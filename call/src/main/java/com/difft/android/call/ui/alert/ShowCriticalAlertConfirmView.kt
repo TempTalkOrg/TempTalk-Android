@@ -11,14 +11,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import com.difft.android.call.ui.HideNavigationBarEffect
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -72,7 +71,6 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
     )
     val isCriticalAlertEnable by viewModel.callUiController.showCriticalAlertConfirmViewEnabled.collectAsState(false)
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
-    val isParticipantSharedScreen by viewModel.callUiController.isShareScreening.collectAsState(false)
     val callType by viewModel.callType.collectAsState()
     val gid = if(callType == CallType.GROUP.type) viewModel.conversationId else null
     val invitees by viewModel.participantManager.awaitingJoinInvitees.collectAsState(emptyList())
@@ -106,23 +104,18 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
 
     if (isCriticalAlertEnable && !isInPipMode) {
 
-        ModalBottomSheet (
-            modifier = Modifier
-                .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
-                .wrapContentHeight(),
+        DifftModalBottomSheet(
             sheetState = sheetState,
-            containerColor = DifftTheme.colors.backgroundTertiary,
             contentWindowInsets = { WindowInsets.navigationBars },
+            hideNavigationBar = true,
             onDismissRequest = {
                 onDismiss()
             },
         ) {
-            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
                     .padding(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,

@@ -6,41 +6,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <RelativeLayout
-        android:id="@+id/title_container"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_title_bar"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:orientation="horizontal"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/ib_back"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:background="@null"
-            android:padding="12dp"
-            android:src="@drawable/chative_ic_back"
-            android:tint="@color/t.primary" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="12dp"
-            android:layout_toEndOf="@id/ib_back"
-            android:ellipsize="end"
-            android:gravity="center_vertical"
-            android:lineSpacingExtra="4sp"
-            android:lines="1"
-            android:text="@string/chat_contact_info"
-            android:textColor="@color/t.primary"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-    </RelativeLayout>
+        android:layout_height="wrap_content" />
 
     <ScrollView
+        android:id="@+id/scroll_view"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
@@ -50,112 +22,18 @@
             android:orientation="vertical"
             android:paddingBottom="20dp">
 
-            <RelativeLayout
-                android:id="@+id/rel_info"
+            <!-- Centered identity header (avatar + name); the whole block opens the contact card -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/compose_identity_header"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@color/bg.elevated"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:id="@+id/v_info"
-                    android:layout_width="wrap_content"
-                    android:layout_height="90dp"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    app:layout_constraintLeft_toLeftOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    tools:showIn="@layout/chat_activity_setting">
-
-                    <com.difft.android.chat.common.AvatarView
-                        android:id="@+id/avatar"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp" />
-
-                    <TextView
-                        android:id="@+id/tv_name"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:ellipsize="end"
-                        android:lines="1"
-                        android:maxWidth="60dp"
-                        android:textColor="@color/t.primary"
-                        android:textSize="12sp"
-                        tools:text="Manta Manta" />
-                </LinearLayout>
-
-                <!--        <include-->
-                <!--            android:id="@+id/v_info"-->
-                <!--            layout="@layout/layout_group_member" />-->
-
-                <LinearLayout
-                    android:id="@+id/rel_member"
-                    android:layout_width="wrap_content"
-                    android:layout_height="90dp"
-                    android:layout_marginStart="27dp"
-                    android:layout_toEndOf="@id/v_info"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    app:layout_constraintLeft_toLeftOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/iv_add_member"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="@drawable/chat_add_member_bg"
-                        android:padding="16dp"
-                        android:src="@drawable/chat_add_member1"
-                        app:tint="@color/icon" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:ellipsize="end"
-                        android:lines="1"
-                        android:maxWidth="60dp"
-                        android:textColor="@color/t.primary"
-                        android:textSize="12sp"
-                        android:visibility="invisible"
-                        tools:text="Manta Manta" />
-                </LinearLayout>
-
-
-            </RelativeLayout>
+                android:layout_height="wrap_content" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="24dp"
                 android:background="@color/bg.elevated"
                 android:orientation="vertical">
-
-                <LinearLayout
-                    android:id="@+id/ll_name_card"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
-
-                    <androidx.appcompat.widget.AppCompatTextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/contact_name_card"
-                        android:textColor="@color/t.primary"
-                        android:textSize="16sp" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
-
-                </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/ll_search_chat_history"
@@ -241,15 +119,12 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <androidx.appcompat.widget.SwitchCompat
+                    <com.difft.android.base.widget.DifftSwitchView
                         android:id="@+id/switch_stick"
-                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:background="@color/bg.elevated"
                         android:checked="false"
                         android:text="@string/chat_stick"
-                        android:textSize="16sp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
@@ -264,21 +139,16 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <androidx.appcompat.widget.SwitchCompat
+                    <com.difft.android.base.widget.DifftSwitchView
                         android:id="@+id/switch2mute1on1"
-                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="@color/bg.elevated"
+                        android:layout_height="match_parent"
                         android:checked="false"
                         android:text="@string/chat_settings_mute"
-                        android:textColor="@color/t.primary"
-                        android:textSize="16sp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        tools:ignore="UseSwitchCompatOrMaterialXml" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 

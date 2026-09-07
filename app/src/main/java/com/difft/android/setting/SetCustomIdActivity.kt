@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -40,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.TextStyle
@@ -202,10 +201,20 @@ fun SetOwnIdScreen(
             ),
             trailingIcon = {
                 if (input.isNotEmpty()) {
-                    IconButton(onClick = { input = "" }) {
+                    // Clearing also resets the stale error/response state (previously it bypassed
+                    // onValueChange entirely, leaving an old error tip on screen). Deliberately not
+                    // routed through onValueChange: its else-branch would set a fresh
+                    // length-invalid tip for the empty value.
+                    IconButton(onClick = {
+                        input = ""
+                        viewModel.resetResponseStatus()
+                        viewModel.resetErrorTip()
+                    }) {
                         Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear text"
+                            painter = painterResource(com.difft.android.base.R.drawable.base_ic_clear_filled),
+                            contentDescription = stringResource(com.difft.android.base.R.string.base_clear_text),
+                            tint = colorResource(com.difft.android.base.R.color.t_secondary),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

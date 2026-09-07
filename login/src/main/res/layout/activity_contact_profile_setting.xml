@@ -166,7 +166,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@null"
-                    android:src="@drawable/chat_fragment_search_input_ic_search_clear"
+                    android:src="@drawable/base_ic_clear_filled"
                     android:tint="@color/t.secondary"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"

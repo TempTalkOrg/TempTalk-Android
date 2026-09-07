@@ -9,12 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallFeedbackRequestBody
+import com.difft.android.base.ui.compose.DifftCheckBox
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
@@ -61,8 +61,7 @@ internal fun CallQuestionView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .wrapContentHeight()
-            .background(color = DifftTheme.colors.backgroundPopup, shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
+            .wrapContentHeight(),
         verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Top),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -157,13 +156,11 @@ internal fun CallQuestionView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
+                    DifftCheckBox(
                         checked = selectedReasons.contains(reason),
                         onCheckedChange = null,
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = DifftTheme.colors.primary,
-                            uncheckedColor = DifftTheme.colors.textDisabled
-                        )
+                        // 24dp inline footprint keeps the glyph aligned with the 15sp label's line box.
+                        modifier = Modifier.size(24.dp),
                     )
                     Text(text = reason, color = DifftTheme.colors.textPrimary, fontSize = 15.sp)
                 }

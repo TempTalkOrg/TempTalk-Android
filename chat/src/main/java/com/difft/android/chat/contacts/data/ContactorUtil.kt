@@ -617,9 +617,7 @@ object ContactorUtil {
         val parts = remarkString.split("|")
         if (parts.size <= 1) return RemarkDecodeResult.Success(remarkString)
         return try {
-            val paddedString = (contactId + contactId + contactId).padEnd(32, '+')
-            val key = paddedString.toByteArray().copyOf(32)
-            val decoded = ContactRemarkUtil.decodeRemark(Base64.decode(parts[1]), key)
+            val decoded = ContactRemarkUtil.decodeRemark(Base64.decode(parts[1]), ContactRemarkUtil.keyForUid(contactId))
             // A null result from decodeRemark indicates a silent decryption failure
             // (e.g. corrupted ciphertext that does not throw). Treat it as Failure so
             // the caller preserves the local value rather than surfacing the raw V1|

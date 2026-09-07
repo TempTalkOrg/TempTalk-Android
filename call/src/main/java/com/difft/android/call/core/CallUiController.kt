@@ -74,6 +74,15 @@ class CallUiController() {
     private val _speakingEnabled = MutableStateFlow(true)
     val speakingEnabled = _speakingEnabled.asStateFlow()
 
+    /**
+     * A participant mute menu (grid tile or screen-share panel) is showing. It lives in its own
+     * Popup window, so the root pointer listener never sees the user reading it; the screen-share
+     * auto-hide timer treats it as ongoing interaction. Deliberately not part of the panel set
+     * that fades the chrome out — a one-line menu is not a sheet.
+     */
+    private val _participantMenuOpen = MutableStateFlow(false)
+    val participantMenuOpen = _participantMenuOpen.asStateFlow()
+
     private val _reconnectCount = MutableStateFlow(0)
     val reconnectCount = _reconnectCount.asStateFlow()
 
@@ -205,6 +214,10 @@ class CallUiController() {
 
     fun setSpeakingEnabled(enabled: Boolean) {
         _speakingEnabled.value = enabled
+    }
+
+    fun setParticipantMenuOpen(open: Boolean) {
+        _participantMenuOpen.value = open
     }
 
     fun incrementReconnectCount() {

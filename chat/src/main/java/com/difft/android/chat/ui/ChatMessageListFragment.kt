@@ -72,6 +72,8 @@ import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.MessageActionHelper
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.attachment.AttachmentDownloadDecision
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
@@ -115,7 +117,6 @@ import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.keepEncryptedAtRest
 import difft.android.messageserialization.model.isVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -214,10 +215,8 @@ class ChatMessageListFragment : Fragment() {
                             val attachment = forward.attachments?.getOrNull(0) ?: return
                             val progress = data.getAttachmentProgress()
 
-                            // Use authorityId for messageId to match file path in ImageAndVideoMessageView
-                            val forwardMessageId = attachment.authorityId.toString()
-                            if (shouldTriggerManualDownload(attachment, progress, forwardMessageId)) {
-                                downloadAttachment(forwardMessageId, attachment, data)
+                            if (shouldTriggerManualDownload(attachment, progress)) {
+                                downloadAttachment(data, attachment)
                                 return
                             }
 
@@ -251,8 +250,8 @@ class ChatMessageListFragment : Fragment() {
                     val attachment = data.attachment ?: return
                     val progress = data.getAttachmentProgress()
 
-                    if (shouldTriggerManualDownload(attachment, progress, data.id)) {
-                        downloadAttachment(data.id, attachment, data)
+                    if (shouldTriggerManualDownload(attachment, progress)) {
+                        downloadAttachment(data, attachment)
                         return
                     }
 
@@ -1662,13 +1661,14 @@ class ChatMessageListFragment : Fragment() {
 
     private fun saveAttachment(data: TextChatMessage) {
         val (attachment, messageId) = resolveActionAttachment(data) ?: return
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+        val attachmentPath = AttachmentPathResolver.fileFor(attachment)
         val progress = data.getAttachmentProgress()
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
         // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
         // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
         // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
-        if (EncryptedAttachmentAccess.isReadable(attachmentPath) && (progress == null || progress == 100)) {
+        if (isFileValid && (progress == null || progress == 100)) {
             // Prefer the durable ciphertext (content uri) over the plaintext file: for a self-sent
             // attachment PushTextSendJob deletes the plaintext right after upload, so a plaintext
             // uri resolved here can ENOENT by the time this async save opens it (intermittent
@@ -1685,21 +1685,11 @@ class ChatMessageListFragment : Fragment() {
                 SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave)
             }
         } else {
-            L.w { "[ChatMessageListFragment] save attachment error, readable=" + EncryptedAttachmentAccess.isReadable(attachmentPath) + " downloadCompleted=" + (progress == null || progress == 100) }
-            ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+            L.w { "[ChatMessageListFragment] save attachment error, readable=$isFileValid downloadCompleted=" + (progress == null || progress == 100) }
+            if (!rescueMissingAttachment(data, attachment, isFileValid)) {
+                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+            }
         }
-    }
-
-    /**
-     * Resolve the actionable attachment + its on-disk storage messageId — the SINGLE source of truth
-     * shared by save AND favorite so their file-path resolution can never diverge again: a direct
-     * attachment is stored under message.id, a single-forward under the forward attachment's
-     * authorityId. Returns null when the message carries no actionable attachment.
-     */
-    private fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? {
-        val attachment = message.singleForwardableAttachment() ?: return null
-        val messageId = if (message.isAttachmentMessage()) message.id else attachment.authorityId.toString()
-        return attachment to messageId
     }
 
     private fun showTranslateDialog(data: TextChatMessage) {
@@ -1747,55 +1737,59 @@ class ChatMessageListFragment : Fragment() {
     }
 
     /**
-     * Check if attachment needs manual download (failed or large file not downloaded)
-     * @return true if needs to download, false otherwise
+     * The copy's own localId is both the job's row identity and its progress key — the collecting
+     * bubble derives the same value through `getAttachmentIdForProgress`.
      */
-    private fun shouldTriggerManualDownload(
-        attachment: Attachment,
-        progress: Int?,
-        messageId: String
-    ): Boolean {
-        // Check if download failed or expired
-        val isFailedOrExpired = if (progress != null) {
-            progress == -1 || progress == -2
-        } else {
-            attachment.status == AttachmentStatus.FAILED.code || attachment.status == AttachmentStatus.EXPIRED.code
-        }
-        if (isFailedOrExpired) return true
-
-        // Check if large file needs manual download (>10M)
-        val fileSize = attachment.size
-        val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
-        val fileName = attachment.fileName ?: ""
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
-
-        return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
-    }
-
-    private fun downloadAttachment(messageId: String, attachment: Attachment, message: ChatMessage) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+    private fun downloadAttachment(message: TextChatMessage, attachment: Attachment) {
+        val filePath = AttachmentPathResolver.fileFor(attachment)
         // Auto-save only for non-confidential images/videos when conversation setting allows
         val autoSave = chatMessageAdapter.shouldSaveToPhotos &&
                 !message.isConfidential() &&
                 (attachment.isImage() || attachment.isVideo())
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
-                messageId,
+                attachment.localId,
+                message.id,
                 attachment.id,
                 filePath,
                 attachment.authorityId,
                 attachment.key ?: byteArrayOf(),
-                !attachment.keepEncryptedAtRest(),
                 autoSave
             )
         )
     }
 
+    /**
+     * What a main-thread read gate does when the file it needs is not readable: ask for the bytes
+     * when the row says they were transferred, and report whether it did so the caller can keep its
+     * own error message for the cases this cannot recover.
+     *
+     * An ENQUEUE, never a read: these gates run on the main thread, so the migration's rescue (which
+     * is blocking IO) belongs in the job, and the job runs it before any network call. That is what
+     * turns a permanent "load error" on a file still sitting at its pre-migration address into a
+     * bubble that fills in as soon as the copy lands.
+     */
+    private fun rescueMissingAttachment(
+        message: TextChatMessage,
+        attachment: Attachment?,
+        isFileValid: Boolean
+    ): Boolean {
+        val progress = message.getAttachmentProgress()
+        if (attachment == null ||
+            !AttachmentDownloadDecision.shouldRescueMissingFile(isFileValid, attachment.status, progress)
+        ) return false
+        L.i { "[ChatMessageListFragment] rescuing missing attachment localId=${attachment.localId} messageId=${message.id}" }
+        downloadAttachment(message, attachment)
+        ToastUtil.showLong(R.string.file_preparing)
+        return true
+    }
+
     private fun openPreview(message: TextChatMessage) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
+        val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
         if (!EncryptedAttachmentAccess.isReadable(filePath)) {
-            ToastUtil.showLong(R.string.file_load_error)
+            if (!rescueMissingAttachment(message, message.attachment, isFileValid = false)) {
+                ToastUtil.showLong(R.string.file_load_error)
+            }
             return
         }
         if (!message.isMine && message.isConfidential()) {
@@ -1808,7 +1802,7 @@ class ChatMessageListFragment : Fragment() {
 
                 if (isConfidential) {
                     // Confidential: only show the current message, no swiping
-                    message.attachment?.let { mediaList.add(AttachmentPreview.localMediaFor(message.id, it)) }
+                    message.attachment?.let { mediaList.add(AttachmentPreview.localMediaFor(it)) }
                 } else {
                     chatMessageAdapter.currentList.forEach { msg ->
                         if (msg !is TextChatMessage) return@forEach
@@ -1818,9 +1812,13 @@ class ChatMessageListFragment : Fragment() {
                         //消息附件
                         msg.attachment?.takeIf { it.isImage() || it.isVideo() }?.let { attachment ->
                             attachment.fileName ?: return@let
-                            val path = FileUtil.getMessageAttachmentFilePath(msg.id) + attachment.fileName
+                            // Off the main thread, so this read gate may also bring a file still at
+                            // its pre-migration address across — same reason as the forward branch
+                            // below; without it such an attachment silently drops out of the swipe
+                            // list until the background migration reaches it.
+                            val path = AttachmentPathResolver.materializedFileFor(attachment, msg.id)
                             if (EncryptedAttachmentAccess.isReadable(path)) {
-                                mediaList.add(AttachmentPreview.localMediaFor(msg.id, attachment))
+                                mediaList.add(AttachmentPreview.localMediaFor(attachment))
                             }
                             return@forEach
                         }
@@ -1832,9 +1830,13 @@ class ChatMessageListFragment : Fragment() {
                             val forwardMessage = generateMessageFromForward(forward) as? TextChatMessage ?: return@forEach
                             val forwardMsgAttachment = forwardMessage.attachment ?: return@forEach
                             forwardMsgAttachment.fileName ?: return@forEach
-                            val path = FileUtil.getMessageAttachmentFilePath(forwardMessage.id) + forwardMsgAttachment.fileName
+                            // Off the main thread, so this read gate can also bring a forwarded file
+                            // that is still at its pre-migration address across; without it such a
+                            // copy would silently drop out of the swipe list until the background
+                            // migration reaches it.
+                            val path = AttachmentPathResolver.materializedFileFor(forwardMsgAttachment, forwardMessage.id)
                             if (EncryptedAttachmentAccess.isReadable(path)) {
-                                mediaList.add(AttachmentPreview.localMediaFor(forwardMessage.id, forwardMsgAttachment))
+                                mediaList.add(AttachmentPreview.localMediaFor(forwardMsgAttachment))
                             }
                         }
                     }
@@ -2155,8 +2157,14 @@ class ChatMessageListFragment : Fragment() {
                                     && msg.playStatus == AudioMessageManager.PLAY_STATUS_NOT_PLAY
                         }.minByOrNull { msg -> msg.systemShowTimestamp }
                         nextAutoPlayMessage?.let { next ->
-                            val fileName: String = (next as TextChatMessage).attachment?.fileName ?: ""
-                            val attachmentPath = FileUtil.getMessageAttachmentFilePath(next.id) + fileName
+                            val nextAttachment = (next as TextChatMessage).attachment ?: return@let
+                            // Migrating read, off the main thread: auto-play-next is not a download
+                            // gate — the next clip is usually off-screen, so no bind funnel has run
+                            // for it, and one still at its pre-per-copy address would end the chain
+                            // silently.
+                            val attachmentPath = withContext(Dispatchers.IO) {
+                                AttachmentPathResolver.materializedFileFor(nextAttachment, next.id)
+                            }
                             AudioMessageManager.playOrPauseAudio(next, attachmentPath)
                         }
                     }
@@ -2414,10 +2422,13 @@ class ChatMessageListFragment : Fragment() {
             // For long-text, load full file content and re-render to replace the 2KB body preview.
             val attachment = currentMessage.attachment
             if (attachment?.isLongText() == true) {
-                val filePath = FileUtil.getMessageAttachmentFilePath(currentMessage.id) + (attachment.fileName ?: "")
+                val ownerMessageId = currentMessage.id
                 val appContext = requireContext().applicationContext
                 viewLifecycleOwner.lifecycleScope.launch {
                     val fullText = withContext(Dispatchers.IO) {
+                        // materializedFileFor: rescues a pre-migration long-text file still at its
+                        // legacy owner-message address (IO context — allowed to migrate on access).
+                        val filePath = AttachmentPathResolver.materializedFileFor(attachment, ownerMessageId)
                         if (EncryptedAttachmentAccess.isReadable(filePath)) {
                             // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
                             try { EncryptedAttachmentAccess.readDecryptedText(appContext, filePath) } catch (_: Exception) { null }
@@ -2543,10 +2554,10 @@ class ChatMessageListFragment : Fragment() {
                 // plaintext-only isFileValid() would report "not available" and block opening.
                 // Gate on isReadable; viewFile() already routes ciphertext through the decrypting
                 // content uri (and falls back to a FileProvider uri for any legacy plaintext).
-                val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
+                val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
                 if (EncryptedAttachmentAccess.isReadable(filePath)) {
                     requireContext().viewFile(filePath)
-                } else {
+                } else if (!chatFragment.rescueMissingAttachment(message, message.attachment, isFileValid = false)) {
                     ToastUtil.showLong(R.string.file_load_error)
                 }
             }
@@ -2595,4 +2606,41 @@ internal fun <T> resolveByMessageId(
 ): T? {
     val position = indexOf(messageId)
     return if (position >= 0) itemAt(position) else null
+}
+
+/**
+ * Resolve the actionable attachment + its directory key — the SINGLE source of truth shared by
+ * save AND favorite (in both the chat list and the forward detail) so their file-path resolution
+ * can never diverge. Returns null when the message carries no actionable attachment.
+ */
+internal fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? {
+    val attachment = message.singleForwardableAttachment() ?: return null
+    return attachment to AttachmentPathResolver.directoryKeyFor(attachment)
+}
+
+/**
+ * Check if attachment needs manual download (failed or large file not downloaded).
+ * One copy of the trigger policy, shared by the chat list and the forward detail.
+ * @return true if needs to download, false otherwise
+ */
+internal fun shouldTriggerManualDownload(
+    attachment: Attachment,
+    progress: Int?
+): Boolean {
+    // Check if download failed or expired
+    val isFailedOrExpired = if (progress != null) {
+        progress == -1 || progress == -2
+    } else {
+        attachment.status == AttachmentStatus.FAILED.code || attachment.status == AttachmentStatus.EXPIRED.code
+    }
+    if (isFailedOrExpired) return true
+
+    // Check if large file needs manual download (>10M)
+    val fileSize = attachment.size
+    val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
+    val attachmentPath = AttachmentPathResolver.fileFor(attachment)
+    val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
+
+    // A readable file is the authority on "downloaded"; a lagging status must not prompt one.
+    return isLargeFile && !isFileValid && progress == null
 }

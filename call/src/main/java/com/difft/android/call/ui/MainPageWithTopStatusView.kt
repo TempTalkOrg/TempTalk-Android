@@ -30,7 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -53,6 +53,8 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.WeakNetworkBanner
+import com.difft.android.call.ui.actionbar.rememberChromeAlpha
+import com.difft.android.call.ui.actionbar.rememberChromeVisible
 import com.difft.android.call.ui.alert.CallCriticalAlertView
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
@@ -72,7 +74,6 @@ fun MainPageWithTopStatusView(
     windowZoomOutAction: () -> Unit,
     onE2eeHintClick: () -> Unit,
 ) {
-    val showTopStatusState by viewModel.callUiController.showTopStatusViewEnabled.collectAsState(true)
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val callDuration by viewModel.timerManager.callDurationText.collectAsState("00:00")
@@ -131,7 +132,10 @@ fun MainPageWithTopStatusView(
         // correctly excluded.
         weakNetwork = WeakNetworkBanner.resolve(networkQuality, participants.size),
     )
-    val isTopVisible = (isOneVOneCall && !isUserSharingScreen) || showTopStatusState
+    // Every scenario collapses on tap (the 1v1 always-visible carve-out is gone), and an open
+    // panel fades the chrome out without touching the toggle itself.
+    val isTopVisible by rememberChromeVisible(viewModel.callUiController, viewModel.callUiController.showTopStatusViewEnabled)
+    val topAlpha = rememberChromeAlpha(viewModel.callUiController, viewModel.callUiController.showTopStatusViewEnabled)
 
     // 关键：`tapInterceptor` 只挂在内层 [TopStatusBar]（52dp 高，与全 app 标题栏一致），而不是
     // 整个 Column。该 Column 是 Material `Surface` 的直接子节点，Surface 会把
@@ -153,7 +157,8 @@ fun MainPageWithTopStatusView(
                     Modifier.padding(bottom = LCallUiConstants.TOP_BAR_MARGIN_BOTTOM_DP.dp)
                 }
             )
-            .alpha(if (isTopVisible) 1f else 0f),
+            // Read in the draw phase only: the 200ms fade never recomposes this subtree.
+            .graphicsLayer { alpha = topAlpha.value },
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -365,7 +370,7 @@ private fun ConnectedStatusContent(
             // Append the duration only once the timer runs: `callDuration` is the raw ticker
             // text, so during the media-ready gate it would read as a frozen "00:00" (the exact
             // bug the timer gate exists for) — and the floating pill already says "Connecting…".
-            val shareTitle = "${StringUtil.truncateWithEllipsis(name, 14)}${ResUtils.getString(R.string.call_screen_sharing_title)}"
+            val shareTitle = "${StringUtil.truncateWithEllipsis(name, PARTICIPANT_NAME_MAX_LENGTH)}${ResUtils.getString(R.string.call_screen_sharing_title)}"
             Text(
                 modifier = Modifier.testTag("call_topbar_call_duration"),
                 text = if (callTimerRunning) "$shareTitle $callDuration" else shareTitle,

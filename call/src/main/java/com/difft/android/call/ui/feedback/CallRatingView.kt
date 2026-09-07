@@ -61,8 +61,7 @@ internal fun CallRatingView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .wrapContentHeight()
-            .background(color = DifftTheme.colors.backgroundPopup, shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
+            .wrapContentHeight(),
         verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Top),
         horizontalAlignment = Alignment.Start,
     ) {

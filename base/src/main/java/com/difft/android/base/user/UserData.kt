@@ -63,6 +63,7 @@ data class UserData(
     var voicePlaybackSpeed: Float = 1.0f, //语音消息播放速度 (1.0x, 1.5x, 2.0x)
     var mostUseEmojis: String? = null,
     var dualPaneRatio: Float = -1f, //双栏布局 list_pane 占可用宽度的比例(0.0–1.0),-1 表示未自定义,走默认逻辑
+    var dualPaneListCollapsed: Boolean = false, // dual-pane list pane collapsed (divider dragged past the minimum)
 
     // — App lifecycle —
     var lastUseTime: Long = 0,

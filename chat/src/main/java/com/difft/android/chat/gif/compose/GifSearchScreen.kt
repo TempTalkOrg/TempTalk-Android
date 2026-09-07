@@ -1,34 +1,27 @@
 package com.difft.android.chat.gif.compose
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.difft.android.base.ui.compose.input.DifftInputSurface
+import com.difft.android.base.ui.compose.input.DifftSearchBar
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.gif.GifPanelContract
@@ -37,10 +30,8 @@ import com.difft.android.chat.gif.GifPanelViewModel
 /**
  * Full-screen GIF search content: a search box above the shared result grid.
  *
- * The search box is styled to match the project's canonical XML search boxes
- * (search_input_bg_search_input: radius 8, solid bg2, padding 12h/8v) so it looks consistent with
- * the rest of the app (Issue 3): backgroundSecondary (bg2, NOT bg3), an accent-colored caret
- * (cursorBrush = primary), and the standard magnifier/clear drawables.
+ * The search box is the shared [DifftSearchBar] component, so it matches every other search
+ * box in the app (radius 8, solid bg2, 36dp, accent caret, standard magnifier/clear icons).
  *
  * Two right-side controls: a clear-x INSIDE the box (clears the query -> trending) and a close-X
  * OUTSIDE to its right ([onClose] dismisses the sheet). Reuses [GifPanelViewModel]'s Search intent
@@ -59,7 +50,6 @@ fun GifSearchScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(DifftTheme.colors.background)
             // Bridge the inner LazyGrid's scroll to the host BottomSheet (View) so the list scrolls
             // first and the sheet only drags-to-dismiss once the list is at the top — otherwise the
             // BottomSheetBehavior swallows the downward drag and closes the sheet (Issue: gesture
@@ -76,56 +66,16 @@ fun GifSearchScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(DifftTheme.colors.backgroundSecondary)
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.search_input_ic_search_input),
-                    contentDescription = null,
-                    tint = DifftTheme.colors.icon,
-                    modifier = Modifier.size(20.dp)
-                )
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (state.query.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.gif_search_hint),
-                            style = DifftTheme.typography.bodyMedium,
-                            color = DifftTheme.colors.textDisabled
-                        )
-                    }
-                    BasicTextField(
-                        value = state.query,
-                        onValueChange = { viewModel.dispatch(GifPanelContract.Intent.Search(it)) },
-                        singleLine = true,
-                        textStyle = TextStyle(
-                            color = DifftTheme.colors.textPrimary,
-                            fontSize = DifftTheme.typography.bodyMedium.fontSize
-                        ),
-                        // Accent caret to match the XML EditText theme cursor (round-1 left the default).
-                        cursorBrush = SolidColor(DifftTheme.colors.primary),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                // Trailing clear "x" INSIDE the box: visible only with a non-empty query; clearing
-                // returns to trending (Search("") -> reload(null) in the VM). (Issue 3b)
-                if (state.query.isNotEmpty()) {
-                    Icon(
-                        painter = painterResource(R.drawable.search_input_ic_search_clear),
-                        contentDescription = stringResource(R.string.gif_search_clear),
-                        tint = DifftTheme.colors.textSecondary,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clickable { viewModel.dispatch(GifPanelContract.Intent.Search("")) }
-                    )
-                }
-            }
+            // Shared search component; both typing and clearing route to the same VM intent
+            // (Search("") -> reload trending), matching the pre-unification behavior exactly.
+            DifftSearchBar(
+                surface = DifftInputSurface.Popup,
+                query = state.query,
+                onQueryChange = { viewModel.dispatch(GifPanelContract.Intent.Search(it)) },
+                onClear = { viewModel.dispatch(GifPanelContract.Intent.Search("")) },
+                hint = stringResource(R.string.gif_search_hint),
+                modifier = Modifier.weight(1f)
+            )
             // Standalone close-X OUTSIDE the box: dismisses the whole search sheet, the primary
             // close affordance (mirrors ChatSelectBottomSheetFragment's tv_close). (Issue 3b)
             Icon(

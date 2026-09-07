@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.cache.OfficialAccountCache
+import com.difft.android.chat.attachment.migration.ForwardAttachmentMigration
 import com.difft.android.chat.messages.MessageForegroundService
 import com.difft.android.chat.util.AppIconBadgeManager
 import com.difft.android.chat.util.ForegroundServiceUtil
@@ -44,6 +45,7 @@ class LogoutManagerImpl @Inject constructor(
     private val coordinator: DomainSpeedTestCoordinator,
     private val wcdb: WCDB,
     private val proxyConfigProvider: ProxyConfigProvider,
+    private val forwardAttachmentMigration: ForwardAttachmentMigration,
 ) : LogoutManager {
     override fun doLogout() {
         performLogout(clearAllData = true)
@@ -55,6 +57,9 @@ class LogoutManagerImpl @Inject constructor(
     }
 
     private fun performLogout(clearAllData: Boolean) {
+        // Stop the attachment migration before the database and the files it is scanning are wiped,
+        // so it does not spend the moments before restartApp() logging IO errors about deleted rows.
+        forwardAttachmentMigration.cancel()
         appScope.launch {
             if (clearAllData) {
                 clearData()

@@ -5,8 +5,10 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
+import android.util.TypedValue
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.use
+import androidx.core.widget.TextViewCompat
 import com.difft.android.R
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
@@ -50,14 +52,29 @@ class IndexIndicator @JvmOverloads constructor(
         val icon = findViewById<AppCompatImageView>(R.id.imageview_icon)
 
         if (isLarger) {
-            text.textSize = 21f
+            applyLabelSize(text, maxSp = 21)
             icon.layoutParams.width = 35.dp
             icon.layoutParams.height = 35.dp
         } else {
-            text.textSize = 14f
+            applyLabelSize(text, maxSp = 14)
             icon.layoutParams.width = 25.dp
             icon.layoutParams.height = 25.dp
         }
+    }
+
+    /**
+     * Auto-size DOWN from [maxSp], never up: the phone bottom strip has room and renders at
+     * [maxSp] as before, while the 72dp dual-pane rail shrinks a long label ("Contacts" at
+     * 14sp needs ~62dp, more than the rail's label box) instead of ellipsizing it.
+     */
+    private fun applyLabelSize(text: AppCompatTextView, maxSp: Int) {
+        TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
+            text, LABEL_MIN_SP, maxSp, 1, TypedValue.COMPLEX_UNIT_SP
+        )
+    }
+
+    private companion object {
+        const val LABEL_MIN_SP = 10
     }
 
     private val tvBadge: AppCompatTextView by lazy { findViewById(R.id.tv_badge) }

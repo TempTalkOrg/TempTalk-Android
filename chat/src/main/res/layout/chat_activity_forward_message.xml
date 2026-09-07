@@ -20,7 +20,8 @@
         android:id="@+id/bottom_sheet"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/bg_forward_message_bottom_sheet"
+        android:layout_gravity="center_horizontal|top"
+        android:background="@drawable/base_bg_bottom_sheet"
         android:clickable="true"
         android:focusable="true"
         android:orientation="vertical"
@@ -34,7 +35,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="12dp"
             android:layout_marginBottom="8dp"
-            android:background="@drawable/bg_bottom_sheet_drag_handle" />
+            android:background="@drawable/base_bg_bottom_sheet_drag_handle" />
 
         <!-- Title Bar -->
         <LinearLayout

@@ -6,7 +6,6 @@
     <color name="success" tools:ignore="ResourceName">#01BC6A</color>
     <color name="warning" tools:ignore="ResourceName">#FFC814</color>
     <color name="error" tools:ignore="ResourceName">#F84135</color>
-    <color name="divider" tools:ignore="ResourceName">#EAECEF</color>
     <color name="line" tools:ignore="ResourceName">#EAECEF</color>
     <color name="icon" tools:ignore="ResourceName">#474D57</color>
     <color name="number_of_missing_missing_muted" tools:ignore="ResourceName">#B7BDC6</color>
@@ -37,7 +36,6 @@
     <color name="bg4" tools:ignore="ResourceName">#B7BDC6</color>
     <color name="bg.disable" tools:ignore="ResourceName">#EAECEF</color>
     <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
-    <color name="bg.modal" tools:ignore="ResourceName">#FFFFFF</color>
     <color name="bg.popup" tools:ignore="ResourceName">#FFFFFF</color>
     <color name="bg.popup.night" tools:ignore="ResourceName">#1E2329</color>
     <color name="bg.blue" tools:ignore="ResourceName">#EBF7FF</color>

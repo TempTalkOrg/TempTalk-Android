@@ -11,6 +11,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.log.lumberjack.L
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -68,6 +69,23 @@ object FileUtil {
         return valid
     }
 
+    /**
+     * Drops the cached validity of [path] and of its `.encrypt` sibling.
+     *
+     * The cache stores only positive results keyed by exact path and is otherwise cleared just on
+     * logout, so any code that DELETES or MOVES a file must call this — a surviving `true` would keep
+     * reporting a file that is no longer there.
+     */
+    fun invalidateFileValidity(path: String) {
+        fileValidityCache.remove(path)
+        fileValidityCache.remove("$path.encrypt")
+    }
+
+    /** [invalidateFileValidity] for every cached path under [directoryPath]. */
+    fun invalidateFileValidityUnder(directoryPath: String) {
+        fileValidityCache.keys.removeAll { it.startsWith(directoryPath) }
+    }
+
     fun isFileNameValid(filename: String?): Boolean {
         // prevent directory traversal and ensure filename doesn't contain path separators
         if (filename.isNullOrEmpty() || filename.contains("..") || filename.contains("/")) {
@@ -112,7 +130,11 @@ object FileUtil {
     }
 
     fun deleteMessageFile(messageId: String) {
-        deleteFolder(File(getFilePath(FILE_DIR_ATTACHMENT + File.separator + messageId)))
+        val directoryPath = getFilePath(FILE_DIR_ATTACHMENT + File.separator + messageId)
+        deleteFolder(File(directoryPath))
+        // The validity cache keys on exact paths and caches only `true`; without this the deleted
+        // files keep reporting as valid until logout.
+        invalidateFileValidityUnder(directoryPath)
     }
 
     private fun deleteFolder(folder: File): Boolean {
@@ -229,18 +251,66 @@ object FileUtil {
         }
     }
 
-    private val progressMap = hashMapOf<String, Int>()
+    /**
+     * Transfer progress per attachment copy (keyed by `Attachment.localId`). Written from job
+     * threads and read from the main thread, hence concurrent.
+     *
+     * Only a SUCCESS terminal (100) is evictable: once published, the file on disk is the durable
+     * answer, so after [TERMINAL_RETENTION_MS] the entry is dropped — without this the map would
+     * grow by one entry per transfer for the process lifetime. A failure (-1) / expired (-2) marker
+     * stays for the whole process instead: the job's terminal write goes to the DB row only, the
+     * in-memory bubble's status is never refreshed, so evicting the marker would make the next
+     * rebind read progress=null + stale LOADING status and auto-re-download the failed/expired
+     * attachment in an endless loop. Growth from failure markers is naturally bounded (one entry
+     * per failed transfer). Eviction is lazy (next touch of the same key, plus a sweep once the map
+     * grows past [SWEEP_THRESHOLD]); deliberately no timer.
+     */
+    private val progressMap = ConcurrentHashMap<String, Int>()
+
+    /** Publish time of the evictable terminal value held for a key; absent while a transfer runs. */
+    private val terminalAtMap = ConcurrentHashMap<String, Long>()
+
+    private const val TERMINAL_RETENTION_MS = 30_000L
+    private const val SWEEP_THRESHOLD = 256
+
+    /** Time source for terminal-progress expiry; overridden by tests so they need not wait it out. */
+    @VisibleForTesting
+    internal var progressClock: () -> Long = { System.currentTimeMillis() }
 
     private val _progressUpdate = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 64)
     val progressUpdate: SharedFlow<String> = _progressUpdate
 
+    private fun isEvictableProgress(progress: Int): Boolean = progress == 100
+
     fun emitProgressUpdate(id: String, progress: Int) {
         progressMap[id] = progress
+        if (isEvictableProgress(progress)) {
+            terminalAtMap[id] = progressClock()
+            if (progressMap.size > SWEEP_THRESHOLD) sweepExpiredTerminalProgress()
+        } else {
+            // A restarted transfer — or a sticky failure/expired marker — makes the key
+            // non-evictable again.
+            terminalAtMap.remove(id)
+        }
         _progressUpdate.tryEmit(id)
     }
 
     fun getProgress(id: String): Int? {
+        evictTerminalProgressIfExpired(id)
         return progressMap[id]
+    }
+
+    private fun evictTerminalProgressIfExpired(id: String) {
+        val terminalAt = terminalAtMap[id] ?: return
+        if (progressClock() - terminalAt < TERMINAL_RETENTION_MS) return
+        terminalAtMap.remove(id)
+        // Drop only while the value is still the evictable one — a transfer restarted in between
+        // must keep its live progress.
+        progressMap.computeIfPresent(id) { _, value -> if (isEvictableProgress(value)) null else value }
+    }
+
+    private fun sweepExpiredTerminalProgress() {
+        terminalAtMap.keys.toList().forEach { evictTerminalProgressIfExpired(it) }
     }
 
     private val downloadingMap = hashMapOf<Long, String>()

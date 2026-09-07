@@ -32,6 +32,8 @@ import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.MessageActionHelper
 import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.attachment.AttachmentDownloadDecision
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
@@ -53,7 +55,6 @@ import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.Attachment
 import javax.inject.Inject
-import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Quote
@@ -61,7 +62,6 @@ import difft.android.messageserialization.model.isAudioMessage
 import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.keepEncryptedAtRest
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
 import com.difft.android.chat.dependencies.ApplicationDependencies
@@ -299,13 +299,14 @@ class ChatForwardMessageFragment : Fragment() {
 
     private fun saveAttachment(data: TextChatMessage) {
         val (attachment, messageId) = resolveActionAttachment(data) ?: return
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+        val attachmentPath = AttachmentPathResolver.fileFor(attachment)
         val progress = data.getAttachmentProgress()
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
         // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
         // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
         // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
-        if (EncryptedAttachmentAccess.isReadable(attachmentPath) && (progress == null || progress == 100)) {
+        if (isFileValid && (progress == null || progress == 100)) {
             // Prefer the durable ciphertext (content uri) over the plaintext file — a self-sent
             // attachment's plaintext is deleted right after upload, so a plaintext uri resolved here
             // can ENOENT by the time this async save reads it. See EncryptedAttachmentAccess.exportContentUriIfEncrypted.
@@ -321,45 +322,44 @@ class ChatForwardMessageFragment : Fragment() {
                 SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave)
             }
         } else {
-            L.w { "[ChatForwardMessageFragment] save attachment error, readable=" + EncryptedAttachmentAccess.isReadable(attachmentPath) + " downloadCompleted=" + (progress == null || progress == 100) }
-            ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+            L.w { "[ChatForwardMessageFragment] save attachment error, readable=$isFileValid downloadCompleted=" + (progress == null || progress == 100) }
+            if (!rescueMissingAttachment(data, attachment, isFileValid)) {
+                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+            }
         }
     }
 
-    /**
-     * Resolve the actionable attachment + its on-disk storage messageId — the SINGLE source of truth
-     * shared by save AND favorite in the forward detail so their file-path resolution can never
-     * diverge. Here both a direct attachment and a single-forward are stored under this message's id.
-     */
-    private fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? =
-        message.singleForwardableAttachment()?.let { it to message.id }
+    // resolveActionAttachment / shouldTriggerManualDownload are the shared top-level helpers in
+    // ChatMessageListFragment.kt — one copy of the policy for both surfaces.
 
     /**
-     * Check if attachment needs manual download
+     * What a main-thread read gate does when the file it needs is not readable: ask for the bytes
+     * when the row says they were transferred, and report whether it did so the caller can keep its
+     * own error message for the cases this cannot recover. Same policy as the chat list's gate —
+     * [AttachmentDownloadDecision.shouldRescueMissingFile] is where it lives, only the download
+     * enqueue differs between the two surfaces.
      */
-    private fun shouldTriggerManualDownload(
-        attachment: Attachment,
-        progress: Int?,
-        messageId: String
+    private fun rescueMissingAttachment(
+        message: TextChatMessage,
+        attachment: Attachment?,
+        isFileValid: Boolean
     ): Boolean {
-        val isFailedOrExpired = if (progress != null) {
-            progress == -1 || progress == -2
-        } else {
-            attachment.status == AttachmentStatus.FAILED.code || attachment.status == AttachmentStatus.EXPIRED.code
-        }
-        if (isFailedOrExpired) return true
-
-        val fileSize = attachment.size
-        val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
-        val fileName = attachment.fileName ?: ""
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
-
-        return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
+        val progress = message.getAttachmentProgress()
+        if (attachment == null ||
+            !AttachmentDownloadDecision.shouldRescueMissingFile(isFileValid, attachment.status, progress)
+        ) return false
+        L.i { "[ChatForwardMessageFragment] rescuing missing attachment localId=${attachment.localId} messageId=${message.id}" }
+        downloadAttachment(message, attachment)
+        ToastUtil.showLong(R.string.file_preparing)
+        return true
     }
 
-    private fun downloadAttachment(messageId: String, attachment: Attachment) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+    /**
+     * The copy's own localId is both the job's row identity and its progress key — the collecting
+     * bubble derives the same value through `getAttachmentIdForProgress`.
+     */
+    private fun downloadAttachment(message: TextChatMessage, attachment: Attachment) {
+        val filePath = AttachmentPathResolver.fileFor(attachment)
         // Auto-save only for non-confidential images/videos when conversation setting allows
         val forwardActivity = activity as? ChatForwardMessageActivity
         val shouldSaveToPhotos = forwardActivity?.getShouldSaveToPhotos() == true
@@ -367,12 +367,12 @@ class ChatForwardMessageFragment : Fragment() {
         val autoSave = shouldSaveToPhotos && !isConfidential && (attachment.isImage() || attachment.isVideo())
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
-                messageId,
+                attachment.localId,
+                message.id,
                 attachment.id,
                 filePath,
                 attachment.authorityId,
                 attachment.key ?: byteArrayOf(),
-                !attachment.keepEncryptedAtRest(),
                 autoSave
             )
         )
@@ -386,8 +386,8 @@ class ChatForwardMessageFragment : Fragment() {
                     val attachment = data.attachment ?: return
                     val progress = data.getAttachmentProgress()
 
-                    if (shouldTriggerManualDownload(attachment, progress, data.id)) {
-                        downloadAttachment(data.id, attachment)
+                    if (shouldTriggerManualDownload(attachment, progress)) {
+                        downloadAttachment(data, attachment)
                         return
                     }
 
@@ -401,9 +401,8 @@ class ChatForwardMessageFragment : Fragment() {
                         val attachment = forward.attachments?.getOrNull(0) ?: return
                         val progress = data.getAttachmentProgress()
 
-                        // data.id is already set to authorityId.toString() by generateMessageFromForward
-                        if (shouldTriggerManualDownload(attachment, progress, data.id)) {
-                            downloadAttachment(data.id, attachment)
+                        if (shouldTriggerManualDownload(attachment, progress)) {
+                            downloadAttachment(data, attachment)
                             return
                         }
 
@@ -614,15 +613,17 @@ class ChatForwardMessageFragment : Fragment() {
     }
 
     private fun openPreview(message: TextChatMessage) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
+        val attachment = message.attachment
+        val filePath = attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
         if (!EncryptedAttachmentAccess.isReadable(filePath)) {
-            ToastUtil.showLong(R.string.file_load_error)
+            if (!rescueMissingAttachment(message, attachment, isFileValid = false)) {
+                ToastUtil.showLong(R.string.file_load_error)
+            }
             return
         }
-        val attachment = message.attachment
         val list = arrayListOf<LocalMedia>().apply {
             if (attachment != null) {
-                this.add(AttachmentPreview.localMediaFor(message.id, attachment))
+                this.add(AttachmentPreview.localMediaFor(attachment))
             } else {
                 this.add(LocalMedia.generateLocalMedia(requireContext(), filePath))
             }

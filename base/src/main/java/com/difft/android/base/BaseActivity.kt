@@ -1,7 +1,7 @@
 package com.difft.android.base
 
 import android.content.Context
-import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -10,6 +10,7 @@ import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.EdgeToEdgeUtils.applySystemBarsPadding
 import com.difft.android.base.utils.EdgeToEdgeUtils.setupEdgeToEdge
 import com.difft.android.base.utils.LanguageUtils
+import com.difft.android.base.utils.OrientationPolicy
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -26,8 +27,18 @@ abstract class BaseActivity : AppCompatActivity() {
         windowFocusLostAt = if (hasFocus) 0L else System.currentTimeMillis()
     }
 
+    // The orientation value THIS policy last wrote, or null when it never applied. Later
+    // re-applies happen only while requestedOrientation still equals it — a screen that set
+    // its own orientation (media picker unlock, screen-share landscape lock) is never
+    // clobbered by the fold/unfold re-apply.
+    private var policyAppliedOrientation: Int? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        applyOrientationPolicy()
+        // Pre-super: setRequestedOrientation post-super on API >= 26 can throw for
+        // translucent activities. Safe here — OrientationPolicy reads only resources.
+        if (shouldApplyOrientationPolicy()) {
+            policyAppliedOrientation = OrientationPolicy.applyTo(this)
+        }
         // Enable edge-to-edge before super.onCreate()
         if (shouldEnableEdgeToEdge()) {
             setupEdgeToEdge()
@@ -122,35 +133,57 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     /**
-     * Single source of truth for screen orientation across all activities:
-     *   - Phones (sw < 600dp): lock SCREEN_ORIENTATION_PORTRAIT.
-     *   - Tablets / unfolded foldables (sw ≥ 600dp): SCREEN_ORIENTATION_UNSPECIFIED
-     *     so the user can rotate freely (drives the dual-pane layout on rotation).
+     * Re-apply the orientation policy when the configuration changes.
      *
-     * Done at runtime instead of `android:screenOrientation` in the manifest so
-     * that large-screen devices which don't honor AOSP 16+'s sw≥600dp exemption
-     * (HarmonyOS NEXT on Huawei foldables, older AOSP, some OEM ROMs) still rotate.
-     * Tradeoff: with no manifest orientation the splash window follows the device,
-     * so a phone launched while held landscape briefly rotates to portrait — rare
-     * (auto-rotate is off by default and launchers stay portrait), and worth it to
-     * keep foldables flicker-free in their common unfolded-landscape posture.
+     * Most activities declare enough `configChanges` keys that a fold/unfold does NOT recreate
+     * them, so without this they keep whatever the FOLDED posture decided — on a book foldable
+     * whose folded smallestScreenWidthDp is < 600dp that leaves every already-open screen
+     * portrait-locked after unfolding, and `values-sw600dp/orientation.xml` never takes effect.
+     *
+     * [OrientationPolicy.applyTo] is idempotent (it early-returns when the target already
+     * matches), so this is silent and a no-op for every configuration change that does not
+     * cross the sw600dp bucket.
+     *
+     * `newConfig` is deliberately NOT forwarded: `applyTo` resolves
+     * `R.bool.force_portrait_orientation` from `resources`, which the framework has already
+     * re-pointed at the new configuration by the time this callback runs. The locale override
+     * [attachBaseContext] installs via `LanguageUtils.createConfiguredContext` does not pin the
+     * size fields (AppCompat re-derives overrides as a delta against a reference context, and
+     * only changed fields — locale, fontScale — land in that delta), so reading the
+     * config-qualified resource here is correct. Do not swap it for a hand-rolled
+     * `newConfig.smallestScreenWidthDp >= 600` check, which would duplicate the qualifier that
+     * `values-sw600dp/orientation.xml` already owns.
      */
-    private fun applyOrientationPolicy() {
-        if (!shouldApplyOrientationPolicy()) return
-        val target = if (resources.getBoolean(R.bool.force_portrait_orientation)) {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // A pinned (PiP) window reports phone-bucket sizes; requesting portrait there would
+        // only queue churn for PiP exit, which delivers its own mode-change callback below.
+        if (isInPictureInPictureMode) return
+        reapplyOrientationPolicyIfOwned()
+    }
+
+    /**
+     * Backstop for the PiP skip above: the exit-PiP configuration change can race the
+     * pinned-mode flag, so re-apply once the mode change itself reports un-pinned.
+     */
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (!isInPictureInPictureMode) {
+            reapplyOrientationPolicyIfOwned()
         }
-        if (requestedOrientation == target) return
-        try {
-            requestedOrientation = target
-            L.i { "[BaseActivity] orient set cls=${javaClass.simpleName} swDp=${resources.configuration.smallestScreenWidthDp} target=$target" }
-        } catch (e: IllegalStateException) {
-            // API 26 (Android 8.0) throws "Only fullscreen activities can request
-            // orientation" for translucent activities. Harmless — they inherit the
-            // underlying activity's orientation. Fixed by AOSP in API 27.
-            L.w { "[BaseActivity] orient set skipped cls=${javaClass.simpleName}: ${e.message}" }
+    }
+
+    /**
+     * Re-apply the orientation policy ONLY while it still owns the value: if any screen set
+     * its own requestedOrientation since (the picture selector's one-time unlock, a
+     * screen-share landscape lock), the policy backs off until that screen restores a
+     * policy-written value.
+     */
+    private fun reapplyOrientationPolicyIfOwned() {
+        if (!shouldApplyOrientationPolicy()) return
+        val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
+        if (owned) {
+            policyAppliedOrientation = OrientationPolicy.applyTo(this)
         }
     }
 
@@ -159,8 +192,9 @@ abstract class BaseActivity : AppCompatActivity() {
      * on all sizes, or manage orientation themselves (camera, PiP, etc.).
      * When false, BaseActivity leaves `requestedOrientation` untouched.
      *
-     * Note: invoked before `super.onCreate()` — overrides must return a constant.
-     * Hilt-injected fields and `savedInstanceState` are not yet available here.
+     * Note: invoked before `super.onCreate()` (and again from [onConfigurationChanged]) —
+     * overrides must return a constant. Hilt-injected fields and `savedInstanceState` are
+     * not yet available at the pre-super call.
      */
     protected open fun shouldApplyOrientationPolicy(): Boolean = true
 }

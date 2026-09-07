@@ -3,4 +3,56 @@
     <declare-styleable name="InsetAwareConstraintLayout">
         <attr name="animateKeyboardChanges" format="boolean" />
     </declare-styleable>
+
+    <!-- Shared by every XML shell around a Difft composable (DifftComposeView). -->
+    <declare-styleable name="DifftComposeView">
+        <attr name="difft_forceDark" format="boolean" />
+    </declare-styleable>
+
+    <!-- Two-state controls (DifftCheckBoxView, DifftSwitchView). -->
+    <declare-styleable name="DifftToggleView">
+        <attr name="android:checked" />
+        <attr name="android:enabled" />
+        <attr name="android:clickable" />
+        <attr name="android:focusable" />
+    </declare-styleable>
+
+    <!-- Switch shell: the row form is driven by android:text (SwitchCompat is a TextView). -->
+    <declare-styleable name="DifftSwitchView">
+        <attr name="android:text" />
+    </declare-styleable>
+
+    <declare-styleable name="DifftClearableInputView">
+        <attr name="dsi_hint" format="reference|string" />
+        <attr name="dsi_autoFocus" format="boolean" />
+        <attr name="dsi_containerColor" format="color" />
+        <attr name="dsi_surface" format="enum">
+            <enum name="page" value="0" />
+            <enum name="popup" value="1" />
+        </attr>
+        <attr name="dsi_height" format="dimension" />
+        <attr name="dsi_minHeight" format="dimension" />
+        <attr name="dsi_maxLength" format="integer" />
+        <attr name="dsi_contentPaddingStart" format="dimension" />
+        <attr name="dsi_clearMode" format="enum">
+            <enum name="whenNotEmpty" value="0" />
+            <enum name="whileEditing" value="1" />
+        </attr>
+        <attr name="dsi_imeAction" format="enum">
+            <enum name="unspecified" value="0" />
+            <enum name="search" value="1" />
+            <enum name="done" value="2" />
+            <enum name="next" value="3" />
+            <enum name="send" value="4" />
+        </attr>
+        <attr name="dsi_keyboardType" format="enum">
+            <enum name="text" value="0" />
+            <enum name="email" value="1" />
+            <enum name="phone" value="2" />
+            <enum name="number" value="3" />
+            <enum name="password" value="4" />
+        </attr>
+        <attr name="android:textSize" />
+        <attr name="android:enabled" />
+    </declare-styleable>
 </resources>

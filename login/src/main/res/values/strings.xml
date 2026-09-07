@@ -1,12 +1,12 @@
 <resources>
     <string name="login_sign_to_chative">Sign in to Quicall</string>
-    <string name="login_email_or_invite_code_hint">Email/Phone Number</string>
+    <string name="login_email_or_phone_hint">Email/Phone Number</string>
     <string name="login_next">Next</string>
     <string name="login_in">Log in</string>
     <string name="login_skip">Skip</string>
     <string name="login_otp_sent">OTP sent, please check</string>
     <string name="login_otp_sent_to">OTP sent to "%s"</string>
-    <string name="login_invite_code_invalid">Invalid , please check</string>
+    <string name="login_error_invalid_account">Invalid email or phone number</string>
     <string name="login_email_code_not_receive">Did\'t receive?</string>
     <string name="login_email_code_resend">Resend%s</string>
     <string name="login_error_not_exist">Code expired or does not exist, please check</string>

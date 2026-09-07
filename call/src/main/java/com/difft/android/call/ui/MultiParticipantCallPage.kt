@@ -44,6 +44,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallUserDisplayInfo
+import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
 import com.difft.android.call.ui.screenshare.ScreenSharingView
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
@@ -63,7 +64,6 @@ fun MultiParticipantCallPage(
     muteOtherEnabled: Boolean = false,
     autoHideTimeout: Long,
     callConfig: CallConfig,
-    isDualPane: Boolean = false,
 ) {
     val participantsFlow = remember(viewModel) {
         viewModel.participants.distinctUntilChanged { old, new ->
@@ -136,7 +136,8 @@ fun MultiParticipantCallPage(
                 coroutineScope = coroutineScope,
                 displayInfoMap = displayInfoMap,
                 // PiP 小窗口空间有限，无论人数多少都用 2 列方形滚动网格，避免固定布局挤压。
-                forceScrollGrid = isInPipMode
+                forceScrollGrid = isInPipMode,
+                bottomReserve = portraitBottomReserved(rememberCallActionBarPlan(isGroup = true)),
             )
         }
     } else {
@@ -153,8 +154,6 @@ fun MultiParticipantCallPage(
         callConfig = callConfig,
         autoHideTimeout = autoHideTimeout,
         isOneVOneCall = false,
-        isDualPane = isDualPane,
-        isShareScreening = isUserSharingScreen,
         room = room,
     )
 }
@@ -300,7 +299,7 @@ private fun WideScreenParticipantLayout(
                                 // the badge's two-person rule is about the room.
                                 participantCount = participants.size,
                                 muteOtherEnabled = muteOtherEnabled,
-                                onClickMute = { viewModel.toggleMute(participant) },
+                                onClickMute = { name -> viewModel.toggleMute(participant, name) },
                                 coroutineScope = coroutineScope
                             )
                         }

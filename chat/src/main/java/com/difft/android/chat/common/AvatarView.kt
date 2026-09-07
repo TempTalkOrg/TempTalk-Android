@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import java.io.File
+import kotlin.math.roundToInt
 
 class AvatarView @JvmOverloads constructor(
     context: Context,
@@ -69,7 +70,7 @@ class AvatarView @JvmOverloads constructor(
         key: String?,
         firstLetter: String?,
         id: String,
-        letterTextSizeDp: Int = 22,
+        letterTextSizeDp: Int = DEFAULT_LETTER_TEXT_SIZE_DP,
         targetSizePx: Int? = null,  // Optional: explicit size in pixels for Glide (useful in Compose AndroidView)
         fallbackUrl: String? = null,
         fallbackKey: String? = null,
@@ -157,7 +158,7 @@ class AvatarView @JvmOverloads constructor(
         }
     }
 
-    fun setAvatar(contact: ContactorModel, letterTextSizeDp: Int = 22, targetSizePx: Int? = null) {
+    fun setAvatar(contact: ContactorModel, letterTextSizeDp: Int = DEFAULT_LETTER_TEXT_SIZE_DP, targetSizePx: Int? = null) {
         val effective = contact.getEffectiveAvatarJson()?.getContactAvatarData()
         val publicAvatar = contact.avatar?.getContactAvatarData()
         setAvatar(
@@ -316,6 +317,16 @@ class AvatarView @JvmOverloads constructor(
 
     companion object {
         private const val CROSSFADE_DURATION = 150L
+
+        /** Avatar diameter the default letter size was designed for. */
+        const val DEFAULT_AVATAR_SIZE_DP = 48
+
+        /** Letter size the [DEFAULT_AVATAR_SIZE_DP] list avatar was designed with. */
+        const val DEFAULT_LETTER_TEXT_SIZE_DP = 22
+
+        /** Letter size that keeps the designed letter/diameter ratio for an avatar rendered at [avatarSizeDp]. */
+        fun letterTextSizeDpFor(avatarSizeDp: Int): Int =
+            (avatarSizeDp * DEFAULT_LETTER_TEXT_SIZE_DP / DEFAULT_AVATAR_SIZE_DP.toFloat()).roundToInt()
     }
 }
 

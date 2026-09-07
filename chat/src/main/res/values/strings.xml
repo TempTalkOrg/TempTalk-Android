@@ -1,6 +1,4 @@
 <resources>
-    <!--    <string name="search_default_hint">Search for messages or users</string>-->
-    <string name="search_default_hint">Search</string>
     <string name="attendee_external_label">EXT</string>
     <string name="attendee_host_prefix">Host・</string>
     <!-- LearnMoreTextView -->
@@ -18,12 +16,15 @@
     <string name="contact_join_at">Joined:</string>
     <string name="contact_how_you_met">How you met:</string>
     <string name="contact_info_website">Website:</string>
-    <string name="contact_name_card">Name Card</string>
     <string name="contact_official_account_label">Official Account</string>
     <string name="contact_name_label">Name: %s</string>
     <string name="contact_avatar_label">Original:</string>
-    <string name="contact_remark_subtitle">Only visible to you</string>
     <string name="contact_remark_name_placeholder">Add Remark</string>
+    <string name="contact_remark_private_hint">Only visible to you</string>
+    <string name="contact_remark_unsaved_message">Save Remark Changes?</string>
+    <string name="group_edit_unsaved_message">Save Group Name Changes?</string>
+    <string name="unsaved_changes_save">Save</string>
+    <string name="unsaved_changes_discard">Discard</string>
     <string name="contact_remark_avatar_choose_photos">Photos</string>
     <string name="contact_remark_avatar_restore">Revert to original</string>
     <string name="contact_info_title">Contact Info</string>
@@ -217,7 +218,6 @@
     <string name="group_operation_done">Done</string>
     <string name="group_participants">PARTICIPANTS</string>
     <string name="group_moderators">MODERATORS</string>
-    <string name="group_edit_info">Edit Group Info</string>
     <string name="group_management">Group Management</string>
     <string name="group_edit_save">Save</string>
     <string name="group_members">Members</string>
@@ -314,9 +314,6 @@
     <string name="contact_profile_done">Done</string>
     <string name="contact_profile_next">Next</string>
     <string name="contact_name">Name</string>
-    <string name="contact_profile_set_remark">Edit remarks</string>
-    <string name="contact_profile_remark">Remark</string>
-    <string name="contact_profile_remark_save">Save</string>
 
     <!-- MainActivity -->
     <string name="not_granted_necessary_permissions">Not granted necessary permissions</string>
@@ -528,6 +525,7 @@
     <string name="call_is_calling_tip">There is a call in progress. You can answer the call after disconnecting the current call.</string>
 
     <string name="file_load_error">Load error</string>
+    <string name="file_preparing">Preparing file…</string>
     <string name="activate_device_title">Device Inactive</string>
     <string name="activate_device_tips">Due to prolonged inactivity, your device has been temporarily disabled for security reasons, and any unreceived messages have been cleared. Please activate your device to resume use.</string>
     <string name="activate_device">Activate Now</string>
@@ -602,7 +600,6 @@
     <!-- Toast when user tries to operate without key -->
     <string name="group_encryption_update_required">Can\'t make changes right now</string>
     <!-- Inline Edit/Done button next to group name field -->
-    <string name="group_edit_name_edit">Edit</string>
     <string name="group_edit_name_done">Done</string>
     <string name="group_edit_name_empty">Group name can\'t be empty</string>
     <string name="critical_alerts">Critical Alerts</string>
@@ -691,7 +688,6 @@
     <string name="gif_search_hint">Search GIFs</string>
     <string name="gif_no_result">No GIFs found</string>
     <string name="gif_load_failed">Couldn\'t load GIFs. Try again later.</string>
-    <string name="gif_search_clear">Clear</string>
     <string name="gif_tab_trending">Trending</string>
 
     <!-- GIF favorites (M3: favorites data flow) -->

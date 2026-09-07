@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +33,6 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
@@ -47,6 +44,8 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.DifftSwitchDefaults
+import com.difft.android.base.ui.compose.DifftSwitchRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
@@ -59,6 +58,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.cancellation.CancellationException
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
 import javax.inject.Inject
@@ -112,34 +112,35 @@ class GroupNotificationSettingsActivity : BaseActivity() {
         }
     }
 
-    private fun updateGroupNotificationSettings(isDefaultEnabled: Boolean) {
+    /**
+     * @return true when the server accepted, so the caller flips the switch only then and it never
+     * shows a value the server rejected.
+     */
+    private suspend fun updateGroupNotificationSettings(useGlobal: Boolean): Boolean {
         val currentUserId = globalServices.myId
-
-        lifecycleScope.launch {
-            try {
-                val request = ChangeSelfSettingsInGroupReq(
-                    notification = null, // 保持当前通知设置不变
-                    useGlobal = isDefaultEnabled // 开关开启时传 true，关闭时传 false
-                )
-
-                ComposeDialogManager.showWait(this@GroupNotificationSettingsActivity, "")
-                val response = withContext(Dispatchers.IO) {
-                    groupRepo.changeSelfSettingsInGroup(groupId, currentUserId, request)
-                }
-                ComposeDialogManager.dismissWait()
-
-                if (response.status == 0) {
-                    // 接口调用成功
-                    L.i { "[GroupNotificationSettingsActivity] Update group notification settings success: useGlobal=$isDefaultEnabled" }
-                } else {
-                    // 接口调用失败，显示错误信息
-                    ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
-                }
-            } catch (e: Exception) {
-                L.e { "[GroupNotificationSettingsActivity] Update group notification settings failed: ${e.stackTraceToString()}" }
-                ComposeDialogManager.dismissWait()
-                ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
+        return try {
+            val request = ChangeSelfSettingsInGroupReq(
+                notification = null, // keep the current notification setting
+                useGlobal = useGlobal
+            )
+            ComposeDialogManager.showWait(this@GroupNotificationSettingsActivity, "")
+            val response = withContext(Dispatchers.IO) {
+                groupRepo.changeSelfSettingsInGroup(groupId, currentUserId, request)
             }
+            if (response.status == 0) {
+                L.i { "[GroupNotificationSettingsActivity] Update group notification settings success: useGlobal=$useGlobal" }
+                true
+            } else {
+                ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
+                false
+            }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            L.e { "[GroupNotificationSettingsActivity] Update group notification settings failed: ${e.stackTraceToString()}" }
+            ToastUtil.show(getString(com.difft.android.chat.R.string.operation_failed))
+            false
+        } finally {
+            // finally, so the rethrown cancellation cannot leave the dialog behind.
+            ComposeDialogManager.dismissWait(this@GroupNotificationSettingsActivity)
         }
     }
 
@@ -192,6 +193,10 @@ class GroupNotificationSettingsActivity : BaseActivity() {
             mutableStateOf(true) // 默认开启，稍后从数据库更新
         }
 
+        // Blocks a second tap while the request is in flight: alternating taps would otherwise
+        // issue opposite values whose responses can land out of order.
+        var switchRequestInFlight by remember { mutableStateOf(false) }
+
         // 异步获取数据库中的 useGlobal 和 notification 值，并响应 refreshTrigger 变化
         LaunchedEffect(refreshTrigger.intValue) {
             // 刷新全局通知设置
@@ -228,9 +233,19 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                             GroupGlobalNotificationSettingsActivity.start(this@GroupNotificationSettingsActivity)
                         },
                         onSwitchChanged = { newValue ->
-                            isDefaultEnabled = newValue
-                            // 调用接口更新群组通知设置
-                            updateGroupNotificationSettings(newValue)
+                            if (!switchRequestInFlight) {
+                                lifecycleScope.launch {
+                                    switchRequestInFlight = true
+                                    try {
+                                        // The switch flips only once the server accepted.
+                                        if (updateGroupNotificationSettings(newValue)) {
+                                            isDefaultEnabled = newValue
+                                        }
+                                    } finally {
+                                        switchRequestInFlight = false
+                                    }
+                                }
+                            }
                         }
                     )
                 }
@@ -427,60 +442,28 @@ class GroupNotificationSettingsActivity : BaseActivity() {
                 .padding(16.dp)
         ) {
             // 第一行：左边显示默认设置文字，右边显示开关
-            Row(
-                verticalAlignment = Alignment.Companion.CenterVertically,
-                modifier = Modifier.Companion.fillMaxWidth()
+            DifftSwitchRow(
+                checked = isDefaultEnabled,
+                onCheckedChange = { newValue -> onSwitchChanged?.invoke(newValue) },
+                modifier = Modifier.Companion.fillMaxWidth(),
+                // Compact row: the card already pads, so the settings-row default would stretch it.
+                minHeight = 0.dp,
             ) {
-                // 左边：Default Setting + 全局设置选项对应的文字
-                Row(
-                    verticalAlignment = Alignment.Companion.CenterVertically,
+                Text(
+                    text = getString(com.difft.android.chat.R.string.notification_default_setting),
+                    style = DifftSwitchDefaults.LabelTextStyle,
+                    color = DifftTheme.colors.textPrimary
+                )
+                Text(
+                    text = " (" + when (currentType) {
+                        GlobalNotificationType.ALL.value -> getString(com.difft.android.chat.R.string.notification_all)
+                        GlobalNotificationType.MENTION.value -> getString(com.difft.android.chat.R.string.notification_mention_only)
+                        GlobalNotificationType.OFF.value -> getString(com.difft.android.chat.R.string.notification_off)
+                        else -> getString(com.difft.android.chat.R.string.notification_all)
+                    } + ")",
+                    style = DifftSwitchDefaults.LabelTextStyle,
+                    color = if (isDefaultEnabled) DifftTheme.colors.textInfo else DifftTheme.colors.textSecondary,
                     modifier = Modifier.Companion.weight(1f)
-                ) {
-                    Text(
-                        text = getString(com.difft.android.chat.R.string.notification_default_setting),
-                        fontSize = 16.sp,
-                        color = Color(
-                            ContextCompat.getColor(
-                                context, R.color.t_primary
-                            )
-                        )
-                    )
-                    Text(
-                        text = " (" + when (currentType) {
-                            GlobalNotificationType.ALL.value -> getString(com.difft.android.chat.R.string.notification_all)
-                            GlobalNotificationType.MENTION.value -> getString(com.difft.android.chat.R.string.notification_mention_only)
-                            GlobalNotificationType.OFF.value -> getString(com.difft.android.chat.R.string.notification_off)
-                            else -> getString(com.difft.android.chat.R.string.notification_all)
-                        } + ")",
-                        fontSize = 16.sp,
-                        color = if (isDefaultEnabled) {
-                            Color(
-                                ContextCompat.getColor(
-                                    context, R.color.t_info
-                                )
-                            )
-                        } else {
-                            Color(
-                                ContextCompat.getColor(
-                                    context, R.color.t_secondary
-                                )
-                            )
-                        }
-                    )
-                }
-
-                // 右边：开关
-                Switch(
-                    checked = isDefaultEnabled,
-                    onCheckedChange = { newValue ->
-                        onSwitchChanged?.invoke(newValue)
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = colorResource(id = R.color.t_white),
-                        checkedTrackColor = colorResource(id = R.color.primary),
-                        uncheckedThumbColor = colorResource(id = R.color.t_white),
-                        uncheckedTrackColor = colorResource(id = R.color.gray_600)
-                    )
                 )
             }
 

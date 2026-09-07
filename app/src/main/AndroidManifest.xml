@@ -62,6 +62,9 @@
         <intent>
             <action android:name="android.media.action.ACTION_VIDEO_CAPTURE" />
         </intent>
+        <!-- Keeps a GSF-hosted gservices provider resolvable under API 30+ package filtering;
+             GmsHealth uses it to detect a GMS install on which nothing serves that authority. -->
+        <package android:name="com.google.android.gsf" />
     </queries>
     <uses-permission android:name="android.permission.GET_PACKAGE_SIZE" />
 

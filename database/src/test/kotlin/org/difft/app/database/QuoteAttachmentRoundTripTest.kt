@@ -94,7 +94,7 @@ class QuoteAttachmentRoundTripTest {
                     contentType = am.contentType ?: "", key = am.key, size = am.size,
                     thumbnail = am.thumbnail, digest = am.digest, fileName = am.fileName,
                     flags = am.flags, width = am.width, height = am.height,
-                    path = am.path, status = am.status
+                    path = null, status = am.status
                 ),
                 flags = am.flags
             )

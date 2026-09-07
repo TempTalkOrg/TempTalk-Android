@@ -1,7 +1,6 @@
 package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.application
 import com.difft.android.chat.gif.GifSendInput
 import com.difft.android.chat.gif.GifSendUseCase
@@ -279,7 +278,7 @@ class FavoriteOptimisticWriter @Inject constructor(
      * via the shared fetcher, then decrypts with the message key. Runs on IO.
      */
     private suspend fun downloadMessagePlaintext(ref: PendingSource.Message): File = withContext(Dispatchers.IO) {
-        val basePath = FileUtil.getMessageAttachmentFilePath(ref.messageId) + ref.fileName
+        val basePath = pendingMessageBasePath(ref.messageId, ref.fileName)
         val srcDir = File(application.cacheDir, "gif_fav_src").apply { mkdirs() }
         // Attachment-supplied fileName is attacker-influenceable metadata; reduce it to a bare basename
         // before using it in any NEW temp path under srcDir, so a crafted name with path separators
@@ -320,9 +319,8 @@ class FavoriteOptimisticWriter @Inject constructor(
      * message's own file (isTemp=false) which must NOT be deleted.
      */
     private suspend fun localPlaintextIfPresent(ref: PendingSource.Message): Pair<File, Boolean>? = withContext(Dispatchers.IO) {
-        val basePath = FileUtil.getMessageAttachmentFilePath(ref.messageId) + ref.fileName
+        val basePath = pendingMessageBasePath(ref.messageId, ref.fileName)
         if (!EncryptedAttachmentAccess.isReadable(basePath)) return@withContext null
         resolveMessageGifPlaintext(application, basePath, ref.key)
     }
-
 }

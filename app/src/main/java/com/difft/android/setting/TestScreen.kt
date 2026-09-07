@@ -317,8 +317,8 @@ private fun TestInputField(
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = DifftTheme.colors.background,
             unfocusedContainerColor = DifftTheme.colors.background,
-            focusedBorderColor = DifftTheme.colors.divider,
-            unfocusedBorderColor = DifftTheme.colors.divider
+            focusedBorderColor = DifftTheme.colors.line,
+            unfocusedBorderColor = DifftTheme.colors.line
         ),
         modifier = modifier
     )

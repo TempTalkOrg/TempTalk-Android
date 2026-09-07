@@ -120,9 +120,8 @@
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <androidx.appcompat.widget.SwitchCompat
+    <com.difft.android.base.widget.DifftSwitchView
         android:id="@+id/switch_can_add"
-        style="@style/Widget.Chative.Switch"
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginTop="16dp"
@@ -131,15 +130,13 @@
         android:paddingStart="16dp"
         android:paddingEnd="8dp"
         android:text="@string/group_only_moderators_can_add"
-        android:textSize="16sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <androidx.appcompat.widget.SwitchCompat
+    <com.difft.android.base.widget.DifftSwitchView
         android:id="@+id/switch_can_speak"
-        style="@style/Widget.Chative.Switch"
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:background="@color/bg.elevated"
@@ -147,15 +144,13 @@
         android:paddingStart="16dp"
         android:paddingEnd="8dp"
         android:text="@string/group_only_moderators_can_speak1"
-        android:textSize="16sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <androidx.appcompat.widget.SwitchCompat
+    <com.difft.android.base.widget.DifftSwitchView
         android:id="@+id/switch_can_critical_alert"
-        style="@style/Widget.Chative.Switch"
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginTop="16dp"
@@ -164,7 +159,6 @@
         android:paddingStart="16dp"
         android:paddingEnd="8dp"
         android:text="@string/group_critical_alert"
-        android:textSize="16sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

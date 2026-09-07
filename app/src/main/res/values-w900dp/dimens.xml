@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dual-pane (list + detail) pane budget — tablet band (width >= 900dp).
+
+    These are the values the dual-pane layout originally shipped with at the w840dp
+    gate. The band boundary is 900dp, NOT 840dp, on purpose: an unfolded Galaxy Z Fold 8
+    is exactly 840dp wide, and on a 7.6" handheld the tablet budget (96dp rail + 360dp
+    list) squeezes the conversation pane to 383dp — narrower than the device's own cover
+    screen. Keeping 673-899dp windows on the compact budget in res/values/dimens.xml
+    gives that device a 487dp conversation pane by default. Real tablets in landscape
+    (>= 960dp) and the Z TriFold unfolded (~1270dp) resolve this file as before.
+
+    Every dimen declared in res/values/dimens.xml MUST also be overridden here (except
+    dual_pane_detail_drag_min_width, which is deliberately band-independent) or a
+    >= 900dp window silently inherits the compact number.
+
+    Feasibility floor for this band: 96 + 0.5 + 280 + 360 == 736.5dp <= 900dp.
+    Pinned by app/src/test/java/com/difft/android/DualPaneBudgetResourceInvariantTest.kt.
+-->
+<resources>
+
+    <dimen name="dual_pane_rail_width">96dp</dimen>
+    <dimen name="dual_pane_divider_width">0.5dp</dimen>
+    <dimen name="dual_pane_list_default_width">360dp</dimen>
+    <dimen name="dual_pane_list_min_width">280dp</dimen>
+    <dimen name="dual_pane_detail_min_width">360dp</dimen>
+
+</resources>

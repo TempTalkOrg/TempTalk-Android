@@ -41,11 +41,10 @@
     </LinearLayout>
 
 
-    <androidx.appcompat.widget.AppCompatCheckBox
+    <com.difft.android.base.widget.DifftCheckBoxView
         android:id="@+id/cb_select"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:buttonTint="@color/event_checkbox_color_selector"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />

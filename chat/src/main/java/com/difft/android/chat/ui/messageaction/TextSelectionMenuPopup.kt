@@ -257,7 +257,7 @@ fun TextSelectionMenuContent(
         modifier = modifier,
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = DifftTheme.colors.backgroundPopup
+            containerColor = MessageActionMenuColors.panel
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 4.dp
@@ -311,12 +311,12 @@ private fun SelectionActionButton(
             painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier.size(16.dp),
-            tint = DifftTheme.colors.textPrimary
+            tint = MessageActionMenuColors.contentDefault
         )
         Text(
             text = label,
             fontSize = 12.sp,
-            color = DifftTheme.colors.textPrimary
+            color = MessageActionMenuColors.contentDefault
         )
     }
 }

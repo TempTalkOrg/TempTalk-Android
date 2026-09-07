@@ -15,10 +15,11 @@ import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnPreDraw
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.common.TextTruncationUtil
 import com.difft.android.chat.message.ChatMessage
@@ -37,6 +38,10 @@ import difft.android.messageserialization.model.isLongText
 /** High blur for image/video (rich content needs stronger blur), low blur for others (preserve content outline) */
 private const val BLUR_RADIUS_HIGH = 80f
 private const val BLUR_RADIUS_LOW = 16f
+
+/** Rendered diameter of the shared-contact card avatar in `chat_item_content_contact.xml`. */
+private const val CONTACT_CARD_AVATAR_SIZE_DP = 40
+private val CONTACT_CARD_AVATAR_LETTER_TEXT_SIZE_DP = AvatarView.letterTextSizeDpFor(CONTACT_CARD_AVATAR_SIZE_DP)
 
 @RequiresApi(Build.VERSION_CODES.S)
 private fun View.applyConfidentialBlur(radius: Float = BLUR_RADIUS_LOW, cornerRadius: Float = 0f) {
@@ -295,13 +300,13 @@ object AttachContentBinder : ContentBinder {
         val attachment = textMessage.attachment
 
         // Handle long text attachment - check if file is downloaded
-        val isLongText = attachment?.isLongText() == true
+        val longTextAttachment = attachment?.takeIf { it.isLongText() }
+        val isLongText = longTextAttachment != null
         var longTextPath: String? = null
         var isLongTextDownloaded = false
 
-        if (isLongText) {
-            val fileName = attachment?.fileName ?: ""
-            longTextPath = FileUtil.getMessageAttachmentFilePath(textMessage.id) + fileName
+        if (longTextAttachment != null) {
+            longTextPath = AttachmentPathResolver.fileFor(longTextAttachment)
             // A complete ".encrypt" alone counts as downloaded (see longTextReady); the status/progress
             // signal only gates legacy plaintext — forwarded long text never flips status to SUCCESS.
             isLongTextDownloaded = longTextReady(textMessage, longTextPath)
@@ -437,14 +442,15 @@ object ContactContentBinder : ContentBinder {
         // Get contact info from cache
         val contactor = contactorCache.getContactor(id)
         if (contactor != null) {
-            avatarView.setAvatar(contactor)
+            avatarView.setAvatar(contactor, letterTextSizeDp = CONTACT_CARD_AVATAR_LETTER_TEXT_SIZE_DP)
         } else {
             // Cache miss, show default avatar
             avatarView.setAvatar(
                 null,
                 null,
                 com.difft.android.chat.contacts.data.ContactorUtil.getFirstLetter(name),
-                id
+                id,
+                letterTextSizeDp = CONTACT_CARD_AVATAR_LETTER_TEXT_SIZE_DP,
             )
         }
 

@@ -1,7 +1,6 @@
 package com.difft.android.base.widget
 
 import android.content.Context
-import android.content.res.Configuration
 import android.util.AttributeSet
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.Guideline
@@ -9,18 +8,8 @@ import androidx.core.content.withStyledAttributes
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.datastore.preferences.core.edit
 import com.difft.android.base.R
-import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.storage.AppStateDataStoreEntryPoint
-import com.difft.android.base.storage.AppStateKeys
-import com.difft.android.base.utils.appScope
-import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
+import com.difft.android.base.storage.KeyboardHeightCache
 
 /**
  * A ConstraintLayout that automatically manages system window insets (status bar, navigation bar,
@@ -60,7 +49,6 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
     private var isKeyboardAnimating = false
     private var isKeyboardPaddingFrozen = false
     private var pendingKeyboardBottom: Int? = null
-    private var lastKeyboardHeight = 0
     private var lastNavigationBarBottom = 0
 
     init {
@@ -209,12 +197,12 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
             dispatchKeyboardListeners { it.onKeyboardHidden() }
         }
 
-        if (isImeVisible && imeInsets.bottom > 0) {
-            val keyboardHeight = imeInsets.bottom - navigationBarInsets.bottom
-            if (keyboardHeight > 0 && keyboardHeight != lastKeyboardHeight) {
-                lastKeyboardHeight = keyboardHeight
-                saveKeyboardHeight(keyboardHeight)
-            }
+        // Only settled values: onEnd re-applies insets once the IME animation is over, so a frame
+        // observed mid-animation is never the one stored. The cache dedupes process-wide; a per-view
+        // guard here could skip a write the cache still needs after another screen stored a
+        // different height.
+        if (isImeVisible && imeInsets.bottom > 0 && !isKeyboardAnimating) {
+            KeyboardHeightCache.save(context, imeInsets.bottom - navigationBarInsets.bottom)
         }
     }
 
@@ -275,42 +263,8 @@ class InsetAwareConstraintLayout @JvmOverloads constructor(
         }
     }
 
-    private fun saveKeyboardHeight(height: Int) {
-        val key = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE
-        } else {
-            AppStateKeys.KEY_KEYBOARD_HEIGHT_PORTRAIT
-        }
-        val dataStore = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            AppStateDataStoreEntryPoint::class.java,
-        ).appStateDataStore()
-        appScope.launch(Dispatchers.IO) {
-            runCatching { dataStore.edit { it[key] = height } }
-                .onFailure { L.w { "[InsetAwareConstraintLayout] save kb height failed: ${it.stackTraceToString()}" } }
-        }
-    }
-
     companion object {
-        /** Synchronous read for layout-init paths; pre-warmed DataStore typically returns in sub-ms, 1 s cap guards cold start. */
-        @Suppress("BanRunBlockingOutsideTests")
-        fun getKeyboardHeight(context: Context): Int {
-            val key = if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE
-            } else {
-                AppStateKeys.KEY_KEYBOARD_HEIGHT_PORTRAIT
-            }
-            val dataStore = EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                AppStateDataStoreEntryPoint::class.java,
-            ).appStateDataStore()
-            return runBlocking(Dispatchers.IO) {
-                val value = withTimeoutOrNull(1_000) { dataStore.data.first()[key] }
-                if (value == null) {
-                    L.w { "[InsetAwareConstraintLayout] getKeyboardHeight timed out at 1s, fallback=0" }
-                }
-                value ?: 0
-            }
-        }
+        /** Main-thread-safe read for layout-init paths; 0 when no keyboard has been measured yet. */
+        fun getKeyboardHeight(context: Context): Int = KeyboardHeightCache.get(context)
     }
 }

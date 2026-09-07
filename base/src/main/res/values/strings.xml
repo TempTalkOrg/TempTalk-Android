@@ -1,4 +1,6 @@
 <resources>
+    <string name="base_clear_text">Clear</string>
+    <string name="search_default_hint">Search</string>
     <string name="language_chinese" translatable="false">中文</string>
     <string name="language_english" translatable="false">English</string>
     <string name="chat_message_confidential_message">[Message]</string>
@@ -68,4 +70,5 @@
     <string name="e2ee_sheet_caveat">End-to-end encryption doesn\'t stop the people you chat with from copying, saving, forwarding, taking screenshots, or recording. Share sensitive content only with people you trust.</string>
     <string name="e2ee_sheet_got_it">OK</string>
     <string name="e2ee_learn_more">Learn more</string>
+    <string name="base_bottom_sheet_drag_handle">Drag handle</string>
 </resources>

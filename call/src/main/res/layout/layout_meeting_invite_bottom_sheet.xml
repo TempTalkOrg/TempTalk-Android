@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="@color/bgpage_primary"
+        android:background="@color/bg.popup.night"
         android:visibility="visible">
 
         <!-- 顶部标题栏 -->
@@ -106,7 +106,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:background="@color/bgpage_primary"
+        android:background="@color/bg.popup.night"
         android:visibility="gone">
 
         <!-- 顶部导航栏 -->
@@ -171,7 +171,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_search_input"
-                android:drawableStart="@drawable/ic_search_input"
+                android:drawableStart="@drawable/base_ic_search"
                 android:drawablePadding="6dp"
                 android:hint="@string/call_invite_search_placeholder"
                 android:imeOptions="actionSearch"
@@ -189,11 +189,12 @@
 
             <androidx.appcompat.widget.AppCompatImageButton
                 android:id="@+id/button_clear"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="12dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="10dp"
+                android:scaleType="fitCenter"
                 android:background="@null"
-                android:src="@drawable/ic_search_clear"
+                android:src="@drawable/base_ic_clear_filled"
                 android:tint="@color/t.secondary.night"
                 android:alpha="0"
                 app:layout_constraintBottom_toBottomOf="@+id/edittext_search_input"

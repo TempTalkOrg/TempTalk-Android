@@ -22,9 +22,7 @@ import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.normalizeNewlines
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
-import com.difft.android.base.utils.windowWidthPx
 import com.difft.android.base.utils.getLifecycleOwner
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
@@ -40,10 +38,12 @@ import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.chat.widget.chatContainerWidthPx
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import difft.android.messageserialization.For
@@ -72,6 +72,7 @@ import com.difft.android.chat.util.isHostActivityAlive
 import util.TimeFormatter
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+import com.difft.android.base.widget.DifftCheckBoxView
 
 /**
  * 消息交互回调封装
@@ -253,7 +254,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val ivSpeech2textServerTipIcon: ImageView
             get() = if (isMine) mineBinding!!.ivSpeech2textServerTipIcon else othersBinding!!.ivSpeech2textServerTipIcon
 
-        private val checkboxSelectForUnpin: androidx.appcompat.widget.AppCompatCheckBox
+        private val checkboxSelectForUnpin: DifftCheckBoxView
             get() = if (isMine) mineBinding!!.checkboxSelectForUnpin else othersBinding!!.checkboxSelectForUnpin
 
         // Voice speed button
@@ -348,9 +349,6 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             resetViewDefaults()
 
             if (message !is TextChatMessage) return
-
-            // Set container width for precise layout calculation in dual-pane mode
-            (contentContainer as? ChatMessageContainerView)?.containerWidth = containerWidth
 
             // Check if this message is currently playing audio and show speed button
             bindVoiceSpeedButton(message)
@@ -487,7 +485,10 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
                 // Cap the wrap_content text column so a long caption ellipsizes instead of pushing
                 // the trailing thumbnail past the bubble's max width. Reserve the thumbnail width
                 // when an attachment preview shows (mirrors iOS measureSize).
-                val bubbleMaxWidth = (containerWidth.takeIf { it > 0 } ?: quoteText.windowWidthPx()) - 70.dp
+                // Plumbed width first (dual-pane aware at bind time); the fallback walks the
+                // container chain (ContentSize.kt) instead of calling WindowMetrics, which is
+                // wrong in a pane and costly per bind.
+                val bubbleMaxWidth = (containerWidth.takeIf { it > 0 } ?: quoteText.chatContainerWidthPx()) - 70.dp
                 val hasAttachment = message.quote?.attachments?.isNotEmpty() == true
                 // chrome = stripe + margins (+48 for thumbnail and its margin when shown)
                 val textMaxWidth = (bubbleMaxWidth - if (hasAttachment) 75.dp else 27.dp).coerceAtLeast(40.dp)
@@ -593,22 +594,30 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             }
         }
 
-        private fun bindCheckboxView(
+        /**
+         * A programmatic `isChecked` on [DifftCheckBoxView] never fires the listener, so no
+         * detach / re-attach is needed around it; only a user toggle reaches the callback.
+         */
+        private fun bindSelectionCheckbox(
             message: TextChatMessage,
             onSelectPinnedMessage: ((messageId: String, selected: Boolean) -> Unit)?
         ) {
-            checkboxSelectForUnpin.setOnCheckedChangeListener(null)
             checkboxSelectForUnpin.isChecked = message.selectedStatus
             checkboxSelectForUnpin.setOnCheckedChangeListener { _, b ->
                 if (message.isConfidential()) {
                     checkboxSelectForUnpin.isChecked = message.selectedStatus
                     ToastUtil.show(itemView.context.getString(R.string.chat_confidential_can_not_select))
-                } else {
-                    if (b != message.selectedStatus) {
-                        onSelectPinnedMessage?.invoke(message.id, b)
-                    }
+                } else if (b != message.selectedStatus) {
+                    onSelectPinnedMessage?.invoke(message.id, b)
                 }
             }
+        }
+
+        private fun bindCheckboxView(
+            message: TextChatMessage,
+            onSelectPinnedMessage: ((messageId: String, selected: Boolean) -> Unit)?
+        ) {
+            bindSelectionCheckbox(message, onSelectPinnedMessage)
             checkboxSelectForUnpin.visibility =
                 if (message.editMode && message.attachment?.isAudioMessage() != true) View.VISIBLE
                 else if (message.editMode && message.attachment?.isAudioMessage() == true) View.INVISIBLE
@@ -628,20 +637,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         ) {
             if (message !is TextChatMessage) return
 
-            // Clear listener first to avoid triggering callback when setting isChecked
-            checkboxSelectForUnpin.setOnCheckedChangeListener(null)
-            checkboxSelectForUnpin.isChecked = message.selectedStatus
-            // Re-set listener to ensure user clicks can be responded
-            checkboxSelectForUnpin.setOnCheckedChangeListener { _, b ->
-                if (message.isConfidential()) {
-                    checkboxSelectForUnpin.isChecked = message.selectedStatus
-                    ToastUtil.show(itemView.context.getString(R.string.chat_confidential_can_not_select))
-                } else {
-                    if (b != message.selectedStatus) {
-                        onSelectPinnedMessage?.invoke(message.id, b)
-                    }
-                }
-            }
+            bindSelectionCheckbox(message, onSelectPinnedMessage)
         }
 
         /**
@@ -1180,11 +1176,15 @@ private fun resolveOriginalThumbnailAsync(
 }
 
 /**
- * Finds the on-disk path of the original quoted message's image/video attachment, forward-aware.
- * - Normal attachment message: file under `getMessageAttachmentFilePath(message.id)`.
- * - Single-forward message: the forwarded file lives under the attachment's `authorityId` directory
- *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment image-preview.
+ * Finds the on-disk path of the original quoted message's image/video attachment, forward-aware:
+ * a single-forward original's media is addressed as a forward copy, anything else as the message's
+ * own attachment (see AttachmentPathResolver).
  * Returns the path only if the file exists AND the attachment is image/video; else null (text-only).
+ *
+ * Blocking IO — every caller must already be on [Dispatchers.IO], which is what licenses the
+ * MIGRATING read below. A quote thumbnail is not a download gate: a miss renders text-only and
+ * enqueues nothing, so unlike a bubble's bind this path cannot rely on the download job to bring a
+ * pre-per-copy file across, and would show blank until the background migration reached the row.
  */
 internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomType: Int): String? = runCatching {
     val original = wcdb.message.getFirstObject(
@@ -1193,22 +1193,22 @@ internal fun findOriginalAttachmentPath(timestamp: Long, roomId: String, roomTyp
             .and(DBMessageModel.timeStamp.eq(timestamp))
     ) ?: return null
 
-    // Single-forward original → forwarded attachment under its authorityId directory.
+    // Single-forward original → the forwarded attachment, addressed as its own copy.
     val forward = original.forwardContext()?.forwards?.takeIf { it.size == 1 }?.firstOrNull()
     if (forward != null) {
         val att = forward.attachments?.firstOrNull() ?: return null
         if (!MediaUtil.isImageOrVideoType(att.contentType)) return null
-        val fileName = att.fileName ?: return null
-        val path = FileUtil.getMessageAttachmentFilePath(att.authorityId.toString()) + fileName
+        att.fileName ?: return null
+        val path = AttachmentPathResolver.materializedFileFor(att, original.id)
         // isReadable (not File.exists): encrypted-at-rest media has only the .encrypt on disk; the
         // loader resolves it to a decrypting content uri via imageGlideModel.
         return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
     }
 
-    // Normal attachment original → file under message.id directory.
+    // Normal attachment original → its own per-copy directory, same rule as the forward branch.
     val att = original.attachment()?.takeIf { MediaUtil.isImageOrVideoType(it.contentType) } ?: return null
-    val fileName = att.fileName ?: return null
-    val path = FileUtil.getMessageAttachmentFilePath(original.id) + fileName
+    att.fileName ?: return null
+    val path = AttachmentPathResolver.materializedFileFor(att, original.id)
     path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
 }.onFailure {
     L.w { "[QuoteThumb] findOriginalAttachmentPath failed ts=$timestamp: ${it.stackTraceToString()}" }

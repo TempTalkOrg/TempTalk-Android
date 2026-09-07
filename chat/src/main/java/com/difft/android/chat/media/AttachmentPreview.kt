@@ -1,7 +1,7 @@
 package com.difft.android.chat.media
 
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.application
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.websocket.api.crypto.AttachmentCipherStreamUtil
 import com.difft.android.selector.entity.LocalMedia
@@ -23,9 +23,9 @@ import difft.android.messageserialization.model.Attachment
  */
 object AttachmentPreview {
 
-    fun localMediaFor(messageId: String, attachment: Attachment): LocalMedia {
+    fun localMediaFor(attachment: Attachment): LocalMedia {
         val fileName = attachment.fileName ?: ""
-        val basePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+        val basePath = AttachmentPathResolver.fileFor(attachment)
 
         // Prefer the decrypting `content://` provider whenever a ciphertext file exists — even if a
         // plaintext copy also exists transiently. During a fresh self-send the plaintext and the
@@ -39,7 +39,7 @@ object AttachmentPreview {
             return LocalMedia.generateLocalMedia(application, basePath)
         }
 
-        val uri = EncryptedAttachmentAccess.contentUri(messageId, fileName)
+        val uri = EncryptedAttachmentAccess.contentUriFromBasePath(basePath)
         return LocalMedia.create().apply {
             path = uri.toString()
             realPath = basePath

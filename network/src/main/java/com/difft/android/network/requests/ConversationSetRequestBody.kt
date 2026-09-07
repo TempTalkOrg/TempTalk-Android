@@ -24,4 +24,8 @@ data class ConversationSetRequestBody(
 enum class MuteStatus(val value: Int) {
     MUTED(1),
     UNMUTED(0);
+
+    companion object {
+        fun of(muted: Boolean): MuteStatus = if (muted) MUTED else UNMUTED
+    }
 }

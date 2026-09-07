@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- True on phones (sw<600dp), false in values-sw600dp/ — see BaseActivity.applyOrientationPolicy. -->
+    <!-- True on phones (sw<600dp), false in values-sw600dp/ — see OrientationPolicy.applyTo. -->
     <bool name="force_portrait_orientation">true</bool>
 </resources>

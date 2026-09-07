@@ -7,41 +7,13 @@
     android:orientation="vertical"
     tools:context=".group.GroupInfoActivity">
 
-    <RelativeLayout
-        android:id="@+id/title_container"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_title_bar"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:orientation="horizontal"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/ib_back"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
-            android:background="@null"
-            android:padding="12dp"
-            android:src="@drawable/chative_ic_back"
-            android:tint="@color/t.primary" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_centerVertical="true"
-            android:layout_toEndOf="@id/ib_back"
-            android:ellipsize="end"
-            android:gravity="center_vertical"
-            android:lineSpacingExtra="4sp"
-            android:lines="1"
-            android:textColor="@color/t.primary"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            tools:text="123123123" />
-    </RelativeLayout>
+        android:layout_height="wrap_content" />
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/scroll_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
@@ -51,11 +23,17 @@
             android:orientation="vertical"
             android:paddingBottom="20dp">
 
+            <!-- Centered identity header (avatar + name + encryption meta); edit mode lives here too -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/compose_identity_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
             <!-- Card A: header (search input + member list + view-all toggle) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="24dp"
                 android:background="@color/bg.elevated"
                 android:orientation="vertical">
 
@@ -71,7 +49,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:background="@drawable/chat_search_input_bg_on_card"
-                        android:drawableStart="@drawable/chat_fragment_search_input_ic_search_input"
+                        android:drawableStart="@drawable/base_ic_search"
                         android:drawablePadding="6dp"
                         android:hint="@string/search_default_hint"
                         android:textColorHint="@color/t.disable"
@@ -140,44 +118,7 @@
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </LinearLayout>
 
-            <!-- Card B: encryption status / upgrade entry (visibility controlled by setupEncryptionRow) -->
-            <LinearLayout
-                android:id="@+id/ll_encryption_row"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="16dp"
-                android:background="@color/bg.elevated"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingEnd="8dp"
-                android:visibility="gone">
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_encryption_lock"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_marginEnd="6dp"
-                    android:src="@drawable/chat_ic_lock_cog"
-                    android:visibility="gone" />
-
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/tv_encryption_label"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.AppCompatImageView
-                    android:id="@+id/iv_encryption_arrow"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
-                    android:visibility="gone" />
-
-            </LinearLayout>
-
-            <!-- Card C: search chat history + group management + edit group info -->
+            <!-- Card C: search chat history + group management -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -240,32 +181,6 @@
 
                 </RelativeLayout>
 
-                <RelativeLayout
-                    android:id="@+id/edit_group_container"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerVertical="true"
-                        android:text="@string/group_edit_info"
-                        tools:ignore="RelativeOverlap"
-                        android:textColor="@color/t.primary"
-                        android:textSize="16sp" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/arrow2"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
-
-                </RelativeLayout>
             </LinearLayout>
 
             <!-- Card D: switches & notifications & disappearing & save to photos -->
@@ -282,14 +197,12 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <androidx.appcompat.widget.SwitchCompat
+                    <com.difft.android.base.widget.DifftSwitchView
                         android:id="@+id/switch_stick"
-                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:checked="false"
                         android:text="@string/chat_stick"
-                        android:textSize="16sp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
@@ -303,14 +216,12 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="8dp">
 
-                    <androidx.appcompat.widget.SwitchCompat
+                    <com.difft.android.base.widget.DifftSwitchView
                         android:id="@+id/switch2mute"
-                        style="@style/Widget.Chative.Switch"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:checked="false"
                         android:text="@string/chat_settings_mute"
-                        android:textSize="16sp"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"

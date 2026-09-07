@@ -38,6 +38,7 @@ import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.CallUserDisplayInfo
+import com.difft.android.call.ui.actionbar.ActionBarPlan
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
@@ -78,27 +79,13 @@ private val PORTRAIT_TOP_BAR_HEIGHT_COMPACT =
     (LCallUiConstants.TOP_BAR_MARGIN_TOP_DP + LCallUiConstants.TOP_BAR_HEIGHT_DP).dp
 
 /**
- * Portrait bottom control-bar reserved height; see [LCallUiConstants.BOTTOM_BAR_TOTAL_HEIGHT_DP].
- * 用于给网格底部预留空间，避免被控制栏覆盖。见 [MainPageWithBottomControlView]。
+ * Portrait grid bottom reserve for one action-bar plan: the whole chrome stack the plan
+ * occupies (bar, its bottom margin, and the outside Emoji pill when the plan has one) plus the
+ * breathing gap, so the last row always rests above the floating controls. The plan is a pure
+ * function of the window size, so this follows fold / unfold and rotation.
  */
-private val PORTRAIT_BOTTOM_BAR_HEIGHT = LCallUiConstants.BOTTOM_BAR_TOTAL_HEIGHT_DP.dp
-
-/**
- * Reserve needed for the bottom emoji barrage entry button: the button's own height
- * ([LCallUiConstants.BARRAGE_ENTRY_TOTAL_HEIGHT_DP]) plus the breathing gap. The button floats
- * above the control bar (see [BarrageMessageView]'s barrageStackBottomPadding), so the grid's
- * bottom must reserve this extra height beyond the control bar to avoid the last row being
- * covered by the button.
- */
-internal val PORTRAIT_BARRAGE_ENTRY_RESERVED =
-    LCallUiConstants.BARRAGE_ENTRY_TOTAL_HEIGHT_DP.dp + PORTRAIT_CONTENT_GAP
-
-/**
- * 竖屏网格底部总预留高度：控制栏 + emoji 弹幕按钮 + 间距，
- * 保证底部格子始终位于 emoji 按钮上方。
- */
-internal val PORTRAIT_BOTTOM_RESERVED =
-    PORTRAIT_BOTTOM_BAR_HEIGHT + PORTRAIT_BARRAGE_ENTRY_RESERVED + PORTRAIT_CONTENT_GAP
+internal fun portraitBottomReserved(plan: ActionBarPlan): Dp =
+    plan.chromeBottomReserveDp.dp + PORTRAIT_CONTENT_GAP
 
 /**
  * Bottom inset the scrolling gallery keeps below its last row once the chrome is hidden — enough
@@ -109,9 +96,8 @@ internal val PORTRAIT_BOTTOM_RESERVED =
  * `LCallActivity.configureWindow`) and the call content consumes only `WindowInsets.statusBars`,
  * so no bottom system inset ever reaches this layout and only the 24 dp breathing gap survives.
  *
- * Unlike iOS the barrage entry earns no reserve in this state: Android fades it out together with
- * the bottom bar (see `ShouldShowBarrageInput`), so reserving its band would hold space for an
- * invisible button.
+ * Unlike iOS the Emoji entry earns no reserve in this state: it is part of the action bar and fades
+ * out with it, so reserving its band would hold space for an invisible control.
  */
 internal val PORTRAIT_BOTTOM_RESIDUAL = 24.dp
 
@@ -255,14 +241,15 @@ internal fun rememberGalleryContentPadding(
     topInset: Dp,
     count: Int,
     reveal: Animatable<Float, AnimationVector1D>,
+    bottomReserve: Dp,
 ): PaddingValues {
     val shownTop = topInset + portraitTopReserved(count, topVisible = true)
     val hiddenTop = topInset + portraitTopReserved(count, topVisible = false)
-    return remember(shownTop, hiddenTop, reveal) {
+    return remember(shownTop, hiddenTop, reveal, bottomReserve) {
         // Both lambdas read reveal.value at measure time only, never from a composable scope.
         DeferredTopPaddingValues(
             horizontal = PORTRAIT_HORIZONTAL_PADDING,
-            bottom = { lerp(PORTRAIT_BOTTOM_RESIDUAL, PORTRAIT_BOTTOM_RESERVED, reveal.value) },
+            bottom = { lerp(PORTRAIT_BOTTOM_RESIDUAL, bottomReserve, reveal.value) },
         ) { lerp(hiddenTop, shownTop, reveal.value) }
     }
 }
@@ -289,6 +276,7 @@ fun PortraitParticipantLayout(
     coroutineScope: CoroutineScope,
     displayInfoMap: Map<String, CallUserDisplayInfo>,
     forceScrollGrid: Boolean,
+    bottomReserve: Dp,
 ) {
     val useScrollGrid = forceScrollGrid || participants.size >= PORTRAIT_SCROLL_FROM
     when {
@@ -320,7 +308,7 @@ fun PortraitParticipantLayout(
                 // toolbar + bullet-entry inset inside the scroll content.
                 val reveal = rememberTopBarRevealProgress(viewModel.callUiController)
                 val contentPadding =
-                    rememberGalleryContentPadding(topInset, participants.size, reveal)
+                    rememberGalleryContentPadding(topInset, participants.size, reveal, bottomReserve)
                 PortraitScrollGallery(
                     participants = participants,
                     viewModel = viewModel,
@@ -340,20 +328,24 @@ fun PortraitParticipantLayout(
                 is LocalParticipant -> globalServices.myId
                 else -> participant.identity?.value ?: ""
             }
-            MultiParticipantItem(
-                viewModel = viewModel,
-                room = room,
-                participant = participant,
-                modifier = Modifier.fillMaxSize(),
-                uid = uid,
-                userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
-                participantIndex = 0,
-                participantCount = participants.size,
-                muteOtherEnabled = muteOtherEnabled,
-                onClickMute = { viewModel.toggleMute(participant) },
-                coroutineScope = coroutineScope,
-                cornerRadius = 0.dp
-            )
+            // Keyed like every other tile site so per-tile state (mute menu) never survives a
+            // participant swap in the single-tile slot.
+            key(participant.sid.value) {
+                MultiParticipantItem(
+                    viewModel = viewModel,
+                    room = room,
+                    participant = participant,
+                    modifier = Modifier.fillMaxSize(),
+                    uid = uid,
+                    userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
+                    participantIndex = 0,
+                    participantCount = participants.size,
+                    muteOtherEnabled = muteOtherEnabled,
+                    onClickMute = { name -> viewModel.toggleMute(participant, name) },
+                    coroutineScope = coroutineScope,
+                    cornerRadius = 0.dp
+                )
+            }
         }
         // 2~6 人：固定布局，夹在顶部标题栏与底部控制栏之间居中展示。
         else -> {
@@ -364,7 +356,8 @@ fun PortraitParticipantLayout(
                 muteOtherEnabled = muteOtherEnabled,
                 topInset = topInset,
                 coroutineScope = coroutineScope,
-                displayInfoMap = displayInfoMap
+                displayInfoMap = displayInfoMap,
+                bottomReserve = bottomReserve,
             )
         }
     }
@@ -420,7 +413,7 @@ private fun PortraitScrollGallery(
                     participantIndex = index,
                     participantCount = participants.size,
                     muteOtherEnabled = muteOtherEnabled,
-                    onClickMute = { viewModel.toggleMute(participant) },
+                    onClickMute = { name -> viewModel.toggleMute(participant, name) },
                     coroutineScope = coroutineScope
                 )
             }
@@ -446,6 +439,7 @@ private fun FixedPortraitGrid(
     topInset: Dp,
     coroutineScope: CoroutineScope,
     displayInfoMap: Map<String, CallUserDisplayInfo>,
+    bottomReserve: Dp,
 ) {
     if (participants.isEmpty()) return
 
@@ -464,7 +458,7 @@ private fun FixedPortraitGrid(
         val layout = computePortraitCells(
             count = participants.size,
             availableWidthDp = maxWidth.value,
-            availableHeightDp = (maxHeight - topChrome - PORTRAIT_BOTTOM_RESERVED).value,
+            availableHeightDp = (maxHeight - topChrome - bottomReserve).value,
             gapDp = PORTRAIT_CELL_GAP_DP.toFloat()
         )
         val cellWidth = layout.cellWidthDp.dp
@@ -484,7 +478,7 @@ private fun FixedPortraitGrid(
                     availableHeight = maxHeight,
                     contentHeight = contentHeight,
                     minTop = topChrome,
-                    bottomReserve = PORTRAIT_BOTTOM_RESERVED,
+                    bottomReserve = bottomReserve,
                 )
             ),
             verticalArrangement = Arrangement.spacedBy(PORTRAIT_CELL_GAP_DP.dp),
@@ -513,7 +507,7 @@ private fun FixedPortraitGrid(
                                 participantIndex = index,
                                 participantCount = participants.size,
                                 muteOtherEnabled = muteOtherEnabled,
-                                onClickMute = { viewModel.toggleMute(participant) },
+                                onClickMute = { name -> viewModel.toggleMute(participant, name) },
                                 coroutineScope = coroutineScope
                             )
                         }

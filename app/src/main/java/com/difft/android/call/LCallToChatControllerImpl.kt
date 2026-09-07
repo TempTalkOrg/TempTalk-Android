@@ -197,18 +197,31 @@ class LCallToChatControllerImpl @Inject constructor(
     override suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel> =
         ContactorUtil.getContactWithID(context, id)
 
-    override fun getAvatarByContactor(context: Context, contactor: ContactorModel): ConstraintLayout =
-        AvatarView(context).apply { setAvatar(contactor) }
+    override fun getAvatarByContactor(context: Context, contactor: ContactorModel, avatarSizeDp: Int?): ConstraintLayout =
+        AvatarView(context).apply {
+            setAvatar(contactor, letterTextSizeDp = letterTextSizeDpFor(avatarSizeDp))
+        }
 
-    override fun createAvatarByNameOrUid(context: Context, name: String?, uid: String): ConstraintLayout {
+    override fun createAvatarByNameOrUid(context: Context, name: String?, uid: String, avatarSizeDp: Int?): ConstraintLayout {
         val userId = if (uid.contains(".")) uid.split(".")[0] else uid
         val firstLetter = if (!name.isNullOrEmpty()) {
             name.take(1)
         } else {
             IdUtil.convertToBase58UserName(userId)?.takeIf { it.isNotEmpty() }?.take(1) ?: userId
         }
-        return AvatarView(context).apply { setAvatar(null, null, firstLetter, userId.replace("+", "")) }
+        return AvatarView(context).apply {
+            setAvatar(
+                null,
+                null,
+                firstLetter,
+                userId.replace("+", ""),
+                letterTextSizeDp = letterTextSizeDpFor(avatarSizeDp),
+            )
+        }
     }
+
+    private fun letterTextSizeDpFor(avatarSizeDp: Int?): Int =
+        AvatarView.letterTextSizeDpFor(avatarSizeDp ?: AvatarView.DEFAULT_AVATAR_SIZE_DP)
 
     override fun getMySelfUid(): String = mySelfId
 

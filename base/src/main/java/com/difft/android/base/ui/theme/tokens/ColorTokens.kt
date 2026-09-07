@@ -18,6 +18,9 @@ object ColorTokens {
     val SuccessDark = Color(0xFF00764B)
     val Warning = Color(0xFFFFC814)
     val WarningDark = Color(0xFFB06D00)
+    // Caution (orange): pending-action state, e.g. an un-encrypted group's "Enhance Encryption" entry.
+    val Caution = Color(0xFFFF8800)
+    val CautionDark = Color(0xFFAE5004)
     val Error = Color(0xFFF84135)
     val ErrorDark = Color(0xFFD9271E)
     val Info = Color(0xFF056FFA)
@@ -30,7 +33,6 @@ object ColorTokens {
         val Bg = Color(0xFFFAFAFA)    // bg — default page background (settings idiom)
         val BackgroundSecondary = Color(0xFFFAFAFA)  // bg2 (matches XML values/colors.xml bg2)
         val BackgroundPopup = Color(0xFFFFFFFF)      // bg.popup (matches XML values/colors.xml bg.popup)
-        val BackgroundModal = Color(0xFFFFFFFF)      // bg.modal (matches XML values/colors.xml bg.modal)
         val BackgroundTertiary = Color(0xFFF5F5F5)   // bg3
         val BackgroundQuaternary = Color(0xFFB7BDC6) // bg4
         val BackgroundActionPopup = Color(0xFFFFFFFF) // Light: pure white (for popup menu)
@@ -38,6 +40,7 @@ object ColorTokens {
         val BackgroundDisabled = Color(0xFFEAECEF)
         val BackgroundBlue = Color(0xFFEBF7FF)
         val BgElevated = Color(0xFFFFFFFF) // bg.elevated — default elevated/card background
+        val Bg5 = Color(0xFF181A20)   // bg5 — permanently dark surface (same value in light and night XML)
         val BackgroundElevate = Color(0xFF0B0E11)
 
         // Surface colors
@@ -52,7 +55,6 @@ object ColorTokens {
         val TextOnPrimary = Color(0xFFFFFFFF)
 
         // UI elements
-        val Divider = Color(0xFFEAECEF)
         val Line = Color(0xFFEAECEF)  // line color
         val Border = Color(0xFFEAECEF)
         val Icon = Color(0xFF474D57)
@@ -74,7 +76,6 @@ object ColorTokens {
         val Bg = Color(0xFF181A20)    // bg — default page background (= bg1 value in dark mode)
         val BackgroundSecondary = Color(0xFF1E2329)  // bg2 (matches XML values-night/colors.xml bg2)
         val BackgroundPopup = Color(0xFF1E2329)      // bg.popup (matches XML values-night/colors.xml bg.popup)
-        val BackgroundModal = Color(0xFF2B3139)      // bg.modal (matches XML values-night/colors.xml bg.modal)
         val BackgroundTertiary = Color(0xFF2B3139)   // bg3
         val BackgroundQuaternary = Color(0xFF474D57) // bg4
         val BackgroundActionPopup = Color(0xFF474D57) // Dark: bg4 value (for popup menu)
@@ -82,6 +83,7 @@ object ColorTokens {
         val BackgroundDisabled = Color(0xFF474D57)
         val BackgroundBlue = Color(0xFF003366)
         val BgElevated = Color(0xFF1E2329) // bg.elevated (= bg2 value in dark mode)
+        val Bg5 = Color(0xFF181A20)   // bg5 — permanently dark surface
 
         val BackgroundElevate = Color(0xFF0B0E11)
 
@@ -97,7 +99,6 @@ object ColorTokens {
         val TextOnPrimary = Color(0xFFFFFFFF)
 
         // UI elements
-        val Divider = Color(0xFF2B3139)
         val Line = Color(0xFF474D57)  // line color
         val Border = Color(0xFF474D57)
         val Icon = Color(0xFFB7BDC6)

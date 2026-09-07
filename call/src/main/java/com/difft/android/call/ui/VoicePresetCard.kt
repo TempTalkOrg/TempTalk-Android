@@ -38,10 +38,12 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.difft.android.call.data.VoicePreset
 
+/** Lifts a menu that opens inside a bottom sheet off the sheet ground it shares a colour family with. */
+private val SHEET_MENU_ELEVATION = 4.dp
+
 @Composable
 fun VoicePresetCard(
     currentPreset: VoicePreset,
-    isParticipantSharedScreen: Boolean,
     onPresetSelected: (VoicePreset) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -52,7 +54,7 @@ fun VoicePresetCard(
 
     Box(
         modifier = Modifier
-            .then(if (isParticipantSharedScreen) Modifier.width(343.dp) else Modifier.fillMaxWidth())
+            .fillMaxWidth()
             .onSizeChanged { boxWidthPx = it.width }
     ) {
         Row(
@@ -60,7 +62,7 @@ fun VoicePresetCard(
                 .fillMaxWidth()
                 .height(55.dp)
                 .background(
-                    color = DifftTheme.colors.backgroundQuaternary,
+                    color = DifftTheme.colors.backgroundTertiary,
                     shape = RoundedCornerShape(size = 8.dp)
                 )
                 .clickable { expanded = true }
@@ -105,9 +107,9 @@ fun VoicePresetCard(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .width(menuWidth)
-                .background(DifftTheme.colors.backgroundTertiary),
+            modifier = Modifier.width(menuWidth),
+            containerColor = DifftTheme.colors.backgroundPopup,
+            shadowElevation = SHEET_MENU_ELEVATION,
             offset = DpOffset(x = dropdownOffset, y = 0.dp)
         ) {
             VoicePreset.entries.forEach { preset ->

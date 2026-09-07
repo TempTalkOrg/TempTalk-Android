@@ -52,8 +52,8 @@ class LoginViewModel @Inject constructor() : ViewModel() {
     @Inject
     lateinit var favoriteWriteRepo: dagger.Lazy<FavoriteWriteRepository>
 
-    private val mInviteCodeLiveData = MutableLiveData<Resource<Any>>()
-    internal val inviteCodeLiveData: LiveData<Resource<Any>> = mInviteCodeLiveData
+    private val mAccountInvalidLiveData = MutableLiveData<Resource<Any>>()
+    internal val accountInvalidLiveData: LiveData<Resource<Any>> = mAccountInvalidLiveData
 
     private val mSignInLiveData = MutableLiveData<Resource<AccountData>>()
     internal val signInLiveData: LiveData<Resource<AccountData>> = mSignInLiveData
@@ -117,15 +117,14 @@ class LoginViewModel @Inject constructor() : ViewModel() {
     }
 
     /**
-     * 验证邀请码是否有效
-     * @param invitationCode 邀请码
+     * Verify a temporary invitation code (one-click-registration nonce code or the
+     * server-issued registration token from email/phone signup). Long-term personal
+     * invite codes are no longer accepted by the server on this endpoint.
      */
     private suspend fun verifyInvitationCode(invitationCode: String) {
-        mInviteCodeLiveData.value = Resource.loading()
         try {
             val result = loginRepo.verifyInvitationCode(invitationCode)
             if (result.status == 0) {
-                mInviteCodeLiveData.value = Resource.success()
                 val vcode = result.data?.vcode
                 val account = result.data?.account
                 if (!vcode.isNullOrBlank() && !account.isNullOrBlank()) {
@@ -136,15 +135,11 @@ class LoginViewModel @Inject constructor() : ViewModel() {
                 }
             } else {
                 L.e { "[login] verifyInvitationCode -> failed with status=${result.status}, reason=${result.reason}" }
-                val error = NetworkException(result.status, result.reason ?: "")
-                mInviteCodeLiveData.value = Resource.error(error)
-                mSignInLiveData.value = Resource.error(error)
+                mSignInLiveData.value = Resource.error(NetworkException(result.status, result.reason ?: ""))
             }
         } catch (e: Exception) {
             L.e { "[login] verifyInvitationCode -> error: ${e.message}" }
-            val error = NetworkException(message = e.message ?: "")
-            mInviteCodeLiveData.value = Resource.error(error)
-            mSignInLiveData.value = Resource.error(error)
+            mSignInLiveData.value = Resource.error(NetworkException(message = e.message ?: ""))
         }
     }
 
@@ -376,9 +371,8 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         } else if (ValidatorUtil.isEmail(account)) {
             verifyEmail(account)
         } else {
-            viewModelScope.launch {
-                verifyInvitationCode(account)
-            }
+            // Only email/phone can log in; invite-code login was removed for security.
+            mAccountInvalidLiveData.value = Resource.error(NetworkException(message = ResUtils.getString(R.string.login_error_invalid_account)))
         }
     }
 }

@@ -31,6 +31,7 @@ data class DifftExtendedColors(
     val textWarning: Color,
     val textSuccess: Color,
     val textInfo: Color,
+    val textCaution: Color,
 
     // Background hierarchy
     val background: Color,
@@ -41,15 +42,14 @@ data class DifftExtendedColors(
     val backgroundActionPopup: Color,  // Message action popup background
     val backgroundBottomSheet: Color,  // Bottom sheet background (same as bg.popup)
     val backgroundDisabled: Color,
-    val backgroundModal: Color,
     val backgroundPopup: Color,
     val backgroundTooltip: Color,
     val backgroundBlue: Color,
     val bgElevated: Color,  // bg.elevated — default elevated/card background
+    val bg5: Color,  // bg5 — permanently dark surface (call UI)
     val backgroundElevate: Color,
 
     // UI elements
-    val divider: Color,
     val line: Color,
     val border: Color,
     val icon: Color,
@@ -107,7 +107,7 @@ fun createLightColorScheme(): ColorScheme = lightColorScheme(
     onSurfaceVariant = ColorTokens.Light.TextSecondary,
 
     outline = ColorTokens.Light.Border,
-    outlineVariant = ColorTokens.Light.Divider,
+    outlineVariant = ColorTokens.Light.Line,
 
     scrim = ColorTokens.Light.Scrim,
 
@@ -152,7 +152,7 @@ fun createDarkColorScheme(): ColorScheme = darkColorScheme(
     onSurfaceVariant = ColorTokens.Dark.TextSecondary,
 
     outline = ColorTokens.Dark.Border,
-    outlineVariant = ColorTokens.Dark.Divider,
+    outlineVariant = ColorTokens.Dark.Line,
 
     scrim = ColorTokens.Dark.Scrim,
 
@@ -182,6 +182,7 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     textWarning = ColorTokens.WarningDark,
     textSuccess = ColorTokens.SuccessDark,
     textInfo = ColorTokens.Info,
+    textCaution = ColorTokens.CautionDark,
 
     background = ColorTokens.Light.Background,
     bg = ColorTokens.Light.Bg,
@@ -191,14 +192,13 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundActionPopup = ColorTokens.Light.BackgroundActionPopup,
     backgroundBottomSheet = ColorTokens.Light.BackgroundBottomSheet,
     backgroundDisabled = ColorTokens.Light.BackgroundDisabled,
-    backgroundModal = ColorTokens.Light.BackgroundModal,
     backgroundPopup = ColorTokens.Light.BackgroundPopup,
     backgroundTooltip = ColorTokens.Light.Tooltip,
     backgroundBlue = ColorTokens.Light.BackgroundBlue,
     bgElevated = ColorTokens.Light.BgElevated,
+    bg5 = ColorTokens.Light.Bg5,
     backgroundElevate = ColorTokens.Light.BackgroundElevate,
 
-    divider = ColorTokens.Light.Divider,
     line = ColorTokens.Light.Line,
     border = ColorTokens.Light.Border,
     icon = ColorTokens.Light.Icon,
@@ -237,6 +237,7 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     textWarning = ColorTokens.Warning,
     textSuccess = ColorTokens.Success,
     textInfo = ColorTokens.InfoLight,
+    textCaution = ColorTokens.Caution,
 
     background = ColorTokens.Dark.Background,
     bg = ColorTokens.Dark.Bg,
@@ -246,14 +247,13 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundActionPopup = ColorTokens.Dark.BackgroundActionPopup,
     backgroundBottomSheet = ColorTokens.Dark.BackgroundBottomSheet,
     backgroundDisabled = ColorTokens.Dark.BackgroundDisabled,
-    backgroundModal = ColorTokens.Dark.BackgroundModal,
     backgroundPopup = ColorTokens.Dark.BackgroundPopup,
     backgroundTooltip = ColorTokens.Dark.Tooltip,
     backgroundBlue = ColorTokens.Dark.BackgroundBlue,
     bgElevated = ColorTokens.Dark.BgElevated,
+    bg5 = ColorTokens.Dark.Bg5,
     backgroundElevate = ColorTokens.Dark.BackgroundElevate,
 
-    divider = ColorTokens.Dark.Divider,
     line = ColorTokens.Dark.Line,
     border = ColorTokens.Dark.Border,
     icon = ColorTokens.Dark.Icon,

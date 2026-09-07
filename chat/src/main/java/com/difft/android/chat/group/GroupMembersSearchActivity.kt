@@ -5,7 +5,6 @@ import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
@@ -67,16 +66,14 @@ class GroupMembersSearchActivity : BaseActivity() {
     private fun initView() {
         mBinding.ibBack.setOnClickListener { finish() }
 
-        mBinding.edittextSearchInput.addTextChangedListener {
-            searchFlow.tryEmit(it.toString().trim())
-        }
+        mBinding.searchInput.onQueryChanged = { searchFlow.tryEmit(it.trim()) }
+        mBinding.searchInput.onClear = { searchFlow.tryEmit("") }
 
         lifecycleScope.launch {
             searchFlow
                 .debounce(300)
                 .distinctUntilChanged()
                 .collect {
-                    resetButtonClear()
                     if (it.isNotEmpty()) {
                         search(it)
                     } else {
@@ -89,10 +86,6 @@ class GroupMembersSearchActivity : BaseActivity() {
             this.layoutManager = LinearLayoutManager(this@GroupMembersSearchActivity)
             itemAnimator = null
             this.adapter = mSearchGroupMemberAdapter
-        }
-
-        mBinding.buttonClear.setOnClickListener {
-            mBinding.edittextSearchInput.text = null
         }
     }
 
@@ -116,15 +109,6 @@ class GroupMembersSearchActivity : BaseActivity() {
                 showNoResults(getString(R.string.search_no_results_found))
                 L.w { "[GroupMembersSearchActivity] search error: ${e.stackTraceToString()}" }
             }
-        }
-    }
-
-    private fun resetButtonClear() {
-        val key = mBinding.edittextSearchInput.text.toString().trim()
-        mBinding.buttonClear.animate().apply {
-            cancel()
-            val toAlpha = if (key.isNotEmpty()) 1.0f else 0f
-            alpha(toAlpha)
         }
     }
 

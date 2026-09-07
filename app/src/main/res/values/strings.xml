@@ -108,6 +108,7 @@
     <string name="db_key_unavailable_retry">Retry</string>
 
     <string name="dual_pane_divider_drag_hint">Drag to resize panes</string>
+    <string name="dual_pane_list_expand_hint">Expand conversation list</string>
 
     <!-- Self-hosted proxy -->
     <string name="proxy_settings_title">Use proxy</string>

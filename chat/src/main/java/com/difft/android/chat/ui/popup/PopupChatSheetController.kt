@@ -2,6 +2,10 @@ package com.difft.android.chat.ui.popup
 
 import android.annotation.SuppressLint
 import android.view.View
+import android.animation.ValueAnimator
+import androidx.core.animation.doOnCancel
+import androidx.core.animation.doOnEnd
+import com.difft.android.base.widget.applySharedMaxWidth
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.difft.android.base.BaseActivity
@@ -51,6 +55,7 @@ class PopupChatSheetController(
     private var statusBarHeight = 0
 
     private var isMaximizing = false
+    private var maximizeAnimator: ValueAnimator? = null
 
     fun setup() {
         // Handle window insets for navigation bar and IME (keyboard)
@@ -111,6 +116,7 @@ class PopupChatSheetController(
 
         bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
         bottomSheetBehavior.apply {
+            applySharedMaxWidth(activity.resources)
             peekHeight = baseHeight
             isFitToContents = true
             isHideable = true
@@ -130,6 +136,7 @@ class PopupChatSheetController(
 
         // Scrim click handler - close popup
         scrim.setOnClickListener {
+            cancelMaximize()
             bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         }
 
@@ -168,6 +175,9 @@ class PopupChatSheetController(
                     }
 
                     BottomSheetBehavior.STATE_HIDDEN -> {
+                        // Covers drag-to-dismiss as well: a ramp still running here must not
+                        // launch the full-screen chat after the popup is gone.
+                        cancelMaximize()
                         activity.finish()
                         @Suppress("DEPRECATION")
                         activity.overridePendingTransition(0, 0)
@@ -201,8 +211,15 @@ class PopupChatSheetController(
      */
     fun dismiss(): Boolean {
         if (!::bottomSheetBehavior.isInitialized) return false
+        cancelMaximize()
         bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
         return true
+    }
+
+    /** Stops a running maximize ramp; its end callback then skips launching the target Activity. */
+    private fun cancelMaximize() {
+        maximizeAnimator?.cancel()
+        maximizeAnimator = null
     }
 
     /**
@@ -241,12 +258,21 @@ class PopupChatSheetController(
         val currentHeight = views.bottomSheet.layoutParams.height
         // Capture initial padding to animate it out smoothly (only needed when keyboard is visible)
         val initialPadding = if (hasKeyboard) views.bottomSheet.paddingBottom else 0
+        // On wide windows the sheet is capped at 640dp; grow it to the full window in step with the
+        // height so the hand-off to the full-width Activity has no horizontal jump.
+        val startWidth = views.bottomSheet.width
+        val sideInsets = ViewCompat.getRootWindowInsets(views.coordinatorRoot)
+            ?.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        val fullWidth = views.coordinatorRoot.width - (sideInsets?.left ?: 0) - (sideInsets?.right ?: 0)
 
         // Animate bottom sheet to target height (just below status bar)
-        android.animation.ValueAnimator.ofInt(currentHeight, targetHeight).apply {
+        maximizeAnimator = ValueAnimator.ofInt(currentHeight, targetHeight).apply {
             duration = 250
             addUpdateListener { animator ->
                 val height = animator.animatedValue as Int
+                if (fullWidth != startWidth) {
+                    bottomSheetBehavior.maxWidth = startWidth + ((fullWidth - startWidth) * animator.animatedFraction).toInt()
+                }
                 views.bottomSheet.layoutParams = views.bottomSheet.layoutParams.apply {
                     this.height = height
                 }
@@ -258,12 +284,14 @@ class PopupChatSheetController(
                 }
                 bottomSheetBehavior.peekHeight = height
             }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    // Start the full Activity after animation completes
-                    onEnd()
-                }
-            })
+            var cancelled = false
+            doOnCancel { cancelled = true }
+            doOnEnd {
+                maximizeAnimator = null
+                // Start the full Activity after animation completes; a cancel (sheet dismissed
+                // mid-ramp) must not launch the Activity the user just dismissed.
+                if (!cancelled) onEnd()
+            }
             start()
         }
 
@@ -275,6 +303,7 @@ class PopupChatSheetController(
     }
 
     fun release() {
+        cancelMaximize()
         if (::bottomSheetBehavior.isInitialized && ::bottomSheetCallback.isInitialized) {
             bottomSheetBehavior.removeBottomSheetCallback(bottomSheetCallback)
         }

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import kotlin.math.roundToInt
+import com.difft.android.chat.ui.messageaction.MessageActionMenuColors
 
 /**
  * Single-row floating menu shown on long-press of a GIF cell (Issue 4): a rounded elevated surface
@@ -74,7 +75,7 @@ fun BoxScope.GifFavoriteMenu(
     var menuSize by remember { mutableStateOf(IntSize.Zero) }
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = DifftTheme.colors.backgroundActionPopup,
+        color = MessageActionMenuColors.panel,
         shadowElevation = 4.dp,
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -104,13 +105,13 @@ fun BoxScope.GifFavoriteMenu(
             Icon(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                tint = DifftTheme.colors.icon,
+                tint = MessageActionMenuColors.contentDefault,
                 modifier = Modifier.size(20.dp)
             )
             Text(
                 text = stringResource(labelRes),
                 style = DifftTheme.typography.bodyMedium,
-                color = DifftTheme.colors.textPrimary
+                color = MessageActionMenuColors.contentDefault
             )
         }
     }

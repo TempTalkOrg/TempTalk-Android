@@ -1,6 +1,7 @@
 package com.difft.android
 
 import android.Manifest
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -12,9 +13,12 @@ import android.text.TextUtils
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.webkit.MimeTypeMap
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.core.animation.doOnEnd
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -29,6 +33,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.DualPaneCollapseUtil
 import com.difft.android.base.utils.DualPaneRatioUtil
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.FileUtil
@@ -51,6 +56,7 @@ import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.attachment.migration.ForwardAttachmentMigration
 import com.difft.android.chat.media.LegacyPlaintextAttachmentMigration
 import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.chat.media.LegacyPlaintextAvatarCleanup
@@ -115,7 +121,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private lateinit var binding: ActivityIndexBinding
 
     // Dual-pane layout support for large screens
-    // Using a marker view to detect dual-pane mode (w840dp layout)
+    // Using a marker view to detect dual-pane mode (w673dp-h480dp layout)
     override var isDualPaneMode = false
         private set
     override val currentSelectedConversationId: String?
@@ -129,6 +135,21 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
     // Set on the first onRestoreInstanceState; a second one must not replay pager state.
     private var hierarchyStateRestored = false
+
+    // Drives the list-pane collapse/expand snap; owns list_pane's width while running.
+    private var paneAnimator: ValueAnimator? = null
+
+    // Enabled only while the list pane is collapsed: back re-opens the list.
+    private var collapsedBackCallback: OnBackPressedCallback? = null
+
+    // True once restoreDetailFragmentsState has run: the ViewPager2 restore dispatches
+    // onPageSelected BEFORE the posted reclaim, and that premature empty-tab pass must not
+    // auto-expand a persisted collapsed pane.
+    private var detailRestoreSettled = false
+
+    // Recreation (rotate / fold) restores the persisted collapse even over an empty detail
+    // pane; only a true cold start silently un-collapses it (blank-first-screen avoidance).
+    private var recreatedFromSavedState = false
 
     private val indicators by lazy {
         listOf(
@@ -197,13 +218,17 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     @Inject
     lateinit var serverTimeSyncer: ServerTimeSyncer
 
+    @Inject
+    lateinit var forwardAttachmentMigration: ForwardAttachmentMigration
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        recreatedFromSavedState = savedInstanceState != null
         binding = ActivityIndexBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Setup dual-pane layout for large screens (w840dp)
+        // Setup dual-pane layout for large screens (w673dp-h480dp)
         setupDualPaneLayout()
 
         val density = resources.displayMetrics.density
@@ -212,6 +237,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         // Load and emit text size early to avoid ANR in UI components
         TextSizeUtil.loadAndEmitTextSize()
         DualPaneRatioUtil.loadAndEmit()
+        DualPaneCollapseUtil.loadAndEmit()
 
         TextSizeUtil.textSizeState
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
@@ -278,6 +304,11 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                     val index = indicators.indexOf(view)
                     if (index < 0) return@setOnClickListener
 
+                    // Tapping any rail tab is the discoverable way back from a collapsed
+                    // list pane (the divider handle is the other).
+                    if (isDualPaneMode && DualPaneCollapseUtil.isCollapsed) {
+                        expandListPane()
+                    }
                     binding.indexViewpager.setCurrentItem(index, false)
                 }
             }
@@ -552,6 +583,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             // One-time purge of legacy plaintext avatar cache (delete; re-downloads encrypted, docs §15).
             LegacyPlaintextAvatarCleanup.runIfNeeded()
         }
+        // One-time move of forwarded attachments to their per-copy directories (#1178). Owns its own
+        // scope and startup delay, and outlives this activity, so it is not part of the block above.
+        forwardAttachmentMigration.start()
     }
 
     /**
@@ -821,6 +855,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     override fun onDestroy() {
+        paneAnimator?.cancel()
+        paneAnimator = null
         super.onDestroy()
     }
 
@@ -1091,12 +1127,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     // ==================== Dual-pane layout support ====================
 
     /**
-     * Setup dual-pane layout for large screens (width >= 840dp AND height >= 480dp)
-     * Layout qualifier w840dp-h480dp ensures this layout only loads when both conditions are met.
+     * Setup dual-pane layout for large screens (width >= 673dp AND height >= 480dp)
+     * Layout qualifier w673dp-h480dp ensures this layout only loads when both conditions are met.
      * Detects dual-pane mode by checking for detail_pane view which only exists in that layout.
      */
     private fun setupDualPaneLayout() {
-        // Check for detail_pane view which only exists in the w840dp-h480dp layout variant
+        // Check for detail_pane view which only exists in the w673dp-h480dp layout variant
         val detailPane = findViewById<View>(com.difft.android.R.id.detail_pane)
         isDualPaneMode = detailPane != null
 
@@ -1108,6 +1144,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
             // Apply list pane width based on current text size (avoid flicker on cold start)
             applyListPaneWidth(TextSizeUtil.isLarger)
+            // Re-apply once the edge-to-edge insets have landed: the cold-start apply above
+            // runs before the first inset dispatch, when root padding is still 0.
+            binding.root.post { applyListPaneWidth(TextSizeUtil.isLarger) }
         }
     }
 
@@ -1118,11 +1157,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      *   1. User-dragged ratio ([DualPaneRatioUtil.hasUserOverride]) — apply saved ratio to current
      *      available width, clamped to per-pane minimums.
      *   2. Larger text mode — 50/50 split so contact / group names have room at the bigger font.
-     *   3. Default — fixed [LIST_PANE_DEFAULT_WIDTH_DP] list pane (Material 3 two-pane recommendation).
+     *   3. Default — the banded `dual_pane_list_default_width` dimen (280dp compact band,
+     *      360dp in the w900dp tablet band).
      *
-     * All branches clamp to [MIN_LIST_PANE_WIDTH_DP] / [MIN_DETAIL_PANE_WIDTH_DP] so neither pane
-     * collapses below usable size; in particular, detail pane must stay ≥ 360dp to fit the
-     * 270dp-wide voice / contact / attach message bubbles plus margins.
+     * All branches clamp to the [paneBudget] minimums so neither pane collapses below usable
+     * size; the detail floor keeps the 270dp-wide voice / contact / attach message bubbles
+     * unclipped wherever the window can afford it (see values/dimens.xml).
      *
      * Uses [WindowSizeClassUtil.getWindowWidthPx] (Jetpack WindowMetrics) instead of
      * [android.content.res.Configuration.screenWidthDp]: on foldables during fold/rotate
@@ -1134,13 +1174,34 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private fun applyListPaneWidth(isLarger: Boolean) {
         if (!isDualPaneMode) return
         val listPane = findViewById<View>(com.difft.android.R.id.list_pane) ?: return
+        // While a collapse/expand animation is driving the width, or the pane is collapsed,
+        // the animator / collapsed constant owns it (large-font 50/50 and saved ratio yield).
+        if (paneAnimator?.isRunning == true) return
+        if (DualPaneCollapseUtil.isCollapsed) {
+            if (listPane.layoutParams.width != COLLAPSED_LIST_WIDTH_PX) {
+                listPane.layoutParams = listPane.layoutParams.apply { width = COLLAPSED_LIST_WIDTH_PX }
+            }
+            applyCollapsedContentImportance()
+            return
+        }
 
-        val density = resources.displayMetrics.density
+        val targetWidth = resolveListTargetPx(isLarger)
+        if (listPane.layoutParams.width != targetWidth) {
+            listPane.layoutParams = listPane.layoutParams.apply { width = targetWidth }
+        }
+    }
+
+    /**
+     * The expanded list-pane width for the current window: saved drag ratio, else large-font
+     * 50/50, else the band default — clamped so the detail pane keeps its floor. Shared by
+     * [applyListPaneWidth] (static apply) and [expandListPane] (animation target).
+     */
+    private fun resolveListTargetPx(isLarger: Boolean): Int {
         val available = availablePaneSpacePx()
-        val listMinPx = (MIN_LIST_PANE_WIDTH_DP * density).toInt()
-        val detailMinPx = (MIN_DETAIL_PANE_WIDTH_DP * density).toInt()
-        // Hard upper bound: keep detail pane at least detailMinPx.
-        val listMaxPx = (available - detailMinPx).coerceAtLeast(listMinPx)
+        val budget = paneBudget()
+        // Hard upper bound: never place the list where the detail pane would drop below the
+        // 360dp floor; where 360 does not fit, the max collapses to the list minimum.
+        val listMaxPx = (available - budget.dragFloorPx).coerceAtLeast(budget.listMinPx)
 
         val rawTarget = when {
             DualPaneRatioUtil.hasUserOverride ->
@@ -1148,13 +1209,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             isLarger ->
                 available / 2
             else ->
-                (LIST_PANE_DEFAULT_WIDTH_DP * density).toInt()
+                budget.listDefaultPx
         }
-        val targetWidth = rawTarget.coerceIn(listMinPx, listMaxPx)
-
-        if (listPane.layoutParams.width != targetWidth) {
-            listPane.layoutParams = listPane.layoutParams.apply { width = targetWidth }
-        }
+        return rawTarget.coerceIn(budget.listMinPx, listMaxPx)
     }
 
     /**
@@ -1163,31 +1220,254 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      * - ACTION_UP: persist the resulting ratio (so subsequent rotate / fold / large-font toggle
      *   preserve the user's preference) and trigger a one-shot rebind on the detail pane's
      *   message RecyclerView so existing bubble widths refresh from the new RecyclerView size.
+     *
+     * Collapse gesture: there is no stable list width below the minimum. Pulling a further
+     * [COLLAPSE_SNAP_TRIGGER_DP] past it snaps the list pane closed (detail full width);
+     * from the collapsed state, pulling the handle back out by the same distance — or
+     * tapping it, tapping a rail tab, or pressing back — snaps it open again.
      */
     private fun setupDualPaneDivider() {
         if (!isDualPaneMode) return
         val divider = findViewById<DraggableDividerView>(com.difft.android.R.id.divider_pane) ?: return
         val listPane = findViewById<View>(com.difft.android.R.id.list_pane) ?: return
 
-        divider.onDrag = { delta, isEnd ->
-            val density = resources.displayMetrics.density
-            val available = availablePaneSpacePx()
-            val listMinPx = (MIN_LIST_PANE_WIDTH_DP * density).toInt()
-            val detailMinPx = (MIN_DETAIL_PANE_WIDTH_DP * density).toInt()
-            val listMaxPx = (available - detailMinPx).coerceAtLeast(listMinPx)
+        // Virtual (unclamped) finger position for the active gesture, in list-width px;
+        // null between gestures. Lets the finger travel past the minimum while the pane
+        // rubber-bands, and lets the release settle by position + velocity — the same model
+        // as the platform pane-expansion handles.
+        var virtualWidthPx: Int? = null
 
-            val currentWidth = listPane.layoutParams.width
-            val newWidth = (currentWidth + delta).coerceIn(listMinPx, listMaxPx)
+        divider.onDrag = { rawDelta, isEnd, rawVelocityX, cancelled ->
+            // Mirror the gesture in RTL: the panes mirror with start/end constraints, so the
+            // list grows LEFTWARD there — a leftward pull widens it and the collapse/expand
+            // directions flip with it. Raw values are screen-space (positive = rightward).
+            val rtl = listPane.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val delta = if (rtl) -rawDelta else rawDelta
+            val velocityX = if (rtl) -rawVelocityX else rawVelocityX
+            when {
+                // A snap animation owns the width; swallow the tail of the gesture.
+                paneAnimator?.isRunning == true -> virtualWidthPx = null
 
-            if (newWidth != currentWidth) {
-                listPane.layoutParams = listPane.layoutParams.apply { width = newWidth }
-            }
+                DualPaneCollapseUtil.isCollapsed -> {
+                    val overshoot = ((virtualWidthPx ?: 0) + delta).coerceAtLeast(0)
+                    if (isEnd) {
+                        virtualWidthPx = null
+                        // A system-cancelled gesture rolls back; only a real release commits.
+                        if (!cancelled && (overshoot >= snapTriggerPx() || velocityX >= flingVelocityPx())) {
+                            divider.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+                            expandListPane()
+                        } else {
+                            // Retract the peek; keep the peeked content at its laid-out width.
+                            animateListPaneWidth(COLLAPSED_LIST_WIDTH_PX, frozenContentPx = binding.indexViewpager.layoutParams.width)
+                        }
+                    } else {
+                        virtualWidthPx = overshoot
+                        // Peek: reveal the edge of the (fully laid-out) list as feedback.
+                        if (binding.indexViewpager.layoutParams.width == android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                            binding.indexViewpager.layoutParams = binding.indexViewpager.layoutParams.apply {
+                                width = resolveListTargetPx(TextSizeUtil.isLarger)
+                            }
+                        }
+                        val peek = COLLAPSED_LIST_WIDTH_PX + rubberPx(overshoot)
+                        if (listPane.layoutParams.width != peek) {
+                            listPane.layoutParams = listPane.layoutParams.apply { width = peek }
+                        }
+                    }
+                }
 
-            if (isEnd && available > 0) {
-                DualPaneRatioUtil.updateRatio(newWidth.toFloat() / available)
-                refreshDetailPaneMessageBubbles()
+                else -> {
+                    val available = availablePaneSpacePx()
+                    val budget = paneBudget()
+                    // Drag clamps against the 360dp drag floor, never the static fallback:
+                    // where 360 does not fit the range collapses and the divider is inert.
+                    val listMaxPx = (available - budget.dragFloorPx).coerceAtLeast(budget.listMinPx)
+
+                    val virtual = ((virtualWidthPx ?: listPane.layoutParams.width) + delta)
+                        .coerceAtMost(listMaxPx)
+                    val overshoot = (budget.listMinPx - virtual).coerceAtLeast(0)
+                    // In range: 1:1. Past the minimum: rubber-band so the finger keeps getting
+                    // feedback instead of hitting a dead stop.
+                    val displayWidth = if (overshoot == 0) virtual else budget.listMinPx - rubberPx(overshoot)
+
+                    if (isEnd) {
+                        virtualWidthPx = null
+                        // The gesture always wins — even over the empty detail state (the edge
+                        // handle, tab taps and back all lead out of it). Only SYSTEM transitions
+                        // that empty the pane (conversation removed, cold start with nothing to
+                        // restore) auto-expand, so an invisible sometimes-it-works rule never
+                        // reads as a bug.
+                        val commitCollapse = !cancelled &&
+                            (overshoot >= snapTriggerPx() || velocityX <= -flingVelocityPx())
+                        when {
+                            commitCollapse -> {
+                                divider.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+                                collapseListPane()
+                            }
+                            overshoot > 0 -> {
+                                // Not committed: spring back to the minimum and persist it.
+                                animateListPaneWidth(budget.listMinPx)
+                                if (available > 0) DualPaneRatioUtil.updateRatio(budget.listMinPx.toFloat() / available)
+                            }
+                            else -> {
+                                if (available > 0) {
+                                    DualPaneRatioUtil.updateRatio(displayWidth.toFloat() / available)
+                                    refreshDetailPaneMessageBubbles()
+                                }
+                            }
+                        }
+                    } else {
+                        virtualWidthPx = virtual
+                        if (listPane.layoutParams.width != displayWidth) {
+                            listPane.layoutParams = listPane.layoutParams.apply { width = displayWidth }
+                        }
+                    }
+                }
             }
         }
+
+        // Tap on the collapsed handle re-opens the list (also TalkBack's activate action).
+        divider.setOnClickListener {
+            if (DualPaneCollapseUtil.isCollapsed) expandListPane()
+        }
+
+        // Restore the collapsed back handler for a state persisted across recreation —
+        // posted so registration lands AFTER onCreate's other back callbacks (see below).
+        binding.root.post {
+            if (DualPaneCollapseUtil.isCollapsed) ensureCollapsedBackCallback()
+        }
+
+        updateDividerAccessibility(divider)
+    }
+
+    /**
+     * Register the back-to-expand handler LAZILY — at first collapse, or posted after
+     * onCreate for a restored collapsed state: onCreate registers an always-enabled
+     * moveTaskToBack callback AFTER setupDualPaneDivider runs, and OnBackPressedDispatcher
+     * is LIFO — a handler registered before it would never receive Back.
+     */
+    private fun ensureCollapsedBackCallback() {
+        if (collapsedBackCallback != null) {
+            collapsedBackCallback?.isEnabled = true
+            return
+        }
+        collapsedBackCallback = onBackPressedDispatcher.addCallback(this) {
+            expandListPane()
+        }.apply { isEnabled = true }
+    }
+
+    /** Collapse the list pane so the detail pane takes the full width. */
+    private fun collapseListPane() {
+        if (DualPaneCollapseUtil.isCollapsed) return
+        DualPaneCollapseUtil.setCollapsed(true)
+        ensureCollapsedBackCallback()
+        animateListPaneWidth(COLLAPSED_LIST_WIDTH_PX)
+        findViewById<DraggableDividerView>(com.difft.android.R.id.divider_pane)
+            ?.let { updateDividerAccessibility(it) }
+    }
+
+    /** Expand the list pane back to its saved-ratio / default width. */
+    private fun expandListPane(animate: Boolean = true) {
+        if (!DualPaneCollapseUtil.isCollapsed) return
+        DualPaneCollapseUtil.setCollapsed(false)
+        collapsedBackCallback?.isEnabled = false
+        applyCollapsedContentImportance()
+        if (animate) {
+            animateListPaneWidth(resolveListTargetPx(TextSizeUtil.isLarger))
+        } else {
+            applyListPaneWidth(TextSizeUtil.isLarger)
+        }
+        findViewById<DraggableDividerView>(com.difft.android.R.id.divider_pane)
+            ?.let { updateDividerAccessibility(it) }
+    }
+
+    /**
+     * Animate list_pane between the collapsed constant and an expanded target.
+     *
+     * The pane content ([ActivityIndexBinding.indexViewpager]) is frozen at the wider endpoint
+     * for the duration, so the list is revealed/concealed by the pane's clip instead of its
+     * rows re-laying out on every frame (widths inside 1..min are never a layout state the
+     * rows see); restored to MATCH_PARENT when the animation lands.
+     */
+    private fun animateListPaneWidth(targetPx: Int, frozenContentPx: Int = 0) {
+        val listPane = findViewById<View>(com.difft.android.R.id.list_pane) ?: return
+        val content = binding.indexViewpager
+        // Cancel BEFORE freezing: cancel() fires the old animator's doOnEnd synchronously,
+        // which restores MATCH_PARENT — done after the freeze it would defeat it.
+        paneAnimator?.cancel()
+        paneAnimator = null
+
+        val startPx = listPane.layoutParams.width
+        if (startPx == targetPx) {
+            // Nothing to animate, but a peek may have left the content frozen — restore it,
+            // and keep the drag-end bubble-refresh contract that doOnEnd would have honoured.
+            if (content.layoutParams.width != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                content.layoutParams = content.layoutParams.apply {
+                    width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                }
+            }
+            applyCollapsedContentImportance()
+            refreshDetailPaneMessageBubbles()
+            return
+        }
+        content.layoutParams = content.layoutParams.apply {
+            width = if (frozenContentPx > 0) frozenContentPx else maxOf(startPx, targetPx)
+        }
+
+        paneAnimator = ValueAnimator.ofInt(startPx, targetPx).apply {
+            duration = PANE_SNAP_ANIM_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                listPane.layoutParams = listPane.layoutParams.apply { width = anim.animatedValue as Int }
+            }
+            doOnEnd {
+                content.layoutParams = content.layoutParams.apply {
+                    width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                }
+                applyCollapsedContentImportance()
+                refreshDetailPaneMessageBubbles()
+            }
+            start()
+        }
+    }
+
+    /**
+     * Keep the collapsed 1px list pane out of the accessibility tree and the keyboard focus
+     * order: its rows are still laid out and would otherwise be reachable invisibly by
+     * TalkBack swipes and hardware TAB. Restored the moment the pane is expanded (or starts
+     * peeking, so the revealed content reads normally).
+     */
+    private fun applyCollapsedContentImportance() {
+        val collapsed = DualPaneCollapseUtil.isCollapsed
+        binding.indexViewpager.importantForAccessibility = if (collapsed) {
+            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        } else {
+            View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        }
+        (binding.indexViewpager as? android.view.ViewGroup)?.descendantFocusability = if (collapsed) {
+            android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        } else {
+            android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
+        }
+    }
+
+    private fun snapTriggerPx(): Int =
+        (COLLAPSE_SNAP_TRIGGER_DP * resources.displayMetrics.density).toInt()
+
+    private fun flingVelocityPx(): Float =
+        COLLAPSE_FLING_VELOCITY_DP_S * resources.displayMetrics.density
+
+    /** Damped overshoot: 1/3 rate, capped — the standard overscroll rubber-band feel. */
+    private fun rubberPx(overshootPx: Int): Int =
+        minOf(overshootPx / 3, (RUBBER_BAND_MAX_DP * resources.displayMetrics.density).toInt())
+
+    private fun updateDividerAccessibility(divider: DraggableDividerView) {
+        divider.contentDescription = getString(
+            if (DualPaneCollapseUtil.isCollapsed) {
+                com.difft.android.R.string.dual_pane_list_expand_hint
+            } else {
+                com.difft.android.R.string.dual_pane_divider_drag_hint
+            }
+        )
     }
 
     /**
@@ -1215,32 +1495,62 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     private fun availablePaneSpacePx(): Int {
-        val density = resources.displayMetrics.density
-        val railPx = (NAVIGATION_RAIL_WIDTH_DP * density).toInt()
-        val dividersPx = (DUAL_PANE_DIVIDERS_WIDTH_DP * density).toInt()
-        return (WindowSizeClassUtil.getWindowWidthPx(this) - railPx - dividersPx).coerceAtLeast(0)
+        // Rail + rail divider widths come from the banded dual_pane_* dimens
+        // (values/dimens.xml vs values-w900dp/dimens.xml), mirroring
+        // layout-w673dp-h480dp/activity_index.xml. divider_pane is a floating overlay
+        // (negative marginStart) and does NOT consume horizontal layout space.
+        // WindowMetrics bounds INCLUDE system decoration, but the panes lay out inside the
+        // root that BaseActivity's edge-to-edge pass pads by the horizontal insets — without
+        // subtracting that padding the detail-pane floor is overstated by the inset (a side
+        // navigation bar or landscape cutout) and the drag clamp can starve it below 360dp.
+        val insetPaddingPx = binding.root.paddingLeft + binding.root.paddingRight
+        val railPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_rail_width)
+        val dividersPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_divider_width)
+        return (WindowSizeClassUtil.getWindowWidthPx(this) - insetPaddingPx - railPx - dividersPx)
+            .coerceAtLeast(0)
     }
 
+    /** Pane minimums resolved from the banded dual_pane_* dimens for one apply/drag pass. */
+    private data class PaneBudget(
+        val listMinPx: Int,
+        val listDefaultPx: Int,
+        val dragFloorPx: Int
+    )
+
+    /**
+     * Resolve the pane budget (window minus rail and divider is the caller's `available`).
+     *
+     * ONE floor governs both static placement and the interactive clamp:
+     * `dual_pane_detail_drag_min_width` (360dp — keeps the 270dp fixed-width bubbles
+     * unclipped, see values/dimens.xml). On windows where 360 does not fit next to the list
+     * minimum (below 713dp) the list max collapses to the list minimum, the divider goes
+     * inert in-range, and the detail pane simply receives the remainder (320-360dp there by
+     * the 673 gate invariant) — no clamp may ever PUSH it below 360, including a persisted
+     * ratio re-applied after crossing a size boundary.
+     */
+    private fun paneBudget(): PaneBudget = PaneBudget(
+        listMinPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_list_min_width),
+        listDefaultPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_list_default_width),
+        dragFloorPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_detail_drag_min_width)
+    )
+
     private companion object {
-        // Default list pane width per Material 3 two-pane guidance (applied when no user
-        // override and not in large text mode). Mirrors the hardcoded value in
-        // layout-w840dp-h480dp/activity_index.xml.
-        const val LIST_PANE_DEFAULT_WIDTH_DP = 360
+        // 1px, not 0: a 0 width degrades to ConstraintLayout's MATCH_CONSTRAINT and the
+        // "collapsed" pane silently takes over the row instead of disappearing.
+        const val COLLAPSED_LIST_WIDTH_PX = 1
 
-        // NavigationRail width. Mirrors layout-w840dp-h480dp/activity_index.xml.
-        const val NAVIGATION_RAIL_WIDTH_DP = 96
+        // Finger travel past the list minimum (or out of the collapsed state) that commits
+        // the snap on release — hysteresis so jitter at the clamp edge cannot toggle the pane.
+        const val COLLAPSE_SNAP_TRIGGER_DP = 48
 
-        // Total layout width consumed by dividers between rail / list / detail.
-        // Only divider_rail (0.5dp ≈ 1dp) actually takes space — divider_pane is a
-        // floating overlay (negative marginStart, declared last for z-order) and does
-        // NOT consume horizontal layout space.
-        const val DUAL_PANE_DIVIDERS_WIDTH_DP = 1
+        // A release with at least this outward horizontal velocity commits the snap
+        // regardless of distance (fling-to-collapse / fling-to-expand).
+        const val COLLAPSE_FLING_VELOCITY_DP_S = 1000
 
-        // Minimum widths (per-pane) honored across user drag, large-font auto-split, and
-        // window-resize clamping. 280dp keeps the conversation list legible; 360dp keeps the
-        // detail pane wide enough for the 270dp voice / contact / attach message bubbles.
-        const val MIN_LIST_PANE_WIDTH_DP = 280
-        const val MIN_DETAIL_PANE_WIDTH_DP = 360
+        // Cap on the visible rubber-band displacement past the minimum.
+        const val RUBBER_BAND_MAX_DP = 32
+
+        const val PANE_SNAP_ANIM_MS = 220L
     }
 
     // Per-tab tag (not per-conversation) — one detail fragment per tab, ceiling 3.
@@ -1269,7 +1579,14 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                 fragment.tag?.let { detailFragmentTagRegex.matches(it) } == true
         }
 
-        if (restored.isEmpty()) return // fresh launch / nothing open
+        if (restored.isEmpty()) {
+            // Cold start with nothing open: a persisted collapsed state over the empty detail
+            // pane would be a blank first screen — silently un-collapse. On RECREATION the
+            // user's collapse survives (the edge handle / tabs / back all lead out of it).
+            if (!recreatedFromSavedState) expandListPane(animate = false)
+            detailRestoreSettled = true
+            return
+        }
 
         restored.forEach { fragment ->
             val tabIndex = detailFragmentTagRegex.matchEntire(fragment.tag!!)!!.groupValues[1].toInt()
@@ -1285,7 +1602,14 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                 if (tab == currentTabIndex) transaction.show(fragment) else transaction.hide(fragment)
             }
         }
-        transaction.commit()
+        // Deferred post (viewpager.post) can dequeue after onSaveInstanceState during background
+        // recreation; tolerate state loss (show/hide is re-derived on any later recreate).
+        if (supportFragmentManager.isStateSaved) {
+            L.w { "[IndexActivity] restoreDetailFragmentsState committing after state save (tolerated via commitAllowingStateLoss)" }
+        }
+        transaction.commitAllowingStateLoss()
+
+        detailRestoreSettled = true
 
         // Restore current tab's chrome + currentConversationId (mirrors handleTabChangeForDualPane).
         val current = tabDetailFragments[currentTabIndex]
@@ -1430,6 +1754,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
             findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
             currentConversationId = null
+            // Guarded: the ViewPager2 restore dispatches a premature empty-tab pass before
+            // the posted reclaim; expanding there would wipe a persisted collapse.
+            if (detailRestoreSettled) expandListPane()
         }
 
         transaction.commit()
@@ -1478,6 +1805,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         if (!isDualPaneMode) return
 
         currentConversationId = null
+        // A collapsed list over an empty detail pane would be a blank screen.
+        expandListPane()
 
         // Remove fragment for current tab
         val oldFragment = tabDetailFragments[currentTabIndex]

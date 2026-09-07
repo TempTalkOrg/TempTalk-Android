@@ -81,31 +81,21 @@
             android:paddingHorizontal="12dp"
             android:paddingVertical="14dp">
 
-            <com.difft.android.base.widget.RuleEditText
+            <com.difft.android.base.widget.DifftClearableInputView
                 android:id="@+id/customUid"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:background="@android:color/transparent"
-                android:drawableEnd="@drawable/account_input_clear_icon"
-                android:gravity="start|center_vertical"
-                android:maxLines="1"
-                android:singleLine="true"
-                android:textAlignment="viewStart"
-                android:textColor="@color/t.primary"
-                android:textColorHint="@color/t.disable"
                 android:textSize="14sp"
-                android:hint="@string/invite_enter_hint"
-                app:clearable="true"
+                app:dsi_autoFocus="true"
+                app:dsi_clearMode="whileEditing"
+                app:dsi_containerColor="@android:color/transparent"
+                app:dsi_hint="@string/invite_enter_hint"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_goneMarginStart="0dp"
-                app:rule="not_empty">
-
-                <requestFocus />
-            </com.difft.android.base.widget.RuleEditText>
+                app:layout_goneMarginStart="0dp" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView

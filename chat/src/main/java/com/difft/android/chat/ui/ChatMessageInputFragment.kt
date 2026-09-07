@@ -59,6 +59,11 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.gif.favorite.collectFavoriteEffects
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.ForwardSourceContext
+import com.difft.android.chat.attachment.deepCopyWithNewAttachmentIdentities
+import com.difft.android.chat.attachment.toForwardCopy
+import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
 import com.difft.android.chat.common.OVERSIZED_TEXT_BODY_LENGTH
 import com.difft.android.chat.common.OVERSIZED_TEXT_THRESHOLD
@@ -172,6 +177,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -320,6 +326,11 @@ class ChatMessageInputFragment : Fragment() {
         val filePath: String,
         val fileName: String,
         val mimeType: String,
+        /**
+         * Local identity of the attachment being sent. Minted by the caller BEFORE staging, because
+         * [filePath] is the address it names — the row and its directory must agree.
+         */
+        val localId: String,
         val isAudioMessage: Boolean = false,
         val isGif: Boolean = false
     )
@@ -467,11 +478,12 @@ class ChatMessageInputFragment : Fragment() {
                                 forwardContext = ForwardContext(emptyList(), false, sharedContactId, sharedContactName)
                             } else if (resolvedForwardContext != null) {
                                 content = ResUtils.getString(R.string.chat_history)
-                                forwardContext = resolvedForwardContext.apply {
-                                    forwards?.forEach { forward ->
-                                        changeAttachmentStatus(forward)
-                                    }
-                                }
+                                // Deep copy: the new message must not inherit the source's attachment
+                                // identities. Each copy is minted LOADING and remembers where to copy
+                                // its bytes from.
+                                forwardContext = resolvedForwardContext.deepCopyWithNewAttachmentIdentities(
+                                    ForwardSourceContext(messageToForward.id, messageToForward.isConfidential())
+                                )
                             } else {
                                 content = if (messageToForward.isAttachmentMessage()) {
                                     ResUtils.getString(R.string.chat_message_attachment)
@@ -487,8 +499,13 @@ class ChatMessageInputFragment : Fragment() {
                                             messageToForward.authorId,
                                             message.messageText,
                                             messageToForward.attachment?.let { attach ->
-                                                attach.status = AttachmentStatus.LOADING.code
-                                                listOf(attach)
+                                                // Copy, never mutate: `attach` is the live object of the
+                                                // message being forwarded, still rendered in the list.
+                                                listOf(
+                                                    attach.toForwardCopy(
+                                                        ForwardSourceContext(messageToForward.id, messageToForward.isConfidential())
+                                                    )
+                                                )
                                             },
                                             null,
                                             messageToForward.mentions,
@@ -1493,17 +1510,18 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     /**
-     * Local file path of the replied message's media, forward-aware.
-     * - Normal attachment: `getMessageAttachmentFilePath(message.id) + fileName`.
-     * - Single-forward: the forwarded file lives under the attachment's `authorityId` directory
-     *   (NOT message.id) — see generateMessageFromForward / ChatMessageListFragment:1774.
-     * Returns null if the resolved media is not readable on disk (plaintext or ciphertext).
+     * Local file path of the replied message's media, addressed per copy like every other
+     * attachment. Returns null if the resolved media is not readable on disk (plaintext or
+     * ciphertext).
+     *
+     * Runs on IO (see [loadComposeQuoteThumbnailAsync]), so the MIGRATING read is allowed: it also
+     * brings a file still at its pre-per-copy owner-message address across — without that, replying
+     * to an old media message shows no thumbnail until the background migration reaches its row.
      */
     private fun quoteLocalAttachmentPath(message: TextChatMessage, attachment: Attachment): String? {
-        val forwards = message.forwardContext?.forwards
-        val dirId = if (forwards?.size == 1) attachment.authorityId.toString() else message.id
-        val fileName = attachment.fileName ?: return null
-        val path = FileUtil.getMessageAttachmentFilePath(dirId) + fileName
+        // Disambiguation only; the resolver owns the path shape.
+        if (attachment.fileName == null) return null
+        val path = AttachmentPathResolver.materializedFileFor(attachment, message.id)
         // isReadable (not File.exists): encrypted-at-rest media keeps only the .encrypt on disk; the
         // loader resolves it to a decrypting content uri via imageGlideModel.
         return path.takeIf { EncryptedAttachmentAccess.isReadable(it) }
@@ -2165,9 +2183,9 @@ class ChatMessageInputFragment : Fragment() {
     /**
      * Create a text file from the given content and return the file path
      */
-    private fun createTextFile(messageId: String, fileName: String, content: String): String? {
+    private fun createTextFile(attachmentLocalId: String, fileName: String, content: String): String? {
         return try {
-            val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+            val filePath = AttachmentPathResolver.stagingFileFor(attachmentLocalId, fileName)
             val file = File(filePath)
             file.parentFile?.mkdirs()
             file.writeText(content, Charsets.UTF_8)
@@ -2196,13 +2214,14 @@ class ChatMessageInputFragment : Fragment() {
             val timeStamp = System.currentTimeMillis()
             val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
             val fileName = generateOversizedTextFileName()
+            val attachmentLocalId = UUID.randomUUID().toString()
             val truncatedText = message.utf8Substring(OVERSIZED_TEXT_BODY_LENGTH)
 
             L.i { "Text message oversized (${messageBytes.size} bytes), converting to file attachment. Body truncated to $OVERSIZED_TEXT_BODY_LENGTH bytes." }
 
             viewLifecycleOwner.lifecycleScope.launch {
                 val filePath = withContext(Dispatchers.IO) {
-                    createTextFile(messageId, fileName, message)
+                    createTextFile(attachmentLocalId, fileName, message)
                 }
 
                 if (!viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
@@ -2218,6 +2237,7 @@ class ChatMessageInputFragment : Fragment() {
                             filePath = filePath,
                             fileName = fileName,
                             mimeType = CONTENT_TYPE_LONG_TEXT,
+                            localId = attachmentLocalId,
                             isAudioMessage = false
                         )
                     )
@@ -2297,7 +2317,11 @@ class ChatMessageInputFragment : Fragment() {
                     val fileSize = FileSystemUtils.getLength(info.filePath)
 
                     Attachment(
-                        messageId,
+                        // No server-side id: this copy has none yet, and nothing local is located by
+                        // it any more — localId below is the identity every local operation uses.
+                        // The column stays NULL, which is what keeps the legacy row locator from
+                        // matching this row.
+                        "",
                         0,
                         info.mimeType,
                         "".toByteArray(),
@@ -2310,7 +2334,8 @@ class ChatMessageInputFragment : Fragment() {
                         mediaWidthAndHeight.first,
                         mediaWidthAndHeight.second,
                         info.filePath,
-                        AttachmentStatus.LOADING.code
+                        AttachmentStatus.LOADING.code,
+                        localId = info.localId
                     )
                 }
             }
@@ -2753,7 +2778,10 @@ class ChatMessageInputFragment : Fragment() {
         val timeStamp = System.currentTimeMillis()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
         val fileName = originalFileName ?: FileSystemUtils.getFileName(attachmentUri.path)
-        val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+        // Minted before staging: the file is written straight to the address the attachment row
+        // will be read from, so no post-send relocation is ever needed.
+        val attachmentLocalId = UUID.randomUUID().toString()
+        val filePath = AttachmentPathResolver.stagingFileFor(attachmentLocalId, fileName)
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -2784,6 +2812,7 @@ class ChatMessageInputFragment : Fragment() {
                         filePath = filePath,
                         fileName = fileName,
                         mimeType = mimeType,
+                        localId = attachmentLocalId,
                         isAudioMessage = isAudioMessage,
                         isGif = isAnimatedImage
                     )
@@ -3049,18 +3078,6 @@ class ChatMessageInputFragment : Fragment() {
                     }
                 )
             }
-        }
-    }
-
-    private fun changeAttachmentStatus(
-        forward: Forward
-    ) {
-        forward.attachments?.map {
-            it.status = AttachmentStatus.LOADING.code
-        }
-
-        forward.forwards?.forEach {
-            changeAttachmentStatus(it)
         }
     }
 

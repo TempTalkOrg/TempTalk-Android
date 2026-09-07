@@ -15,9 +15,11 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.R
 import com.difft.android.call.connect.CallConnectionCoordinator
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.core.CallTlsProvider
@@ -561,7 +563,14 @@ class LCallViewModel @AssistedInject constructor(
 
     fun updateScreenShareFallback(participant: Participant) = screenShareFallback.update(participant)
     fun setCameraEnabled(enabled: Boolean) = mediaCtl.setCameraEnabled(enabled)
-    fun toggleMute(participant: Participant) = rtm.toggleMute(participant)
+    /**
+     * Mute-other over RTM. Success is reported only through the target's mic state; a failed
+     * publish must not be silent, so it surfaces a toast naming [displayName].
+     */
+    fun toggleMute(participant: Participant, displayName: String) = rtm.toggleMute(participant) { success ->
+        L.i { "[Call] mute other target=${participant.identity?.value} success=$success" }
+        if (!success) showToastMessage(ResUtils.getString(R.string.call_mute_participant_failed, displayName))
+    }
     fun flipCamera() = mediaCtl.flipCamera()
     fun shouldTriggerFeedbackView() = feedbackBinder.maybeTrigger()
     fun isRequestingPermission() = callUiController.isRequestingPermission.value
@@ -609,7 +618,7 @@ class LCallViewModel @AssistedInject constructor(
 
     private fun showToastMessage(message: String) {
         viewModelScope.launch {
-            try { ToastUtil.show(message) } catch (e: Exception) { L.e(e) { "[Call] Failed to show toast message: $message" } }
+            try { ToastUtil.show(message) } catch (e: Exception) { L.e(e) { "[Call] Failed to show toast message length=${message.length}" } }
         }
     }
 }

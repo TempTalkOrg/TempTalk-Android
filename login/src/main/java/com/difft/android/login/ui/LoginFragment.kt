@@ -6,17 +6,14 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.dp
-import com.difft.android.login.BindAccountActivity
 import com.difft.android.login.R
 import com.difft.android.login.VerifyCodeActivity
 import com.difft.android.login.databinding.FragmentLogInBinding
@@ -71,8 +68,8 @@ class LoginFragment : Fragment() {
             checkInputAccount()
         }
 
-        binding.account.doOnTextChanged { text, _, _, _ ->
-            val content = text.toString().trim()
+        binding.account.onQueryChanged = { text ->
+            val content = text.trim()
             if (content.isEmpty()) {
                 disableHandleZone()
             } else {
@@ -84,6 +81,9 @@ class LoginFragment : Fragment() {
                 }
             }
         }
+        // Equivalence note: today's empty branch only disables the button — clPhone stays as-is
+        // after a clear (it only changes on the next non-empty input). Do NOT hide it here.
+        binding.account.onClear = { disableHandleZone() }
 
         binding.clPhone.setOnClickListener {
             val intent = Intent(requireActivity(), CountryPickerActivity::class.java)
@@ -91,12 +91,7 @@ class LoginFragment : Fragment() {
         }
         binding.tvPhoneCode.text = getDefaultCountryCode()
 
-        binding.account.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                checkInputAccount()
-            }
-            false
-        }
+        binding.account.onImeAction = { checkInputAccount() }
 
         binding.tvSignUp.setOnClickListener {
             val fragmentLogIn = requireActivity().findViewById<View>(R.id.fragment_log_in)
@@ -126,7 +121,7 @@ class LoginFragment : Fragment() {
 
     private fun checkInputAccount() {
         showSignInErrorView(null)
-        val account = binding.account.text.toString().trim()
+        val account = binding.account.query.trim()
         if (account.isEmpty()) return
         val phoneCode = binding.tvPhoneCode.text.toString().trim()
         viewModel.verifyAccount(account, phoneCode)
@@ -153,42 +148,18 @@ class LoginFragment : Fragment() {
     }
 
     private fun startObserve() {
-        observeVerifyInviteCode()
-        observeSignIn()
+        observeAccountInvalid()
         observeVerifyPhone()
         observeVerifyEmail()
     }
 
-    private fun observeVerifyInviteCode() =
-        viewModel.inviteCodeLiveData.observe(
-            viewLifecycleOwner
-        ) {
+    // Local validation error: input is neither a valid email nor a phone number.
+    private fun observeAccountInvalid() =
+        viewModel.accountInvalidLiveData.observe(viewLifecycleOwner) {
             it ?: return@observe
-            when (it.status) {
-                Status.LOADING -> loadingHandleZone()
-                Status.SUCCESS -> enableHandleZone()
-                Status.ERROR -> {
-                    enableHandleZone()
-                    showSignInErrorView(it.exception?.errorMsg)
-                }
-            }
-        }
-
-    //邀请码登录成功，会进入绑定邮箱流程，新版本去掉了邀请码登录的功能，所以此逻辑不会触发
-    private fun observeSignIn() =
-        viewModel.signInLiveData.observe(viewLifecycleOwner) {
-            when (it.status) {
-                Status.LOADING -> loadingHandleZone()
-                Status.SUCCESS -> {
-                    enableHandleZone()
-                    startActivity(Intent(context, BindAccountActivity::class.java))
-                    activity?.finish()
-                }
-
-                Status.ERROR -> {
-                    enableHandleZone()
-                    showSignInErrorView(it.exception?.errorMsg)
-                }
+            if (it.status == Status.ERROR) {
+                enableHandleZone()
+                showSignInErrorView(it.exception?.errorMsg)
             }
         }
 

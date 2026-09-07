@@ -28,8 +28,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -44,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.DifftSwitch
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallEngine
@@ -167,7 +166,7 @@ class LCallServerNodeActivity : BaseActivity() {
                         color = Color.DarkGray,
                     )
                     Spacer(Modifier.width(6.dp))
-                    Switch(
+                    DifftSwitch(
                         checked = connectionType == CONNECTION_TYPE.HTTP3_QUIC,
                         onCheckedChange = { checked ->
                             if (checked && !LCallEngine.isQuicSelectable()) {
@@ -179,10 +178,6 @@ class LCallServerNodeActivity : BaseActivity() {
                                 LCallEngine.setSelectedConnectMode(protocol, fromUserSelection = true)
                             }
                         },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFF2196F3),
-                            uncheckedThumbColor = Color.LightGray,
-                        ),
                     )
                 }
             }

@@ -24,6 +24,7 @@ import com.difft.android.call.response.RoomState
 import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.databinding.ChatFragmentHeaderCallBinding
@@ -48,6 +49,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+/** Rendered diameter of `imageviewAvatar` in `chat_fragment_header_call.xml`. */
+private const val HEADER_AVATAR_SIZE_DP = 24
 
 
 @AndroidEntryPoint
@@ -245,7 +249,10 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
                 uid?.let {
                     if (displayInfo.contact?.isPresent == true) {
                         binding.imageviewAvatar.visibility = View.VISIBLE
-                        binding.imageviewAvatar.setAvatar(displayInfo.contact.get())
+                        binding.imageviewAvatar.setAvatar(
+                            displayInfo.contact.get(),
+                            letterTextSizeDp = AvatarView.letterTextSizeDpFor(HEADER_AVATAR_SIZE_DP),
+                        )
                     } else {
                         binding.imageviewAvatar.setAvatar(com.difft.android.base.R.drawable.base_ic_avatar_default)
                     }

@@ -14,7 +14,7 @@
         android:id="@+id/iv_search_more"
         android:layout_width="18dp"
         android:layout_height="18dp"
-        android:src="@drawable/search_input_ic_search_input"
+        android:src="@drawable/base_ic_search"
         android:tint="@color/t.info"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"

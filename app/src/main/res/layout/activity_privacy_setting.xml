@@ -38,20 +38,6 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!--    <androidx.appcompat.widget.AppCompatTextView-->
-    <!--        android:id="@+id/tv_security"-->
-    <!--        android:layout_width="match_parent"-->
-    <!--        android:layout_height="wrap_content"-->
-    <!--        android:layout_marginStart="16dp"-->
-    <!--        android:layout_marginTop="16dp"-->
-    <!--        android:background="@null"-->
-    <!--        android:src="@drawable/chative_ic_back"-->
-    <!--        android:text="@string/settings_security"-->
-    <!--        android:textColor="@color/t.secondary"-->
-    <!--        android:textSize="12sp"-->
-    <!--        app:layout_constraintLeft_toLeftOf="parent"-->
-    <!--        app:layout_constraintTop_toBottomOf="@+id/ib_back" />-->
-
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -280,93 +266,5 @@
             android:textColor="@color/t.secondary"
             android:textSize="12sp" />
     </LinearLayout>
-
-    <!--        <androidx.appcompat.widget.AppCompatTextView-->
-    <!--            android:id="@+id/tv_find_me"-->
-    <!--            android:layout_width="match_parent"-->
-    <!--            android:layout_height="wrap_content"-->
-    <!--            android:layout_marginStart="16dp"-->
-    <!--            android:layout_marginTop="30dp"-->
-    <!--            android:background="@null"-->
-    <!--            android:src="@drawable/chative_ic_back"-->
-    <!--            android:text="@string/settings_privacy_find_me"-->
-    <!--            android:textColor="@color/t.secondary"-->
-    <!--            android:textSize="12sp"-->
-    <!--            app:layout_constraintLeft_toLeftOf="parent"-->
-    <!--            app:layout_constraintTop_toBottomOf="@+id/ib_back" />-->
-
-    <!--        <LinearLayout-->
-    <!--            android:layout_width="match_parent"-->
-    <!--            android:layout_height="wrap_content"-->
-    <!--            android:layout_marginLeft="16dp"-->
-    <!--            android:layout_marginTop="8dp"-->
-    <!--            android:layout_marginRight="16dp"-->
-    <!--            android:background="@drawable/chat_group_info_bg"-->
-    <!--            android:orientation="vertical">-->
-
-    <!--            <androidx.constraintlayout.widget.ConstraintLayout-->
-    <!--                android:layout_width="match_parent"-->
-    <!--                android:layout_height="52dp"-->
-    <!--                android:paddingStart="16dp"-->
-    <!--                android:paddingEnd="12dp">-->
-
-    <!--                <androidx.appcompat.widget.AppCompatTextView-->
-    <!--                    android:id="@+id/tv_phone"-->
-    <!--                    android:layout_width="wrap_content"-->
-    <!--                    android:layout_height="match_parent"-->
-    <!--                    android:background="@null"-->
-    <!--                    android:gravity="center_vertical"-->
-    <!--                    android:text="@string/settings_privacy_phone"-->
-    <!--                    android:textColor="@color/t.primary"-->
-    <!--                    android:textSize="16sp"-->
-    <!--                    app:layout_constraintBottom_toBottomOf="@+id/cb_phone"-->
-    <!--                    app:layout_constraintLeft_toLeftOf="parent"-->
-    <!--                    app:layout_constraintTop_toTopOf="@+id/cb_phone" />-->
-
-    <!--                <androidx.appcompat.widget.AppCompatCheckBox-->
-    <!--                    android:id="@+id/cb_phone"-->
-    <!--                    android:layout_width="wrap_content"-->
-    <!--                    android:layout_height="wrap_content"-->
-    <!--                    android:buttonTint="@color/event_checkbox_color_selector"-->
-    <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
-    <!--                    app:layout_constraintEnd_toEndOf="parent"-->
-    <!--                    app:layout_constraintRight_toRightOf="parent"-->
-    <!--                    app:layout_constraintTop_toTopOf="parent" />-->
-    <!--            </androidx.constraintlayout.widget.ConstraintLayout>-->
-
-    <!--            <androidx.constraintlayout.widget.ConstraintLayout-->
-    <!--                android:layout_width="match_parent"-->
-    <!--                android:layout_height="52dp"-->
-    <!--                android:paddingStart="16dp"-->
-    <!--                android:paddingEnd="12dp">-->
-
-    <!--                <androidx.appcompat.widget.AppCompatTextView-->
-    <!--                    android:id="@+id/tv_email"-->
-    <!--                    android:layout_width="wrap_content"-->
-    <!--                    android:layout_height="match_parent"-->
-    <!--                    android:background="@null"-->
-    <!--                    android:gravity="center_vertical"-->
-    <!--                    android:text="@string/settings_privacy_email"-->
-    <!--                    android:textColor="@color/t.primary"-->
-    <!--                    android:textSize="16sp"-->
-    <!--                    app:layout_constraintBottom_toBottomOf="@+id/cb_email"-->
-    <!--                    app:layout_constraintLeft_toLeftOf="parent"-->
-    <!--                    app:layout_constraintTop_toTopOf="@+id/cb_email" />-->
-
-    <!--                <androidx.appcompat.widget.AppCompatCheckBox-->
-    <!--                    android:id="@+id/cb_email"-->
-    <!--                    android:layout_width="wrap_content"-->
-    <!--                    android:layout_height="wrap_content"-->
-    <!--                    android:buttonTint="@color/event_checkbox_color_selector"-->
-    <!--                    app:layout_constraintBottom_toBottomOf="parent"-->
-    <!--                    app:layout_constraintEnd_toEndOf="parent"-->
-    <!--                    app:layout_constraintRight_toRightOf="parent"-->
-    <!--                    app:layout_constraintTop_toTopOf="parent" />-->
-
-    <!--            </androidx.constraintlayout.widget.ConstraintLayout>-->
-    <!--        </LinearLayout>-->
-
-    <!--    </LinearLayout>-->
-
 
 </LinearLayout>

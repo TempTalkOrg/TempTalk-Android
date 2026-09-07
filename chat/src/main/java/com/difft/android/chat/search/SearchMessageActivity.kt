@@ -6,7 +6,6 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -100,21 +99,8 @@ class SearchMessageActivity : BaseActivity() {
     private fun initView() {
         mBinding.ibBack.setOnClickListener { finish() }
 
-        mBinding.edittextSearchInput.addTextChangedListener {
-            val text = it.toString().trim()
-            searchJob?.cancel()
-            searchJob = lifecycleScope.launch {
-                delay(300)
-                if (text == key) return@launch
-                key = text
-                resetButtonClear()
-                if (key.isNotEmpty()) {
-                    loadPage(isInitialLoad = true)
-                } else {
-                    showNoResults(getString(R.string.search_messages_default_tips))
-                }
-            }
-        }
+        mBinding.searchInput.onQueryChanged = { raw -> scheduleSearch(raw.trim()) }
+        mBinding.searchInput.onClear = { scheduleSearch("") }
 
         mBinding.recyclerviewChatHistory.apply {
             layoutManager = LinearLayoutManager(this@SearchMessageActivity)
@@ -123,12 +109,7 @@ class SearchMessageActivity : BaseActivity() {
             addOnScrollListener(paginationScrollListener)
         }
 
-        mBinding.buttonClear.setOnClickListener {
-            mBinding.edittextSearchInput.text = null
-        }
-
-        mBinding.edittextSearchInput.setText(key)
-        mBinding.edittextSearchInput.setSelection(key.length)
+        mBinding.searchInput.query = key
 
         if (key.isNotEmpty()) {
             loadPage(isInitialLoad = true)
@@ -174,11 +155,17 @@ class SearchMessageActivity : BaseActivity() {
         }
     }
 
-    private fun resetButtonClear() {
-        mBinding.buttonClear.animate().apply {
-            cancel()
-            val toAlpha = if (key.isNotEmpty()) 1.0f else 0f
-            alpha(toAlpha)
+    private fun scheduleSearch(text: String) {
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch {
+            delay(300)
+            if (text == key) return@launch
+            key = text
+            if (key.isNotEmpty()) {
+                loadPage(isInitialLoad = true)
+            } else {
+                showNoResults(getString(R.string.search_messages_default_tips))
+            }
         }
     }
 

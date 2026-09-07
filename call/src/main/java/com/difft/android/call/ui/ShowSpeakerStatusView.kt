@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
-import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.StringUtil
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -36,7 +35,7 @@ import io.livekit.android.util.flow
 
 
 @Composable
-fun ShowSpeakerStatusView(participant: Participant, userName: String?, speakingEnabled: Boolean = true) {
+fun ShowSpeakerStatusView(participant: Participant, displayName: String, speakingEnabled: Boolean = true) {
 
     val imageLoader = LocalImageLoaderProvider.localImageLoader()
     val isSpeaking by participant::isSpeaking.flow.collectAsState()
@@ -84,10 +83,8 @@ fun ShowSpeakerStatusView(participant: Participant, userName: String?, speakingE
             tint = tintColor,
         )
 
-        val username = "${userName ?: IdUtil.convertToBase58UserName(participant.identity?.value)}"
-
         Text(
-            text = StringUtil.truncateWithEllipsis(username, 14),
+            text = StringUtil.truncateWithEllipsis(displayName, PARTICIPANT_NAME_MAX_LENGTH),
             // SF/P4
             style = TextStyle(
                 fontSize = 12.sp,

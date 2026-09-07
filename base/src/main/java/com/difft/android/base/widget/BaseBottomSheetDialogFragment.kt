@@ -2,13 +2,12 @@ package com.difft.android.base.widget
 
 import android.app.Dialog
 import android.os.Bundle
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.annotation.DrawableRes
 import androidx.annotation.LayoutRes
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
@@ -27,7 +26,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
  * - Auto fit-to-content by default
  * - Optional fixed peek height with expandable behavior
  * - Optional full-screen mode
- * - Max width constraint for wide screens (640dp)
+ * - Max width constraint for wide screens (640dp), applied through [BottomSheetBehavior.setMaxWidth]
+ *   before the first layout pass so the sheet never flashes at full width
  * - Custom layout support (bypass default container)
  *
  * Usage Mode 1 - Default Container (with rounded corners and drag handle):
@@ -128,6 +128,15 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
      */
     protected open fun useDefaultBackground(): Boolean = true
 
+    /**
+     * Background for the default container. Defaults to the app-wide sheet surface (`bg.popup`).
+     * Override with [R.drawable.base_bg_bottom_sheet_page] for content that is also shown as a
+     * full page and therefore paints the page colour itself — a different container colour would
+     * show as a two-tone seam at the drag handle.
+     */
+    @DrawableRes
+    protected open fun getContainerBackgroundRes(): Int = R.drawable.base_bg_bottom_sheet
+
     // ========== Max Width Configuration ==========
 
     /**
@@ -166,6 +175,8 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
 
         if (useDefaultContainer()) {
+            view.setBackgroundResource(getContainerBackgroundRes())
+
             // Setup drag handle visibility
             val dragHandle = view.findViewById<View>(R.id.drag_handle)
             dragHandle?.visibility = if (showDragHandle()) View.VISIBLE else View.GONE
@@ -203,6 +214,10 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState) as BottomSheetDialog
 
+        // Must happen before the first measure: resizing the sheet in onShow (after the first
+        // layout) produces a visible full-width -> 640dp jump.
+        dialog.behavior.applyMaxWidth(getMaxWidth())
+
         // Set cancelable based on configuration
         isCancelable = isCancelableByUser()
         dialog.setCanceledOnTouchOutside(isCancelableByUser())
@@ -216,9 +231,6 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
             bottomSheet?.let { sheet ->
                 val behavior = BottomSheetBehavior.from(sheet)
                 val peekHeightRatio = getPeekHeightRatio()
-
-                // Apply max width constraint for wide screens
-                applyMaxWidth(sheet)
 
                 // Configure draggable
                 behavior.isDraggable = isDraggable()
@@ -294,32 +306,6 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
         return dialog
     }
 
-    /**
-     * Apply max width constraint to the bottom sheet.
-     */
-    private fun applyMaxWidth(sheet: View) {
-        val maxWidth = getMaxWidth()
-        if (maxWidth <= 0) return
-
-        val screenWidth = WindowSizeClassUtil.getWindowWidthPx(requireActivity())
-        if (screenWidth > maxWidth) {
-            val layoutParams = sheet.layoutParams
-            when (layoutParams) {
-                is CoordinatorLayout.LayoutParams -> {
-                    layoutParams.width = maxWidth
-                    layoutParams.gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
-                }
-                is FrameLayout.LayoutParams -> {
-                    layoutParams.width = maxWidth
-                    layoutParams.gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
-                }
-                else -> {
-                    layoutParams.width = maxWidth
-                }
-            }
-            sheet.layoutParams = layoutParams
-        }
-    }
 
     /**
      * Called when the bottom sheet is ready and configured.

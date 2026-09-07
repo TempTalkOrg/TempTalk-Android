@@ -29,12 +29,17 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.group.ChatUIData
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.deepCopyWithNewAttachmentIdentities
+import com.difft.android.chat.attachment.forwardSourceContext
+import com.difft.android.chat.attachment.toForwardCopy
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageTwo
+import com.difft.android.chat.message.getRelevantAttachment
 import com.difft.android.chat.message.isNotifyStyleMessage
 import com.difft.android.chat.speech2text.SpeechToTextManager
 import com.difft.android.chat.translate.TranslateManager
@@ -689,12 +694,20 @@ class ChatMessageViewModel @AssistedInject constructor(
                 return@launch
             }
 
-            data.attachment?.let { attachment ->
-                attachment.id
+            // Forward-aware: a forwarded voice message carries its attachment in the forward tree, and
+            // its file is addressed per copy — resolve both here instead of trusting the persisted
+            // `path` column, which the resolver supersedes.
+            data.getRelevantAttachment()?.let { attachment ->
                 // 检查 key和digest 是否存在
                 if (attachment.key == null || attachment.digest == null) {
-                    L.w { "[speechToTextManager] Attachment key is null or empty for message: ${data.attachment?.id}" }
+                    L.w { "[speechToTextManager] Attachment key is null or empty for message: ${data.id}" }
                     return@launch
+                }
+                // Migrating read, off the main thread: speech-to-text is not a download gate — a
+                // voice file still at its pre-per-copy owner-message address would fail the
+                // conversion with a generic toast and never be rescued.
+                val attachmentPath = withContext(Dispatchers.IO) {
+                    AttachmentPathResolver.materializedFileFor(attachment, data.id)
                 }
 
                 val speechToTextData = data.speechToTextData ?: SpeechToTextData(SpeechToTextStatus.Invisible, null)
@@ -704,6 +717,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                     viewModelScope,
                     context,
                     attachment,
+                    attachmentPath,
                     onSuccess = {
                         if (it.isNotEmpty()) {
                             speechToTextData.convertStatus = SpeechToTextStatus.Show
@@ -1232,13 +1246,18 @@ class ChatMessageViewModel @AssistedInject constructor(
                 val sharedContactName = message.sharedContact?.getOrNull(0)?.name?.displayName
                 ForwardContext(null, false, sharedContactId, sharedContactName)
             } else if (nestedForward != null) {
-                nestedForward.apply {
-                    this.forwards?.forEach { forward ->
-                        if (!forward.attachments.isNullOrEmpty()) {
-                            forward.attachments = forward.attachments?.subList(0, 1)
+                // Deep copy first, then trim: mutating `nestedForward` would edit the ORIGINAL
+                // message's live object (dropping its extra attachments from the open conversation)
+                // and would hand the new message the source's attachment identities.
+                nestedForward
+                    .deepCopyWithNewAttachmentIdentities(message.forwardSourceContext())
+                    .apply {
+                        forwards?.forEach { forward ->
+                            forward.attachments?.takeIf { it.isNotEmpty() }?.let {
+                                forward.attachments = listOf(it.first())
+                            }
                         }
                     }
-                }
             } else {
                 ForwardContext(mutableListOf<Forward>().apply {
                     this.add(
@@ -1248,7 +1267,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                             message.forWhat is For.Group,
                             message.fromWho.id,
                             message.text,
-                            message.attachments,
+                            message.attachments?.map { it.toForwardCopy(message.forwardSourceContext()) },
                             null,
                             message.mentions,
                             message.systemShowTimestamp
@@ -1266,8 +1285,8 @@ class ChatMessageViewModel @AssistedInject constructor(
                     message.forWhat is For.Group,
                     message.fromWho.id,
                     if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
-                    message.attachments,
-                    message.forwardContext?.forwards,
+                    message.attachments?.map { it.toForwardCopy(message.forwardSourceContext()) },
+                    message.forwardContext?.forwards?.map { it.deepCopyWithNewAttachmentIdentities(message.forwardSourceContext()) },
                     message.mentions,
                     message.systemShowTimestamp
                 )
@@ -1430,8 +1449,8 @@ class ChatMessageViewModel @AssistedInject constructor(
                     it.forWhat is For.Group,
                     it.fromWho.id,
                     if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
-                    message.attachments,
-                    message.forwardContext?.forwards,
+                    message.attachments?.map { attach -> attach.toForwardCopy(message.forwardSourceContext()) },
+                    message.forwardContext?.forwards?.map { fwd -> fwd.deepCopyWithNewAttachmentIdentities(message.forwardSourceContext()) },
                     message.mentions,
                     it.systemShowTimestamp
                 )

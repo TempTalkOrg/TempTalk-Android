@@ -1,5 +1,6 @@
 package com.difft.android.chat.search
 
+import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -31,9 +32,22 @@ abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean 
 
     private var searchKey: String = ""
 
+    // Pending until a commit callback actually rebinds: AsyncListDiffer drops superseded
+    // commit callbacks, so a per-call captured flag could be lost with the dropped callback.
+    private var pendingHighlightRebind = false
+
+    @SuppressLint("NotifyDataSetChanged")
     fun updateWithSearchKey(key: String, data: List<SearchChatHistoryViewData>) {
+        if (key != searchKey) pendingHighlightRebind = true
         searchKey = key
-        submitList(data)
+        submitList(data) {
+            // DiffUtil skips rebinding items whose data is unchanged, so a new search key
+            // would leave stale highlights on surviving items — force a full rebind.
+            if (pendingHighlightRebind) {
+                pendingHighlightRebind = false
+                notifyDataSetChanged()
+            }
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SearchChatHistoryViewHolder {

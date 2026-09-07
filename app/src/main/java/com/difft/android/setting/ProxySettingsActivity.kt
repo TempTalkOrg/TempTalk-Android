@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -34,8 +35,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.DifftSwitchRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.base.widget.ToastUtil
@@ -298,38 +299,18 @@ private fun ProxyUseProxyCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
+    DifftSwitchRow(
+        label = stringResource(R.string.proxy_use_proxy),
+        checked = checked,
+        onCheckedChange = onCheckedChange,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(
-                color = DifftTheme.colors.background,
-                shape = RoundedCornerShape(8.dp),
-            )
-            .heightIn(min = 52.dp)
-            .padding(horizontal = 15.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.proxy_use_proxy),
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-            fontWeight = FontWeight.Normal,
-            color = DifftTheme.colors.textPrimary,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(modifier = Modifier.size(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = DifftTheme.colors.textOnPrimary,
-                checkedTrackColor = DifftTheme.colors.primary,
-                uncheckedThumbColor = DifftTheme.colors.textOnPrimary,
-                uncheckedTrackColor = DifftTheme.colors.icon,
-            ),
-        )
-    }
+            // clip before background so the whole-row ripple follows the card's corners.
+            .clip(RoundedCornerShape(8.dp))
+            .background(color = DifftTheme.colors.background),
+        contentPadding = PaddingValues(horizontal = 15.dp, vertical = 10.dp),
+    )
 }
 
 /**
@@ -381,48 +362,20 @@ private fun ProxyProtectCallCard(
     enabledLook: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
+    DifftSwitchRow(
+        label = stringResource(R.string.proxy_protect_call),
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        // Greyed look while the proxy is off; the row stays tappable so the tap can be answered.
+        switchAppearsEnabled = enabledLook,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(
-                color = DifftTheme.colors.background,
-                shape = RoundedCornerShape(8.dp),
-            )
-            .heightIn(min = 52.dp)
-            .padding(horizontal = 15.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.proxy_protect_call),
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-            fontWeight = FontWeight.Normal,
-            color = DifftTheme.colors.textPrimary,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(modifier = Modifier.size(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = if (enabledLook) {
-                SwitchDefaults.colors(
-                    checkedThumbColor = DifftTheme.colors.textOnPrimary,
-                    checkedTrackColor = DifftTheme.colors.primary,
-                    uncheckedThumbColor = DifftTheme.colors.textOnPrimary,
-                    uncheckedTrackColor = DifftTheme.colors.icon,
-                )
-            } else {
-                // Greyed look while the proxy is off (switch remains tappable).
-                SwitchDefaults.colors(
-                    checkedThumbColor = DifftTheme.colors.textOnPrimary,
-                    checkedTrackColor = DifftTheme.colors.backgroundDisabled,
-                    uncheckedThumbColor = DifftTheme.colors.textOnPrimary,
-                    uncheckedTrackColor = DifftTheme.colors.backgroundDisabled,
-                )
-            },
-        )
-    }
+            // clip before background so the whole-row ripple follows the card's corners.
+            .clip(RoundedCornerShape(8.dp))
+            .background(color = DifftTheme.colors.background),
+        contentPadding = PaddingValues(horizontal = 15.dp, vertical = 10.dp),
+    )
 }
 
 /** Caption under the "Protect IP address in calls" card (Figma §16822:19386). */
@@ -584,6 +537,7 @@ private fun PassphraseDialog(
     var passphrase by remember { mutableStateOf("") }
 
     AlertDialog(
+        containerColor = DifftTheme.colors.backgroundPopup,
         onDismissRequest = { if (!isLoading) onDismiss() },
         title = { Text(text = stringResource(R.string.proxy_passphrase_title)) },
         text = {

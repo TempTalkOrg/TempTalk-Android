@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.sp
 import com.difft.android.chat.R
 
 /**
- * Bottom sheet shown when the user taps the avatar in [ContactSetRemarkActivity]
+ * Bottom sheet shown when the user taps the avatar while editing the remark on the contact card
  * AND there is already a remark avatar set. Three rows: choose new photo,
  * restore (clear) the remark avatar, cancel. The first two are blue (t.info)
  * because they're affirmative actions; cancel is the default text color.

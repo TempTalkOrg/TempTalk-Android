@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dual-pane (list + detail) pane budget — compact dual-pane band (673dp <= width < 900dp).
+
+    The DEFAULT configuration deliberately carries the compact numbers: the dual-pane
+    layout only exists behind the resource qualifier
+    res/layout-w673dp-h480dp/activity_index.xml, so no configuration narrower than
+    673dp can ever read these values. Windows >= 900dp read res/values-w900dp/dimens.xml
+    instead: these five dimens have exactly two candidate directories in this module —
+    this unqualified default and values-w900dp/ — and a qualified directory that matches
+    the configuration always beats the unqualified default, while w900dp contradicts (and
+    so is dropped for) any window below 900dp. Both halves are pinned behaviourally by
+    app/src/test/java/com/difft/android/DualPaneBudgetResourceInvariantTest.kt.
+
+    INVARIANT — the qualifier floor IS the pane-budget feasibility floor:
+
+        dual_pane_rail_width + dual_pane_divider_width
+            + dual_pane_list_min_width + dual_pane_detail_min_width
+        == 72 + 1 + 280 + 320 == 673dp
+        == the w673dp component of res/layout-w673dp-h480dp/
+
+    Changing any minimum here therefore REQUIRES renaming that layout directory (and
+    WindowSizeClassUtil.DUAL_PANE_MIN_WIDTH_DP). Pinned by
+    app/src/test/java/com/difft/android/DualPaneBudgetResourceInvariantTest.kt.
+
+    320dp is the declared static floor only: it can occur solely on 673-712dp windows
+    (in practice multi-window and the narrowest unfolded foldables), where the divider's
+    in-range drag is inert. Interactive resizing is clamped separately by
+    dual_pane_detail_drag_min_width below.
+-->
+<resources>
+
+    <!-- Vertical navigation rail. 72dp gives each auto-sizing label the same 56dp box
+         (72 - 2 x 8dp padding) that a 360dp phone's bottom strip already gives it. -->
+    <dimen name="dual_pane_rail_width">72dp</dimen>
+
+    <!-- Seam between the rail and the list pane. -->
+    <dimen name="dual_pane_divider_width">1dp</dimen>
+
+    <!-- Initial list-pane width; IndexActivity.applyListPaneWidth() re-applies it at
+         runtime (user-drag ratio and large-font 50/50 override it, clamped to the
+         min widths below). -->
+    <dimen name="dual_pane_list_default_width">280dp</dimen>
+
+    <!-- Floor terms of the invariant above, enforced at runtime by
+         IndexActivity.applyListPaneWidth() / the drag clamp. The DETAIL minimum wins
+         when both cannot be met: the detail pane holds fixed-width message content
+         that clips, while the list rows compress gracefully. -->
+    <dimen name="dual_pane_list_min_width">280dp</dimen>
+    <dimen name="dual_pane_detail_min_width">320dp</dimen>
+
+    <!-- Drag clamp floor for the detail pane, band-independent and intentionally above
+         dual_pane_detail_min_width: incoming rows hosting the 270dp fixed-width bubbles
+         (contact / audio / attachment) need 26 (start offset) + 270 + 40 (end margin)
+         = 336dp to render unclipped, 340dp with the voice-speed button. Users must not
+         be able to drag the detail pane into that clipping zone; only the static budget
+         on 673-712dp windows (in-range drag inert there) may go below. -->
+    <dimen name="dual_pane_detail_drag_min_width">360dp</dimen>
+
+</resources>

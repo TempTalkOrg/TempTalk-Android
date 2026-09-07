@@ -5,7 +5,6 @@ import com.difft.android.base.log.lumberjack.L
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.content.ContextCompat
-import androidx.core.widget.addTextChangedListener
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
@@ -62,11 +61,14 @@ class DeleteAccountActivity : BaseActivity() {
         val lastSix = if (myIdBase58.length >= 6) myIdBase58.takeLast(6) else myIdBase58
         mBinding.tvTips2.text = getString(R.string.me_delete_account_tips2, lastSix)
 
-        mBinding.etAccount.addTextChangedListener {
-            val etContent = mBinding.etAccount.text.toString().trim()
-            mBinding.btnDone.isEnabled = lastSix == etContent
+        mBinding.etAccount.onQueryChanged = {
+            mBinding.btnDone.isEnabled = lastSix == it.trim()
         }
-
+        // Written as the watcher expression evaluated at "": equivalent without assuming
+        // lastSix is non-empty.
+        mBinding.etAccount.onClear = {
+            mBinding.btnDone.isEnabled = lastSix.isEmpty()
+        }
 
         mBinding.btnDone.setOnClickListener {
             ComposeDialogManager.showMessageDialog(

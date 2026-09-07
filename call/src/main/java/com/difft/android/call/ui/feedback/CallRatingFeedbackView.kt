@@ -1,9 +1,7 @@
 package com.difft.android.call.ui.feedback
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -11,11 +9,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import com.difft.android.base.call.CallFeedbackRequestBody
-import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.data.FeedbackCallInfo
-import com.difft.android.call.ui.HideNavigationBarEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,19 +28,15 @@ fun CallRatingFeedbackView(
     )
 
     if (viewState != FeedbackViewState.Dismissed) {
-        ModalBottomSheet(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(),
+        DifftModalBottomSheet(
             sheetState = sheetState,
-            dragHandle = null,
-            containerColor = DifftTheme.colors.backgroundPopup,
+            showDragHandle = false,
+            hideNavigationBar = true,
             onDismissRequest = {
                 viewState = FeedbackViewState.Dismissed
                 onDismiss()
             },
         ) {
-            HideNavigationBarEffect()
             when (viewState) {
                 is FeedbackViewState.Rating -> {
                     onDisplay()

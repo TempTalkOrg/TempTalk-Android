@@ -67,11 +67,15 @@ sealed interface PendingSource {
      * (a) derive the account fileHash for the isExist fast-pass, (b) render from local/cached bytes
      * if present, and (c) download+decrypt the message ciphertext on an isExist miss.
      *
-     *  - key/digest/authorizeId/attachmentId: the MESSAGE attachment pointer (message-scoped).
-     *    NOTE these are the message's authorizeId/attachmentId, used ONLY to download the source
-     *    bytes on an isExist miss; the CONFIRMED favorite gets a NEW account-level authorizeId from
-     *    isExist/uploadInfo (re-authorized under [myId] so the favorite outlives the message).
+     *  - key/digest/authorizeId: the MESSAGE attachment pointer (message-scoped), used ONLY to
+     *    download the source bytes on an isExist miss; the CONFIRMED favorite gets a NEW
+     *    account-level authorizeId from isExist/uploadInfo (re-authorized under [myId] so the
+     *    favorite outlives the message).
+     *  - attachmentId: the source attachment's message-domain LOCAL id. Purely internal bookkeeping
+     *    — it is persisted with the pending row and never leaves the device.
      *  - messageId + fileName: locate the on-disk `.encrypt` ciphertext for local render / decrypt.
+     *    `messageId` is the attachment's DIRECTORY key from `AttachmentPathResolver.directoryKeyFor`
+     *    (the copy's own local id), not the id of a message.
      *  - accountFileHash: Base64(SHA-256(key)) precomputed — the isExist fast-pass key.
      */
     data class Message(

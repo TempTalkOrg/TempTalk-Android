@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.R
+import com.difft.android.base.ui.compose.DifftBottomSheetDefaults
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.openExternalBrowser
 
@@ -61,10 +62,10 @@ fun E2eeInfoSheetContent(
         modifier = modifier
             .heightIn(max = maxHeight)
             .verticalScroll(rememberScrollState())
-            // Mock's 32px sheet-top padding assumed the grabber floats OUTSIDE the sheet;
-            // M3's in-sheet DragHandle already contributes ~22dp below the pill, so only
-            // the remainder is added here to keep the visual grabber→icon distance at ~32.
-            .padding(top = 10.dp, bottom = 16.dp)
+            // Mock's 32dp sheet-top padding assumed the grabber floats OUTSIDE the sheet;
+            // the shared drag handle already contributes its bottom padding below the pill, so only
+            // the remainder is added here to keep the visual grabber→icon distance at 32dp.
+            .padding(top = DifftTheme.spacing.insetXXLarge - DifftBottomSheetDefaults.DragHandleBottomPadding, bottom = 16.dp)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(28.dp),
     ) {

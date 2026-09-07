@@ -17,23 +17,23 @@
         android:paddingTop="25dp"
         android:paddingRight="10dp"
         android:paddingBottom="25dp"
-        android:textColor="@color/ps_color_53575e"
+        android:textColor="@color/t.primary"
         android:textSize="14sp" />
 
     <View
         android:id="@+id/bottom_line"
         android:layout_width="match_parent"
         android:layout_height="0.6dp"
-        android:background="@color/ps_color_e" />
+        android:background="@color/line" />
 
     <com.difft.android.selector.widget.MediumBoldTextView
         android:id="@+id/btnOk"
         android:layout_width="match_parent"
         android:layout_height="45dp"
-        android:background="@drawable/ps_btn_selector"
+        android:background="@drawable/ps_popup_item_bg"
         android:gravity="center"
         android:text="@string/ps_know"
-        android:textColor="@color/ps_color_bd"
+        android:textColor="@color/primary"
         android:textSize="16sp"
         />
 </LinearLayout>

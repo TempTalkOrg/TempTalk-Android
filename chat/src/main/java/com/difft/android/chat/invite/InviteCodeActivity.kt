@@ -50,8 +50,9 @@ class InviteCodeActivity : BaseActivity() {
 
         mBinding.addText.setOnClickListener {
             mBinding.tvError.text = ""
-            mBinding.customUid.text?.let { text ->
-                val textStr = text.toString()
+            // Empty input no longer fires a pointless network query (previously an empty
+            // Editable still entered the block and called queryByCustomUid("")).
+            mBinding.customUid.query.takeIf { it.isNotEmpty() }?.let { textStr ->
                 // 判断text是否为4位数字，如果是则调用queryByInviteCode，否则调用 queryByCustomUid
                 if (textStr.length == 4 && textStr.all { it.isDigit() }) {
                     queryByInviteCode(textStr)

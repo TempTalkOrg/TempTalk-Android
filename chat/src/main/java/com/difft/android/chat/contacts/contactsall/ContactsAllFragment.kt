@@ -252,7 +252,7 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
      */
     private class PendingDividerDecoration(context: Context) : RecyclerView.ItemDecoration() {
         private val paint = Paint().apply {
-            color = ContextCompat.getColor(context, com.difft.android.base.R.color.divider)
+            color = ContextCompat.getColor(context, com.difft.android.base.R.color.line)
             strokeWidth = 1.dp.toFloat()
         }
         private val marginH = 16.dp

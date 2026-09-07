@@ -2,17 +2,19 @@ package com.difft.android.chat.group
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import androidx.activity.viewModels
+import com.difft.android.chat.common.AvatarPickLauncher
+import com.difft.android.chat.common.compose.IdentityMeta
+import com.difft.android.chat.group.mvi.GroupInfoHeaderContract
+import com.difft.android.chat.group.mvi.GroupInfoHeaderViewModel
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
-import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.GlobalNotificationType
 import androidx.lifecycle.flowWithLifecycle
@@ -48,26 +50,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -85,26 +84,18 @@ import com.difft.android.network.group.GroupMemberBinding
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.group.RotateGroupCryptoReq
 import com.difft.android.network.group.UpgradeGroupToEncryptedReq
-import com.difft.android.network.responses.MuteStatus
+import com.difft.android.network.requests.MuteStatus
 import com.hi.dhl.binding.viewbind
+import com.difft.android.base.ui.compose.input.ClearMode
+import com.difft.android.base.ui.compose.input.DifftClearableTextField
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.selector.basic.PictureSelector
-import com.difft.android.selector.config.SelectMimeType
-import com.difft.android.selector.config.SelectModeConfig
-import com.difft.android.selector.entity.LocalMedia
-import com.difft.android.selector.interfaces.OnResultCallbackListener
-import com.difft.android.selector.language.LanguageConfig
-import com.difft.android.selector.pictureselector.GlideEngine
-import com.difft.android.selector.pictureselector.ImageFileCompressEngine
-import com.difft.android.selector.pictureselector.ImageFileCropEngine
-import com.difft.android.selector.pictureselector.PictureSelectorUtils
-import com.difft.android.selector.utils.ToastUtils
-import util.ScreenLockUtil
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -116,7 +107,6 @@ import com.difft.android.chat.util.MessageNotificationUtil
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 const val KEY_GROUP_ID = "groupId"
-const val KEY_GROUP_NAME = "groupName"
 const val EXTRA_SELECTED_MEMBER_IDS = "extra_selected_member_ids"
 
 // Server status for a rotate-crypto CAS conflict (baseGroupCryptoKeyVersion stale).
@@ -135,6 +125,11 @@ class GroupInfoActivity : BaseActivity() {
     private var groupInfo: GroupModel? = null
     private var isMemberListExpanded = false
 
+    private val headerViewModel: GroupInfoHeaderViewModel by viewModels()
+
+    // Field so the picker's permission contract registers before STARTED.
+    private val headerBinder = GroupInfoHeaderBinder(this, { binding }, { headerViewModel }, { groupId })
+
     // Guards against concurrent / double-tap rotation: a second performResetCrypto
     // returns early while one is already running. Cleared in the finally below.
     @Volatile
@@ -150,10 +145,9 @@ class GroupInfoActivity : BaseActivity() {
     // encrypted only at confirm time, not at pick time.
     private val resetAvatarPath = mutableStateOf<String?>(null)
 
-    // Must be an Activity field so it's registered before the Activity is STARTED.
-    private val onPicturePermissionForAvatar = registerPermission {
-        onPicturePermissionForAvatarResult(it)
-    }
+    // Activity field so the permission contract registers before STARTED. Only stages the path;
+    // upload + encrypt happen at confirm time (create-group model).
+    private val resetAvatarPicker = AvatarPickLauncher.forActivity(this) { resetAvatarPath.value = it }
 
     @Inject
     lateinit var groupUtil: GroupUtil
@@ -191,7 +185,8 @@ class GroupInfoActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding.ibBack.setOnClickListener { finish() }
+        headerBinder.setup()
+        headerBinder.observe()
 
         // Subscribe to conversationSet for all config-related UI updates
         chatSettingViewModel.conversationSet
@@ -206,16 +201,19 @@ class GroupInfoActivity : BaseActivity() {
             }
             .launchIn(lifecycleScope)
 
-        binding.switch2mute.setOnClickListener {
-            var muteStatus = MuteStatus.UNMUTED.value
-            if (binding.switch2mute.isChecked) {
-                muteStatus = MuteStatus.MUTED.value
+        // Controlled: the conversationSet flow moves the switch once the server accepted, so a
+        // failed request simply leaves it alone.
+        binding.switch2mute.setOnToggleRequestListener { view, requested ->
+            ComposeDialogManager.showWait(this, "")
+            view.guardWhile(
+                chatSettingViewModel.setConversationConfigs(
+                    activity = this,
+                    conversation = groupId,
+                    muteStatus = MuteStatus.of(requested).value,
+                )
+            ) {
+                ComposeDialogManager.dismissWait(this)
             }
-            chatSettingViewModel.setConversationConfigs(
-                activity = this,
-                conversation = groupId,
-                muteStatus = muteStatus,
-            )
         }
 
         // 异步加载置顶状态
@@ -225,9 +223,9 @@ class GroupInfoActivity : BaseActivity() {
                 binding.switchStick.isChecked = isPinned
             }
         }
-        binding.switchStick.setOnClickListener {
-            val newPinned = binding.switchStick.isChecked
-            pinChattingRoom(newPinned)
+        // Controlled and DB-only: the switch moves once the write landed, no wait dialog needed.
+        binding.switchStick.setOnToggleRequestListener { view, requested ->
+            view.guardWhile(pinChattingRoom(requested))
         }
 
 
@@ -277,8 +275,7 @@ class GroupInfoActivity : BaseActivity() {
     }
 
     private fun initView() {
-        val title = groupInfo?.name + "(" + groupInfo?.members?.size.toString() + ")"
-        binding.title.text = title
+        groupInfo?.let { headerViewModel.dispatch(GroupInfoHeaderContract.Intent.Load(it)) }
         setMembersView()
         setOtherView()
     }
@@ -511,18 +508,11 @@ class GroupInfoActivity : BaseActivity() {
                 )
             }
         }
-
-        binding.editGroupContainer.setOnClickListener {
-            val editIntent = Intent(this, GroupEditInfoActivity::class.java).apply {
-                putExtra(KEY_GROUP_ID, groupId)
-                putExtra(KEY_GROUP_NAME, groupInfo?.name)
-            }
-            startActivity(editIntent)
-        }
     }
 
-    private fun pinChattingRoom(isPinned: Boolean) {
-        lifecycleScope.launch {
+    /** @return the write's job, so the toggle can gate itself on it (see `DifftToggleView.guardWhile`). */
+    private fun pinChattingRoom(isPinned: Boolean): Job {
+        return lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     dbRoomStore.updatePinnedTime(
@@ -530,10 +520,12 @@ class GroupInfoActivity : BaseActivity() {
                         if (isPinned) System.currentTimeMillis() else null
                     )
                 }
+                binding.switchStick.isChecked = isPinned
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 L.w { "[GroupInfoActivity] pinChattingRoom error: ${e.stackTraceToString()}" }
+                ToastUtil.show(getString(R.string.operation_failed))
             }
         }
     }
@@ -563,36 +555,37 @@ class GroupInfoActivity : BaseActivity() {
         }
     }
 
+    /**
+     * Encryption meta row under the group name. Visibility and click targets are unchanged from the
+     * former standalone row: encrypted groups always show their status; plain groups show the
+     * upgrade entry only when the flag is on and the user is owner/admin.
+     */
     private fun setupEncryptionRow() {
         val isEncryptedGroup = (groupInfo?.groupCryptoMode ?: 0) > 0
-
-        if (isEncryptedGroup) {
-            // Flag gates new encryption actions only; encrypted groups always show their status.
-            binding.llEncryptionRow.visibility = View.VISIBLE
-            binding.ivEncryptionLock.visibility = View.VISIBLE
-            binding.ivEncryptionLock.setColorFilter(getColor(com.difft.android.base.R.color.t_primary))
-            binding.tvEncryptionLabel.text = getString(R.string.group_encrypted_label)
-            binding.tvEncryptionLabel.setTextColor(getColor(com.difft.android.base.R.color.t_primary))
-            binding.ivEncryptionArrow.visibility = View.VISIBLE
-            binding.llEncryptionRow.setOnClickListener {
-                showEncryptedGroupInfoSheet()
-            }
+        headerBinder.encryptionMeta = if (isEncryptedGroup) {
+            IdentityMeta(
+                text = getString(R.string.group_encrypted_label),
+                iconRes = R.drawable.chat_ic_lock_cog,
+                caution = false,
+                onClick = { showEncryptedGroupInfoSheet() }
+            )
+        } else if (globalConfigsManager.isGroupEncryptionEnabled() && role <= GROUP_ROLE_ADMIN) {
+            IdentityMeta(
+                text = getString(R.string.group_upgrade_to_encrypted),
+                iconRes = R.drawable.chat_ic_alert_circle,
+                caution = true,
+                onClick = { showUpgradeToEncryptedSheet() }
+            )
         } else {
-            // Plain group: upgrade entry shown only when flag is on and user is owner/admin.
-            val canShowUpgrade = globalConfigsManager.isGroupEncryptionEnabled() && role <= GROUP_ROLE_ADMIN
-            if (canShowUpgrade) {
-                binding.llEncryptionRow.visibility = View.VISIBLE
-                binding.ivEncryptionLock.visibility = View.GONE
-                binding.tvEncryptionLabel.text = getString(R.string.group_upgrade_to_encrypted)
-                binding.tvEncryptionLabel.setTextColor(getColor(com.difft.android.base.R.color.primary))
-                binding.ivEncryptionArrow.visibility = View.GONE
-                binding.llEncryptionRow.setOnClickListener {
-                    showUpgradeToEncryptedSheet()
-                }
-            } else {
-                binding.llEncryptionRow.visibility = View.GONE
-            }
+            null
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // A tap the header binder consumed (unsaved-changes prompt) is turned into a cancel so the
+        // row underneath releases its pressed state without firing its click.
+        if (headerBinder.onDispatchTouchEvent(ev)) ev.action = MotionEvent.ACTION_CANCEL
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun showUpgradeToEncryptedSheet() {
@@ -643,68 +636,6 @@ class GroupInfoActivity : BaseActivity() {
                 }
             )
         }
-    }
-
-    private fun onPicturePermissionForAvatarResult(permissionState: PermissionUtil.PermissionState) {
-        when (permissionState) {
-            PermissionUtil.PermissionState.Denied -> {
-                ToastUtils.showToast(this, getString(R.string.not_granted_necessary_permissions))
-            }
-
-            PermissionUtil.PermissionState.Granted -> {
-                createResetAvatarPictureSelector()
-            }
-
-            PermissionUtil.PermissionState.PermanentlyDenied -> {
-                ComposeDialogManager.showMessageDialog(
-                    context = this,
-                    title = getString(R.string.tip),
-                    message = getString(R.string.no_permission_picture_tip),
-                    confirmText = getString(R.string.notification_go_to_settings),
-                    cancelText = getString(R.string.notification_ignore),
-                    cancelable = false,
-                    onConfirm = { PermissionUtil.launchSettings(this) },
-                    onCancel = {
-                        ToastUtils.showToast(this, getString(R.string.not_granted_necessary_permissions))
-                    }
-                )
-            }
-        }
-    }
-
-    /**
-     * Picker for the interim reset dialog. Clone of [CreateGroupActivity.createPictureSelector].
-     * On result we only stage the path into [resetAvatarPath] (Compose-observable) — the
-     * upload+encrypt happens later at confirm time (create-group model). We do NOT touch any
-     * binding; the dialog content observes the state and recomposes.
-     */
-    private fun createResetAvatarPictureSelector() {
-        ScreenLockUtil.temporarilyDisabled = true
-        PictureSelector.create(this)
-            .openGallery(SelectMimeType.ofImage())
-            .setDefaultLanguage(LanguageConfig.ENGLISH)
-            .setLanguage(PictureSelectorUtils.getLanguage(this))
-            .setSelectorUIStyle(PictureSelectorUtils.getSelectorStyle(this))
-            .setImageEngine(GlideEngine.createGlideEngine())
-            .setSelectionMode(SelectModeConfig.SINGLE)
-            .isDirectReturnSingle(true)
-            .setCropEngine(ImageFileCropEngine(this, PictureSelectorUtils.getSelectorStyle(this)))
-            .setCompressEngine(ImageFileCompressEngine())
-            .forResult(object : OnResultCallbackListener<LocalMedia> {
-                override fun onResult(result: ArrayList<LocalMedia>) {
-                    ScreenLockUtil.temporarilyDisabled = false
-                    if (result.isNotEmpty()) {
-                        val localMedia = result[0]
-                        resetAvatarPath.value = localMedia.compressPath ?: localMedia.realPath
-                        // Upload uses compressPath/realPath; drop the plaintext crop output immediately.
-                        AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = resetAvatarPath.value)
-                    }
-                }
-
-                override fun onCancel() {
-                    ScreenLockUtil.temporarilyDisabled = false
-                }
-            })
     }
 
     /**
@@ -783,7 +714,7 @@ class GroupInfoActivity : BaseActivity() {
                         // Omit context → uses application default, avoiding capture of the
                         // Activity context inside this composable clickable.
                         // Open directly when media is already usable (full/partial); else request.
-                        onPicturePermissionForAvatar.launchMediaSelectionOrOpen { createResetAvatarPictureSelector() }
+                        resetAvatarPicker.launch()
                     }
                 ) {
                     AndroidView(
@@ -798,10 +729,10 @@ class GroupInfoActivity : BaseActivity() {
                         },
                         modifier = Modifier.size(64.dp)
                     )
-                    // Camera overlay (bottom-end): 24dp circle + centered 12dp camera
-                    // icon, replicating chat_activity_group_edit_info.xml. The bg is a
-                    // <shape> oval (icon fill + bg_popup stroke), which Compose
-                    // painterResource can't load — recreate it with clip/background/border.
+                    // Camera overlay (bottom-end): 24dp circle + centered 12dp camera icon, same
+                    // badge the create-group screen uses. The bg is a <shape> oval (icon fill +
+                    // bg_popup stroke), which Compose painterResource can't load — recreate it with
+                    // clip/background/border.
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
@@ -827,37 +758,24 @@ class GroupInfoActivity : BaseActivity() {
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            // Name input — styled to match the create-group / forward inputs
-            // (forward_input_bg). 64-char cap mirrors create-group's maxLength.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        colorResource(com.difft.android.base.R.color.bg3),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                BasicTextField(
+            // Shared clearable input. This dialog is hosted by ComposeDialogManager, which does
+            // not wrap DifftTheme (LocalDifftExtendedColors would fall back to the light
+            // palette in dark mode), so the component wraps its own theme here.
+            // maxLength truncates on paste — InputFilter.LengthFilter semantics.
+            DifftTheme(applyWindowBackground = false) {
+                DifftClearableTextField(
                     value = rememberedState.value,
-                    onValueChange = { if (it.length <= 64) rememberedState.value = it },
-                    singleLine = true,
-                    textStyle = TextStyle(
-                        fontSize = 18.sp,
-                        color = colorResource(com.difft.android.base.R.color.t_primary)
-                    ),
-                    cursorBrush = SolidColor(colorResource(com.difft.android.base.R.color.primary)),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { innerTextField ->
-                        if (rememberedState.value.isEmpty()) {
-                            Text(
-                                text = stringResource(R.string.group_crypto_reset_name_hint),
-                                fontSize = 18.sp,
-                                color = colorResource(com.difft.android.base.R.color.t_disable)
-                            )
-                        }
-                        innerTextField()
-                    }
+                    onValueChange = { rememberedState.value = it },
+                    onClear = { rememberedState.value = "" },
+                    hint = stringResource(R.string.group_crypto_reset_name_hint),
+                    clearMode = ClearMode.WhileEditing,
+                    containerColor = DifftTheme.colors.backgroundTertiary,
+                    textStyle = DifftTheme.typography.bodyMedium.copy(fontSize = 18.sp),
+                    height = null,
+                    minHeight = 36.dp,
+                    contentPadding = PaddingValues(start = 12.dp),
+                    maxLength = 64,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }

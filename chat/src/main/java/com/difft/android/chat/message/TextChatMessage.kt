@@ -4,6 +4,10 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.chat.R
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.ForwardSourceContext
+import com.difft.android.chat.attachment.deepCopyWithNewAttachmentIdentities
+import com.difft.android.chat.attachment.toForwardCopy
 import com.difft.android.chat.widget.AudioMessageManager
 import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
@@ -18,7 +22,6 @@ import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isLongText
-import difft.android.messageserialization.model.keepEncryptedAtRest
 
 /**
  * Information about a long text file for copying
@@ -103,20 +106,19 @@ fun TextChatMessage.isAttachmentMessage(): Boolean {
 }
 
 /**
- * The single attachment eligible for per-item actions (save / favorite): a direct attachment message,
- * or the sole attachment of a single-item forward (a combined-forward wrapper with exactly one
- * forward). Returns null otherwise. Keeps save/favorite detection in lockstep across the chat list
- * and the forward detail view — a single forward wraps its gif in forwardContext, so `attachment` is
- * null and a naive check misses it.
+ * ACTION-coupled selector: the single attachment eligible for per-item actions (save / favorite) —
+ * a direct attachment message, or the sole attachment of a single-item forward (a combined-forward
+ * wrapper with exactly one forward). Returns null otherwise. Keeps save/favorite detection in
+ * lockstep across the chat list and the forward detail view — a single forward wraps its gif in
+ * forwardContext, so `attachment` is null and a naive check misses it.
+ *
+ * OWN-attachment-first, deliberately unlike the render-coupled [getRelevantAttachment]: an action
+ * offered on a message acts on the attachment that message itself carries whenever it has one.
  */
 fun TextChatMessage.singleForwardableAttachment(): Attachment? = when {
     isAttachmentMessage() -> attachment
     forwardContext?.forwards?.size == 1 -> forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
     else -> null
-}
-
-fun TextChatMessage.shouldDecrypt(): Boolean {
-    return this.attachment?.keepEncryptedAtRest() != true
 }
 
 fun TextChatMessage.getAttachmentProgress(): Int? {
@@ -126,20 +128,26 @@ fun TextChatMessage.getAttachmentProgress(): Int? {
 }
 
 /**
- * Determines the appropriate attachment ID to use for progress tracking.
- * For single forward messages, uses the forward attachment ID if available,
- * otherwise falls back to the message ID.
+ * The attachment carried by a single-item forward wrapper — the one such a bubble renders and
+ * addresses. Null when this message is not a single-item forward, or that forward has no attachment.
  */
-fun TextChatMessage.getAttachmentIdForProgress(): String {
-    return forwardContext?.forwards
+internal fun TextChatMessage.singleForwardWrappedAttachment(): Attachment? =
+    forwardContext?.forwards
         ?.takeIf { it.size == 1 }
         ?.firstOrNull()
         ?.attachments
         ?.firstOrNull()
-        ?.authorityId
-        ?.toString()
-        ?: this.id
-}
+
+/**
+ * The single authority for the progress-map key of this message: emit side and collect side must
+ * both go through it, or progress UI silently stops matching.
+ *
+ * The key is the relevant attachment's own [Attachment.localId], so every forwarded copy tracks its
+ * own transfer instead of sharing one with the message it came from. A message with no attachment
+ * (or a row whose localId has not been backfilled yet) falls back to the message id.
+ */
+fun TextChatMessage.getAttachmentIdForProgress(): String =
+    getRelevantAttachment()?.localId?.takeIf { it.isNotEmpty() } ?: this.id
 
 fun TextChatMessage.shouldShowFail(): Boolean {
     // Only show fail for non-mine messages or messages from different device
@@ -161,17 +169,17 @@ fun TextChatMessage.shouldShowFail(): Boolean {
 }
 
 /**
- * Gets the relevant attachment for this message.
- * For single forward messages, returns the forward attachment, otherwise returns the message attachment.
+ * RENDER-coupled selector: the attachment whose transfer state (progress key, status, fail display)
+ * this bubble shows — which must be the attachment the bubble actually draws.
+ *
+ * FORWARD-leaf-first, deliberately unlike the action-coupled [singleForwardableAttachment]:
+ * `ChatMessageViewHolder` binds the forward leaf for every `forwards.size == 1` message, so for a
+ * crafted message carrying both an own attachment and a single-item forward wrapper (no client
+ * produces this, but the wire format allows it) the own attachment is never on screen and keying
+ * state to it would track an attachment nobody sees.
  */
-internal fun TextChatMessage.getRelevantAttachment(): Attachment? {
-    val forwards = forwardContext?.forwards
-    return if (forwards?.size == 1) {
-        forwards.firstOrNull()?.attachments?.firstOrNull()
-    } else {
-        this.attachment
-    }
-}
+internal fun TextChatMessage.getRelevantAttachment(): Attachment? =
+    singleForwardWrappedAttachment() ?: attachment
 
 // ============ Copy & Forward Extension Functions ============
 
@@ -264,44 +272,40 @@ fun TextChatMessage.getCopyableTextContent(): String? {
 /**
  * Get long text file info for copying
  * Returns the file path and message ID for long text attachment
+ *
+ * Blocking IO — callers must be off the main thread, which is what licenses the MIGRATING read
+ * below. Copy is not a download gate: a miss enqueues nothing, so a long-text file still at its
+ * pre-per-copy owner-message address would silently put the 2KB body preview on the clipboard and
+ * report success.
  */
 fun TextChatMessage.getLongTextFileInfo(): LongTextFileInfo? {
-    val (attachment, messageId) = when {
-        isAttachmentMessage() -> {
-            this.attachment to this.id
-        }
+    // Disambiguation only: which attachment. The resolver owns where its file is.
+    val attachment = (if (isAttachmentMessage()) this.attachment else singleForwardWrappedAttachment())
+        ?: return null
+    // Directory key, which callers also take as the message-scoped handle of the file (it is the
+    // segment of the exported content uri).
+    val messageId = AttachmentPathResolver.directoryKeyFor(attachment)
+    if (messageId.isEmpty()) return null
 
-        forwardContext?.forwards?.size == 1 -> {
-            val forward = forwardContext?.forwards?.firstOrNull()
-            val forwardMessage = forward?.let { generateMessageFromForward(it) }
-            forward?.attachments?.firstOrNull() to (forwardMessage?.id ?: "")
-        }
-
-        else -> null to ""
-    }
-
-    if (attachment == null || messageId.isEmpty()) return null
-
-    val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+    val filePath = AttachmentPathResolver.materializedFileFor(attachment, id)
     return LongTextFileInfo(filePath, messageId)
 }
 
 /**
  * Get file info for copying file to clipboard
  * Returns file path, file name, and attachment info
+ *
+ * Blocking IO — callers must be off the main thread, same contract and same reason as
+ * [getLongTextFileInfo]: a Copy that misses is a total no-op (no clipboard write, no toast, no
+ * download), so this read has to be the migrating one.
  */
 fun TextChatMessage.getFileInfoForCopy(): FileInfoForCopy? {
-    val attachment = when {
-        isAttachmentMessage() -> this.attachment
-        forwardContext?.forwards?.size == 1 -> {
-            forwardContext?.forwards?.firstOrNull()?.attachments?.firstOrNull()
-        }
+    // Disambiguation only: which attachment. The resolver owns where its file is.
+    val attachment = (if (isAttachmentMessage()) this.attachment else singleForwardWrappedAttachment()) ?: return null
 
-        else -> null
-    } ?: return null
-
-    val messageId = if (isAttachmentMessage()) id else attachment.authorityId.toString()
-    val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+    // Doubles as the message segment of the exported content uri, so it stays the directory key.
+    val messageId = AttachmentPathResolver.directoryKeyFor(attachment)
+    val filePath = AttachmentPathResolver.materializedFileFor(attachment, id)
 
     return FileInfoForCopy(filePath, attachment.fileName ?: "file", attachment, messageId)
 }
@@ -313,6 +317,8 @@ fun TextChatMessage.getFileInfoForCopy(): FileInfoForCopy? {
 fun TextChatMessage.buildForwardData(): Pair<String, ForwardContext>? {
     val content: String
     val forwardCtx: ForwardContext
+    // Owner message id travels only as the migration's legacy-address hint; addressing never reads it.
+    val sourceContext = ForwardSourceContext(id, isConfidential())
 
     if (forwardContext != null) {
         // Already a forward message, re-forward it
@@ -326,7 +332,10 @@ fun TextChatMessage.buildForwardData(): Pair<String, ForwardContext>? {
         } else {
             ResUtils.getString(R.string.chat_history)
         }
-        forwardCtx = forwardContext ?: return null
+        // Deep copy, never the original tree: reusing it would hand the new message the SAME
+        // attachment identities as the message being forwarded, re-coupling their files and state.
+        forwardCtx = (forwardContext ?: return null)
+            .deepCopyWithNewAttachmentIdentities(sourceContext)
     } else {
         // Create a new forward context from this message
         content = if (isAttachmentMessage()) {
@@ -345,7 +354,7 @@ fun TextChatMessage.buildForwardData(): Pair<String, ForwardContext>? {
                         authorId,
                         message?.toString(),
                         attachment?.let { attach ->
-                            listOf(attach.copy(status = AttachmentStatus.LOADING.code))
+                            listOf(attach.toForwardCopy(sourceContext))
                         },
                         null,
                         mentions,

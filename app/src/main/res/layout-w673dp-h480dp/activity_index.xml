@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dual-pane layout (width >= 673dp AND height >= 480dp).
+    673dp is the pane-budget feasibility floor: rail + divider + list_min + detail_min
+    (72 + 1 + 280 + 320, values/dimens.xml) — the narrowest window where both panes still
+    meet their minimums. Unfolded book foldables (690-840dp) qualify; h480dp keeps
+    folded/phone-landscape windows out (e.g. Z TriFold folded landscape ~955dp x ~409dp).
+    Pane widths are @dimen references so values-w900dp/ can restore the tablet budget
+    (rail 96 / list 360 / detail_min 360) on genuinely large windows.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:ignore="InconsistentLayout">
+
+    <!-- NavigationRail for large screens -->
+    <LinearLayout
+        android:id="@+id/navigation_rail_container"
+        android:layout_width="@dimen/dual_pane_rail_width"
+        android:layout_height="match_parent"
+        android:background="@color/bg1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingTop="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.difft.android.views.IndexIndicator
+            android:id="@+id/indicatorview_chats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:src="@drawable/ic_index_activity_chat"
+            android:text="@string/chat_chats"
+            android:textColor="@color/color_index_activity_index_text" />
+
+        <com.difft.android.views.IndexIndicator
+            android:id="@+id/indicatorview_contacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:src="@drawable/ic_index_activity_contact"
+            android:text="@string/chat_contacts"
+            android:textColor="@color/color_index_activity_index_text" />
+
+        <com.difft.android.views.IndexIndicator
+            android:id="@+id/indicatorview_me"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:src="@drawable/ic_index_activity_me"
+            android:text="@string/chat_me"
+            android:textColor="@color/color_index_activity_index_text" />
+
+    </LinearLayout>
+
+    <View
+        android:id="@+id/divider_rail"
+        android:layout_width="@dimen/dual_pane_divider_width"
+        android:layout_height="0dp"
+        android:background="@color/line"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/navigation_rail_container"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!--
+        List pane: initial width from @dimen/dual_pane_list_default_width (280dp compact
+        band, 360dp in the w900dp tablet band). Resized at runtime by
+        IndexActivity.applyListPaneWidth() based on user drag (DualPaneRatioUtil ratio),
+        large-font 50/50 split, or the dimen default.
+    -->
+    <FrameLayout
+        android:id="@+id/list_pane"
+        android:layout_width="@dimen/dual_pane_list_default_width"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/divider_rail"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Distinct id — see layout/activity_index.xml. -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/index_viewpager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:nestedScrollingEnabled="false"
+            android:overScrollMode="never" />
+
+    </FrameLayout>
+
+    <!-- Detail pane: directly follows list_pane (no divider in between).
+         The draggable divider overlays the boundary as a separate floating view below. -->
+    <FrameLayout
+        android:id="@+id/detail_pane"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/bg1"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/list_pane"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Placeholder for detail content -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container_detail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Empty state shown when no conversation is selected -->
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/empty_detail_view"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_gravity="center"
+            android:src="@drawable/login_logo_with_name"
+            android:tint="@color/t.disable"
+            android:visibility="visible" />
+
+    </FrameLayout>
+
+    <!--
+        Draggable divider between list and detail panes — floating overlay.
+        24dp wide visually centered on list_pane's right edge via marginStart="-12dp",
+        so it overlaps 12dp into each pane without consuming layout space.
+        Touches only active in the vertical center band (DraggableDividerView).
+        Declared LAST in XML for highest z-order so touches reach it before the panes.
+        Drag is wired up in IndexActivity.setupDualPaneDivider().
+    -->
+    <com.difft.android.views.DraggableDividerView
+        android:id="@+id/divider_pane"
+        android:layout_width="24dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="-12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/list_pane"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Dual-pane layout: list_pane (runtime-sized) + detail_pane (remaining space) + draggable overlay divider -->
+
+    <!-- Hidden views for compatibility with default layout (needed for ViewBinding) -->
+    <View
+        android:id="@+id/view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cl_tab"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        tools:ignore="MissingConstraints" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

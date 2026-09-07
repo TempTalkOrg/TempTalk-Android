@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- focusableInTouchMode on the root: swallow the window's initial focus assignment. The
+     Compose-backed title field would start an IME session the moment it gains focus, whereas
+     the legacy EditText took the same initial focus without opening the keyboard. Manual taps
+     on the field are unaffected. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg1"
+    android:focusableInTouchMode="true"
     tools:ignore="Overdraw">
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -69,24 +74,16 @@
 
         </androidx.appcompat.widget.Toolbar>
 
-        <EditText
+        <com.difft.android.base.widget.DifftClearableInputView
             android:id="@+id/instantMeetingTitleInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:backgroundTint="@android:color/transparent"
-            android:drawableEnd="@drawable/circled_close_f"
-            android:fontFamily="sans-serif"
-            android:imeOptions="actionDone"
-            android:inputType="text"
-            android:lineSpacingExtra="8sp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
             android:paddingBottom="16dp"
-            android:textColor="@color/t.primary"
             android:textSize="20sp"
-            tools:drawableRight="@drawable/circled_close_f"
-            tools:ignore="LabelFor"
-            tools:text="Wea Meeting" />
+            app:dsi_clearMode="whileEditing"
+            app:dsi_containerColor="@android:color/transparent"
+            app:dsi_contentPaddingStart="16dp"
+            app:dsi_imeAction="done" />
 
         <View
             android:layout_width="match_parent"

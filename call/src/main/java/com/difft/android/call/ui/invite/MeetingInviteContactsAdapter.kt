@@ -23,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
+import com.difft.android.base.widget.DifftCheckBoxView
 
 /**
  * 联系人选择项数据模型
@@ -69,9 +70,7 @@ class MeetingInviteContactsAdapter(
         private val lifecycleScope: CoroutineScope
     ) : RecyclerView.ViewHolder(itemView) {
 
-        private val checkbox: View = itemView.findViewById(R.id.checkbox)
-        private val checkboxSelected: ViewGroup = itemView.findViewById(R.id.checkbox_selected)
-        private val checkboxSelectedIcon: android.widget.ImageView = itemView.findViewById(R.id.checkbox_selected_icon)
+        private val checkbox: DifftCheckBoxView = itemView.findViewById(R.id.checkbox)
         private val avatarContainer: ViewGroup = itemView.findViewById(R.id.avatar_container)
         private val textViewAvatarLetter: TextView = itemView.findViewById(R.id.textview_avatar_letter)
         private val textViewName: TextView = itemView.findViewById(R.id.textview_name)
@@ -94,24 +93,9 @@ class MeetingInviteContactsAdapter(
             val displayName = item.contact.getDisplayNameForUI()
             textViewName.text = displayName
 
-            if (item.isInMeeting) {
-                checkbox.visibility = View.GONE
-                checkboxSelected.visibility = View.VISIBLE
-                checkboxSelected.setBackgroundResource(R.drawable.bg_checkbox_selected_disabled)
-                checkboxSelectedIcon.setColorFilter(
-                    itemView.context.getColor(com.difft.android.base.R.color.t_disable)
-                )
-            } else {
-                if (item.isSelected) {
-                    checkbox.visibility = View.GONE
-                    checkboxSelected.visibility = View.VISIBLE
-                    checkboxSelected.setBackgroundResource(R.drawable.bg_checkbox_selected)
-                    checkboxSelectedIcon.setColorFilter(itemView.context.getColor(android.R.color.white))
-                } else {
-                    checkbox.visibility = View.VISIBLE
-                    checkboxSelected.visibility = View.GONE
-                }
-            }
+            // Already in the meeting: shown checked but disabled, not selectable.
+            checkbox.isEnabled = !item.isInMeeting
+            checkbox.isChecked = item.isInMeeting || item.isSelected
 
             loadAvatarJob?.cancel()
             loadAvatar(item.contact)

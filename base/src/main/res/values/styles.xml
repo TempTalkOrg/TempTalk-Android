@@ -23,19 +23,6 @@
         <item name="android:background">@color/bg1</item>
     </style>
 
-    <declare-styleable name="RuleEditText">
-        <attr name="rule" format="flags|string">
-            <flag name="none" value="0x0000001" />
-            <flag name="not_empty" value="0x00000010" />
-            <flag name="email" value="0x000000100" />
-            <flag name="password" value="0x000001000" />
-            <flag name="mobile" value="0x00010000" />
-            <flag name="referral" value="0x00100000" />
-        </attr>
-    </declare-styleable>
-    <declare-styleable name="EditableTextView">
-        <attr name="clearable" format="boolean" />
-    </declare-styleable>
     <declare-styleable name="uikit_verify_code">
         <attr name="verifyTitle" format="string" />
         <attr name="hideInput" format="boolean" />
@@ -119,9 +106,4 @@
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <!-- Switch 公共主题 (兼容AppCompat) -->
-    <style name="Widget.Chative.Switch" parent="Widget.AppCompat.CompoundButton.Switch">
-        <item name="thumbTint">@color/material_switch_thumb_tint</item>
-        <item name="trackTint">@color/material_switch_track_tint</item>
-    </style>
 </resources>

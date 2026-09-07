@@ -36,6 +36,7 @@ import org.difft.app.database.probeHealthy
 import org.difft.app.database.wcdb
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
+import com.difft.android.base.utils.GmsHealth
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallEngine
@@ -177,7 +178,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
-            .addBlocking("installCrashFilter", this::installCrashFilter)
+            .addBlocking("installCrashFilter") { CrashFilter.install() }
             .addNonBlocking("reapply locale") {
                 // Refresh the Application's Configuration with the user locale so legacy
                 // callers that read `application.resources` directly see the right locale.
@@ -202,6 +203,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addNonBlocking("begin job loop") { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking("init call engine") { initCallEngine() }
             .addNonBlocking("cleanup stale call notification") { cleanupStaleCallNotification() }
+            // Warm the per-process verdict off the main thread so later main-thread readers
+            // (SmsRetrieverHelper on the verify-code screen) hit the cache, not PackageManager.
+            .addNonBlocking("warm GmsHealth") { GmsHealth.isGmsBroken(this) }
             .addNonBlocking("monitor main thread blocking") { monitorMainThreadBlocking() }
             .addNonBlocking("init contactor") { ContactorUtil.init() }
             .addNonBlocking("init global configs") { initGlobalConfigs() }
@@ -800,82 +804,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         return isTimeout
-    }
-
-    /**
-     * Intercept crashes triggered by Hook frameworks on abnormal devices (rooted emulators,
-     * automation tools).
-     *
-     * Filtered crashes:
-     * 1. [android.util.SuperNotCalledException] — Hook frameworks intercept Activity.onCreate()
-     *    without calling through to the original implementation.
-     * 2. UCropMultipleActivity "Missing required parameters" — Hook frameworks on virtual devices
-     *    (ladroid/redroid emulators) launch UCropMultipleActivity directly via Intent without
-     *    the required CropTotalDataSource parameter. Normal users cannot trigger this because
-     *    ImageFileCropEngine and PictureCommonFragment already validate parameters before
-     *    launching UCrop (see PR #363). The library throws in onCreate() → initCropFragments()
-     *    before any ActivityLifecycleCallbacks can intercept it, so UncaughtExceptionHandler
-     *    is the only viable interception point.
-     */
-    private fun installCrashFilter() {
-        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            if (throwable.javaClass.name == "android.util.SuperNotCalledException") {
-                L.w { "[CrashFilter] Suppressed SuperNotCalledException: ${throwable.message}" }
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } else if (isUCropMissingParametersCrash(throwable)) {
-                L.w { "[CrashFilter] Suppressed UCrop missing parameters crash from abnormal device" }
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } else if (isFinalizerWatchdogTimeout(thread, throwable)) {
-                // Daemon-thread timeout, not a main-thread crash: swallow it. The watchdog thread
-                // dies but the process keeps running, so don't report and don't kill the process.
-                L.w { "[CrashFilter] Suppressed FinalizerWatchdogDaemon timeout: ${throwable.message}" }
-            } else {
-                previousHandler?.uncaughtException(thread, throwable)
-            }
-        }
-    }
-
-    /**
-     * Matches the exact crash: Hook framework launches UCropMultipleActivity directly without
-     * the required CropTotalDataSource parameter, causing `initCropFragments()` to throw.
-     *
-     * Three-layer matching to avoid false positives:
-     * 1. Cause type: `IllegalArgumentException`
-     * 2. Cause message: exact match of UCrop library's error string
-     * 3. Cause stacktrace: must originate from `UCropMultipleActivity.initCropFragments`
-     *
-     * Note: `UCrop.of()` throws the same message but from a different call site — the stacktrace
-     * check distinguishes the two. Our code already guards `UCrop.of()` with null checks (PR #363),
-     * so that path cannot reach here under normal usage.
-     */
-    private fun isUCropMissingParametersCrash(throwable: Throwable): Boolean {
-        // IllegalArgumentException may be the top-level throwable or wrapped as cause
-        // (Android framework wraps Activity.onCreate() exceptions in RuntimeException)
-        val cause = when {
-            throwable is IllegalArgumentException -> throwable
-            throwable.cause is IllegalArgumentException -> throwable.cause as IllegalArgumentException
-            else -> return false
-        }
-        if (cause.message != "Missing required parameters, count cannot be less than 1") return false
-        return cause.stackTrace.any {
-            it.className == "com.yalantis.ucrop.UCropMultipleActivity" &&
-                it.methodName == "initCropFragments"
-        }
-    }
-
-    /**
-     * Android's FinalizerWatchdogDaemon throws TimeoutException when a finalize() takes >10s.
-     * Triggered by OEM background-freeze: wall-clock keeps advancing while the frozen process
-     * can't schedule the finalizer thread, so the watchdog misfires on resume. The blamed object
-     * (e.g. WCDB winq Expression, which only releases native memory via finalize() — no close API)
-     * is just the queue head, not the real cause. Normal foreground devices never hit this.
-     * Equivalent to disabling the watchdog, but without hidden-API reflection (blocked on API 28+).
-     */
-    private fun isFinalizerWatchdogTimeout(thread: Thread, throwable: Throwable): Boolean {
-        if (thread.name != "FinalizerWatchdogDaemon") return false
-        if (throwable !is java.util.concurrent.TimeoutException) return false
-        return throwable.message?.contains("finalize() timed out") == true
     }
 
     private fun initCallEngine() {

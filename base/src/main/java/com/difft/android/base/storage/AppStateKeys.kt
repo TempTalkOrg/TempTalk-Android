@@ -49,6 +49,7 @@ object AppStateKeys {
     val SAVE_TO_PHOTOS = booleanPreferencesKey("save_to_photos")
     val VOICE_PLAYBACK_SPEED = floatPreferencesKey("voice_playback_speed")
     val DUAL_PANE_RATIO = floatPreferencesKey("dual_pane_ratio")
+    val DUAL_PANE_LIST_COLLAPSED = booleanPreferencesKey("dual_pane_list_collapsed")
     val CALL_VOICE_CHANGER_PRESET = stringPreferencesKey("call_voice_changer_preset")
     val CALL_MIC_PERMISSION_REQUESTED = booleanPreferencesKey("call_mic_permission_requested")
     val CALL_CAMERA_PERMISSION_REQUESTED = booleanPreferencesKey("call_camera_permission_requested")
@@ -115,6 +116,41 @@ object AppStateKeys {
     // One-time archive-tombstone sentinel re-anchor (WCDBUpdateService). Set only after the
     // migration completes, so a failed run retries on the next start.
     val ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED = booleanPreferencesKey("archive_tombstone_sentinel_migrated")
+
+    // ---------- Section H: Attachment address migration bookkeeping (#1178) ----------
+    //
+    // Highest migration version whose stages have all completed — the same versioned-marker shape as
+    // `LegacyPlaintextAttachmentMigration`'s KEY_VERSION and the `syncedContactsVn` contact refresh:
+    // a later wave raises the target version and the module replays only the stages that version
+    // adds. Version 1 = forwarded attachments moved to their per-copy directories.
+    val ATTACHMENT_MIGRATION_VERSION = intPreferencesKey("attachment_migration_version")
+
+    // In-flight progress of the version currently being migrated, cleared when it completes: the
+    // last finished stage, and the last attachment row (databaseId) whose file was processed, so an
+    // interrupted run resumes instead of rescanning. All three are cleared with the rest of
+    // app_state on logout, which is correct — the files are gone by then too.
+    val ATTACHMENT_MIGRATION_STAGE = intPreferencesKey("attachment_migration_stage")
+    val ATTACHMENT_MIGRATION_WATERMARK = intPreferencesKey("attachment_migration_watermark")
+
+    // Completed file-migration passes (stage 2). A row whose file cannot be copied (a persistently
+    // full disk, a stale directory occupying the target name) would otherwise keep the stage
+    // unfinished forever, re-running the full table scan on every cold start and never stamping.
+    // After MAX attempts the stage reports done despite the failures; the row is not abandoned, it
+    // is materialized on demand by the per-row rescue path the next time the user opens it.
+    val ATTACHMENT_MIGRATION_FILE_ATTEMPTS = intPreferencesKey("attachment_migration_file_attempts")
+
+    // Completed sweep passes over the legacy directories (stage 3). The sweep can only ever delete —
+    // a directory it keeps N runs in a row is permanently unverifiable garbage (a nested dir, a
+    // stray entry from a row deleted pre-upgrade), so after MAX attempts the migration stamps its
+    // version with the residue left in place instead of re-walking the attachment root on every
+    // launch forever.
+    val ATTACHMENT_MIGRATION_SWEEP_ATTEMPTS = intPreferencesKey("attachment_migration_sweep_attempts")
+
+    // Completed normal-attachment migration passes (stage 4). Same give-up budget as the file stage
+    // above, and deliberately a SEPARATE counter: the two stages belong to different migration
+    // versions and only the version stamp clears either, so sharing one key would let a device that
+    // already gave up in stage 2 abandon stage 4's rows on their very first pass.
+    val ATTACHMENT_MIGRATION_NORMAL_ATTEMPTS = intPreferencesKey("attachment_migration_normal_attempts")
 }
 
 /**
@@ -144,6 +180,7 @@ object AppStateDefaults {
     const val VOICE_PLAYBACK_SPEED = 1.0f
     /** Sentinel -1f = no user override; UI falls back to mode default (mirrors DualPaneRatioUtil.NO_OVERRIDE). */
     const val DUAL_PANE_RATIO = -1f
+    const val DUAL_PANE_LIST_COLLAPSED = false
     const val CALL_VOICE_CHANGER_PRESET = "original"
     const val CALL_MIC_PERMISSION_REQUESTED = false
     const val CALL_CAMERA_PERMISSION_REQUESTED = false
@@ -181,4 +218,12 @@ object AppStateDefaults {
 
     // Section G defaults
     const val ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED = false
+
+    // Section H defaults — 0 = nothing migrated yet (fresh install and pre-migration installs alike).
+    const val ATTACHMENT_MIGRATION_VERSION = 0
+    const val ATTACHMENT_MIGRATION_STAGE = 0
+    const val ATTACHMENT_MIGRATION_WATERMARK = 0
+    const val ATTACHMENT_MIGRATION_FILE_ATTEMPTS = 0
+    const val ATTACHMENT_MIGRATION_SWEEP_ATTEMPTS = 0
+    const val ATTACHMENT_MIGRATION_NORMAL_ATTEMPTS = 0
 }

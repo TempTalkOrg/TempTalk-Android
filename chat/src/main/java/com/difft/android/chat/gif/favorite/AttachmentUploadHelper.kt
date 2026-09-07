@@ -3,6 +3,8 @@ package com.difft.android.chat.gif.favorite
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sanitizeUrl
+import com.difft.android.chat.attachment.decodeCipherHashOrNull
+import com.difft.android.chat.attachment.resolveUploadIdentity
 import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
@@ -107,9 +109,7 @@ class AttachmentUploadHelper @Inject constructor(
                 }
             }
             val originKey = digest512.digest()
-            val digest256 = MessageDigest.getInstance("SHA-256")
-            digest256.update(originKey)
-            val fileHash = com.difft.android.base.utils.Base64.encodeBytes(digest256.digest())
+            val fileHash = attachmentFileHashOf(originKey)
 
             // AES/CBC/PKCS5 + HMAC-SHA256 (IV prefixed, MAC appended).
             val iv = ByteArray(16)
@@ -131,58 +131,15 @@ class AttachmentUploadHelper @Inject constructor(
             encryptOutputStream.flush()
 
             val fileSize = Math.toIntExact(file.length())
-            val microToken = globalServices.userManager.getUserData()?.microToken ?: ""
 
-            val existResp = fileShareRepo.isExist(FileExistReq(microToken, fileHash, recipients)).execute()
-            if (!existResp.isSuccessful) {
-                throw IOException("check attachment exist fail: ${existResp.message()}")
-            }
-            val res = existResp.body()?.data ?: throw IOException("isExist response data is null")
-
-            if (res.exists) {
-                if (res.authorizeId == 0L) throw IOException("isExist returned invalid authorizeId for existing file")
-                return@withContext UploadedAttachment(
-                    attachmentId = res.attachmentId,
-                    authorizeId = res.authorizeId,
-                    key = originKey,
-                    digest = FileSystemUtils.decodeDigestHex(res.cipherHash),
-                    fileHash = fileHash,
-                    fileSize = fileSize
-                )
-            }
-
-            // Real upload: try each pre-signed URL until one succeeds.
-            uploadToOss(encryptFile, res.urls?.takeIf { it.isNotEmpty() } ?: listOf(res.url), onProgress)
-
-            val cipherDigest = md5Of(encryptFile, buffer)
-            val uploadInfoResp = fileShareRepo.uploadInfo(
-                UploadInfoReq(
-                    token = microToken,
-                    numbers = recipients,
-                    attachmentId = res.attachmentId,
-                    fileHash = fileHash,
-                    cipherHash = FileSystemUtils.bytesToHex(cipherDigest),
-                    cipherHashType = "MD5",
-                    hashAlg = "SHA-256",
-                    keyAlg = "SHA-512",
-                    encAlg = "AES-CBC-256",
-                    fileSize = fileSize,
-                    attachmentType = attachmentType
-                )
-            ).execute()
-            if (!uploadInfoResp.isSuccessful) {
-                throw IOException("uploadInfo fail: ${uploadInfoResp.message()}")
-            }
-            val authorizeId = uploadInfoResp.body()?.data?.authorizeId?.takeIf { it != 0L }
-                ?: throw IOException("uploadInfo response has invalid authorizeId")
-
-            UploadedAttachment(
-                attachmentId = res.attachmentId,
-                authorizeId = authorizeId,
+            publish(
+                ciphertext = encryptFile,
                 key = originKey,
-                digest = cipherDigest,
                 fileHash = fileHash,
-                fileSize = fileSize
+                plainSize = fileSize,
+                recipients = recipients,
+                attachmentType = attachmentType,
+                onProgress = onProgress
             )
         } finally {
             inputStream?.close()
@@ -215,11 +172,133 @@ class AttachmentUploadHelper @Inject constructor(
                 attachmentId = res.attachmentId,
                 authorizeId = res.authorizeId,
                 key = ByteArray(0),          // caller supplies the real key (ref.key); not from isExist
-                digest = FileSystemUtils.decodeDigestHex(res.cipherHash),
+                digest = serverDigestOrEmpty(res.cipherHash),
                 fileHash = fileHash,
                 fileSize = 0                 // unknown here; caller carries the message size
             )
         }
+
+    /**
+     * Re-authorizes an attachment whose bytes are already stored **encrypted at rest**, by uploading
+     * that stored ciphertext as-is. Used when a forward's rapid-upload authorization misses: the
+     * server no longer holds the file, but this device still does.
+     *
+     * The at-rest ciphertext is exactly the payload a recipient must receive — it was produced with
+     * (or downloaded for) [key], so its IV/MAC already match. Re-encrypting instead would require the
+     * plaintext, which is deleted for every encrypted-at-rest attachment, and would only produce an
+     * equivalent payload under a fresh IV. [key] is content-derived (SHA-512 of the plaintext), so
+     * `fileHash` — and therefore the server-side identity of the file — is unchanged; only the
+     * authorization (and the cipherHash, when the stored ciphertext is not the one the server held)
+     * comes back new. Callers MUST write every returned field back.
+     *
+     * @param plainSize the recorded PLAINTEXT size; the plaintext is not on disk to measure.
+     * @throws IOException on any network / server failure.
+     */
+    suspend fun uploadStoredCiphertext(
+        ciphertextFile: File,
+        key: ByteArray,
+        plainSize: Int,
+        recipients: List<String>,
+        attachmentType: Int = AttachmentUploadType.NORMAL,
+        onProgress: ((Int) -> Unit)? = null
+    ): UploadedAttachment = withContext(Dispatchers.IO) {
+        publish(ciphertextFile, key, attachmentFileHashOf(key), plainSize, recipients, attachmentType, onProgress)
+    }
+
+    /**
+     * isExist → (upload → uploadInfo) for an already-encrypted [ciphertext]. Shared by the
+     * encrypt-then-upload path and the stored-ciphertext re-authorization path so both speak to the
+     * server through one sequence. Blocking — callers are on IO.
+     */
+    private fun publish(
+        ciphertext: File,
+        key: ByteArray,
+        fileHash: String,
+        plainSize: Int,
+        recipients: List<String>,
+        attachmentType: Int,
+        onProgress: ((Int) -> Unit)?
+    ): UploadedAttachment {
+        val microToken = globalServices.userManager.getUserData()?.microToken ?: ""
+
+        val existResp = fileShareRepo.isExist(FileExistReq(microToken, fileHash, recipients)).execute()
+        if (!existResp.isSuccessful) {
+            throw IOException("check attachment exist fail: ${existResp.message()}")
+        }
+        val res = existResp.body()?.data ?: throw IOException("isExist response data is null")
+
+        if (res.exists) {
+            if (res.authorizeId == 0L) throw IOException("isExist returned invalid authorizeId for existing file")
+            return UploadedAttachment(
+                attachmentId = res.attachmentId,
+                authorizeId = res.authorizeId,
+                key = key,
+                digest = serverDigestOrEmpty(res.cipherHash),
+                fileHash = fileHash,
+                fileSize = plainSize
+            )
+        }
+
+        // Real upload: try each pre-signed URL until one succeeds.
+        uploadToOss(ciphertext, res.urls?.takeIf { it.isNotEmpty() } ?: listOf(res.url), onProgress)
+
+        val cipherDigest = md5Of(ciphertext)
+        val sentCipherHash = FileSystemUtils.bytesToHex(cipherDigest)
+        val uploadInfoResp = fileShareRepo.uploadInfo(
+            UploadInfoReq(
+                token = microToken,
+                numbers = recipients,
+                attachmentId = res.attachmentId,
+                fileHash = fileHash,
+                cipherHash = sentCipherHash,
+                cipherHashType = "MD5",
+                hashAlg = "SHA-256",
+                keyAlg = "SHA-512",
+                encAlg = "AES-CBC-256",
+                fileSize = plainSize,
+                attachmentType = attachmentType
+            )
+        ).execute()
+        if (!uploadInfoResp.isSuccessful) {
+            throw IOException("uploadInfo fail: ${uploadInfoResp.message()}")
+        }
+        val info = uploadInfoResp.body()?.data ?: throw IOException("uploadInfo response data is null")
+        val authorizeId = info.authorizeId.takeIf { it != 0L }
+            ?: throw IOException("uploadInfo response has invalid authorizeId")
+
+        // Read as nullable although both are declared non-null: gson bypasses Kotlin nullability, and
+        // a non-dedup uploadInfo response carries authorizeId only — these arrive null at runtime
+        // (same defense as AttachmentSendIdentity.localIdOf).
+        val respAttachmentId: String? = info.attachmentId
+        val respCipherHash: String? = info.cipherHash
+        // The server de-duplicates by fileHash, so a concurrent upload of the same plaintext can be
+        // answered with the OTHER copy's object; the pointer must describe that copy, not ours.
+        val identity = resolveUploadIdentity(
+            localAttachmentId = res.attachmentId,
+            localDigest = cipherDigest,
+            respAttachmentId = respAttachmentId,
+            respCipherHash = respCipherHash
+        )
+        if (identity.adoptedFromServer) {
+            L.i { "[AttachmentUploadHelper] adopted server de-duplicated copy attachmentId=${identity.attachmentId} uploadedAs=${res.attachmentId}" }
+        } else if (respCipherHash != null && !respCipherHash.equals(sentCipherHash, ignoreCase = true)) {
+            // The server answered with a DIFFERENT ciphertext hash that could not be adopted (not
+            // hex, or not the local digest's length), so the pointer keeps a digest the server does
+            // not hold — the #1184 symptom. Silent here would leave nothing to diagnose it by.
+            L.w { "[AttachmentUploadHelper] uploadInfo returned an unusable de-dup cipherHash, keeping local digest attachmentId=${res.attachmentId} hasRespId=${!respAttachmentId.isNullOrBlank()}" }
+        }
+
+        // key stays the caller's content-derived key (it decrypts either copy) and fileSize the
+        // plaintext size; only the object identity and its digest come from the server.
+        return UploadedAttachment(
+            attachmentId = identity.attachmentId,
+            authorizeId = authorizeId,
+            key = key,
+            digest = identity.digest,
+            fileHash = fileHash,
+            fileSize = plainSize
+        )
+    }
 
     private fun uploadToOss(encryptFile: File, urls: List<String>, onProgress: ((Int) -> Unit)?) {
         var lastError: Exception? = null
@@ -245,7 +324,23 @@ class AttachmentUploadHelper @Inject constructor(
         throw lastError ?: IOException("All upload URLs failed")
     }
 
-    private fun md5Of(file: File, buffer: ByteArray): ByteArray {
+    /**
+     * The digest of an `isExist` hit: the server's copy is the ONLY payload here, so its cipherHash
+     * is the only digest available — but there is no local candidate to fall back to either, and an
+     * unusable value must NOT fail the call. These hits sit on the message send main path
+     * ([com.difft.android.chat.jobs.PushTextSendJob] → encryptAndUpload → publish), where a server
+     * that answers deterministically would make the message permanently unsendable: no retry can
+     * change a deterministic response. A send never fails over a server field it can proceed
+     * without, so an absent (gson leaves the non-null field null) or malformed value degrades to an
+     * empty digest — the one behavior this path is known to ship.
+     */
+    private fun serverDigestOrEmpty(cipherHash: String?): ByteArray {
+        decodeCipherHashOrNull(cipherHash)?.let { return it }
+        L.w { "[AttachmentUploadHelper] isExist hit carried an unusable cipherHash, publishing an empty digest blank=${cipherHash.isNullOrBlank()} len=${cipherHash?.length ?: 0}" }
+        return ByteArray(0)
+    }
+
+    private fun md5Of(file: File, buffer: ByteArray = ByteArray(8192)): ByteArray {
         val md5 = MessageDigest.getInstance("MD5")
         FileInputStream(file).use { stream ->
             var n: Int
@@ -255,4 +350,15 @@ class AttachmentUploadHelper @Inject constructor(
         }
         return md5.digest()
     }
+}
+
+/**
+ * The server-side file identity: `Base64(SHA-256(key))`, where key = SHA-512(plaintext). Every
+ * isExist / upload keys the file by this value, so all derivations MUST go through here — two
+ * sites deriving it differently is a silent way to re-lose a file the server still holds.
+ */
+internal fun attachmentFileHashOf(key: ByteArray): String {
+    val digest256 = MessageDigest.getInstance("SHA-256")
+    digest256.update(key)
+    return com.difft.android.base.utils.Base64.encodeBytes(digest256.digest())
 }

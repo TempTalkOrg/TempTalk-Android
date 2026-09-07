@@ -48,14 +48,12 @@
         android:paddingStart="16dp"
         android:paddingEnd="8dp">
 
-        <androidx.appcompat.widget.SwitchCompat
+        <com.difft.android.base.widget.DifftSwitchView
             android:id="@+id/switch_save_to_photos"
-            style="@style/Widget.Chative.Switch"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:checked="false"
             android:text="@string/me_save_to_photos"
-            android:textSize="16sp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

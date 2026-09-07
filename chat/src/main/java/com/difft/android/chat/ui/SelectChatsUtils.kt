@@ -6,11 +6,9 @@ import android.text.TextUtils
 import android.view.View
 import android.widget.TextView
 import androidx.appcompat.widget.AppCompatEditText
-import androidx.appcompat.widget.AppCompatImageButton
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.PushForwardNoticeSendJobFactory
@@ -31,6 +29,9 @@ import org.difft.app.database.search
 import org.difft.app.database.searchByNameAndGroupMembers
 import org.difft.app.database.wcdb
 import com.difft.android.chat.R
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.ForwardAttachmentMaterializer
+import com.difft.android.chat.attachment.deepCopyWithNewAttachmentIdentities
 import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.GroupAvatarView
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
@@ -60,6 +61,7 @@ import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.GetConversationSetResponseBody
+import com.difft.android.base.widget.DifftSearchInputView
 import com.difft.android.base.widget.sideBar.SectionDecoration
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import android.os.Bundle
@@ -69,6 +71,7 @@ import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -86,9 +89,10 @@ import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.RoomModel
 import util.FileSystemUtils
 import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.gif.favorite.attachmentFileHashOf
 import com.difft.android.chat.util.MediaUtil
 import java.io.File
-import java.security.MessageDigest
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
@@ -250,14 +254,6 @@ class SelectChatsUtils @Inject constructor(
             } catch (e: Exception) {
                 L.e { "[SelectChatsUtils] search error: ${e.stackTraceToString()}" }
             }
-        }
-    }
-
-    fun resetButtonClear(btnClear: AppCompatImageButton) {
-        btnClear.animate().apply {
-            cancel()
-            val toAlpha = if (!TextUtils.isEmpty(searchKey)) 1.0f else 0f
-            alpha(toAlpha)
         }
     }
 
@@ -847,14 +843,32 @@ class SelectChatsUtils @Inject constructor(
         try {
             val attachment = attachmentList[index]
             attachment.key?.let {
-                val digest = MessageDigest.getInstance("SHA-256").digest(it)
-                val fileHash = android.util.Base64.encodeToString(digest, android.util.Base64.NO_WRAP)
+                // One derivation with the repair's isExist/uploadInfo keying (attachmentFileHashOf):
+                // the miss this marks and the re-upload that repairs it must name the same file.
+                val fileHash = attachmentFileHashOf(it)
                 val response = fileShareRepo.isExist(FileExistReq((globalServices.userManager.getUserData()?.microToken ?: ""), fileHash, recipientIds))
                 val fileExistResp = response.execute().body()?.data
                 if (fileExistResp?.exists == true) {
                     forwardContext?.forwards?.forEach { forward ->
-                        changeAttachmentDigest(forward, attachment.id, fileExistResp, fileHash)
+                        changeAttachmentDigest(forward, attachment.localId, fileExistResp, fileHash)
                     }
+                } else if (fileExistResp?.exists == false) {
+                    // The server no longer holds this file, so the pointer this leaf carries is dead:
+                    // sending it would deliver an attachment the recipient can never download, with
+                    // no signal to anyone (issue #1181). Zeroing the authority id is the miss signal
+                    // the send job repairs from — it already means "never uploaded" everywhere else,
+                    // and unlike a transient marker it survives the per-target copy, the job's
+                    // serialization and the row, so an interrupted send still knows.
+                    //
+                    // `attachment` IS the tree leaf (checkForwardAttachments collects the leaf objects
+                    // themselves), so this reaches exactly the one leaf the request was made for.
+                    //
+                    // Only an EXPLICIT miss counts. A null body is a transport/parse failure, not an
+                    // answer about the file, and treating it as a miss would turn every flaky isExist
+                    // into a full re-upload of a file the server most likely still has.
+                    L.w { "[SelectChatsUtils] isExist miss, forward attachment needs re-upload localId=${attachment.localId}" }
+                    attachment.authorityId = 0L
+                    attachment.fileHash = fileHash
                 }
             }
 
@@ -876,22 +890,6 @@ class SelectChatsUtils @Inject constructor(
             L.e { "[SelectChatsUtils] requestPermission error: ${e.stackTraceToString()}" }
             onComplete?.invoke()
             throw e
-        }
-    }
-
-    private fun changeAttachmentDigest(
-        forward: Forward,
-        attachmentId: String,
-        fileExistResp: FileExistResp,
-        fileHash: String
-    ) {
-        val attachment = forward.attachments?.find { attachment -> attachment.id == attachmentId }
-        attachment?.digest = FileSystemUtils.decodeDigestHex(fileExistResp.cipherHash)
-        attachment?.authorityId = fileExistResp.authorizeId
-        attachment?.fileHash = fileHash
-
-        forward.forwards?.forEach {
-            changeAttachmentDigest(it, attachmentId, fileExistResp, fileHash)
         }
     }
 
@@ -923,7 +921,27 @@ class SelectChatsUtils @Inject constructor(
         val timeStamp = getSafeTimestamp()
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
-        var finalForwardContext = forwardContext
+        // Per TARGET, not per forward action: one ForwardContext instance is dispatched to N targets,
+        // so each target's message needs its own attachment identities (and, below, its own files).
+        // Runs after the isExist authorization has rewritten authorityId/digest on the shared tree, so
+        // the copies inherit the final server identity.
+        val targetForwardContext = forwardContext?.deepCopyWithNewAttachmentIdentities()
+        if (targetForwardContext != null) {
+            // Best effort: gives the forwarded bubble its file up front so it renders without a
+            // download. Never blocks the send — any failure leaves the copy LOADING, which is the
+            // pre-existing download path, so the send proceeds either way.
+            try {
+                val result = withContext(Dispatchers.IO) { ForwardAttachmentMaterializer.materialize(targetForwardContext) }
+                if (result.copied > 0 || result.failed > 0) {
+                    L.i { "[FwdAttachCopy] target=$accountID copied=${result.copied} skipped=${result.skipped} failed=${result.failed}" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[FwdAttachCopy] materialize failed target=$accountID: ${e.stackTraceToString()}" }
+            }
+        }
+        var finalForwardContext = targetForwardContext
         var sharedContacts: List<SharedContact>? = null
         if (sharedContactId != null) {
             sharedContacts = mutableListOf<SharedContact>().apply {
@@ -976,6 +994,9 @@ class SelectChatsUtils @Inject constructor(
                 sendMessage(time.toInt(), mode)
             } catch (e: Exception) {
                 L.e { "[SelectChatsUtils] sendTextPush error: ${e.stackTraceToString()}" }
+                // The send never reached the job queue, so the copies materialized above belong to
+                // no row: row-driven deletion and the migration's sweep could never reclaim them.
+                targetForwardContext?.let { ForwardAttachmentMaterializer.discard(it) }
                 throw e
             }
         }
@@ -992,9 +1013,12 @@ class SelectChatsUtils @Inject constructor(
         val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
 
         val fileName = FileSystemUtils.getFileName(attachmentUri.path)
+        // Minted before the copy: the file is staged at the address the attachment will be read
+        // from, so the same value keys the directory and the row.
+        val attachmentLocalId = UUID.randomUUID().toString()
         //copy file
         try {
-            val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+            val filePath = AttachmentPathResolver.stagingFileFor(attachmentLocalId, fileName)
             FileSystemUtils.copy(attachmentUri.path, filePath)
 
             val mimeType = MediaUtil.getMimeType(com.difft.android.base.utils.application, filePath.toUri()) ?: ""
@@ -1002,7 +1026,10 @@ class SelectChatsUtils @Inject constructor(
             val fileSize = FileSystemUtils.getLength(filePath)
 
             val attachment = Attachment(
-                messageId,
+                // No server-side id — see the send path in ChatMessageInputFragment: this copy is
+                // located by localId, and the column stays NULL so the legacy row locator cannot
+                // reach it.
+                "",
                 0,
                 mimeType,
                 "".toByteArray(),
@@ -1014,7 +1041,8 @@ class SelectChatsUtils @Inject constructor(
                 mediaWidthAndHeight.first,
                 mediaWidthAndHeight.second,
                 filePath,
-                AttachmentStatus.LOADING.code
+                AttachmentStatus.LOADING.code,
+                localId = attachmentLocalId
             )
 
             val time = messageArchiveManager.getMessageArchiveTime(forWhat)
@@ -1069,6 +1097,33 @@ class SelectChatsUtils @Inject constructor(
 }
 
 /**
+ * Writes one fast-path authorization response back onto the ONE forward-tree leaf it was requested
+ * for, matched by that leaf's local id, at any nesting depth.
+ *
+ * Matching by the server-side attachment id stopped at the FIRST leaf carrying it, so forwarding the
+ * same file twice in one action left every sibling after the first holding a stale digest and a zero
+ * authority id. Local ids are unique per leaf, so each response lands on exactly its own leaf.
+ */
+internal fun changeAttachmentDigest(
+    forward: Forward,
+    attachmentLocalId: String,
+    fileExistResp: FileExistResp,
+    fileHash: String
+) {
+    forward.attachments
+        ?.find { attachment -> attachment.localId == attachmentLocalId }
+        ?.let { attachment ->
+            attachment.digest = FileSystemUtils.decodeDigestHex(fileExistResp.cipherHash)
+            attachment.authorityId = fileExistResp.authorizeId
+            attachment.fileHash = fileHash
+        }
+
+    forward.forwards?.forEach {
+        changeAttachmentDigest(it, attachmentLocalId, fileExistResp, fileHash)
+    }
+}
+
+/**
  * 聊天选择底部弹窗Fragment
  */
 @AndroidEntryPoint
@@ -1114,18 +1169,15 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
             dismiss()  // onDismiss 中会处理回调和清理
         }
 
-        val btnClear = view.findViewById<AppCompatImageButton>(R.id.button_clear)
-        val etSearch = view.findViewById<AppCompatEditText>(R.id.edittext_search_input)
+        val searchInput = view.findViewById<DifftSearchInputView>(R.id.search_input)
 
-        btnClear.setOnClickListener {
-            etSearch.text = null
-        }
-        selectChatsUtils.resetButtonClear(btnClear)
-
-        etSearch.addTextChangedListener {
-            selectChatsUtils.searchKey = it.toString().trim()
+        searchInput.onQueryChanged = { key ->
+            selectChatsUtils.searchKey = key.trim()
             selectChatsUtils.search(lifecycleScope)
-            selectChatsUtils.resetButtonClear(btnClear)
+        }
+        searchInput.onClear = {
+            selectChatsUtils.searchKey = ""
+            selectChatsUtils.search(lifecycleScope)
         }
 
         val recentChatsAdapter = object : ChatsContactSelectAdapter(isContactOnly) {

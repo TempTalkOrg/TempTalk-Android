@@ -11,7 +11,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
 import org.difft.app.database.attachment
 import org.difft.app.database.getContactorsFromAllTable
@@ -19,6 +18,8 @@ import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import org.difft.app.database.getReadInfoList
 import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import difft.android.messageserialization.model.Attachment
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.databinding.ActivityMessageDetailBinding
@@ -68,8 +69,16 @@ class MessageDetailActivity : BaseActivity() {
                 val messageModel = wcdb.message.getAllObjects(DBMessageModel.id.eq(messageId)).firstOrNull()
                 messageModel ?: return@launch
 
+                // Resolved here, not in initView: the share gate is not a download gate — a file
+                // still at its pre-per-copy owner-message address would simply make the Share entry
+                // disappear — so the read has to be the migrating one, which is blocking IO.
+                val attachment = messageModel.attachment()
+                val attachmentPath = attachment?.let {
+                    AttachmentPathResolver.materializedFileFor(it, messageModel.id)
+                }
+
                 withContext(Dispatchers.Main) {
-                    initView(messageModel)
+                    initView(messageModel, attachment, attachmentPath)
                 }
             } catch (e: Exception) {
                 L.w { "[MessageDetailActivity] loadMessage error: ${e.stackTraceToString()}" }
@@ -84,7 +93,7 @@ class MessageDetailActivity : BaseActivity() {
 
     // Numeric-only display (expires-in seconds); no English text to translate.
     @SuppressLint("SetTextI18n")
-    private fun initView(message: MessageModel) {
+    private fun initView(message: MessageModel, attachment: Attachment?, attachmentPath: String?) {
         if (message.fromWho == globalServices.myId) {
             MessageDetailBitmapHolder.getBitmap()?.let {
                 binding.ivMessage.visibility = View.VISIBLE
@@ -141,7 +150,7 @@ class MessageDetailActivity : BaseActivity() {
 
         binding.llShare.visibility = View.GONE
 
-        message.attachment()?.let { attachment ->
+        attachment?.let {
             if (attachment.isAudioMessage() || attachment.isAudioFile()) {
                 binding.llFileName.visibility = View.GONE
                 binding.llShare.visibility = View.GONE
@@ -149,11 +158,10 @@ class MessageDetailActivity : BaseActivity() {
                 binding.llFileName.visibility = View.VISIBLE
                 binding.tvFileName.text = attachment.fileName
 
-                val attachmentPath = FileUtil.getMessageAttachmentFilePath(message.id) + attachment.fileName
                 // A confidential attachment must not be shared out of the app — hide the share entry
                 // (consistent with confidential messages getting no copy/forward/save elsewhere).
                 val isConfidential = message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE
-                if (EncryptedAttachmentAccess.isReadable(attachmentPath) && !isConfidential) {
+                if (attachmentPath != null && EncryptedAttachmentAccess.isReadable(attachmentPath) && !isConfidential) {
                     binding.llShare.visibility = View.VISIBLE
                     binding.ivShare.setOnClickListener {
                         // shareFile is the single chokepoint: it routes encrypted-at-rest attachments

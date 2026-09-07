@@ -108,9 +108,8 @@
             android:layout_height="1dp"
             android:background="@color/bg" />
 
-        <androidx.appcompat.widget.SwitchCompat
+        <com.difft.android.base.widget.DifftSwitchView
             android:id="@+id/switch_can_id_search"
-            style="@style/Widget.Chative.Switch"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:background="@color/bg.elevated"
@@ -118,7 +117,6 @@
             android:paddingStart="16dp"
             android:paddingEnd="8dp"
             android:text="@string/settings_contact_ID_SWITCH"
-            android:textSize="16sp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"

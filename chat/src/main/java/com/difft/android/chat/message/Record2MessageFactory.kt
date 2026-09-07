@@ -13,6 +13,7 @@ import org.difft.app.database.wcdb
 import com.difft.android.base.R
 import com.difft.android.chat.common.SendType
 import difft.android.messageserialization.For
+import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Message
@@ -308,16 +309,22 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
 }
 
 
+/**
+ * The attachment a [Forward] record is addressed by: its own first attachment, else the first
+ * attachment of its first nested forward. Null when neither level carries one.
+ *
+ * Disambiguation only — it answers WHICH attachment, never where its file lives.
+ */
+internal fun forwardAddressingAttachment(record: Forward): Attachment? =
+    record.attachments?.firstOrNull()
+        ?: record.forwards?.firstOrNull()?.attachments?.firstOrNull()
+
 fun generateMessageFromForward(record: Forward, mode: Int = 0): ChatMessage {
     return TextChatMessage().apply {
-        val attachmentID = if (!record.attachments.isNullOrEmpty()) {
-            record.attachments?.firstOrNull()?.authorityId.toString()
-        } else if (!record.forwards.isNullOrEmpty()) {
-            val forward = record.forwards?.firstOrNull()
-            if (forward?.attachments?.isNotEmpty() == true) {
-                forward.attachments?.firstOrNull()?.authorityId.toString()
-            } else ""
-        } else ""
+        // A stable per-forward identity for list diffing and playback/progress matching. NOT an
+        // addressing key: a forward copy's file is located from the attachment itself (see
+        // AttachmentPathResolver), so this id is never used to build a path.
+        val attachmentID = forwardAddressingAttachment(record)?.authorityId?.toString() ?: ""
         this.id = if (!TextUtils.isEmpty(attachmentID)) attachmentID else System.currentTimeMillis().toString()
         this.authorId = record.author
         this.isMine = false

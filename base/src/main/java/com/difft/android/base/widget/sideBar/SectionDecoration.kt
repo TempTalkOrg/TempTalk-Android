@@ -21,7 +21,8 @@ class SectionDecoration(context: Context, private val callback: DecorationCallba
     private val fontMetrics: Paint.FontMetrics = Paint.FontMetrics()
 
     init {
-        paint.color = context.resources.getColor(R.color.bg2)
+        // bg3, not bg2: bg2 equals bg.popup in dark mode, so the band merged with sheet grounds.
+        paint.color = context.resources.getColor(R.color.bg3)
         textPaint = TextPaint()
         textPaint.isAntiAlias = true
         textPaint.color = context.resources.getColor(R.color.t_primary)

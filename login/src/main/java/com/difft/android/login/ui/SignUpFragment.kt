@@ -5,12 +5,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import com.difft.android.base.widget.DifftClearableInputView
 import com.difft.android.login.R
 import com.difft.android.login.intro.RegisterIntroActivity
 import com.difft.android.login.databinding.FragmentSignUpBinding
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import com.difft.android.chat.util.ViewUtil
 
 @AndroidEntryPoint
 class SignUpFragment : Fragment() {
@@ -43,7 +43,9 @@ class SignUpFragment : Fragment() {
             fragmentLogIn.visibility = View.VISIBLE
             fragmentSignUp.visibility = View.GONE
 
-            ViewUtil.focusAndShowKeyboard(fragmentLogIn.findViewById(R.id.account))
+            // The account field is a Compose-backed component; a plain View-level focus request
+            // cannot reach the inner text field.
+            fragmentLogIn.findViewById<DifftClearableInputView>(R.id.account).focusAndShowKeyboard()
         }
     }
 }

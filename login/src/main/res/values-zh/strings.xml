@@ -1,12 +1,12 @@
 <resources>
     <string name="login_sign_to_chative">登录Quicall</string>
-    <string name="login_email_or_invite_code_hint">邮箱/手机号</string>
+    <string name="login_email_or_phone_hint">邮箱/手机号</string>
     <string name="login_next">下一步</string>
     <string name="login_in">登录</string>
     <string name="login_skip">跳过</string>
     <string name="login_otp_sent">OTP 已发送，请查看</string>
     <string name="login_otp_sent_to">已发送 OTP 至 "%s"</string>
-    <string name="login_invite_code_invalid">无效，请检查</string>
+    <string name="login_error_invalid_account">邮箱/手机号错误</string>
     <string name="login_email_code_not_receive">没有收到？</string>
     <string name="login_email_code_resend">重新发送%s</string>
     <string name="login_error_not_exist">登录码过期或不存在，请检查</string>

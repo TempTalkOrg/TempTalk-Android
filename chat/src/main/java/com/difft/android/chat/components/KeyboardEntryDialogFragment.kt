@@ -3,6 +3,7 @@ package com.difft.android.chat.components
 import android.app.Dialog
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,6 +13,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.DialogFragment
+import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
 
 /**
@@ -28,6 +30,12 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
   protected open val withDim: Boolean = false
 
   protected open val themeResId: Int = R.style.Theme_TT_RoundedBottomSheet
+
+  /**
+   * Whether to cap the window at the shared bottom-sheet max width on wide screens. Bottom-anchored
+   * entry sheets keep it; full-screen overlays that must mirror the host layout opt out.
+   */
+  protected open val capToSheetWidth: Boolean = true
 
   override fun onCreate(savedInstanceState: Bundle?) {
     setStyle(STYLE_NORMAL, themeResId)
@@ -54,6 +62,25 @@ abstract class KeyboardEntryDialogFragment(@LayoutRes contentLayoutId: Int) :
     }
 
     return dialog
+  }
+
+  override fun onStart() {
+    super.onStart()
+    applyMaxWidth()
+  }
+
+  /**
+   * The window is non-floating (fills the screen), so on wide screens cap it at the shared
+   * bottom-sheet max width and keep it bottom-centered, matching the other bottom sheets.
+   */
+  private fun applyMaxWidth() {
+    if (!capToSheetWidth) return
+    val window = dialog?.window ?: return
+    val maxWidth = resources.getDimensionPixelSize(com.difft.android.base.R.dimen.bottom_sheet_max_width)
+    if (WindowSizeClassUtil.getWindowWidthPx(requireActivity()) > maxWidth) {
+      window.setLayout(maxWidth, WindowManager.LayoutParams.MATCH_PARENT)
+      window.setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+    }
   }
 
   override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {

@@ -350,6 +350,11 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.textInfo
 
+    /** Orange caution text: a pending action (not an error), e.g. "Enhance Encryption" on a plain group. */
+    val textCaution: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.textCaution
+
     /**
      * Default page background (settings idiom).
      * Matches XML `@color/bg`. Use this for the page-level background on almost all screens —
@@ -390,9 +395,6 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.backgroundDisabled
 
-    val backgroundModal: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.backgroundModal
 
     val backgroundPopup: Color
         @Composable @ReadOnlyComposable
@@ -424,9 +426,15 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.bgElevated
 
-    val divider: Color
+    /**
+     * Matches XML `@color/bg5` — a permanently dark surface (#181A20 in both light and
+     * night resources). Used by call UI (e.g. the meeting-invite search field) which is
+     * forced dark regardless of system theme.
+     */
+    val bg5: Color
         @Composable @ReadOnlyComposable
-        get() = extended.divider
+        get() = extended.bg5
+
 
     val line: Color
         @Composable @ReadOnlyComposable

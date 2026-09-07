@@ -4,11 +4,9 @@ package com.difft.android.chat.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
 import android.view.View
 import android.widget.PopupWindow
 import androidx.core.content.ContextCompat
-import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 
@@ -108,38 +106,26 @@ class GroupInCommonActivity : BaseActivity() {
             itemAnimator = null
         }
 
-        mBinding.edittextSearchInput.addTextChangedListener {
-            // Cancel previous search job
+        mBinding.searchInput.onQueryChanged = { restartDebouncedSearch() }
+
+        // Order matches the pre-migration ✕ handler line-for-line: cancel the pending debounce,
+        // search immediately (bypassing the 300ms delay), scroll the (old) list to top. The
+        // text itself is already cleared by the component before this callback runs.
+        mBinding.searchInput.onClear = {
             searchJob?.cancel()
-
-            // Create new debounced search job
-            searchJob = lifecycleScope.launch {
-                delay(300)
-                // Pass null to let searchGroups get the latest text value
-                searchGroups()
-            }
-        }
-
-        mBinding.buttonClear.setOnClickListener {
-            // Cancel any pending search
-            searchJob?.cancel()
-
-            mBinding.edittextSearchInput.text = null
-            // Immediately search for all groups when clearing
             searchGroups()
-            // Scroll to top when clearing search
             mBinding.recyclerviewGroup.scrollToPosition(0)
         }
 
-        mBinding.buttonClear.animate().apply {
-            val etContent = mBinding.edittextSearchInput.text.toString().trim()
-            cancel()
-            val toAlpha = if (!TextUtils.isEmpty(etContent)) 1.0f else 0f
-            alpha(toAlpha)
-        }
-
         groupUtil.singleGroupsUpdate
-            .onEach { mBinding.edittextSearchInput.text = null }
+            .onEach {
+                // The component's external setter is silent (no callback), so the refresh must
+                // be explicit — otherwise the group list stops refreshing after group updates.
+                // Do NOT use clear() here: that is the user-tap semantics (adds scroll-to-top
+                // and an immediate, un-debounced search).
+                mBinding.searchInput.query = ""
+                restartDebouncedSearch()
+            }
             .catch { L.w { "[GroupInCommonActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .launchIn(lifecycleScope)
@@ -147,11 +133,19 @@ class GroupInCommonActivity : BaseActivity() {
         searchGroups()
     }
 
+    private fun restartDebouncedSearch() {
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch {
+            delay(300)
+            searchGroups()
+        }
+    }
+
     private fun searchGroups() {
         lifecycleScope.launch {
             try {
                 // Get the latest text value at search time
-                val searchQuery = mBinding.edittextSearchInput.text.toString().trim()
+                val searchQuery = mBinding.searchInput.query.trim()
 
                 val commonGroups = withContext(Dispatchers.IO) {
                     // Efficient approach: directly query for groups where both users are members

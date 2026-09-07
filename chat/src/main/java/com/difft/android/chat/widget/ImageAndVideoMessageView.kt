@@ -12,8 +12,6 @@ import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.utils.getLifecycleOwner
 import com.difft.android.base.utils.getSafeContext
-import com.difft.android.base.utils.windowHeightPx
-import com.difft.android.base.utils.windowWidthPx
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -28,11 +26,15 @@ import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.AttachmentDownloadAction
+import com.difft.android.chat.attachment.AttachmentDownloadDecision
+import com.difft.android.chat.attachment.AttachmentStatusRepair
 import com.difft.android.chat.databinding.LayoutImageMessageViewBinding
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.getAttachmentIdForProgress
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isConfidential
-import com.difft.android.chat.message.shouldDecrypt
 import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isVideo
@@ -63,6 +65,14 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     private var currentContainerWidth: Int = 0
 
     /**
+     * The [resolvedContentWidthPx] value the current imageView layout params and Glide request
+     * were computed from, or 0 when the last bind did not size anything (no attachment).
+     * Guards [onAttachedToWindow] and [onMeasure] so the re-resolve is a no-op in the steady
+     * state.
+     */
+    private var sizedForContentWidthPx: Int = 0
+
+    /**
      * Rounds the image corners at the VIEW level (6dp) — the sole corner mechanism, since no Glide
      * transform is applied. Corners can't be a Glide transform here because the encrypted RESOURCE
      * cache stores animated (gif/webp) content as untransformed source bytes, so a bitmap corner
@@ -80,8 +90,11 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     fun setupImageView(message: TextChatMessage, shouldSaveToPhotos: Boolean = false, containerWidth: Int = 0) {
         currentShouldSaveToPhotos = shouldSaveToPhotos
         currentContainerWidth = containerWidth
+        sizedForContentWidthPx = 0
         val previousAttachmentId = currentAttachmentId
-        currentAttachmentId = message.id
+        // Progress key authority — must match what the emit side publishes.
+        val attachmentId = message.getAttachmentIdForProgress()
+        currentAttachmentId = attachmentId
         currentMessage = message
 
         // Round the image corners via a view-level outline clip (see [roundedCornerOutline]) — the
@@ -94,7 +107,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         // (status change, progress update, list-context refresh) keep the existing bitmap to
         // avoid a visible blank-frame flash exposing the placeholder background.
         hideAllStatusViews()
-        if (previousAttachmentId != null && previousAttachmentId != message.id) {
+        if (previousAttachmentId != null && previousAttachmentId != attachmentId) {
             Glide.with(context.getSafeContext()).clear(binding.imageView)
             binding.imageView.setImageDrawable(null)
         }
@@ -102,20 +115,22 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         val attachment = message.attachment ?: return
 
         val isVideo = attachment.isVideo()
-        val fileName: String = attachment.fileName ?: ""
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(message.id) + fileName
+        val attachmentPath = AttachmentPathResolver.fileFor(attachment)
 
         // Calculate and set image dimensions
         setupImageDimensions(attachment, attachmentPath, isVideo)
 
         val progress = message.getAttachmentProgress()
-        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath, attachment.size)
+        // A readable file is the authority on "downloaded"; repair a lagging status before the
+        // download-state branches read it, so no branch can order a download for a file we have.
+        if (isFileValid) AttachmentStatusRepair.markSuccessIfStale(attachment)
         val isCurrentDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
 
         // Distinguish upload/download state based on whether sent from current device
         if (isCurrentDeviceSend) {
             // Current device send - upload state
-            handleUploadState(progress, isFileValid, attachmentPath, attachment, isVideo)
+            handleUploadState(message, progress, isFileValid, attachmentPath, attachment, isVideo)
         } else {
             // Other device send or sync message - download state
             handleDownloadState(message, progress, isFileValid, attachmentPath, attachment, isVideo)
@@ -126,6 +141,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
      * Handle upload state (sent from current device)
      */
     private fun handleUploadState(
+        message: TextChatMessage,
         progress: Int?,
         isFileValid: Boolean,
         attachmentPath: String,
@@ -143,6 +159,13 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         } else if (isFileValid) {
             // Upload complete, show video play button
             binding.playButton.visibility = if (isVideo) View.VISIBLE else View.GONE
+        } else if (AttachmentDownloadDecision.shouldRescueMissingFile(isFileValid, attachment.status, progress)) {
+            // An own send whose bytes the row says landed, but which are not at this address: the
+            // file moved (pre-per-copy addressing) or is gone. Without this the bubble stays blank
+            // forever — the job's first act is the migration's local rescue, so this usually costs a
+            // file-system copy and no network.
+            downloadAttachment(message, attachmentPath)
+            showDownloadingState(0)
         }
     }
 
@@ -183,8 +206,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
 
         // Priority 3: Large file manual download prompt (>10MB)
         val fileSize = attachment.size
-        val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
-        if (isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null) {
+        if (AttachmentDownloadDecision.shouldPromptManualDownload(isFileValid, fileSize, progress)) {
             showManualDownloadState(fileSize)
             return
         }
@@ -194,19 +216,18 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
             loadImage(attachmentPath, attachment.size, attachment.contentType)
         }
 
-        // Priority 4: Downloading or auto download
-        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
-            if (progress == null) {
-                // Auto download
+        // Priority 4: Downloading or auto download.
+        when (AttachmentDownloadDecision.downloadAction(isFileValid, progress)) {
+            AttachmentDownloadAction.AUTO_DOWNLOAD -> {
                 downloadAttachment(message, attachmentPath)
                 showDownloadingState(0)
-            } else {
-                // Show download progress
-                showDownloadingState(progress)
             }
-        } else if (isFileValid) {
+
+            AttachmentDownloadAction.SHOW_PROGRESS -> showDownloadingState(progress ?: 0)
+
             // Download complete, show video play button
-            binding.playButton.visibility = if (isVideo) View.VISIBLE else View.GONE
+            AttachmentDownloadAction.READY ->
+                binding.playButton.visibility = if (isVideo) View.VISIBLE else View.GONE
         }
     }
 
@@ -281,15 +302,20 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     ) {
         var finalWidth: Int
         var finalHeight: Int
-        // Prefer currentContainerWidth (set by ChatMessageViewHolder for dual-pane), fall back
-        // to the current Activity window bounds via WindowMetrics. Avoids Resources.getSystem(),
-        // which always returns device-level dimensions and breaks on foldables (see PR #580).
-        val containerWidth = if (currentContainerWidth > 0) {
-            currentContainerWidth
-        } else {
-            windowWidthPx()
-        }
-        val containerHeight = windowHeightPx()
+        // Container-derived content box, capped by the 560dp ceiling: the same conversation
+        // renders full-screen and inside the dual-pane detail pane, and only the container
+        // (the message RecyclerView ancestor) knows which — see ContentSize.kt. On the FIRST
+        // bind of a freshly created row this runs before RecyclerView calls addView(), so
+        // there is no parent chain yet and the width falls back to the plumbed
+        // currentContainerWidth (dual-pane) or the window; onAttachedToWindow re-resolves it
+        // before the row is ever measured, and onMeasure re-resolves it again whenever the
+        // viewport width changes under an attached row (pane divider drag, multi-window
+        // resize without recreation).
+        val containerWidth = resolvedContentWidthPx()
+        sizedForContentWidthPx = containerWidth
+        // Usable window height, NOT WindowMetrics bounds: those include the system bars and
+        // silently grow the screenHeight / 3 media cap by the navigation-bar height.
+        val containerHeight = chatContentHeightPx()
 
         val maxWidth = containerWidth - 70.dp
         val maxHeight = (containerHeight / 3f).toInt()
@@ -383,8 +409,57 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         binding.imageView.layoutParams = layoutParams
     }
 
+    /**
+     * The content width the bubble should be sized against right now.
+     *
+     * The ancestor walk ([chatContainerWidthPx]) is the primary source: an attached row's
+     * message RecyclerView always carries the CURRENT viewport width, including a pane-divider
+     * drag or a multi-window resize that recreates nothing. On a fresh-row bind there is no
+     * parent chain yet; prefer the plumbed [currentContainerWidth] (correct in the dual-pane
+     * detail) over the walk's window fallback there. Capped by chat_content_max_width so a
+     * photo does not stretch edge-to-edge on a wide full-screen window.
+     */
+    private fun resolvedContentWidthPx(): Int {
+        // Fresh-row bind runs before addView(): no ancestor chain yet, prefer the plumbed
+        // width (still capped by the same ceiling chatContentWidthPx applies).
+        if (parent == null && currentContainerWidth > 0) {
+            return minOf(currentContainerWidth, resources.getDimensionPixelSize(R.dimen.chat_content_max_width))
+        }
+        return chatContentWidthPx()
+    }
+
+    /**
+     * Re-size the bubble when the conversation viewport changed under an already-attached row:
+     * the detail pane divider was dragged, or a multi-window resize arrived without a
+     * recreation. The row root is mid-measure here and still reports the previous width;
+     * [chatContainerWidthPx] therefore answers from the message RecyclerView, whose measured
+     * width is already the new one. Re-running the bind (rather than patching layout params)
+     * keeps Glide's decode target in step with the final size; `into()` cancels the previous
+     * request for the same target, so there is never a second concurrent decode. Guarded to a
+     * genuine width change, so it is a no-op on every ordinary measure.
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val message = currentMessage
+        if (message != null &&
+            sizedForContentWidthPx != 0 &&
+            sizedForContentWidthPx != resolvedContentWidthPx()
+        ) {
+            setupImageView(message, currentShouldSaveToPhotos, currentContainerWidth)
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // RecyclerView binds a holder BEFORE addView(), so the first bind of a freshly created
+        // row sized against the plumbed width or the window. Attach is the earliest point the
+        // real container width is knowable and still free — the corrected size is used by the
+        // row's FIRST measure, so nothing flickers. No-op at an unchanged width.
+        currentMessage?.let { message ->
+            if (sizedForContentWidthPx != 0 && sizedForContentWidthPx != resolvedContentWidthPx()) {
+                setupImageView(message, currentShouldSaveToPhotos, currentContainerWidth)
+            }
+        }
         if (progressJob == null) {
             getLifecycleOwner()?.lifecycleScope?.launch {
                 FileUtil.progressUpdate
@@ -401,7 +476,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         // Intentionally do NOT reset currentAttachmentId here. setupImageView relies on its
         // surviving the detach so that, on the next bind of a recycled ViewHolder to a
-        // different message, previousAttachmentId differs from message.id and the stale
+        // different attachment, previousAttachmentId differs from the new key and the stale
         // bitmap from the previous bubble is cleared (scroll-recycle stale-image protection).
         progressJob?.cancel()
         progressJob = null
@@ -444,10 +519,9 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
 
             val (model: Any, fileLastModified: Long, actualFileSize: Long) = withContext(Dispatchers.IO) {
                 if (isEncryptedMedia) {
-                    val uri = EncryptedAttachmentAccess.contentUri(
-                        currentMessage?.id ?: "",
-                        plainFile.name
-                    )
+                    // Derive the uri from the resolved path, so its segment is the directory the file
+                    // actually lives in (per-copy for a forward) rather than the rendering message id.
+                    val uri = EncryptedAttachmentAccess.contentUriFromBasePath(attachmentPath)
                     Triple(uri as Any, encryptedFile.lastModified(), encryptedFile.length())
                 } else {
                     Triple(attachmentPath as Any, plainFile.lastModified(), plainFile.length())
@@ -496,20 +570,20 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     }
 
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {
-        message.attachment?.key?.let { key ->
-            val autoSave = currentShouldSaveToPhotos && !message.isConfidential()
-            ApplicationDependencies.getJobManager().add(
-                DownloadAttachmentJob(
-                    message.id,
-                    message.attachment?.id ?: "",
-                    attachmentPath,
-                    message.attachment?.authorityId ?: 0,
-                    key,
-                    message.shouldDecrypt(),
-                    autoSave
-                )
+        val attachment = message.attachment ?: return
+        val key = attachment.key ?: return
+        val autoSave = currentShouldSaveToPhotos && !message.isConfidential()
+        ApplicationDependencies.getJobManager().add(
+            DownloadAttachmentJob(
+                attachment.localId,
+                message.id,
+                attachment.id,
+                attachmentPath,
+                attachment.authorityId,
+                key,
+                autoSave
             )
-        }
+        )
     }
 
 }

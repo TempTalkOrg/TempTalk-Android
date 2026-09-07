@@ -72,10 +72,12 @@ fun AudioDeviceKind.pickerIconRes(): Int = when (this) {
 
 /** Horn-button icon. */
 fun AudioDeviceKind.hornIconRes(): Int = when (this) {
-    AudioDeviceKind.EARPIECE -> R.drawable.call_btn_volume_phone
-    AudioDeviceKind.SPEAKERPHONE -> R.drawable.call_btn_volume_speaker
-    AudioDeviceKind.WIRED_HEADSET -> R.drawable.call_btn_volume_headphones
-    AudioDeviceKind.BLUETOOTH_HEADSET -> R.drawable.call_btn_volume_airpod
+    // Earpiece and loudspeaker share the horn glyph; the action bar tells them apart by the
+    // selected (white) background, not by the icon.
+    AudioDeviceKind.EARPIECE -> R.drawable.call_ic_volume_speaker
+    AudioDeviceKind.SPEAKERPHONE -> R.drawable.call_ic_volume_speaker
+    AudioDeviceKind.WIRED_HEADSET -> R.drawable.call_ic_volume_headphones
+    AudioDeviceKind.BLUETOOTH_HEADSET -> R.drawable.call_ic_volume_airpod
 }
 
 /**

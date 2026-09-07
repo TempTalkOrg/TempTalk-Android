@@ -58,12 +58,8 @@
         <activity
             android:name=".contacts.contactsdetail.ContactDetailActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false" />
-        <activity
-            android:name=".contacts.contactsremark.ContactSetRemarkActivity"
-            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:windowSoftInputMode="stateVisible|adjustResize" />
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".group.CreateGroupActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -71,7 +67,8 @@
         <activity
             android:name=".group.GroupInfoActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".group.GroupGlobalNotificationSettingsActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
@@ -98,10 +95,6 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
-            android:name=".group.GroupEditInfoActivity"
-            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false" />
-        <activity
             android:name=".setting.ChatArchiveSettingsActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
@@ -114,7 +107,8 @@
         <activity
             android:name=".ui.SingleChatSettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.GroupInCommonActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"

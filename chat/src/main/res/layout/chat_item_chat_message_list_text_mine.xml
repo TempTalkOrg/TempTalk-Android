@@ -385,12 +385,11 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <androidx.appcompat.widget.AppCompatCheckBox
+    <com.difft.android.base.widget.DifftCheckBoxView
         android:id="@+id/checkbox_select_for_unpin"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="6dp"
-        android:buttonTint="@color/event_checkbox_color_selector"
         android:visibility="gone"
         app:layout_constrainedHeight="true"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -405,7 +404,7 @@
         android:id="@+id/tv_voice_speed"
         android:layout_width="36dp"
         android:layout_height="24dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="5dp"
         android:background="@drawable/chat_voice_speed_btn_bg"
         android:gravity="center"
         android:textColor="@color/t.secondary"

@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -41,7 +42,6 @@ import com.difft.android.call.ui.video.ViewType
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
-import com.difft.android.call.data.MUTE_ACTION_INDEX
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
@@ -60,7 +60,7 @@ fun MultiParticipantItem(
     participantIndex: Int,
     participantCount: Int,
     muteOtherEnabled: Boolean,
-    onClickMute: () -> Unit,
+    onClickMute: (displayName: String) -> Unit,
     coroutineScope: CoroutineScope,
     cornerRadius: Dp = 8.dp
 ) {
@@ -79,18 +79,38 @@ fun MultiParticipantItem(
 
     var videoMuted by remember { mutableStateOf(true) }
 
-    var expanded by remember { mutableStateOf(false) }
-
-    fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
-        setExpanded(false)
-        when (index) {
-            MUTE_ACTION_INDEX -> onClickMute()
-            else -> {}
-        }
-    }
+    // Which surface the menu is anchored to: the name pill (single tap) or the whole tile
+    // (long-press compatibility entry). Both open the same menu at the finger.
+    var muteMenuAnchor by remember { mutableStateOf<MuteMenuAnchor?>(null) }
+    var muteMenuTouch by remember { mutableStateOf(Offset.Zero) }
+    val muteMenuAvailable = participant.isMuteMenuTarget(muteOtherEnabled)
+    val displayName = rememberParticipantDisplayName(participant, userDisplayInfo.name)
 
     fun handleClickScreen() {
         viewModel.callUiController.toggleOverlays()
+    }
+
+    // Opening is idempotent: any second entry while the menu shows (a second finger on the pill,
+    // a tap racing the Popup window's attach) must not re-anchor or re-create it.
+    fun openMuteMenu(anchor: MuteMenuAnchor, touch: Offset) {
+        if (muteMenuAnchor != null) return
+        muteMenuTouch = touch
+        muteMenuAnchor = anchor
+    }
+
+    @Composable
+    fun MuteMenuFor(anchor: MuteMenuAnchor) {
+        ParticipantMuteMenu(
+            visible = muteMenuAnchor == anchor,
+            touchInAnchor = muteMenuTouch,
+            targetName = displayName,
+            onDismissRequest = { muteMenuAnchor = null },
+            onMute = {
+                muteMenuAnchor = null
+                onClickMute(displayName)
+            },
+            onOpenChanged = viewModel.callUiController::setParticipantMenuOpen,
+        )
     }
 
     LaunchedEffect(videoPub) {
@@ -105,16 +125,16 @@ fun MultiParticipantItem(
     Box(
         modifier = Modifier
             .testTag("call_render_participant_$participantIndex")
-            .pointerInput(Unit) {
+            .pointerInput(muteMenuAvailable) {
                 detectTapGestures(
-                    onLongPress = {
-                        if (participant.isMicrophoneEnabled && muteOtherEnabled) {
-                            expanded = true
+                    onTap = { handleClickScreen() },
+                    // Long-press anywhere on the tile stays as the compatibility entry and opens
+                    // the same menu; it never mutes directly.
+                    onLongPress = { touch ->
+                        if (muteMenuAvailable && participant.isMicrophoneEnabled) {
+                            openMuteMenu(MuteMenuAnchor.TILE, touch)
                         }
                     },
-                    onTap = {
-                        handleClickScreen()
-                    }
                 )
             }
     ) {
@@ -163,6 +183,9 @@ fun MultiParticipantItem(
                         ) {
                             userDisplayInfo.avatarData?.let { avatarData ->
                                 key(avatarData) {
+                                    // No avatarSizeDp on purpose: the 96dp tile avatar keeps the
+                                    // same 22dp letter as the 1v1 and incoming-call 96dp avatars;
+                                    // scaling large avatars is a design decision, not a fix.
                                     AndroidView(
                                         factory = { ctx ->
                                             when (avatarData) {
@@ -187,22 +210,47 @@ fun MultiParticipantItem(
                 }
             }
 
-            Row(
+            // The name pill is the single-tap mute entry; the rest of the tile keeps toggling the
+            // overlays. The inner padding is transparent hit area only (minTouchTarget tall, bounded
+            // by the tile edge below) — the pill keeps its 4dp / 4.33dp visual inset. The menu is
+            // a child of the OUTER box so its Popup anchor shares the tap target's coordinate
+            // space; inside the padded box the anchor would sit 20dp below the finger.
+            Box(
                 modifier = Modifier
                     .constrainAs(statusView) {
-                        start.linkTo(parent.start, 4.dp)
-                        bottom.linkTo(parent.bottom, 4.33.dp)
+                        start.linkTo(parent.start)
+                        bottom.linkTo(parent.bottom)
                     }
-                    .wrapContentWidth()
-                    .height(24.dp)
-                    .background(color = DifftTheme.colors.backgroundElevate, shape = RoundedCornerShape(size = 4.dp))
-                    .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
-                verticalAlignment = Alignment.Bottom,
+                    .testTag("call_render_participant_status_$participantIndex")
+                    .muteMenuTapTarget(
+                        participant = participant,
+                        muteOtherEnabled = muteOtherEnabled,
+                        yieldToLongPress = true,
+                        onTap = { touch -> openMuteMenu(MuteMenuAnchor.PILL, touch) },
+                    )
             ) {
-                ShowSpeakerStatusView(participant, userDisplayInfo.name, speakingEnabled = speakingEnabled)
+                Row(
+                    modifier = Modifier
+                        .padding(
+                            start = STATUS_PILL_INSET_START,
+                            // Tops the pill + bottom inset up to the minimum touch target.
+                            top = DifftTheme.spacing.minTouchTarget - STATUS_PILL_HEIGHT - STATUS_PILL_INSET_BOTTOM,
+                            end = STATUS_PILL_HIT_SLOP_END,
+                            bottom = STATUS_PILL_INSET_BOTTOM,
+                        )
+                        .wrapContentWidth()
+                        .height(STATUS_PILL_HEIGHT)
+                        .background(color = DifftTheme.colors.backgroundElevate, shape = RoundedCornerShape(size = 4.dp))
+                        .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    ShowSpeakerStatusView(participant, displayName, speakingEnabled = speakingEnabled)
+                }
+                MuteMenuFor(MuteMenuAnchor.PILL)
             }
         }
+        MuteMenuFor(MuteMenuAnchor.TILE)
 
         // Declared after the ConstraintLayout: inside a Box the later sibling draws on top.
         ParticipantWeakNetworkBadge(
@@ -214,14 +262,12 @@ fun MultiParticipantItem(
             participantCount = participantCount,
             modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
         )
-
-        ShowItemOnClickView(listOf("Mute"), expanded, setExpanded = { value -> expanded = value },
-            onClickItem = { index ->
-                onClickItem(index,
-                    setExpanded = { value -> expanded = value },
-                    onClickMute = { onClickMute() }
-                )
-            }
-        )
     }
 }
+
+private enum class MuteMenuAnchor { PILL, TILE }
+
+private val STATUS_PILL_HEIGHT = 24.dp
+private val STATUS_PILL_INSET_START = 4.dp
+private val STATUS_PILL_INSET_BOTTOM = 4.33.dp
+private val STATUS_PILL_HIT_SLOP_END = 12.dp

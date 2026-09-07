@@ -55,9 +55,8 @@ class ChatSettingsFragment : Fragment() {
     private fun initView() {
         // Save to photos setting - local only, no server sync
         binding.switchSaveToPhotos.isChecked = (userManager.getUserData()?.saveToPhotos == true)
-        binding.switchSaveToPhotos.setOnClickListener {
-            val newValue = binding.switchSaveToPhotos.isChecked
-            userManager.update { saveToPhotos = newValue }
+        binding.switchSaveToPhotos.setOnCheckedChangeListener { _, checked ->
+            userManager.update { saveToPhotos = checked }
         }
 
         // Voice playback speed setting

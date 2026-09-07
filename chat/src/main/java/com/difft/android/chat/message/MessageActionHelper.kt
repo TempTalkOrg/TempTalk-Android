@@ -51,14 +51,11 @@ class MessageActionHelper(
 
     /** Reads the backing file off-main-thread; falls back to data.message on read failure. */
     private suspend fun copyLongTextContent(data: TextChatMessage): Boolean {
-        val fileInfo = data.getLongTextFileInfo()
-        if (fileInfo == null) {
-            val fallback = data.message ?: return false
-            Util.copyToClipboard(activity, fallback)
-            return true
-        }
-
         val content = withContext(Dispatchers.IO) {
+            // Resolved HERE rather than on the caller's thread: getLongTextFileInfo does a migrating
+            // read, which is blocking IO. An unresolvable attachment falls through to the same body
+            // preview an unreadable file does.
+            val fileInfo = data.getLongTextFileInfo() ?: return@withContext ""
             try {
                 // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
                 EncryptedAttachmentAccess.readDecryptedText(activity, fileInfo.filePath) ?: ""
@@ -78,14 +75,17 @@ class MessageActionHelper(
     }
 
     /** Returns false if the underlying attachment is not readable (neither plaintext nor ciphertext). */
-    private fun copyFileToClipboard(data: TextChatMessage): Boolean {
-        val fileInfo = data.getFileInfoForCopy() ?: return false
-        val basePath = fileInfo.filePath
+    private suspend fun copyFileToClipboard(data: TextChatMessage): Boolean {
         // Attachments are now stored encrypted-at-rest: on disk usually only "<basePath>.encrypt"
         // exists. Mirror saveAttachment/shareFile — gate on isReadable (plaintext OR ciphertext) and
         // hand out the decrypting content:// uri when only the ciphertext is present, instead of the
         // old plaintext-only file.exists() check that silently failed for encrypted images.
-        if (!EncryptedAttachmentAccess.isReadable(basePath)) return false
+        // Both the migrating resolve and the probe run on IO; the clipboard write stays on the
+        // caller's thread.
+        val fileInfo = withContext(Dispatchers.IO) {
+            data.getFileInfoForCopy()?.takeIf { EncryptedAttachmentAccess.isReadable(it.filePath) }
+        } ?: return false
+        val basePath = fileInfo.filePath
 
         // Prefer the durable ciphertext (content uri): a self-sent attachment's plaintext is deleted
         // right after upload, so a FileProvider uri to it can ENOENT by the time the receiver reads

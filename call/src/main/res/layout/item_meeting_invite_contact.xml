@@ -10,7 +10,6 @@
         android:id="@+id/avatar_container"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginStart="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -35,45 +34,23 @@
         android:lines="1"
         android:textColor="@color/t.primary.night"
         android:textSize="17sp"
-        app:layout_constraintEnd_toStartOf="@+id/checkbox_container"
+        app:layout_constraintEnd_toStartOf="@+id/checkbox"
         app:layout_constraintStart_toEndOf="@+id/avatar_container"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <FrameLayout
-        android:id="@+id/checkbox_container"
+    <!-- Forced dark: this sheet hardcodes .night colours, so the shell cannot infer dark from the
+         resource configuration. Not clickable: the row owns selection. -->
+    <com.difft.android.base.widget.DifftCheckBoxView
+        android:id="@+id/checkbox"
         android:layout_width="24dp"
         android:layout_height="24dp"
-        android:layout_marginEnd="16dp"
+        android:clickable="false"
+        android:focusable="false"
+        app:difft_forceDark="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <View
-            android:id="@+id/checkbox"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_checkbox_unselected"
-            android:visibility="visible" />
-
-        <FrameLayout
-            android:id="@+id/checkbox_selected"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_checkbox_selected"
-            android:visibility="gone">
-
-            <ImageView
-                android:id="@+id/checkbox_selected_icon"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                android:src="@drawable/call_ic_selected"
-                android:tint="@android:color/white"
-                android:scaleType="fitCenter" />
-        </FrameLayout>
-    </FrameLayout>
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 

@@ -92,8 +92,8 @@ class ContactorCacheManagerTest {
 
         // Regression assertion: the OLD path called getAvatarByContactor on Main; the NEW
         // IO-only path must NOT — UI construction is moved to the AndroidView factory.
-        verify(exactly = 0) { callToChatController.getAvatarByContactor(any(), any()) }
-        verify(exactly = 0) { callToChatController.createAvatarByNameOrUid(any(), any(), any()) }
+        verify(exactly = 0) { callToChatController.getAvatarByContactor(any(), any(), any()) }
+        verify(exactly = 0) { callToChatController.createAvatarByNameOrUid(any(), any(), any(), any()) }
     }
 
     // --- Branch coverage ---------------------------------------------------------------
@@ -180,8 +180,8 @@ class ContactorCacheManagerTest {
             subject.getParticipantDisplayInfo("+12312345678.1")
         }
 
-        verify(exactly = 0) { callToChatController.getAvatarByContactor(any(), any()) }
-        verify(exactly = 0) { callToChatController.createAvatarByNameOrUid(any(), any(), any()) }
+        verify(exactly = 0) { callToChatController.getAvatarByContactor(any(), any(), any()) }
+        verify(exactly = 0) { callToChatController.createAvatarByNameOrUid(any(), any(), any(), any()) }
     }
 
     // --- Sanity: id/name are propagated unchanged --------------------------------------

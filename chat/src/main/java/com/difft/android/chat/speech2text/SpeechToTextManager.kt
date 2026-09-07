@@ -47,21 +47,28 @@ class SpeechToTextManager @Inject constructor(
     @ChativeHttpClientModule.Default
     lateinit var chatHttpClient: ChativeHttpClient
 
+    /**
+     * @param attachmentPath on-disk base path of [attachment], resolved by the caller through
+     *   `AttachmentPathResolver`. Passed in rather than read from `Attachment.path`: that column is a
+     *   frozen absolute path and is not the addressing authority (a forwarded voice message is
+     *   addressed per copy).
+     */
     fun speechToText(
         scope: CoroutineScope,
         context: Context,
         attachment: Attachment,
+        attachmentPath: String,
         onSuccess: (String) -> Unit,
         onFailure: (Exception) -> Unit,
     ){
-        convert(scope, attachment, onSuccess, onFailure)
+        convert(scope, attachment, attachmentPath, onSuccess, onFailure)
     }
 
 
     /**
      * Convert speech to text. Uses the caller-provided scope for lifecycle management.
      */
-    private fun convert(scope: CoroutineScope, attachment: Attachment, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
+    private fun convert(scope: CoroutineScope, attachment: Attachment, attachmentPath: String, onSuccess: (String) -> Unit, onFailure: (Exception) -> Unit) {
         scope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
@@ -85,9 +92,8 @@ class SpeechToTextManager @Inject constructor(
                     } else {
                         // Does not exist, upload audio file first then request speech-to-text service
                         val urlString = fileExistResp?.url
-                        val filePath = attachment.path
-                        val encryptedFile = File("$filePath.encrypt")
-                        if (urlString.isNullOrEmpty() || filePath.isNullOrEmpty() || !encryptedFile.exists()) {
+                        val encryptedFile = File("$attachmentPath.encrypt")
+                        if (urlString.isNullOrEmpty() || attachmentPath.isEmpty() || !encryptedFile.exists()) {
                             throw Exception("file is not exist")
                         }
 

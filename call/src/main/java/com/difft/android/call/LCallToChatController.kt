@@ -27,9 +27,10 @@ interface LCallToChatController {
 
     suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel>
 
-    fun getAvatarByContactor(context:Context, contactor: ContactorModel): ConstraintLayout
+    /** [avatarSizeDp] is the diameter the view will be rendered at, so the letter scales to it; null keeps the 48dp default. */
+    fun getAvatarByContactor(context: Context, contactor: ContactorModel, avatarSizeDp: Int? = null): ConstraintLayout
 
-    fun createAvatarByNameOrUid(context: Context, name: String?, uid: String): ConstraintLayout
+    fun createAvatarByNameOrUid(context: Context, name: String?, uid: String, avatarSizeDp: Int? = null): ConstraintLayout
 
     fun getMySelfUid(): String
 

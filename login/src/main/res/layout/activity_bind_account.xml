@@ -146,31 +146,22 @@
                     app:layout_constraintTop_toTopOf="@+id/tv_phone_code" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
-            <com.difft.android.base.widget.RuleEditText
+            <com.difft.android.base.widget.DifftClearableInputView
                 android:id="@+id/account"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:background="@android:color/transparent"
-                android:drawableEnd="@drawable/account_input_clear_icon"
-                android:gravity="start|center_vertical"
-                android:hint="@string/login_email_or_invite_code_hint"
-                android:maxLines="1"
-                android:singleLine="true"
-                android:textAlignment="viewStart"
-                android:textColor="@color/t.primary"
-                android:textColorHint="@color/t.disable"
                 android:textSize="14sp"
-                app:clearable="true"
+                app:dsi_autoFocus="true"
+                app:dsi_clearMode="whileEditing"
+                app:dsi_containerColor="@android:color/transparent"
+                app:dsi_hint="@string/login_email_or_phone_hint"
+                app:dsi_imeAction="done"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toEndOf="@+id/cl_phone"
                 app:layout_constraintTop_toTopOf="parent"
-                app:layout_goneMarginStart="0dp"
-                app:rule="not_empty">
-
-                <requestFocus />
-            </com.difft.android.base.widget.RuleEditText>
+                app:layout_goneMarginStart="0dp" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
         <TextView
@@ -184,7 +175,7 @@
             android:textColor="@color/t.error"
             android:textSize="@dimen/login_hint_size"
             android:visibility="gone"
-            tools:text="@string/login_invite_code_invalid"
+            tools:text="@string/login_error_invalid_account"
             tools:visibility="visible" />
 
     </LinearLayout>

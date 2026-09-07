@@ -68,9 +68,8 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/switch_pattern" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.difft.android.base.widget.DifftSwitchView
                 android:id="@+id/switch_pattern"
-                style="@style/Widget.Chative.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -103,9 +102,8 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/switch_passcode" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.difft.android.base.widget.DifftSwitchView
                 android:id="@+id/switch_passcode"
-                style="@style/Widget.Chative.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -190,9 +188,8 @@
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="@+id/switch_pattern_show_path" />
 
-        <androidx.appcompat.widget.SwitchCompat
+        <com.difft.android.base.widget.DifftSwitchView
             android:id="@+id/switch_pattern_show_path"
-            style="@style/Widget.Chative.Switch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:layout_constraintBottom_toBottomOf="parent"

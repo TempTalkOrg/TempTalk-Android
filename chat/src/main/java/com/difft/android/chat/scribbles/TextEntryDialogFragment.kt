@@ -25,6 +25,9 @@ import com.difft.android.chat.util.fragments.requireListener
 
 class TextEntryDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_image_editor_text_entry_fragment) {
 
+  // Full-screen transparent overlay whose controls mirror the editor HUD beneath it — not a sheet.
+  override val capToSheetWidth: Boolean = false
+
   private lateinit var hiddenTextEntry: HiddenEditText
   private lateinit var controller: Controller
 

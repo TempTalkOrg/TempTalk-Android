@@ -103,6 +103,7 @@
     <string name="db_key_unavailable_retry">重试</string>
 
     <string name="dual_pane_divider_drag_hint">拖动以调整面板宽度</string>
+    <string name="dual_pane_list_expand_hint">展开会话列表</string>
 
     <!-- 自建代理 -->
     <string name="proxy_settings_title">使用代理</string>

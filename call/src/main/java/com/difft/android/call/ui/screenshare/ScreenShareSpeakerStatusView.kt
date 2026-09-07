@@ -26,7 +26,7 @@ import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
 import com.difft.android.call.ui.LocalImageLoaderProvider
-import com.difft.android.call.util.IdUtil
+import com.difft.android.call.ui.rememberParticipantDisplayName
 import com.difft.android.call.util.StringUtil
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
@@ -110,7 +110,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
             tint = tintColor
         )
 
-        val username = "${userName ?: IdUtil.convertToBase58UserName(activeSpeaker.identity?.value)}"
+        val username = rememberParticipantDisplayName(activeSpeaker, userName)
 
         Text(
             modifier = Modifier

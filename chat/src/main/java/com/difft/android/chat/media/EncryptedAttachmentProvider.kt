@@ -19,11 +19,13 @@ import android.system.OsConstants
 import android.webkit.MimeTypeMap
 import androidx.annotation.RequiresApi
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.websocket.api.crypto.AttachmentCipherStreamUtil
 import difft.android.messageserialization.model.CONTENT_TYPE_LONG_TEXT
 import org.difft.app.database.models.AttachmentModel
 import org.difft.app.database.models.DBAttachmentModel
+import org.difft.app.database.synthesizedLocalId
 import org.difft.app.database.wcdb
 import java.io.File
 import java.io.RandomAccessFile
@@ -101,7 +103,7 @@ class EncryptedAttachmentProvider : ContentProvider() {
         val parsed = EncryptedAttachmentAccess.parse(uri) ?: return null
         val (messageId, fileName) = parsed
         // Reject path-traversal uris before any filesystem access (see resolveContainedBasePath).
-        val basePath = EncryptedAttachmentAccess.resolveContainedBasePath(messageId, fileName) ?: return null
+        val basePath = resolveBasePath(messageId, fileName) ?: return null
 
         val cols = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
         val cursor = MatrixCursor(cols)
@@ -127,7 +129,7 @@ class EncryptedAttachmentProvider : ContentProvider() {
         // Reject path-traversal uris BEFORE any filesystem access — in particular before the plaintext
         // fallback below, which would otherwise disclose arbitrary app-readable files for a crafted
         // `m/../../…` uri (confused-deputy; see resolveContainedBasePath).
-        val basePath = EncryptedAttachmentAccess.resolveContainedBasePath(messageId, fileName)
+        val basePath = resolveBasePath(messageId, fileName)
             ?: throw java.io.FileNotFoundException("attachment path rejected")
 
         // Legacy plaintext still on disk → serve it directly (transition compatibility).
@@ -201,8 +203,7 @@ class EncryptedAttachmentProvider : ContentProvider() {
         val declaredLength = runCatching {
             val parsed = EncryptedAttachmentAccess.parse(uri) ?: return@runCatching -1L
             val (messageId, fileName) = parsed
-            val basePath = EncryptedAttachmentAccess.resolveContainedBasePath(messageId, fileName)
-                ?: return@runCatching -1L
+            val basePath = resolveBasePath(messageId, fileName) ?: return@runCatching -1L
             if (!EncryptedAttachmentAccess.hasEncrypted(basePath)) return@runCatching -1L
             val key = resolveKey(messageId, fileName) ?: return@runCatching -1L
             FileDecryptionUtil.exactPlaintextLength(EncryptedAttachmentAccess.encryptedFile(basePath), key)
@@ -210,27 +211,66 @@ class EncryptedAttachmentProvider : ContentProvider() {
         return AssetFileDescriptor(pfd, 0, declaredLength)
     }
 
-    /**
-     * Resolve the attachment DB row for a uri's `(messageId, fileName)`.
-     *
-     * Normal messages: the file lives under `getMessageAttachmentFilePath(message.id)` and the DB
-     * row's `messageId` equals that id. Forwarded single attachments are special — the bubble/preview
-     * address the file by the attachment's **authorityId** (see ChatMessageListFragment), so the uri's
-     * "messageId" segment is actually an authorityId that won't match any row's `messageId`. Fall back
-     * to an `authorityId` lookup in that case so the decryption key/content type can still be found.
-     */
-    private fun findAttachment(messageId: String, fileName: String): AttachmentModel? {
+    /** Resolve the attachment DB row for a uri's `(key, fileName)` — order owned by [resolveAttachmentRowByUriKey]. */
+    private fun findAttachment(key: String, fileName: String): AttachmentModel? {
         return try {
-            val byMessage = wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(messageId))
-            (byMessage.firstOrNull { it.fileName == fileName } ?: byMessage.firstOrNull())?.let { return it }
-
-            val authorityId = messageId.toLongOrNull() ?: return null
-            val byAuthority = wcdb.attachment.getAllObjects(DBAttachmentModel.authorityId.eq(authorityId))
-            byAuthority.firstOrNull { it.fileName == fileName } ?: byAuthority.firstOrNull()
+            resolveAttachmentRowByUriKey<AttachmentModel>(
+                key = key,
+                fileName = fileName,
+                fileNameOf = { it.fileName },
+                synthesizedLocalIdOf = { it.synthesizedLocalId() },
+                lookup = { identity, value ->
+                    when (identity) {
+                        AttachmentUriIdentity.LOCAL_ID -> wcdb.attachment.getAllObjects(DBAttachmentModel.localId.eq(value))
+                        AttachmentUriIdentity.MESSAGE_ID -> wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(value))
+                        AttachmentUriIdentity.AUTHORITY_ID ->
+                            value.toLongOrNull()?.let { wcdb.attachment.getAllObjects(DBAttachmentModel.authorityId.eq(it)) }.orEmpty()
+                        // Bounded by the file name: only rows the backfill has not reached can carry a
+                        // synthesized id, and only those with THIS name can be the one asked for.
+                        AttachmentUriIdentity.SYNTHESIZED_LOCAL_ID -> wcdb.attachment.getAllObjects(
+                            DBAttachmentModel.localId.isNull().or(DBAttachmentModel.localId.eq(""))
+                                .and(DBAttachmentModel.fileName.eq(fileName))
+                        )
+                    }
+                }
+            )
         } catch (e: Exception) {
             L.w { "[EncryptedAttachmentProvider] findAttachment failed: ${e.message}" }
             null
         }
+    }
+
+    /**
+     * The file path served for a uri, ALWAYS recomputed from the matched DB row rather than assembled
+     * from the uri's literal key segment. This is what keeps a uri minted by an older version (or held
+     * by an external app across a migration) pointing at the file's CURRENT location.
+     *
+     * Falls back to the literal segment when no row matches or the row cannot name a directory key
+     * (a row predating the localId column) — the legacy interpretation, unchanged.
+     *
+     * When the row-derived directory holds no readable file yet — the migration window between the
+     * localId backfill and the file migration placing the bytes, or a persistently failing copy —
+     * the file is served from the legacy address that still holds it instead of failing a
+     * previously-valid uri. Every candidate passes the same containment check.
+     *
+     * Returns null ⇒ the caller MUST deny the request (path traversal; see resolveContainedBasePath).
+     */
+    private fun resolveBasePath(key: String, fileName: String): String? {
+        val row = findAttachment(key, fileName)
+        val directoryKey = row?.let { AttachmentPathResolver.directoryKeyForRow(it.localId) } ?: key
+        // Only the DIRECTORY comes from the row; the file name stays the one the caller asked for.
+        val primary = EncryptedAttachmentAccess.resolveContainedBasePath(directoryKey, fileName) ?: return null
+        if (row == null || EncryptedAttachmentAccess.isReadable(primary)) return primary
+        val legacyKeys = listOfNotNull(
+            key.takeIf { it != directoryKey },
+            row.authorityId?.takeIf { it != 0L }?.toString(),
+            row.messageId
+        ).distinct()
+        for (legacy in legacyKeys) {
+            val candidate = EncryptedAttachmentAccess.resolveContainedBasePath(legacy, fileName) ?: continue
+            if (EncryptedAttachmentAccess.isReadable(candidate)) return candidate
+        }
+        return primary
     }
 
     private fun resolveKey(messageId: String, fileName: String): ByteArray? =

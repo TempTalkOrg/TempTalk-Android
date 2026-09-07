@@ -43,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -52,7 +53,9 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
+import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
 import com.difft.android.call.ui.screenshare.ScreenSharingView
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.ui.video.VideoItemTrackSelector
@@ -80,7 +83,6 @@ fun SingleParticipantCallPage(
     callConfig: CallConfig,
     conversationId: String?,
     callRole: CallRole?,
-    isDualPane: Boolean = false,
 ){
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
@@ -152,9 +154,14 @@ fun SingleParticipantCallPage(
 
 
     if (floatingVisible) {
+        // Default resting spot clears whatever the bar plan occupies (two rows + backplate,
+        // a single row, or a row with the outside Emoji pill) plus the breathing gap. Seeded
+        // once — the window stays draggable and its position must survive PiP round-trips.
+        val plan = rememberCallActionBarPlan(isGroup = false)
         OneVOneSelfVideoView(
             viewModel = viewModel,
             onTap = { isSelfInMain = !isSelfInMain },
+            defaultBottomPadding = (plan.chromeBottomReserveDp + LCallUiConstants.CHROME_CONTENT_GAP_DP).dp,
         ) {
             if (effectiveIsSelfInMain && participantUid != null) {
                 // 已交换：悬浮窗内显示对端，必须用 Texture 以正确叠加在主画面之上。
@@ -183,8 +190,6 @@ fun SingleParticipantCallPage(
         callConfig = callConfig,
         autoHideTimeout = autoHideTimeout,
         isOneVOneCall = true,
-        isDualPane = isDualPane,
-        isShareScreening = isUserSharingScreen,
         room = room,
     )
 }
@@ -195,12 +200,13 @@ fun SingleParticipantCallPage(
 fun OneVOneSelfVideoView(
     viewModel: LCallViewModel,
     onTap: () -> Unit = {},
+    defaultBottomPadding: Dp = 120.dp,
     content: @Composable () -> Unit,
 ) {
     val videoViewWidth = 120.dp
     val videoViewHeight = 214.dp
     val paddingEnd = 12.dp
-    val paddingBottom = 40.dp
+    val paddingBottom = defaultBottomPadding
 
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
@@ -443,7 +449,7 @@ private fun ParticipantAvatarInfo(
     val iconSize = if (compact) 10.dp else 14.dp
     val iconPadding = if (compact) 1.dp else 2.dp
     val nameFontSize = if (compact) 11.sp else TextUnit.Unspecified
-    val nameMaxChars = if (compact) 8 else 14
+    val nameMaxChars = if (compact) 8 else PARTICIPANT_NAME_MAX_LENGTH
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -501,7 +507,7 @@ private fun ParticipantAvatarInfo(
                 )
             }
 
-            val username = "${userDisplayInfo.name ?: IdUtil.convertToBase58UserName(userId)}"
+            val username = rememberParticipantDisplayName(userId, userDisplayInfo.name)
             Text(
                 text = StringUtil.truncateWithEllipsis(username, nameMaxChars),
                 color = Color.White,

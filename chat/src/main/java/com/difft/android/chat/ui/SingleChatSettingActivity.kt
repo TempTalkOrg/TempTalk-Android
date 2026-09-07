@@ -7,6 +7,16 @@ import android.os.Bundle
 import android.text.TextUtils
 import android.view.View
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.chat.common.compose.CollapsingTitleBar
+import com.difft.android.chat.common.compose.ContactAvatar
+import com.difft.android.chat.common.compose.IdentityHeader
+import com.difft.android.chat.common.compose.IdentityHeaderMode
+import com.difft.android.chat.common.compose.TitleBarAction
+import com.difft.android.chat.common.compose.TitleCollapseTracker
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.ChatSettingViewModelFactory
@@ -34,7 +44,7 @@ import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
-import com.difft.android.network.responses.MuteStatus
+import com.difft.android.network.requests.MuteStatus
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
@@ -42,6 +52,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -88,6 +99,16 @@ class SingleChatSettingActivity : BaseActivity() {
 
     private var mContact: ContactorModel? = null
 
+    /** Null only while the local row is still loading; see [loadAndRenderContact]. */
+    private var headerContact by mutableStateOf<ContactorModel?>(null)
+    private val collapseTracker by lazy { TitleCollapseTracker(mBinding.composeTitleBar) }
+
+    /**
+     * Peer with no local row (fetch failed / deregistered): the header still needs an entry to the
+     * card. Applied only after the DB has answered, so the id never flashes while loading.
+     */
+    private val fallbackContact by lazy { ContactorModel().apply { id = contactId } }
+
     companion object {
         fun startActivity(activity: Activity, contactId: String) {
             val intent = Intent(activity, SingleChatSettingActivity::class.java)
@@ -101,37 +122,12 @@ class SingleChatSettingActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        mBinding.ibBack.setOnClickListener { finish() }
-
-        if (TextUtils.isEmpty(contactId)) return
-
-        if (contactId.isOfficialAccount()) {
-            mBinding.relInfo.visibility = View.GONE
-        } else {
-            mBinding.relMember.visibility = View.VISIBLE
-            mBinding.relMember.setOnClickListener {
-                lifecycleScope.launch {
-                    try {
-                        val contact = withContext(Dispatchers.IO) {
-                            wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId))
-                        }
-                        if (contact != null) {
-                            CreateGroupActivity.startActivity(this@SingleChatSettingActivity, arrayListOf(contact.id))
-                        } else {
-                            ToastUtil.showLong(getString(R.string.contact_not_in_list))
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        L.w { "[SingleChatSettingActivity] createGroup error: ${e.stackTraceToString()}" }
-                    }
-                }
-            }
+        if (TextUtils.isEmpty(contactId)) {
+            finish()
+            return
         }
 
-        mBinding.llNameCard.setOnClickListener {
-            ContactDetailActivity.startActivity(this, contactId)
-        }
+        setupHeaderCompose()
 
         mBinding.saveToPhotosContainer.setOnClickListener {
             SaveToPhotosSettingsActivity.start(this, For.Account(contactId))
@@ -224,16 +220,19 @@ class SingleChatSettingActivity : BaseActivity() {
                 }
             }
         }
-        mBinding.switch2mute1on1.setOnClickListener {
-            var muteStatus = MuteStatus.UNMUTED.value
-            if (mBinding.switch2mute1on1.isChecked) {
-                muteStatus = MuteStatus.MUTED.value
+        // Controlled: the conversationSet flow moves the switch once the server accepted, so a
+        // failed request simply leaves it alone.
+        mBinding.switch2mute1on1.setOnToggleRequestListener { view, requested ->
+            ComposeDialogManager.showWait(this, "")
+            view.guardWhile(
+                chatSettingViewModel.setConversationConfigs(
+                    activity = this,
+                    conversation = contactId,
+                    muteStatus = MuteStatus.of(requested).value,
+                )
+            ) {
+                ComposeDialogManager.dismissWait(this)
             }
-            chatSettingViewModel.setConversationConfigs(
-                activity = this,
-                conversation = contactId,
-                muteStatus = muteStatus
-            )
         }
 
         // 异步加载置顶状态
@@ -243,9 +242,9 @@ class SingleChatSettingActivity : BaseActivity() {
                 mBinding.switchStick.isChecked = isPinned
             }
         }
-        mBinding.switchStick.setOnClickListener {
-            val newPinned = mBinding.switchStick.isChecked
-            pinChattingRoom(newPinned)
+        // Controlled and DB-only: the switch moves once the write landed, no wait dialog needed.
+        mBinding.switchStick.setOnToggleRequestListener { view, requested ->
+            view.guardWhile(pinChattingRoom(requested))
         }
     }
 
@@ -254,26 +253,78 @@ class SingleChatSettingActivity : BaseActivity() {
         handleCommonGroupsDisplay()
     }
 
+    // region identity header (title bar + centered header)
+
+    private fun setupHeaderCompose() {
+        mBinding.composeTitleBar.setContent {
+            DifftTheme(applyWindowBackground = false) {
+                CollapsingTitleBar(
+                    title = headerContact?.getDisplayNameForUI().orEmpty(),
+                    collapsed = collapseTracker.collapsed,
+                    onBack = { finish() },
+                    action = if (contactId.isOfficialAccount()) {
+                        null
+                    } else {
+                        TitleBarAction.Icon(R.drawable.chat_ic_users_plus) { createGroupWithContact() }
+                    }
+                )
+            }
+        }
+        mBinding.composeIdentityHeader.setContent {
+            DifftTheme(applyWindowBackground = false) {
+                val contact = headerContact ?: return@DifftTheme
+                IdentityHeader(
+                    name = contact.getDisplayNameForUI(),
+                    mode = IdentityHeaderMode.Browse,
+                    avatar = { avatarModifier ->
+                        ContactAvatar(contactor = contact, size = DifftTheme.spacing.avatarLarge, modifier = avatarModifier)
+                    },
+                    onAvatarClick = { openContactCard() },
+                    onHeaderClick = { openContactCard() },
+                    onAvatarBottomChanged = collapseTracker::onAvatarBottomChanged,
+                )
+            }
+        }
+    }
+
+    private fun openContactCard() {
+        ContactDetailActivity.startActivity(this, contactId)
+    }
+
+    private fun createGroupWithContact() {
+        lifecycleScope.launch {
+            try {
+                val contact = withContext(Dispatchers.IO) {
+                    wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contactId))
+                }
+                if (contact != null) {
+                    CreateGroupActivity.startActivity(this@SingleChatSettingActivity, arrayListOf(contact.id))
+                } else {
+                    ToastUtil.showLong(getString(R.string.contact_not_in_list))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[SingleChatSettingActivity] createGroup error: ${e.stackTraceToString()}" }
+            }
+        }
+    }
+
+    // endregion
+
     private fun loadAndRenderContact() {
         lifecycleScope.launch {
             try {
                 val contact = withContext(Dispatchers.IO) {
                     wcdb.getContactorFromAllTable(contactId)
                 }
-                if (contact != null) {
-                    mContact = contact
-                    mBinding.avatar.setAvatar(contact)
-                    mBinding.tvName.text = contact.getDisplayNameForUI()
-                    mBinding.title.text = contact.getDisplayNameForUI()
-
-                    mBinding.vInfo.setOnClickListener {
-                        ContactDetailActivity.startActivity(this@SingleChatSettingActivity, contactId)
-                    }
-                }
+                mContact = contact
+                headerContact = contact ?: fallbackContact
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 L.w { "[SingleChatSettingActivity] getContactWithID error: ${e.stackTraceToString()}" }
+                headerContact = headerContact ?: fallbackContact
             }
         }
     }
@@ -388,8 +439,9 @@ class SingleChatSettingActivity : BaseActivity() {
         )
     }
 
-    private fun pinChattingRoom(isPinned: Boolean) {
-        lifecycleScope.launch {
+    /** @return the write's job, so the toggle can gate itself on it (see `DifftToggleView.guardWhile`). */
+    private fun pinChattingRoom(isPinned: Boolean): Job {
+        return lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     dbRoomStore.updatePinnedTime(
@@ -397,10 +449,12 @@ class SingleChatSettingActivity : BaseActivity() {
                         if (isPinned) System.currentTimeMillis() else null
                     )
                 }
+                mBinding.switchStick.isChecked = isPinned
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 L.w { "[SingleChatSettingActivity] pinChattingRoom error: ${e.stackTraceToString()}" }
+                ToastUtil.show(getString(R.string.operation_failed))
             }
         }
     }

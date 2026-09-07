@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The dual-pane band: this qualifier set is the same one that selects
+        app/src/main/res/layout-w673dp-h480dp/activity_index.xml, so the gate is true
+        exactly where a detail_pane is inflated. Contract and consumer: see values/bools.xml.
+    -->
+    <bool name="dual_pane_layout_active">true</bool>
+</resources>

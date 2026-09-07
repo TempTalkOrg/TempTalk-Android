@@ -18,9 +18,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
+import com.difft.android.base.ui.compose.DifftSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -31,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -51,6 +49,11 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.VoicePreset
+import com.difft.android.call.ui.actionbar.ActionBarQuickAction
+import com.difft.android.call.ui.actionbar.ActionCountBadge
+import com.difft.android.call.ui.actionbar.CallActionButton
+import com.difft.android.call.ui.actionbar.LabeledActionSlot
+import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 import kotlinx.coroutines.launch
 
@@ -84,11 +87,16 @@ fun ShowItemsBottomView(
 
     val showCriticalAlertEnable = viewModel.is1v1ShowCriticalAlertEnable(callStatus) || viewModel.isGroupShowCriticalAlertEnable(isCriticalAlertEnable) || viewModel.isInstantCriticalAlertEnable(awaitingJoinInvitees)
 
-    val itemSpace = when {
-        cameraEnabled && callType == CallType.GROUP.type -> 8.dp
-        isOneVOneCall -> 50.dp
-        else -> 32.dp
-    }
+    // Quick actions are the controls the current bar plan dropped: Invite always, People too
+    // for groups, none when the split layout already shows both in the bar.
+    val plan = rememberCallActionBarPlan(isGroup = !isOneVOneCall)
+    // People is offered only where the participants panel can actually render (shared screen
+    // or a wide window); otherwise the toggle would flip with nothing on screen.
+    val peopleAvailable = participantsPanelAvailable(isParticipantSharedScreen, rememberParticipantsPanelWide())
+    val quickActions = plan.moreQuickActions.filter { it != ActionBarQuickAction.PEOPLE || peopleAvailable }
+    val participants by viewModel.participants.collectAsState(initial = emptyList())
+    val hasQuickRow = quickActions.isNotEmpty() || cameraEnabled || showCriticalAlertEnable
+    val itemSpace = 24.dp
 
     val shouldShowSheet = showToolBarBottomViewEnable && !isInPipMode
     val dismissSheet: () -> Unit = {
@@ -107,86 +115,63 @@ fun ShowItemsBottomView(
     }
 
     if (shouldShowSheet || sheetState.isVisible) {
-        ModalBottomSheet (
-            modifier = Modifier
-                .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
-                .wrapContentHeight(),
+        DifftModalBottomSheet(
             sheetState = sheetState,
-            containerColor = DifftTheme.colors.backgroundTertiary,
             contentWindowInsets = { WindowInsets.navigationBars },
+            hideNavigationBar = true,
             onDismissRequest = {
                 dismissSheet()
             },
         ) {
-            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
                     .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
                     .testTag("call_more_sheet")
                     .fillMaxWidth()
-                    .wrapContentHeight()
-                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
+                    .wrapContentHeight(),
                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Row(
+                if (hasQuickRow) Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(76.dp),
                     horizontalArrangement = Arrangement.spacedBy(itemSpace, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.Top,
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .width(80.dp)
-                            .height(76.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Top),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .testTag("call_more_btn_invite")
-                                .width(48.dp)
-                                .height(48.dp)
-                                .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 100.dp))
-                                .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
-                                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    if (ActionBarQuickAction.INVITE in quickActions) {
+                        LabeledActionSlot(label = ResUtils.getString(R.string.call_toolbar_bottom_invite_text)) {
+                            CallActionButton(
+                                painter = painterResource(id = R.drawable.call_bottom_invite),
+                                contentDescription = "invite",
+                                iconSize = 24.dp,
+                                testTag = "call_more_btn_invite",
+                                containerColor = DifftTheme.colors.backgroundTertiary,
+                                onClick = {
                                     L.i { "[call] ShowItemsBottomView onClick invite" }
                                     handleInviteUsersClick()
                                     dismissSheet()
                                 },
-                            horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .width(24.dp)
-                                    .height(24.dp)
-                                    .padding(start = 3.dp, top = 3.dp, end = 2.dp, bottom = 2.99961.dp),
-                                horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
-                                verticalAlignment = Alignment.CenterVertically,
+                            )
+                        }
+                    }
+
+                    if (ActionBarQuickAction.PEOPLE in quickActions) {
+                        LabeledActionSlot(label = ResUtils.getString(R.string.call_action_people)) {
+                            CallActionButton(
+                                painter = painterResource(id = R.drawable.call_ic_users),
+                                contentDescription = "people",
+                                testTag = "call_more_btn_people",
+                                containerColor = DifftTheme.colors.backgroundTertiary,
+                                onClick = {
+                                    L.i { "[call] ShowItemsBottomView onClick people" }
+                                    dismissSheet()
+                                    viewModel.callUiController.setShowUsersEnabled(true)
+                                },
                             ) {
-                                Image(
-                                    modifier = Modifier
-                                        .padding(0.dp)
-                                        .width(19.dp)
-                                        .height(18.00039.dp),
-                                    painter = painterResource(id = R.drawable.call_bottom_invite),
-                                    contentDescription = "invite",
-                                    contentScale = ContentScale.Fit
-                                )
+                                if (participants.isNotEmpty()) ActionCountBadge(participants.size)
                             }
                         }
-                        Text(
-                            text = ResUtils.getString(R.string.call_toolbar_bottom_invite_text),
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                fontFamily = FontFamily.Default,
-                                fontWeight = FontWeight(400),
-                                color = DifftTheme.colors.textPrimary,
-                            )
-                        )
                     }
 
                     if (cameraEnabled) {
@@ -202,7 +187,7 @@ fun ShowItemsBottomView(
                                     .testTag("call_more_btn_switch_camera")
                                     .width(48.dp)
                                     .height(48.dp)
-                                    .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 100.dp))
+                                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 100.dp))
                                     .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
@@ -252,7 +237,7 @@ fun ShowItemsBottomView(
                                     .testTag("call_more_btn_critical_alert")
                                     .width(48.dp)
                                     .height(48.dp)
-                                    .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 100.dp))
+                                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 100.dp))
                                     .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
@@ -303,9 +288,8 @@ fun ShowItemsBottomView(
 
                 Column(
                     modifier = Modifier
-                        .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
+                        .fillMaxWidth()
                         .wrapContentHeight()
-                        .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
                         .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -313,7 +297,7 @@ fun ShowItemsBottomView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(55.dp)
-                            .background(color = DifftTheme.colors.backgroundQuaternary, shape = RoundedCornerShape(size = 8.dp))
+                            .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 8.dp))
                             .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -332,20 +316,11 @@ fun ShowItemsBottomView(
                             )
                         )
 
-                        Switch(
+                        DifftSwitch(
                             modifier = Modifier
                                 .testTag("call_more_btn_denoise")
-                                .width(51.dp)
-                                .height(31.dp)
-                                .padding(end = 10.dp)
                                 .semantics { contentDescription = "DeNoise" },
                             checked = deNoiseEnable,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = DifftTheme.colors.primary,
-                                uncheckedThumbColor = Color.White,
-                                uncheckedTrackColor = DifftTheme.colors.backgroundDisabled
-                            ),
                             onCheckedChange = {
                                 viewModel.audioDeviceManager.switchDeNoiseEnable(it)
                                 deNoiseCallBack(it)
@@ -356,7 +331,6 @@ fun ShowItemsBottomView(
                     AnimatedVisibility(visible = deNoiseEnable) {
                         DeNoiseModeSelector(
                             currentMode = deNoiseMode,
-                            isParticipantSharedScreen = isParticipantSharedScreen,
                             onModeSelected = { mode ->
                                 viewModel.audioDeviceManager.switchDeNoiseMode(mode)
                                 deNoiseModeCallBack(mode)
@@ -366,7 +340,6 @@ fun ShowItemsBottomView(
 
                     VoicePresetCard(
                         currentPreset = voicePreset,
-                        isParticipantSharedScreen = isParticipantSharedScreen,
                         onPresetSelected = { preset ->
                             viewModel.audioDeviceManager.switchVoicePreset(preset)
                             voicePresetCallBack(preset)

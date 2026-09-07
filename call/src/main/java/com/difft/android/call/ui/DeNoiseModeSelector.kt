@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,10 +32,12 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.github.TempTalkOrg.audio_pipeline.AudioModule
 
+/** Lifts a menu that opens inside a bottom sheet off the sheet ground it shares a colour family with. */
+private val SHEET_MENU_ELEVATION = 4.dp
+
 @Composable
 fun DeNoiseModeSelector(
     currentMode: AudioModule,
-    isParticipantSharedScreen: Boolean,
     onModeSelected: (AudioModule) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -49,14 +50,14 @@ fun DeNoiseModeSelector(
 
     Box(
         modifier = Modifier
-            .then(if (isParticipantSharedScreen) Modifier.width(343.dp) else Modifier.fillMaxWidth())
+            .fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(55.dp)
                 .background(
-                    color = DifftTheme.colors.backgroundQuaternary,
+                    color = DifftTheme.colors.backgroundTertiary,
                     shape = RoundedCornerShape(size = 8.dp)
                 )
                 .clickable { expanded = true }
@@ -101,7 +102,8 @@ fun DeNoiseModeSelector(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DifftTheme.colors.backgroundQuaternary)
+            containerColor = DifftTheme.colors.backgroundPopup,
+            shadowElevation = SHEET_MENU_ELEVATION,
         ) {
             DropdownMenuItem(
                 text = {

@@ -14,12 +14,12 @@ import android.widget.ImageView
 import android.widget.SeekBar
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.widget.AppCompatSeekBar
-import androidx.appcompat.widget.SwitchCompat
 import androidx.constraintlayout.widget.Guideline
 import androidx.core.animation.doOnEnd
 import com.airbnb.lottie.SimpleColorFilter
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.globalHiltServices
+import com.difft.android.base.widget.DifftSwitchView
 import com.difft.android.chat.R
 import com.difft.android.chat.mediasend.v2.MediaAnimations
 import com.difft.android.chat.scribbles.HSVColorSlider.getColor
@@ -65,7 +65,7 @@ class ImageEditorHudV2 @JvmOverloads constructor(
     private val cropFlipButton: View = findViewById(R.id.image_editor_hud_flip_button)
     private val cropAspectLockButton: ImageView = findViewById(R.id.image_editor_hud_aspect_lock_button)
     private val blurToggleContainer: View = findViewById(R.id.image_editor_hud_blur_toggle_container)
-    private val blurToggle: SwitchCompat = findViewById(R.id.image_editor_hud_blur_toggle)
+    private val blurToggle: DifftSwitchView = findViewById(R.id.image_editor_hud_blur_toggle)
     private val blurToast: View = findViewById(R.id.image_editor_hud_blur_toast)
     private val blurHelpText: View = findViewById(R.id.image_editor_hud_blur_help_text)
     private val colorIndicator: ImageView = findViewById(R.id.image_editor_hud_color_indicator)
@@ -271,9 +271,7 @@ class ImageEditorHudV2 @JvmOverloads constructor(
     }
 
     fun setBlurFacesToggleEnabled(enabled: Boolean) {
-        blurToggle.setOnCheckedChangeListener(null)
         blurToggle.isChecked = enabled
-        blurToggle.setOnCheckedChangeListener { _, value -> listener?.onBlurFacesToggled(value) }
     }
 
 

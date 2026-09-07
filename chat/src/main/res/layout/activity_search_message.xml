@@ -23,32 +23,17 @@
             app:layout_constraintLeft_toLeftOf="parent"
             app:tint="@color/t.primary" />
 
-        <androidx.appcompat.widget.AppCompatEditText
-            android:id="@+id/edittext_search_input"
+        <com.difft.android.base.widget.DifftSearchInputView
+            android:id="@+id/search_input"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="16dp"
-            android:background="@drawable/search_input_bg_search_input"
-            android:drawableStart="@drawable/search_input_ic_search_input"
-            android:drawablePadding="6dp"
-            android:hint="@string/search_default_hint"
-            android:imeOptions="actionSearch"
-            android:inputType="text"
-            android:lines="1"
-            android:paddingStart="10dp"
-            android:paddingEnd="40dp"
-            android:textColor="@color/t.primary"
-            android:textColorHint="@color/t.disable"
-            android:textSize="14sp"
-            app:drawableTint="@color/icon"
+            app:dsi_hint="@string/search_default_hint"
+            app:dsi_autoFocus="true"
             app:layout_constraintBottom_toBottomOf="@+id/ib_back"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@+id/ib_back"
-            app:layout_constraintTop_toTopOf="@+id/ib_back">
-
-            <requestFocus />
-        </androidx.appcompat.widget.AppCompatEditText>
-
+            app:layout_constraintTop_toTopOf="@+id/ib_back" />
         <!--        <View-->
         <!--            android:id="@+id/view_separator"-->
         <!--            android:layout_width="0dp"-->
@@ -58,18 +43,6 @@
         <!--            app:layout_constraintEnd_toEndOf="parent"-->
         <!--            app:layout_constraintStart_toStartOf="parent"-->
         <!--            app:layout_constraintTop_toBottomOf="@+id/edittext_search_input" />-->
-
-        <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/button_clear"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
-            android:background="@null"
-            android:src="@drawable/search_input_ic_search_clear"
-            android:tint="@color/t.secondary"
-            app:layout_constraintBottom_toBottomOf="@+id/edittext_search_input"
-            app:layout_constraintEnd_toEndOf="@+id/edittext_search_input"
-            app:layout_constraintTop_toTopOf="@+id/edittext_search_input" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

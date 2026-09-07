@@ -17,6 +17,7 @@ import org.difft.app.database.models.SharedContactModel
 import org.difft.app.database.models.SharedContactPhoneModel
 import org.difft.app.database.models.SpeechToTextModel
 import org.difft.app.database.models.TranslateModel
+import java.util.UUID
 
 /**
  * Child-row -> domain mappers shared by BOTH read paths:
@@ -34,6 +35,18 @@ import org.difft.app.database.models.TranslateModel
  * [AttachmentModel.toAttachment] deliberately stays in `WCDBExtensions.kt`: it predates this file,
  * has unrelated callers, and depends on the private `convertAmplitudes` there.
  */
+
+/**
+ * Deterministic synthesized localId for an attachment row whose `localId` column is still NULL
+ * (the row predates the column). Derived from the row's own databaseId, so every read of the same
+ * row synthesizes the SAME id: pre-backfill addressing (download target directories, progress keys,
+ * list-diff identity) stays stable across rebinds instead of minting a fresh orphan address per
+ * read, and the migration's backfill stage persists exactly this value — a file placed under the
+ * synthesized address before backfill is already at its final address. Never written back from a
+ * read path.
+ */
+fun AttachmentModel.synthesizedLocalId(): String =
+    UUID.nameUUIDFromBytes("attachment-row-$databaseId".toByteArray(Charsets.UTF_8)).toString()
 
 /**
  * The attachment shape used INSIDE a quote. Intentionally NOT [AttachmentModel.toAttachment]:
@@ -58,8 +71,11 @@ fun AttachmentModel.toQuotedAttachment(): QuotedAttachment = QuotedAttachment(
         flags = flags,
         width = width,
         height = height,
-        path = path,
-        status = status
+        path = null, // not persisted; send-time transient only
+        status = status,
+        // NULL column (row predates the column) -> deterministic synthesized id, never written
+        // back from a read.
+        localId = localId ?: synthesizedLocalId()
     ),
     flags = flags
 )

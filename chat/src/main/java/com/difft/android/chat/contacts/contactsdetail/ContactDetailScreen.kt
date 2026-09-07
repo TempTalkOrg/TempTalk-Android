@@ -18,13 +18,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,16 +37,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
-import com.difft.android.chat.common.AvatarView
-import com.difft.android.chat.contacts.data.ContactorUtil
-import com.difft.android.chat.contacts.data.getContactAvatarData
-import com.difft.android.chat.contacts.data.getContactAvatarUrl
-import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import org.difft.app.database.models.ContactorModel
 
 /**
@@ -68,7 +64,13 @@ data class ContactDetailUiState(
     val joinedAt: String? = null,
     val sourceDescribe: String? = null,
     val commonGroupsCount: Int = 0,
-    val website: String? = null
+    val website: String? = null,
+    /** In-place remark editing (contact card only, never for self). */
+    val isEditingRemark: Boolean = false,
+    val editingRemarkName: String = "",
+    /** Real name offered by the edit-mode quick-fill row. */
+    val quickFillName: String = "",
+    val showQuickFill: Boolean = false
 )
 
 /**
@@ -105,7 +107,11 @@ fun ContactDetailScreen(
     modifier: Modifier = Modifier,
     showBackButton: Boolean = true,
     onWebsiteClick: () -> Unit = {},
-    onRemoveNowClick: () -> Unit = {}
+    onRemoveNowClick: () -> Unit = {},
+    onEditingRemarkNameChange: (String) -> Unit = {},
+    onSubmitRemark: () -> Unit = {},
+    onAvatarClickInEdit: () -> Unit = {},
+    onQuickFillRemark: () -> Unit = {}
 ) {
     // Popup mode: calculate minimum height (40% of screen height) to avoid looking too short.
     // Fall back to Configuration on the first composition (before the first layout pass), otherwise
@@ -122,17 +128,18 @@ fun ContactDetailScreen(
         0.dp
     }
 
+    val wrapContent = isPopupMode && !uiState.isEditingRemark
     Column(
         modifier = modifier
             .fillMaxWidth()
             .then(
-                if (isPopupMode) {
+                if (wrapContent) {
                     // Popup mode: wrap content height with minimum height
                     Modifier
                         .wrapContentHeight()
                         .heightIn(min = minHeight)
                 } else {
-                    // Full screen mode: fill entire screen
+                    // Full screen mode (or popup expanded for editing): fill entire screen
                     Modifier.fillMaxSize()
                 }
             )
@@ -143,16 +150,16 @@ fun ContactDetailScreen(
             isPopupMode = isPopupMode,
             showBackButton = showBackButton,
             showMoreButton = uiState.isFriend && !uiState.isSelf,
-            showEditButton = !uiState.isSelf,
+            isEditing = uiState.isEditingRemark,
             onCloseClick = onCloseClick,
             onMoreClick = onMoreClick,
-            onEditClick = onEditClick
+            onDoneClick = onSubmitRemark
         )
 
         Spacer(modifier = Modifier.height(DifftTheme.spacing.stackMedium))
 
         // Avatar and name section (with horizontal padding)
-        AvatarNameSection(
+        ContactDetailHeader(
             contactor = uiState.contactor,
             displayName = uiState.displayName,
             originalName = uiState.originalName,
@@ -160,8 +167,18 @@ fun ContactDetailScreen(
             hasRemarkAvatar = uiState.hasRemarkAvatar,
             originalAvatarJson = uiState.originalAvatarJson,
             isOfficialAccount = uiState.isOfficialAccount,
+            isEditing = uiState.isEditingRemark,
+            editingName = uiState.editingRemarkName,
+            showEditEntry = !uiState.isSelf && uiState.contactor != null,
+            quickFillName = uiState.quickFillName,
+            showQuickFill = uiState.showQuickFill,
             onAvatarClick = onAvatarClick,
             onOriginalAvatarClick = onOriginalAvatarClick,
+            onEditClick = onEditClick,
+            onEditingNameChange = onEditingRemarkNameChange,
+            onSubmitEdit = onSubmitRemark,
+            onAvatarClickInEdit = onAvatarClickInEdit,
+            onQuickFill = onQuickFillRemark,
             modifier = Modifier.padding(horizontal = DifftTheme.spacing.insetLarge)
         )
 
@@ -198,7 +215,7 @@ fun ContactDetailScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(
-                    if (isPopupMode) {
+                    if (wrapContent) {
                         // Popup mode: wrap content height
                         Modifier.wrapContentHeight()
                     } else {
@@ -215,16 +232,16 @@ private fun TopBar(
     isPopupMode: Boolean,
     showBackButton: Boolean,
     showMoreButton: Boolean,
-    showEditButton: Boolean,
+    isEditing: Boolean,
     onCloseClick: () -> Unit,
     onMoreClick: () -> Unit,
-    onEditClick: () -> Unit
+    onDoneClick: () -> Unit
 ) {
+    // Same geometry as every other top bar: 52dp tall, no row inset, 24dp icons with 12dp touch padding.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(DifftTheme.spacing.insetLarge),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .height(TOP_BAR_HEIGHT),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Close/Back button - show in popup mode or when showBackButton is true
@@ -236,240 +253,71 @@ private fun TopBar(
                 contentDescription = null,
                 modifier = Modifier
                     .clickable { onCloseClick() }
-                    .padding(10.dp)
+                    .padding(TOP_BAR_ICON_PADDING)
                     .size(DifftTheme.spacing.iconMedium),
                 tint = DifftTheme.colors.textPrimary
             )
         } else {
             // Placeholder when back button is hidden
-            Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium + 20.dp))
+            Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium + TOP_BAR_ICON_PADDING * 2))
         }
 
-        // Right side: edit + more buttons
-        // Each icon uses padding(10.dp) to form a 44dp square touch target;
-        // adjacent icons naturally share their padding gaps without extra spacedBy.
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (showEditButton) {
-                Icon(
-                    painter = painterResource(id = R.drawable.chat_contact_detail_ic_edit),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .clickable { onEditClick() }
-                        .padding(10.dp)
-                        .size(DifftTheme.spacing.iconMedium),
-                    tint = DifftTheme.colors.textPrimary
-                )
-            }
-            if (showMoreButton) {
-                Icon(
-                    painter = painterResource(id = R.drawable.chat_message_action_more),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .clickable { onMoreClick() }
-                        .padding(10.dp)
-                        .size(DifftTheme.spacing.iconMedium),
-                    tint = DifftTheme.colors.textPrimary
-                )
-            } else if (!showEditButton) {
-                Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium + 20.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun AvatarNameSection(
-    contactor: ContactorModel?,
-    displayName: String,
-    originalName: String?,
-    hasRemark: Boolean,
-    hasRemarkAvatar: Boolean,
-    originalAvatarJson: String?,
-    isOfficialAccount: Boolean,
-    onAvatarClick: () -> Unit,
-    onOriginalAvatarClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Avatar using AndroidView to embed AvatarView
-        Box(
-            modifier = Modifier
-                .size(DifftTheme.spacing.avatarLarge)
-                .clip(CircleShape)
-                .clickable { onAvatarClick() }
-        ) {
-            contactor?.let { contact ->
-                val avatarSizePx = with(LocalDensity.current) {
-                    DifftTheme.spacing.avatarLarge.roundToPx()
-                }
-                AndroidView(
-                    factory = { ctx -> AvatarView(ctx) },
-                    update = { avatarView ->
-                        // Pass explicit size to avoid layout timing issues in Compose AndroidView
-                        avatarView.setAvatar(contact, 22, avatarSizePx)
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineMedium))
-
-        // Names column - takes remaining width after avatar
-        Column(modifier = Modifier.weight(1f)) {
-            // Display name and edit button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = displayName,
-                    style = TextStyle(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 20.sp
-                    ),
-                    color = DifftTheme.colors.textPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-
-                if (isOfficialAccount) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        painter = painterResource(id = R.drawable.chat_ic_official_bot_badge),
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color.Unspecified
-                    )
-                }
-            }
-
-            val showSubtitle = isOfficialAccount ||
-                (hasRemark && !originalName.isNullOrEmpty()) ||
-                hasRemarkAvatar
-            if (showSubtitle) {
-                Spacer(modifier = Modifier.height(4.dp))
-                SubtitleRow(
-                    isOfficialAccount = isOfficialAccount,
-                    hasRemark = hasRemark,
-                    hasRemarkAvatar = hasRemarkAvatar,
-                    originalName = originalName,
-                    originalAvatarJson = originalAvatarJson,
-                    contactor = contactor,
-                    onOriginalAvatarClick = onOriginalAvatarClick,
-                )
-            }
-        }
-    }
-}
-
-private val subtitleStyle = TextStyle(
-    fontWeight = FontWeight.Normal,
-    fontSize = 14.sp
-)
-
-@Composable
-private fun SubtitleRow(
-    isOfficialAccount: Boolean,
-    hasRemark: Boolean,
-    hasRemarkAvatar: Boolean,
-    originalName: String?,
-    originalAvatarJson: String?,
-    contactor: ContactorModel?,
-    onOriginalAvatarClick: () -> Unit,
-) {
-    val tertiary = DifftTheme.colors.textTertiary
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        if (isOfficialAccount) {
-            Text(
-                text = stringResource(R.string.contact_official_account_label),
-                style = subtitleStyle,
-                color = tertiary,
+        // Edit mode: the privacy line sits between the close button and "Done", shrinking to fit
+        // rather than truncating on a narrow screen.
+        if (isEditing) {
+            BasicText(
+                text = stringResource(R.string.contact_remark_private_hint),
+                style = privacyHintStyle.copy(color = DifftTheme.colors.textTertiary),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(
+                    minFontSize = PRIVACY_HINT_MIN_SIZE,
+                    maxFontSize = PRIVACY_HINT_MAX_SIZE,
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = TOP_BAR_ICON_PADDING)
             )
-            if ((hasRemark && !originalName.isNullOrEmpty()) || hasRemarkAvatar) {
-                Text(text = "・", style = subtitleStyle, color = tertiary)
-            }
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
         }
+
+        // Right side: "Done" while editing the remark (it takes the more button's slot), else more.
         when {
-            // Both remarked: inline "[smallAvatar] originalName" without key labels.
-            hasRemark && hasRemarkAvatar && !originalName.isNullOrEmpty() -> {
-                SmallOriginalAvatar(originalAvatarJson, contactor, onOriginalAvatarClick)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = originalName,
-                    style = subtitleStyle,
-                    color = tertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // Only name remarked: "Name: originalName"
-            hasRemark && !originalName.isNullOrEmpty() -> {
-                Text(
-                    text = stringResource(R.string.contact_name_label, originalName),
-                    style = subtitleStyle,
-                    color = tertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // Only avatar remarked: "Original: [smallAvatar]"
-            hasRemarkAvatar -> {
-                Text(
-                    text = stringResource(R.string.contact_avatar_label),
-                    style = subtitleStyle,
-                    color = tertiary,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                SmallOriginalAvatar(originalAvatarJson, contactor, onOriginalAvatarClick)
-            }
+            isEditing -> Text(
+                text = stringResource(R.string.group_edit_name_done),
+                style = doneStyle,
+                color = DifftTheme.colors.textInfo,
+                modifier = Modifier
+                    .clickable { onDoneClick() }
+                    .padding(horizontal = TOP_BAR_ICON_PADDING, vertical = 8.dp)
+            )
+
+            showMoreButton -> Icon(
+                painter = painterResource(id = R.drawable.chat_message_action_more),
+                contentDescription = null,
+                modifier = Modifier
+                    .clickable { onMoreClick() }
+                    .padding(TOP_BAR_ICON_PADDING)
+                    .size(DifftTheme.spacing.iconMedium),
+                tint = DifftTheme.colors.textPrimary
+            )
+
+            else -> Spacer(modifier = Modifier.size(DifftTheme.spacing.iconMedium + TOP_BAR_ICON_PADDING * 2))
         }
     }
 }
 
-@Composable
-private fun SmallOriginalAvatar(
-    originalAvatarJson: String?,
-    contactor: ContactorModel?,
-    onClick: () -> Unit,
-) {
-    val avatarSizePx = with(LocalDensity.current) { 20.dp.roundToPx() }
-    Box(
-        modifier = Modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .clickable { onClick() }
-    ) {
-        AndroidView(
-            factory = { ctx -> AvatarView(ctx) },
-            update = { avatarView ->
-                val avatarData = originalAvatarJson?.getContactAvatarData()
-                avatarView.setAvatar(
-                    url = avatarData?.getContactAvatarUrl(),
-                    key = avatarData?.encKey,
-                    firstLetter = ContactorUtil.getFirstLetter(
-                        contactor?.getDisplayNameWithoutRemarkForUI().orEmpty()
-                    ),
-                    id = contactor?.id.orEmpty(),
-                    letterTextSizeDp = 11,
-                    targetSizePx = avatarSizePx,
-                )
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-    }
-}
+private val TOP_BAR_HEIGHT = 52.dp
+private val TOP_BAR_ICON_PADDING = 12.dp
+private val PRIVACY_HINT_MIN_SIZE = 11.sp
+private val PRIVACY_HINT_MAX_SIZE = 14.sp
+private val privacyHintStyle = TextStyle(
+    fontWeight = FontWeight.Normal,
+    fontSize = 14.sp,
+    lineHeight = 20.sp,
+    textAlign = TextAlign.Center,
+)
+private val doneStyle = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp)
 
 @Composable
 private fun ActionButtonsSection(

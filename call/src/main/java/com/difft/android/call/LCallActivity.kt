@@ -22,6 +22,7 @@ import com.difft.android.base.user.CountdownTimer
 import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.utils.OrientationPolicy
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.permission.CallMediaPermission
 import com.difft.android.call.handler.CallActionHandler
@@ -44,7 +45,7 @@ import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.ScreenDeviceUtil
-import com.difft.android.call.util.ViewUtil
+import com.difft.android.base.utils.hideNavigationBar
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
@@ -234,6 +235,27 @@ class LCallActivity : AppCompatActivity() {
         configureWindow()
     }
 
+    // The orientation value the policy last wrote for this activity (see BaseActivity's
+    // twin field): re-applies happen only while requestedOrientation still equals it, so
+    // ScreenSharingView's deliberate landscape lock is never clobbered mid-share.
+    internal var policyAppliedOrientation: Int? = null
+
+    /**
+     * Re-apply the sw600dp orientation policy when the configuration changes: this activity's
+     * manifest configChanges swallow every fold key, so a mid-call unfold never recreates it
+     * and the folded posture's portrait lock would otherwise stick on the inner display.
+     * Not a BaseActivity, so it cannot inherit that re-apply. Skipped while pinned (PiP)
+     * and while another owner (screen-share landscape lock) holds the orientation.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isInPictureInPictureMode) return
+        val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
+        if (owned) {
+            policyAppliedOrientation = OrientationPolicy.applyTo(this)
+        }
+    }
+
     /**
      * Activity teardown.
      *
@@ -336,7 +358,7 @@ class LCallActivity : AppCompatActivity() {
         // Never auto-enables anything — a fresh grant still waits for the next tap.
         viewModel.mediaPermissions.refresh(this)
         updateScreenshotListeningState()
-        ViewUtil.hideNavigationBar(window)
+        window.hideNavigationBar()
     }
 
     override fun onPictureInPictureModeChanged(

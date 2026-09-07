@@ -11,13 +11,19 @@ import java.nio.charset.Charset
  * Single source of truth for reading message attachments that are stored **encrypted at rest**
  * (`<basePath>.encrypt`, format `[IV16][AES-CBC ciphertext][HMAC32]`).
  *
- * Background: historically attachments were decrypted to a plaintext file (`basePath`) on download.
- * The migration keeps only the ciphertext (`.encrypt`) on disk and decrypts on demand. This helper
- * lets every consumer (image bubble, preview, file-open, …) resolve "is it ready" and "how to read
- * it" while remaining backward compatible with the legacy plaintext file during the transition.
+ * **Every** attachment type is kept encrypted at rest — images, video, voice, audio files, long
+ * text, and generic files (documents / archives / apk / octet-stream) — so no plaintext attachment
+ * ever touches disk. Each type reads its ciphertext on demand: images and generic files through the
+ * decrypting `content://` uri (whose seekable proxy fd is also how video is played and seeked), long
+ * text read fully into memory, voice and audio files decrypted to memory bytes for playback.
+ *
+ * A plaintext file at `basePath` can therefore only be legacy data, written before that became
+ * uniform. The read paths below stay backward compatible with it, and
+ * [LegacyPlaintextAttachmentMigration] re-encrypts it in place — narrowing which types are kept
+ * encrypted would require bumping that migration's version.
  *
  * Reading is funnelled through [EncryptedAttachmentProvider] so that callers obtain a `content://`
- * [Uri] whose bytes are decrypted lazily on a background thread — no plaintext ever touches disk.
+ * [Uri] whose bytes are decrypted lazily on a background thread.
  */
 object EncryptedAttachmentAccess {
 
@@ -67,6 +73,18 @@ object EncryptedAttachmentAccess {
     fun isReadable(basePath: String): Boolean = hasEncrypted(basePath) || hasPlaintext(basePath)
 
     /**
+     * [isReadable] with the row's recorded plaintext size: the legacy plaintext arm additionally
+     * requires the exact expected length (when known), so a truncated legacy plaintext — half-written
+     * by an interrupted pre-encrypt-at-rest download — reports "not ready" and re-downloads instead
+     * of rendering broken forever (and instead of having its row repaired to SUCCESS). The ciphertext
+     * arm keeps the structural check: a persisted `.encrypt` is only ever written complete
+     * (temp + rename + MAC in `DownloadAttachmentJob`).
+     */
+    fun isReadable(basePath: String, expectedPlainSize: Int): Boolean =
+        hasEncrypted(basePath) || (hasPlaintext(basePath) &&
+            (expectedPlainSize <= 0 || plaintextFile(basePath).length() == expectedPlainSize.toLong()))
+
+    /**
      * "Fully downloaded" gate for long-text attachments (Read-more / hide-download-card).
      *
      * A persisted `<basePath>.encrypt` is guaranteed **complete and MAC-valid** by
@@ -91,7 +109,11 @@ object EncryptedAttachmentAccess {
     /**
      * Build a `content://` [Uri] that streams the decrypted attachment bytes.
      *
-     * @param messageId the owning message id (used to resolve the decryption key from the DB)
+     * @param messageId the attachment's DIRECTORY key — what
+     *   `AttachmentPathResolver.directoryKeyFor` returns, i.e. the copy's own local id (the
+     *   parameter name is historical; older uris carry a message id here). Prefer
+     *   [contentUriFromBasePath], which derives it from an already-resolved path and so cannot drift.
+     *   The provider resolves this segment against every identity it has ever meant.
      * @param fileName  the attachment file name (last path segment of [basePath])
      */
     fun contentUri(messageId: String, fileName: String): Uri =
@@ -105,14 +127,16 @@ object EncryptedAttachmentAccess {
 
     /**
      * Resolve a content uri straight from a base path of the form
-     * `.../attachment/<messageId>/<fileName>`.
+     * `.../attachment/<directoryKey>/<fileName>`.
      */
     fun contentUri(context: Context, messageId: String, basePath: String): Uri =
         contentUri(messageId, File(basePath).name)
 
     /**
      * Build a content uri from a canonical attachment base path of the form
-     * `.../attachment/<messageId>/<fileName>` (see [FileUtil.getMessageAttachmentFilePath]).
+     * `.../attachment/<directoryKey>/<fileName>` (see `AttachmentPathResolver`). Preferred over
+     * [contentUri]: the segment comes from the path itself, so it always names the directory the
+     * file actually lives in.
      */
     fun contentUriFromBasePath(basePath: String): Uri {
         val f = File(basePath)
@@ -145,8 +169,7 @@ object EncryptedAttachmentAccess {
      * so routing through it eliminates that window. Mirrors the `hasEncrypted`-first ordering already
      * used by `Context.shareFile` / `Context.viewFile`.
      *
-     * @param messageId the id used to resolve the decryption key from the DB (message id, or the
-     *   forwarded attachment's authorityId — same value used to build [basePath]).
+     * @param messageId the attachment's directory key — the same value used to build [basePath].
      */
     fun exportContentUriIfEncrypted(messageId: String, basePath: String): Uri? =
         if (hasEncrypted(basePath)) contentUri(messageId, File(basePath).name) else null
@@ -192,9 +215,12 @@ object EncryptedAttachmentAccess {
     }
 
     /**
-     * Resolve the on-disk base path for a parsed `(messageId, fileName)`, **rejecting any value that
+     * Resolve the on-disk base path for a `(directoryKey, fileName)` pair, **rejecting any value that
      * would escape the attachment root directory** (path traversal). Returns `null` ⇒ the caller MUST
      * deny the request.
+     *
+     * Callers serving a uri must pass a key recomputed from the matched DB row, never the uri's
+     * literal segment — that is what keeps an old uri resolving to the file's current location.
      *
      * Why this matters: [EncryptedAttachmentProvider] is not exported, but our own app resolves
      * inbound shared `content://` uris (e.g. `IndexActivity` share-in) under the same uid, which

@@ -8,6 +8,7 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendType
@@ -66,6 +67,7 @@ import com.difft.android.chat.util.MessageNotificationUtil
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -513,8 +515,11 @@ class MessageContentProcessor @Inject constructor(
                 L.e { "Illegal file name: $fileName" }
                 attachmentPointer.id.toString()
             }
-            val attachmentPath = FileUtil.getMessageAttachmentFilePath(content.messageId) + fileName
-            val attachment = createAttachmentFormPointer(content.messageId, attachmentPointer, fileName, attachmentPath)
+            // Addressed by its own local identity, minted here — same rule the forward branch has
+            // used since per-copy addressing landed.
+            val localId = UUID.randomUUID().toString()
+            val attachmentPath = AttachmentPathResolver.stagingFileFor(localId, fileName)
+            val attachment = createAttachmentFormPointer(attachmentPointer, fileName, attachmentPath, localId = localId)
             attachmentList.add(attachment)
         }
 
@@ -549,7 +554,7 @@ class MessageContentProcessor @Inject constructor(
                             attachment1.id.toString()
                         }
                         val filePath = "${FileUtil.getFilePath(FileUtil.FILE_DIR_AVATAR)}$fileName"
-                        createAttachmentFormPointer(attachment1.id.toString() + "", attachment1, fileName, filePath)
+                        createAttachmentFormPointer(attachment1, fileName, filePath)
                     }
                     SharedContactAvatar(attachment, it.avatar.isProfile)
                 } else null
@@ -958,8 +963,17 @@ class MessageContentProcessor @Inject constructor(
                     L.e { "Illegal file name: $fileName" }
                     attachmentPointer.id.toString()
                 }
-                val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-                val attachment = createAttachmentFormPointer(attachmentPointer.id.toString() + "", attachmentPointer, fileName, attachmentPath)
+                // A forward attachment is addressed by its own local identity, not by the message
+                // that carries the forward tree: minted here, at the moment the copy is created.
+                val localId = UUID.randomUUID().toString()
+                val attachmentPath = AttachmentPathResolver.stagingFileFor(localId, fileName)
+                val attachment = createAttachmentFormPointer(
+                    attachmentPointer,
+                    fileName,
+                    attachmentPath,
+                    localId = localId,
+                    isForwardCopy = true
+                )
                 attachments.add(attachment)
             }
         }
@@ -977,13 +991,23 @@ class MessageContentProcessor @Inject constructor(
         return Forward(forward.id, forward.type, forward.isFromGroup, forward.author, forward.text, attachments, forwards, mentions, serverTimestamp)
     }
 
+    /**
+     * The domain `id` is left EMPTY: the server-side attachment id is shared by every copy of the
+     * same file, so it can identify nothing locally, and every local operation addresses by [localId]
+     * instead. The column keeps its binding for rows written before per-copy addressing (which the
+     * legacy job locator still resolves through); new rows simply store nothing there.
+     *
+     * @param localId local identity of the attachment copy; must be the same value the caller used to
+     *   build [attachmentPath]. Defaults to a fresh one.
+     */
     private fun createAttachmentFormPointer(
-        id: String,
         attachmentPointer: SignalServiceProtos.AttachmentPointer,
         fileName: String?,
-        attachmentPath: String
+        attachmentPath: String,
+        localId: String = UUID.randomUUID().toString(),
+        isForwardCopy: Boolean = false
     ) = Attachment(
-        id,
+        "",
         attachmentPointer.id,
         attachmentPointer.contentType,
         attachmentPointer.key.toByteArray(),
@@ -995,7 +1019,9 @@ class MessageContentProcessor @Inject constructor(
         attachmentPointer.width,
         attachmentPointer.height,
         attachmentPath,
-        AttachmentStatus.LOADING.code
+        AttachmentStatus.LOADING.code,
+        localId = localId,
+        isForwardCopy = isForwardCopy
     )
 
     /**

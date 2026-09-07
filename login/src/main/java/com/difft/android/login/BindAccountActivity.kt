@@ -7,11 +7,12 @@ import com.difft.android.base.log.lumberjack.L
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.text.InputType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.core.widget.doOnTextChanged
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.utils.ResUtils
 import androidx.lifecycle.lifecycleScope
@@ -88,19 +89,19 @@ class BindAccountActivity : BaseActivity() {
             TYPE_BIND_EMAIL -> {
                 mBinding.loginTitle.text = getString(R.string.login_bind_email)
                 mBinding.account.hint = getString(R.string.login_new_email)
-                mBinding.account.inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                mBinding.account.keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done)
             }
 
             TYPE_CHANGE_EMAIL -> {
                 mBinding.loginTitle.text = getString(R.string.login_change_email)
                 mBinding.account.hint = getString(R.string.login_new_email)
-                mBinding.account.inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                mBinding.account.keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done)
             }
 
             TYPE_BIND_PHONE -> {
                 mBinding.loginTitle.text = getString(R.string.login_bind_phone_number)
                 mBinding.account.hint = getString(R.string.login_new_phone_number)
-                mBinding.account.inputType = InputType.TYPE_CLASS_PHONE
+                mBinding.account.keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done)
                 mBinding.clPhone.visibility = View.VISIBLE
                 mBinding.tvPhoneCode.text = getDefaultCountryCode()
             }
@@ -108,7 +109,7 @@ class BindAccountActivity : BaseActivity() {
             TYPE_CHANGE_PHONE -> {
                 mBinding.loginTitle.text = getString(R.string.login_change_phone_number)
                 mBinding.account.hint = getString(R.string.login_new_phone_number)
-                mBinding.account.inputType = InputType.TYPE_CLASS_PHONE
+                mBinding.account.keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done)
                 mBinding.clPhone.visibility = View.VISIBLE
                 mBinding.tvPhoneCode.text = getDefaultCountryCode()
             }
@@ -120,10 +121,10 @@ class BindAccountActivity : BaseActivity() {
         }
 
         disableHandleZone()
-        mBinding.account.doOnTextChanged { text, _, _, _ ->
-            val content = text.toString().trim()
-            if (content.isEmpty()) disableHandleZone() else enableHandleZone()
+        mBinding.account.onQueryChanged = { text ->
+            if (text.trim().isEmpty()) disableHandleZone() else enableHandleZone()
         }
+        mBinding.account.onClear = { disableHandleZone() }
         mBinding.handleZone.setOnClickListener {
             verifyAccount(null)
         }
@@ -160,7 +161,7 @@ class BindAccountActivity : BaseActivity() {
         }
 
     private fun verifyAccount(nonce: String?) {
-        val account = mBinding.account.text.toString().trim()
+        val account = mBinding.account.query.trim()
         val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
 
         loadingHandleZone()

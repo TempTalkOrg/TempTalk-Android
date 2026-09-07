@@ -139,6 +139,9 @@ internal object UserDataFieldRouter {
             if (prev.dualPaneRatio != new.dualPaneRatio) {
                 add(AppStateChange.FloatChange(AppStateKeys.DUAL_PANE_RATIO, new.dualPaneRatio))
             }
+            if (prev.dualPaneListCollapsed != new.dualPaneListCollapsed) {
+                add(AppStateChange.BooleanChange(AppStateKeys.DUAL_PANE_LIST_COLLAPSED, new.dualPaneListCollapsed))
+            }
             if (prev.callVoiceChangerPreset != new.callVoiceChangerPreset) {
                 add(AppStateChange.StringChange(AppStateKeys.CALL_VOICE_CHANGER_PRESET, new.callVoiceChangerPreset))
             }
@@ -252,6 +255,7 @@ internal object UserDataFieldRouter {
             AppStateKeys.SAVE_TO_PHOTOS -> base.copy(saveToPhotos = value as Boolean)
             AppStateKeys.VOICE_PLAYBACK_SPEED -> base.copy(voicePlaybackSpeed = value as Float)
             AppStateKeys.DUAL_PANE_RATIO -> base.copy(dualPaneRatio = value as Float)
+            AppStateKeys.DUAL_PANE_LIST_COLLAPSED -> base.copy(dualPaneListCollapsed = value as Boolean)
             AppStateKeys.CALL_VOICE_CHANGER_PRESET -> base.copy(callVoiceChangerPreset = value as String)
             AppStateKeys.KEEP_ALIVE_ENABLED -> base.copy(keepAliveEnabled = value as Boolean)
             AppStateKeys.AUTO_START_MESSAGE_SERVICE -> base.copy(autoStartMessageService = value as Boolean)
@@ -314,6 +318,7 @@ internal object UserDataFieldRouter {
             saveToPhotos = appState[AppStateKeys.SAVE_TO_PHOTOS] ?: base.saveToPhotos,
             voicePlaybackSpeed = appState[AppStateKeys.VOICE_PLAYBACK_SPEED] ?: base.voicePlaybackSpeed,
             dualPaneRatio = appState[AppStateKeys.DUAL_PANE_RATIO] ?: base.dualPaneRatio,
+            dualPaneListCollapsed = appState[AppStateKeys.DUAL_PANE_LIST_COLLAPSED] ?: base.dualPaneListCollapsed,
             callVoiceChangerPreset = appState[AppStateKeys.CALL_VOICE_CHANGER_PRESET] ?: base.callVoiceChangerPreset,
             keepAliveEnabled = appState[AppStateKeys.KEEP_ALIVE_ENABLED] ?: base.keepAliveEnabled,
             autoStartMessageService = appState[AppStateKeys.AUTO_START_MESSAGE_SERVICE] ?: base.autoStartMessageService,

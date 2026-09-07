@@ -1,10 +1,10 @@
 package com.difft.android.call
 
 import android.provider.Settings
-import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.data.BottomCallEndAction
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.DialogActionType
@@ -47,10 +47,12 @@ internal fun LCallActivity.handleWindowZoomOutClick() {
     if (pictureInPictureManager?.isSystemPipEnabledAndAvailable() == true) {
         enterPipModeIfPossible(tag = "windowZoomOut")
     } else {
-        AlertDialog.Builder(this)
-            .setMessage(R.string.call_pip_not_supported_message)
-            .setPositiveButton(android.R.string.ok) { dialog, _ -> dialog.dismiss() }
-            .show()
+        ComposeDialogManager.showMessageDialog(
+            context = this,
+            title = "",
+            message = getString(R.string.call_pip_not_supported_message),
+            showCancel = false,
+        )
     }
 }
 

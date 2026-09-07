@@ -4,8 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
-import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
@@ -271,7 +269,7 @@ class CreateGroupActivity : BaseActivity() {
 
 
         binding.createButton.setOnClickListener {
-            val groupName = binding.groupNameEdit.text.toString().trim()
+            val groupName = binding.groupNameEdit.query.trim()
                 .takeIf { it.isNotEmpty() } ?: getString(R.string.new_group)
 
             createGeneralGroup(groupName)
@@ -293,8 +291,7 @@ class CreateGroupActivity : BaseActivity() {
                                 if (index != contacts.lastIndex) append(", ")
                             }
                     }
-                    binding.groupNameEdit.setText(defaultName)
-                    binding.groupNameEdit.setSelection(defaultName.length)
+                    binding.groupNameEdit.query = defaultName
                 }
 
                 searchContacts("")
@@ -305,29 +302,12 @@ class CreateGroupActivity : BaseActivity() {
             }
         }
 
-        binding.edittextSearchInput.addTextChangedListener {
-            val etContent = binding.edittextSearchInput.text.toString().trim()
-            searchContacts(etContent)
-            resetButtonClear(etContent)
-        }
-
-        binding.buttonClear.setOnClickListener {
-            binding.edittextSearchInput.text = null
-        }
-
-        resetButtonClear(null)
+        binding.searchInput.onQueryChanged = { searchContacts(it.trim()) }
+        binding.searchInput.onClear = { searchContacts("") }
 
         binding.groupAvatar.setOnClickListener {
             // Open directly when media is already usable (full/partial); else request.
             onPicturePermissionForAvatar.launchMediaSelectionOrOpen { createPictureSelector() }
-        }
-    }
-
-    private fun resetButtonClear(etContent: String?) {
-        binding.buttonClear.animate().apply {
-            cancel()
-            val toAlpha = if (!TextUtils.isEmpty(etContent)) 1.0f else 0f
-            alpha(toAlpha)
         }
     }
 
@@ -342,8 +322,10 @@ class CreateGroupActivity : BaseActivity() {
                 addMembersToSelectedMemberList()
                 notifyItemChanged(position)
 
-                if (!TextUtils.isEmpty(binding.edittextSearchInput.text)) {
-                    binding.buttonClear.performClick()
+                // Un-trimmed emptiness check is the pre-migration semantics (whitespace-only
+                // text also triggers the clear) — keep it.
+                if (binding.searchInput.query.isNotEmpty()) {
+                    binding.searchInput.clear()
                 }
             }
         }

@@ -18,16 +18,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,10 +44,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
 import com.google.android.material.snackbar.Snackbar
+import java.lang.ref.WeakReference
 
 /**
  * Dialog接口，提供统一的dismiss方法
@@ -327,6 +326,9 @@ object ComposeDialogManager {
     // 全局WaitDialog管理
     private var currentWaitDialog: (() -> Unit)? = null
 
+    /** Context [showWait] was called with, so [dismissWait] can tell whose dialog the slot holds. */
+    private var currentWaitOwner: WeakReference<Context>? = null
+
     /**
      * 显示全局WaitDialog - 类似DialogX的使用方式
      * @param context Context实例
@@ -354,6 +356,7 @@ object ComposeDialogManager {
             onDismiss = onDismiss
         )
         currentWaitDialog = dialog?.let { { it.dismiss() } }
+        currentWaitOwner = WeakReference(context)
     }
 
     /**
@@ -363,6 +366,18 @@ object ComposeDialogManager {
     fun dismissWait() {
         currentWaitDialog?.invoke()
         currentWaitDialog = null
+        currentWaitOwner = null
+    }
+
+    /**
+     * Dismisses the wait dialog only when the slot holds the one [owner] showed, matched on the
+     * context identity passed to [showWait]. So a screen that shows and dismisses with the same
+     * Activity always releases its own dialog - finishing or destroyed included, which frees the
+     * closure holding that Activity - and never closes a dialog another screen showed afterwards.
+     */
+    @JvmStatic
+    fun dismissWait(owner: Activity) {
+        if (currentWaitOwner?.get() === owner) dismissWait()
     }
 
     /**
@@ -623,27 +638,14 @@ fun BottomDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    val bgColor = colorResource(R.color.bg_popup)
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true
-    )
-
     if (isVisible) {
-        ModalBottomSheet(
+        // No DifftTheme above this ComposeView: pass night-aware resource colors explicitly.
+        DifftModalBottomSheet(
             onDismissRequest = onDismiss,
-            sheetState = sheetState,
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            containerColor = bgColor,
-            contentWindowInsets = { BottomSheetDefaults.windowInsets }
+            containerColor = colorResource(R.color.bg_popup),
+            dragHandleColor = colorResource(R.color.t_disable),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        bgColor,
-                        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                    )
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 content()
             }
         }
@@ -690,20 +692,13 @@ fun FullScreenBottomDialog(
     backgroundDrawable: android.graphics.drawable.Drawable? = null,
     content: @Composable () -> Unit
 ) {
-    val bgColor = colorResource(R.color.bg_popup)
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true
-    )
-
     if (isVisible) {
         // 如果有自定义背景，我们需要自定义整个 ModalBottomSheet 的外观
         if (backgroundDrawable != null) {
-            ModalBottomSheet(
+            DifftModalBottomSheet(
                 onDismissRequest = onDismiss,
-                sheetState = sheetState,
-                dragHandle = null, // 移除默认手势指示器，让背景完全覆盖
+                showDragHandle = false, // 移除默认手势指示器，让背景完全覆盖
                 containerColor = Color.Transparent,
-                contentWindowInsets = { BottomSheetDefaults.windowInsets }
             ) {
                 Box(
                     modifier = Modifier
@@ -743,21 +738,15 @@ fun FullScreenBottomDialog(
             }
         } else {
             // 使用纯色背景的原有逻辑
-            ModalBottomSheet(
+            DifftModalBottomSheet(
                 onDismissRequest = onDismiss,
-                sheetState = sheetState,
-                dragHandle = { BottomSheetDefaults.DragHandle() },
-                containerColor = bgColor,
-                contentWindowInsets = { BottomSheetDefaults.windowInsets }
+                containerColor = colorResource(R.color.bg_popup),
+                dragHandleColor = colorResource(R.color.t_disable),
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(0.95f)
-                        .background(
-                            bgColor,
-                            RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                        )
                 ) {
                     content()
                 }

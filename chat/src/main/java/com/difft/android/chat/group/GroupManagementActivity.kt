@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.SwitchCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -13,6 +12,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.DifftToggleView
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
@@ -124,15 +124,11 @@ class GroupManagementActivity : BaseActivity() {
     }
 
     private fun initView(group: GroupModel) {
-        mBinding.switchCanAdd.setOnCheckedChangeListener(null)
-        mBinding.switchCanSpeak.setOnCheckedChangeListener(null)
-        mBinding.switchCanCriticalAlert.setOnCheckedChangeListener(null)
-
         mBinding.switchCanAdd.isChecked = group.invitationRule == 1
         mBinding.switchCanSpeak.isChecked = group.publishRule == 1
         mBinding.switchCanCriticalAlert.isChecked = group.criticalAlert == true
 
-        setCheckChangeListener()
+        setToggleRequestListeners()
 
         mBinding.rvModerators.apply {
             layoutManager = GridLayoutManager(this@GroupManagementActivity, 5)
@@ -174,60 +170,57 @@ class GroupManagementActivity : BaseActivity() {
         }
     }
 
-    private fun setCheckChangeListener() {
-        mBinding.switchCanAdd.setOnCheckedChangeListener { _, isChecked ->
-            val invitationRule = if (isChecked) 1 else 2
-            changeGroupSetting(mBinding.switchCanAdd, invitationRule = invitationRule)
+    private fun setToggleRequestListeners() {
+        // Controlled: each switch only moves once the server accepted the change, so a failure
+        // needs no rollback.
+        mBinding.switchCanAdd.setOnToggleRequestListener { view, requested ->
+            changeGroupSetting(view, requested, invitationRule = if (requested) 1 else 2)
         }
 
-        mBinding.switchCanSpeak.setOnCheckedChangeListener { _, isChecked ->
-            val publishRule = if (isChecked) 1 else 2
-            changeGroupSetting(mBinding.switchCanSpeak, publishRule = publishRule)
+        mBinding.switchCanSpeak.setOnToggleRequestListener { view, requested ->
+            changeGroupSetting(view, requested, publishRule = if (requested) 1 else 2)
         }
 
-        mBinding.switchCanCriticalAlert.setOnCheckedChangeListener { _, isChecked ->
-            changeGroupSetting(mBinding.switchCanCriticalAlert, criticalAlertSwitch = isChecked)
+        mBinding.switchCanCriticalAlert.setOnToggleRequestListener { view, requested ->
+            changeGroupSetting(view, requested, criticalAlertSwitch = requested)
         }
     }
 
     private fun changeGroupSetting(
-        switch: SwitchCompat,
+        switch: DifftToggleView,
+        requested: Boolean,
         invitationRule: Int? = null,
         publishRule: Int? = null,
         criticalAlertSwitch: Boolean? = null,
     ) {
         ComposeDialogManager.showWait(this@GroupManagementActivity, "")
-        lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    groupRepo.changeGroupSettings(
-                        groupId, ChangeGroupSettingsReq(
-                            invitationRule = invitationRule,
-                            publishRule = publishRule,
-                            criticalAlert = criticalAlertSwitch,
+        switch.guardWhile(
+            lifecycleScope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        groupRepo.changeGroupSettings(
+                            groupId, ChangeGroupSettingsReq(
+                                invitationRule = invitationRule,
+                                publishRule = publishRule,
+                                criticalAlert = criticalAlertSwitch,
+                            )
                         )
-                    )
+                    }
+                    if (result.status != 0) {
+                        ToastUtil.show(result.reason ?: getString(R.string.operation_failed))
+                    } else {
+                        switch.isChecked = requested
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w { "[GroupManagementActivity] changeGroupSetting error: ${e.stackTraceToString()}" }
+                    ToastUtil.show(getString(R.string.operation_failed))
+                } finally {
+                    // finally, so a cancelled scope cannot leave the dialog behind.
+                    ComposeDialogManager.dismissWait(this@GroupManagementActivity)
                 }
-                ComposeDialogManager.dismissWait()
-                if (result.status != 0) {
-                    showErrorAndRestoreSwitch(result.reason, switch)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[GroupManagementActivity] changeGroupSetting error: ${e.stackTraceToString()}" }
-                ComposeDialogManager.dismissWait()
-                showErrorAndRestoreSwitch(getString(R.string.operation_failed), switch)
             }
-        }
-    }
-
-    private fun showErrorAndRestoreSwitch(errorMessage: String?, switch: SwitchCompat) {
-        errorMessage?.let { ToastUtil.show(it) }
-
-        switch.setOnCheckedChangeListener(null)
-        switch.isChecked = !switch.isChecked
-
-        setCheckChangeListener()
+        )
     }
 }

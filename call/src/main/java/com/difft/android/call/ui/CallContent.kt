@@ -5,7 +5,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -13,7 +12,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -24,7 +22,6 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.BottomCallEndAction
@@ -140,12 +137,6 @@ private fun CallContentContainer(
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
     onBottomCallEndAction: (BottomCallEndAction) -> Unit
 ) {
-    val configuration = LocalConfiguration.current
-    val activity = LocalActivity.current
-    val isDualPane = remember(configuration, activity) {
-        activity?.let { WindowSizeClassUtil.shouldUseDualPaneLayout(it) } ?: false
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -179,7 +170,6 @@ private fun CallContentContainer(
                         conversationId = conversationId,
                         autoHideTimeout = autoHideTimeout,
                         muteOtherEnabled = muteOtherEnabled,
-                        isDualPane = isDualPane,
                         onInviteUsersClick = onInviteUsersClick,
                         onInviteViewAction = onInviteViewAction,
                         onWindowZoomOutClick = onWindowZoomOutClick,
@@ -199,7 +189,6 @@ private fun CallContentContainer(
                         conversationId = conversationId,
                         autoHideTimeout = autoHideTimeout,
                         muteOtherEnabled = muteOtherEnabled,
-                        isDualPane = isDualPane,
                         onInviteUsersClick = onInviteUsersClick,
                         onWindowZoomOutClick = onWindowZoomOutClick,
                         onExitClick = onExitClick,
@@ -233,7 +222,6 @@ private fun OneOnOneCallContent(
     onWindowZoomOutClick: () -> Unit,
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
     modifier: Modifier = Modifier,
-    isDualPane: Boolean = false
 ) {
     CallSurface(modifier = modifier) {
         SingleParticipantCallPage(
@@ -243,7 +231,6 @@ private fun OneOnOneCallContent(
             callConfig = callConfig,
             conversationId = conversationId,
             callRole = callRole,
-            isDualPane = isDualPane,
         )
         // 气泡飘动层：通过 WindowManager 挂在独立的 APPLICATION_PANEL
         // 子窗口里，和主 Activity 窗口走两条独立的 measure/layout/draw
@@ -295,7 +282,6 @@ private fun MultiParticipantCallContent(
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
     onBottomCallEndAction: (BottomCallEndAction) -> Unit,
     modifier: Modifier = Modifier,
-    isDualPane: Boolean = false
 ) {
     CallSurface(modifier = modifier) {
         MultiParticipantCallPage(
@@ -304,7 +290,6 @@ private fun MultiParticipantCallContent(
             muteOtherEnabled = muteOtherEnabled,
             autoHideTimeout = autoHideTimeout,
             callConfig = callConfig,
-            isDualPane = isDualPane,
         )
         // 气泡飘动层：通过 WindowManager 挂在独立子窗口里，避免主窗口
         // re-measure 波及气泡。详见 [BubbleOverlayWindowHost]。

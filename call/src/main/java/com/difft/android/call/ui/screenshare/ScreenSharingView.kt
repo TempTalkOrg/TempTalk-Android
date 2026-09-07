@@ -22,7 +22,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.WindowSizeClassUtil
+import com.difft.android.base.utils.OrientationPolicy
+import com.difft.android.call.LCallActivity
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.ui.video.VideoItemTrackSelector
 import com.difft.android.call.ui.video.ViewType
@@ -55,13 +56,14 @@ fun ScreenSharingView(
                 hide(WindowInsetsCompat.Type.navigationBars())
                 systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
-            if (!WindowSizeClassUtil.shouldUseDualPaneLayout(activity)) {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                room.localParticipant.deviceRotation = 0
-            } else {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                room.localParticipant.deviceRotation = null
-            }
+            // Restore via the policy itself and hand ownership back: the bucket may have
+            // changed while the landscape lock was held (fold/unfold mid-share), and a
+            // hand-written restore would leave policyAppliedOrientation stale, silencing
+            // every later re-apply for the rest of the call.
+            val restored = OrientationPolicy.applyTo(activity)
+            (activity as? LCallActivity)?.policyAppliedOrientation = restored
+            room.localParticipant.deviceRotation =
+                if (restored == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) 0 else null
         }
     }
 

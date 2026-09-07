@@ -16,6 +16,7 @@ import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatActivityForwardMessageBinding
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.base.widget.applySharedMaxWidth
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.hi.dhl.binding.viewbind
 import com.difft.android.chat.MessageContactsCacheUtil
@@ -146,6 +147,7 @@ class ChatForwardMessageActivity : BaseActivity() {
         // Setup BottomSheetBehavior
         bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
         bottomSheetBehavior.apply {
+            applySharedMaxWidth(resources)
             this.peekHeight = peekHeight
             this.expandedOffset = statusBarHeight // Full screen stops below status bar
             isFitToContents = false // Required for half-expanded support

@@ -97,7 +97,7 @@
             android:textColor="@color/t.error"
             android:textSize="@dimen/login_hint_size"
             android:visibility="gone"
-            tools:text="@string/login_invite_code_invalid"
+            tools:text="@string/login_error_invalid_account"
             tools:visibility="visible" />
 
     </LinearLayout>

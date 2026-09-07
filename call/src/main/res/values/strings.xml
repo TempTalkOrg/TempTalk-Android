@@ -63,6 +63,18 @@
     <string name="call_toolbar_bottom_invite_text">Invite</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>
     <string name="call_toolbar_bottom_critical_alert_text">Critical Alert</string>
+    <!-- Action bar labels (two-row layout + More sheet quick actions) -->
+    <string name="call_action_mute">Mute</string>
+    <string name="call_action_unmute">Unmute</string>
+    <!-- Mute-other menu: item names the target; failure toast when the RTM mute request fails -->
+    <string name="call_mute_participant_menu_item">Mute %1$s</string>
+    <string name="call_mute_participant_failed">Couldn\'t mute %1$s. Try again.</string>
+    <string name="call_action_video">Video</string>
+    <string name="call_action_speaker">Speaker</string>
+    <string name="call_action_emoji">Emoji</string>
+    <string name="call_action_more">More</string>
+    <string name="call_action_end">End</string>
+    <string name="call_action_people">People</string>
     <string name="call_topbar_critical_alert_entrance_text1">No answer?</string>
     <string name="call_topbar_critical_alert_entrance_text2">Send a Critical Alert.</string>
     <string name="call_join_failed_tip">Failed to join the call, please try again.</string>

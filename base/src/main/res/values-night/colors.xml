@@ -5,7 +5,6 @@
     <color name="success" tools:ignore="ResourceName">#01BC6A</color>
     <color name="warning" tools:ignore="ResourceName">#F84135</color>
     <color name="error" tools:ignore="ResourceName">#F84135</color>
-    <color name="divider" tools:ignore="ResourceName">#2B3139</color>
     <color name="line" tools:ignore="ResourceName">#474D57</color>
     <color name="icon" tools:ignore="ResourceName">#B7BDC6</color>
 
@@ -36,7 +35,6 @@
     <color name="bg4" tools:ignore="ResourceName">#474D57</color>
     <color name="bg.disable" tools:ignore="ResourceName">#474D57</color>
     <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
-    <color name="bg.modal" tools:ignore="ResourceName">#2B3139</color>
     <color name="bg.popup" tools:ignore="ResourceName">#1E2329</color>
     <color name="bg.blue" tools:ignore="ResourceName">#003366</color>
     <color name="bg.sky" tools:ignore="ResourceName">#003366</color>

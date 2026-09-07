@@ -39,6 +39,9 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // Gradle's 512m default overflows once Robolectric has loaded the several android-all
+        // framework jars this suite spans (API 27–34); mirrors :call.
+        unitTests.all { it.maxHeapSize = "2g" }
     }
 }
 

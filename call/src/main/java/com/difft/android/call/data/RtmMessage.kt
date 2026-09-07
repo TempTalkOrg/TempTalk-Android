@@ -31,10 +31,6 @@ enum class BubbleMessageType {
     TEXT
 }
 
-
-const val MUTE_ACTION_INDEX = 0
-
-
 @Serializable
 data class RtmMessage(
     val topic: String? = null,

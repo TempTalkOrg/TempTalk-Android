@@ -1,19 +1,15 @@
 package com.difft.android.chat.recent
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.core.content.ContextCompat
-import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -46,7 +42,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDB
-import com.difft.android.chat.util.ViewUtil
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.handler.InviteRequestState
 
@@ -321,12 +316,8 @@ class InviteParticipantsFragment : Fragment() {
             LinearLayoutManager(requireContext())
         binding.attendeeRecyclerView.adapter = attendeeAdapter
 
-        binding.instantMeetingTitleInput.doOnTextChanged() { text, start, before, count ->
-            viewModel.setMeetingName(text.toString())
-            setupClearButtonForTitleInput(text.toString())
-        }
-
-        installTitleInputClearButtonTouchHandler()
+        binding.instantMeetingTitleInput.onQueryChanged = { viewModel.setMeetingName(it) }
+        binding.instantMeetingTitleInput.onClear = { viewModel.setMeetingName("") }
 
         binding.btnAddMember.setOnClickListener {
             val intent = Intent(
@@ -366,7 +357,7 @@ class InviteParticipantsFragment : Fragment() {
                 ResUtils.getString(R.string.meetings_action_invite)
         }
         viewModel.setMeetingName(originalMeetingName)
-        binding.instantMeetingTitleInput.setText(originalMeetingName)
+        binding.instantMeetingTitleInput.query = originalMeetingName
 
         binding.attendeePageActionInvite.setOnClickListener {
             activity?.onBackPressed()
@@ -384,7 +375,10 @@ class InviteParticipantsFragment : Fragment() {
                         "${viewModel.getMyDisplayName(requireContext(), globalServices.myId)} Meeting"
                     }
                     if (!isAdded || view == null) return@launch
-                    binding.instantMeetingTitleInput.setText(defaultMeetingName)
+                    // The component's external setter is silent — sync the VM explicitly
+                    // (legacy setText fired the watcher, which called setMeetingName).
+                    binding.instantMeetingTitleInput.query = defaultMeetingName
+                    viewModel.setMeetingName(defaultMeetingName)
                 }
             }
 
@@ -402,29 +396,6 @@ class InviteParticipantsFragment : Fragment() {
         binding.labelMembers.setOnClickListener {}
     }
 
-    // Intercepts taps on the title input's end-drawable "clear" button — sub-region
-    // of the EditText, not whole-view click; performClick() would mislead a11y.
-    @SuppressLint("ClickableViewAccessibility")
-    private fun installTitleInputClearButtonTouchHandler() {
-        binding.instantMeetingTitleInput.setOnTouchListener { v, event ->
-            if (event.action == MotionEvent.ACTION_UP) {
-                val drawableRight =
-                    binding.instantMeetingTitleInput.compoundDrawables[2]
-                if (drawableRight != null) {
-                    val clearButtonStart =
-                        binding.instantMeetingTitleInput.right - drawableRight.bounds.width() - ViewUtil.dpToPx(
-                            16
-                        )
-                    if (event.rawX >= clearButtonStart) {
-                        binding.instantMeetingTitleInput.text.clear()
-                        return@setOnTouchListener true
-                    }
-                }
-            }
-            return@setOnTouchListener false
-        }
-    }
-
     private fun observeData() {
         viewModel.attendees.observe(viewLifecycleOwner) { attendeesList ->
 
@@ -436,22 +407,6 @@ class InviteParticipantsFragment : Fragment() {
 
             transformedList = convertGroupMembersToAttendeeList(attendeesList)
             attendeeAdapter.submitList(transformedList)
-        }
-    }
-
-    private fun setupClearButtonForTitleInput(text: String?) {
-        if (text.isNullOrEmpty()) {
-            binding.instantMeetingTitleInput.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                null, null, null, null
-            )
-        } else {
-            val closeDrawable = ContextCompat.getDrawable(
-                binding.instantMeetingTitleInput.context,
-                R.drawable.circled_close_f
-            )
-            binding.instantMeetingTitleInput.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                null, null, closeDrawable, null
-            )
         }
     }
 

@@ -1,343 +1,327 @@
 package com.difft.android.call.ui
 
-import android.content.res.Configuration
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.LCallActivity
-import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
+import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.CallEndType
+import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.onMediaControlTapped
 import com.difft.android.call.permission.CallMediaPermission
+import com.difft.android.call.ui.actionbar.ActionBarLabels
+import com.difft.android.call.ui.actionbar.ActionBarLayout
+import com.difft.android.call.ui.actionbar.ActionBarSlots
+import com.difft.android.call.ui.actionbar.ActionCountBadge
+import com.difft.android.call.ui.actionbar.CallActionBarPlanner
+import com.difft.android.call.ui.actionbar.CallActionButton
+import com.difft.android.call.ui.actionbar.OutsideEmojiButton
+import com.difft.android.call.ui.actionbar.SingleRowActionBar
+import com.difft.android.call.ui.actionbar.SplitActionBar
+import com.difft.android.call.ui.actionbar.TwoRowActionBar
+import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
+import com.difft.android.call.ui.actionbar.rememberChromeAlpha
+import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.RemoteParticipant
+import io.livekit.android.room.track.Track
+import io.livekit.android.util.flow
 
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Call action bar. The layout (two rows / split / one row / emoji outside / compact) comes from
+ * [rememberCallActionBarPlan], a pure width-budget decision; this composable only binds the
+ * controls to view-model state and hands them to the matching layout.
+ */
 @Composable
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
-    isUserSharingScreen: Boolean = false,
-    endCallAction: (callType: String, callEndType: CallEndType) -> Unit
-){
-    // 直接 collectAsState；可见性变化会让本 composable 重组一次，按钮 Row 等
-    // 子树参数稳定（Compose 自动 skip），实际成本 <1ms。换来的是可见态完全
-    // 不挂 pointerInput，命中测试中本节点透明，详见 isBottomVisible 顶部注释。
-    val showBottomState = viewModel.callUiController.showBottomToolBarViewEnabled.collectAsState(true)
+    onInviteUsersClick: () -> Unit,
+    endCallAction: (callType: String, callEndType: CallEndType) -> Unit,
+) {
+    val controller = viewModel.callUiController
+    val plan = rememberCallActionBarPlan(isGroup = !isOneVOneCall)
+
+    // The fade is read in the draw phase only. Once fully faded out the controls leave the tree,
+    // so a hidden bar neither swallows taps meant for the 1v1 self-video underneath nor needs a
+    // tap interceptor: the root's own click brings the chrome back. `derivedStateOf` flips this
+    // Boolean only at the two ends of the fade, so the animation itself never recomposes here.
+    val bottomAlpha = rememberChromeAlpha(controller, controller.showBottomToolBarViewEnabled)
+    val barComposed by remember(bottomAlpha) { derivedStateOf { bottomAlpha.value > 0f } }
+
     val participants by viewModel.participants.collectAsState(initial = emptyList())
     val micEnabled by viewModel.micEnabled.collectAsState(false)
     val videoEnabled by viewModel.cameraEnabled.collectAsState(false)
     val currentCallType by viewModel.callType.collectAsState()
     val voicePreset by viewModel.voicePreset.collectAsState()
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-
-    val context = LocalContext.current
-
-    // 预加载并缓存 painter，避免首次展示时触发资源解析卡顿
-    val micOpenPainter = painterResource(id = R.drawable.call_btn_microphone_open)
-    val micClosePainter = painterResource(id = R.drawable.call_btn_microphone_close)
-    val cameraOpenPainter = painterResource(id = R.drawable.call_btn_camera_open)
-    val cameraClosePainter = painterResource(id = R.drawable.call_btn_camera_close)
-    val usersPainter = painterResource(id = R.drawable.users)
-    val dotsPainter = painterResource(id = R.drawable.call_btn_tabler_dots)
-
     // Tap routing + system-request launching + Settings guide all live in
     // LCallActivityMediaPermissions (single decision point). Compose only renders
     // the mic badge from the coordinator state — camera is dialog-only, no badge.
     val micPermissionState by viewModel.mediaPermissions.micState.collectAsState()
     val showMicPermissionBadge = micPermissionState.showsBadge
+    val context = LocalContext.current
 
-    val isBottomVisible = isOneVOneCall && !isUserSharingScreen || showBottomState.value
+    val size = plan.buttonSizeDp.dp
+    val glyph = plan.iconSizeDp.dp
+    val onMediaTap: (CallMediaPermission) -> Unit = { permission ->
+        if (viewModel.isControlButtonClickEnabled() && context is LCallActivity) {
+            context.onMediaControlTapped(permission)
+        }
+    }
+
+    val slots = ActionBarSlots(
+        mic = {
+            MicActionButton(micEnabled, showMicPermissionBadge, voicePreset, size) {
+                L.i { "[call] LCallActivity onClick Mic" }
+                onMediaTap(CallMediaPermission.Microphone)
+            }
+        },
+        video = {
+            val icon = if (videoEnabled) R.drawable.call_ic_camera_on else R.drawable.call_ic_camera_off
+            // Camera-off keeps its red slash like the mic, so it is drawn untinted.
+            SimpleActionButton(icon, "Camera", size, testTag = "call_btn_camera", tintIcon = videoEnabled) {
+                L.i { "[call] LCallActivity onClick Camera" }
+                onMediaTap(CallMediaPermission.Camera)
+            }
+        },
+        speaker = { AudioRouteControl(viewModel = viewModel, isOneVOneCall = isOneVOneCall, controlSize = size) },
+        invite = {
+            SimpleActionButton(R.drawable.call_bottom_invite, "Invite", size, glyph, "call_btn_invite") {
+                L.i { "[call] LCallActivity onClick Invite" }
+                onInviteUsersClick()
+            }
+        },
+        people = { PeopleActionButton(controller, participants.size, size) },
+        more = {
+            SimpleActionButton(R.drawable.call_btn_tabler_dots, "more options menu", size, glyph, "call_btn_more") {
+                controller.setShowToolBarBottomViewEnable(true)
+            }
+        },
+        emoji = {
+            val emojiGlyph = CallActionBarPlanner.OUTSIDE_EMOJI_ICON_DP.dp
+            SimpleActionButton(R.drawable.tabler_mood_smile, "emoji", size, emojiGlyph, "call_btn_emoji") {
+                controller.setShowSimpleBarrageEnabled(true)
+            }
+        },
+        end = { EndActionButton(controller, currentCallType, size, endCallAction) },
+    )
+
+    val remoteCameraOn = rememberRemoteCameraOn(participants)
+    val showPlate = plan.layout == ActionBarLayout.TWO_ROW && (videoEnabled || remoteCameraOn)
+    val bottomMargin = if (showPlate) CallActionBarPlanner.TWO_ROW_PLATE_BOTTOM_DP.dp else plan.bottomMarginDp.dp
 
     Column(
         modifier = Modifier
-            .then(
-                if (!isLandscape) {
-                    Modifier.padding(bottom = LCallUiConstants.BOTTOM_BAR_MARGIN_BOTTOM_DP.dp)
-                } else {
-                    // Landscape-only margin, not mirrored anywhere — stays a literal.
-                    Modifier.padding(bottom = 16.dp)
-                }
-            )
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(bottom = bottomMargin),
         verticalArrangement = Arrangement.Bottom,
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
+        if (barComposed) Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.Transparent)
-                .alpha(if (isBottomVisible) 1f else 0f)
-                .tapInterceptor(enabled = !isBottomVisible) {
-                    viewModel.callUiController.toggleOverlays()
-                }
+                .graphicsLayer { alpha = bottomAlpha.value },
         ) {
-            val controlSize = LCallUiConstants.BOTTOM_BAR_CONTROL_SIZE_DP.dp
-            val controlPadding = if (isLandscape) 16.dp else 12.dp
-            Row(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .wrapContentSize(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.size(controlSize)) {
-                    Surface(
-                        modifier = Modifier.size(controlSize),
-                        color = Color.Transparent,
-                        shape = CircleShape,
-                        // Preset ring hides with the preset badge while mic permission is
-                        // denied: the voice changer only shapes local capture, and with no
-                        // RECORD_AUDIO there is no capture — advertising it would mislead.
-                        border = if (voicePreset.isEnabled && !showMicPermissionBadge) BorderStroke(
-                            width = 2.dp,
-                            color = colorResource(id = com.difft.android.base.R.color.blue_400),
-                        ) else null
-                    ) {
-                        val painter = if (micEnabled) micOpenPainter else micClosePainter
-                        Image(
-                            painter = painter,
-                            contentDescription = "Mic",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .testTag("call_btn_mic")
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = {
-                                        L.i { "[call] LCallActivity onClick Mic" }
-                                        if (viewModel.isControlButtonClickEnabled() && context is LCallActivity) {
-                                            context.onMediaControlTapped(CallMediaPermission.Microphone)
-                                        }
-                                    }
-                                )
-                        )
-                    }
-                    if (showMicPermissionBadge) {
-                        MicPermissionBadge(modifier = Modifier.align(Alignment.TopEnd))
-                    }
-                    // The permission badge replaces the entire voice-preset treatment (badge
-                    // here, ring above) while visible — Figma 17129:3875 shows only the alert
-                    // badge, and an inactive capture chain makes the preset state meaningless.
-                    if (voicePreset.isEnabled && !showMicPermissionBadge) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .size(18.dp)
-                                .background(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            Color(0xFF4DA0FF),
-                                            Color(0xFF82C1FC),
-                                            Color(0xFF328AFD)
-                                        ),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                                    ),
-                                    shape = CircleShape
-                                )
-                        ) {
-                            Text(
-                                text = voicePreset.emoji,
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(controlPadding))
-
-                Surface(
-                    modifier = Modifier.size(controlSize),
-                    color = Color.Transparent
-                ) {
-                    val painter = if (videoEnabled) cameraOpenPainter else cameraClosePainter
-                    Image(
-                        painter = painter,
-                        contentDescription = "Camera",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .testTag("call_btn_camera")
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                L.i { "[call] LCallActivity onClick Camera" }
-                                if (viewModel.isControlButtonClickEnabled() && context is LCallActivity) {
-                                    context.onMediaControlTapped(CallMediaPermission.Camera)
-                                }
-                            }
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(controlPadding))
-
-                AudioRouteControl(
-                    viewModel = viewModel,
-                    isOneVOneCall = isOneVOneCall,
-                    controlSize = controlSize,
-                )
-
-                if (isUserSharingScreen) {
-                    Spacer(modifier = Modifier.width(controlPadding))
-                    Surface(
-                        modifier = Modifier.size(controlSize),
-                        color = Color.Transparent
-                    ) {
-                        Box {
-                            Image(
-                                painter = usersPainter,
-                                contentDescription = "Users",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .testTag("call_btn_users")
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) {
-                                        L.i { "[call] LCallActivity onClick Users" }
-                                        viewModel.callUiController.setShowUsersEnabled(
-                                            !viewModel.callUiController.showUsersEnabled.value
-                                        )
-                                    }
-                            )
-                            if (participants.isNotEmpty()) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .size(20.dp)
-                                        .background(
-                                            color = DifftTheme.colors.backgroundTooltip,
-                                            shape = CircleShape
-                                        )
-                                ) {
-                                    Text(
-                                        text = "${participants.size}",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        lineHeight = 16.sp,
-                                        fontFamily = FontFamily.Default,
-                                        fontWeight = FontWeight(590),
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.wrapContentSize(Alignment.Center)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(controlPadding))
-
-                Row(
-                    modifier = Modifier
-                        .testTag("call_btn_more")
-                        .width(48.dp)
-                        .height(48.dp)
-                        .background(
-                            color = DifftTheme.colors.backgroundSecondary,
-                            shape = RoundedCornerShape(size = 100.00001.dp)
-                        )
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            viewModel.callUiController.setShowToolBarBottomViewEnable(true)
-                        }
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(
-                        10.000000953674316.dp,
-                        Alignment.Start
+            if (!plan.emojiInline) {
+                OutsideEmojiButton(
+                    onClick = { controller.setShowSimpleBarrageEnabled(true) },
+                    modifier = Modifier.padding(
+                        start = CallActionBarPlanner.H_INSET_DP.dp,
+                        bottom = CallActionBarPlanner.OUTSIDE_EMOJI_GAP_DP.dp,
                     ),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Image(
-                        modifier = Modifier
-                            .padding(1.dp)
-                            .width(24.dp)
-                            .height(24.dp),
-                        painter = dotsPainter,
-                        contentDescription = "more options menu",
-                        contentScale = ContentScale.None
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(controlPadding))
-
-                if (currentCallType == CallType.ONE_ON_ONE.type) {
-                    OneOnOneHangupButton(
-                        onHangup = { endCallAction(currentCallType, CallEndType.END) }
-                    )
-                } else if (!isLandscape) {
-                    GroupCallLeaveButton(
-                        onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
-                        onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
-                    )
-                }
+                )
             }
-
-            if (currentCallType != CallType.ONE_ON_ONE.type && isLandscape) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 19.dp)
-                ) {
-                    GroupCallLeaveButton(
-                        onLeave = { endCallAction(currentCallType, CallEndType.LEAVE) },
-                        onShowEndMenu = { viewModel.callUiController.setShowBottomCallEndViewEnable(true) }
-                    )
-                }
+            when (plan.layout) {
+                ActionBarLayout.TWO_ROW -> TwoRowActionBar(
+                    slots = slots,
+                    labels = ActionBarLabels(
+                        mic = stringResource(id = if (micEnabled) R.string.call_action_mute else R.string.call_action_unmute),
+                        video = stringResource(id = R.string.call_action_video),
+                        speaker = stringResource(id = R.string.call_action_speaker),
+                        emoji = stringResource(id = R.string.call_action_emoji),
+                        more = stringResource(id = R.string.call_action_more),
+                        end = stringResource(id = R.string.call_action_end),
+                    ),
+                    showPlate = showPlate,
+                )
+                ActionBarLayout.SPLIT -> SplitActionBar(plan = plan, slots = slots)
+                else -> SingleRowActionBar(plan = plan, slots = slots)
             }
         }
     }
+}
+
+/** A plain bar control: glyph resource in, tap out. [iconSize] defaults to the full-frame glyph. */
+@Composable
+private fun SimpleActionButton(
+    iconRes: Int,
+    contentDescription: String,
+    size: Dp,
+    iconSize: Dp = size,
+    testTag: String,
+    tintIcon: Boolean = true,
+    onClick: () -> Unit,
+) {
+    CallActionButton(
+        painter = painterResource(id = iconRes),
+        contentDescription = contentDescription,
+        size = size,
+        iconSize = iconSize,
+        tintIcon = tintIcon,
+        testTag = testTag,
+        onClick = onClick,
+    )
+}
+
+/** People control with the participant count badge; toggles the participant list. */
+@Composable
+private fun PeopleActionButton(controller: CallUiController, participantCount: Int, size: Dp) {
+    CallActionButton(
+        painter = painterResource(id = R.drawable.call_ic_users),
+        contentDescription = "Users",
+        size = size,
+        testTag = "call_btn_users",
+        onClick = {
+            L.i { "[call] LCallActivity onClick Users" }
+            controller.setShowUsersEnabled(!controller.showUsersEnabled.value)
+        },
+    ) {
+        if (participantCount > 0) ActionCountBadge(participantCount)
+    }
+}
+
+/** 1v1: hang up. Group: leave, with the chevron tail opening the end menu. */
+@Composable
+private fun EndActionButton(
+    controller: CallUiController,
+    callType: String,
+    size: Dp,
+    endCallAction: (callType: String, callEndType: CallEndType) -> Unit,
+) {
+    if (callType == CallType.ONE_ON_ONE.type) {
+        OneOnOneHangupButton(onHangup = { endCallAction(callType, CallEndType.END) }, size = size)
+    } else {
+        GroupCallLeaveButton(
+            onLeave = { endCallAction(callType, CallEndType.LEAVE) },
+            onShowEndMenu = { controller.setShowBottomCallEndViewEnable(true) },
+            size = size,
+        )
+    }
+}
+
+/** Mic control with its two overlays: the permission badge, or the voice-preset ring + badge. */
+@Composable
+private fun MicActionButton(
+    micEnabled: Boolean,
+    showPermissionBadge: Boolean,
+    voicePreset: VoicePreset,
+    size: Dp,
+    onClick: () -> Unit,
+) {
+    // Preset ring hides with the preset badge while mic permission is denied: the voice changer
+    // only shapes local capture, and with no RECORD_AUDIO there is no capture — advertising it
+    // would mislead. The permission badge replaces the entire voice-preset treatment while
+    // visible (Figma 17129:3875 shows only the alert badge).
+    val showPreset = voicePreset.isEnabled && !showPermissionBadge
+    CallActionButton(
+        painter = painterResource(id = if (micEnabled) R.drawable.call_ic_mic_on else R.drawable.call_ic_mic_off),
+        contentDescription = "Mic",
+        size = size,
+        // The muted glyph keeps its red slash (pre-existing salience cue), so it is not tinted.
+        tintIcon = micEnabled,
+        testTag = "call_btn_mic",
+        onClick = onClick,
+    ) {
+        if (showPreset) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .border(width = 2.dp, color = colorResource(id = com.difft.android.base.R.color.blue_400), shape = CircleShape)
+            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(18.dp)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xFF4DA0FF), Color(0xFF82C1FC), Color(0xFF328AFD)),
+                            start = Offset(0f, 0f),
+                            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                        ),
+                        shape = CircleShape
+                    )
+            ) {
+                Text(
+                    text = voicePreset.emoji,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        if (showPermissionBadge) {
+            MicPermissionBadge(modifier = Modifier.align(Alignment.TopEnd))
+        }
+    }
+}
+
+/**
+ * Whether the (first) remote participant is publishing an unmuted camera track. Drives the
+ * two-row backplate together with the local camera, so captions stay legible over video.
+ */
+@Composable
+private fun rememberRemoteCameraOn(participants: List<Participant>): Boolean {
+    val remote = participants.filterIsInstance<RemoteParticipant>().firstOrNull() ?: return false
+    val videoPubs by remote::videoTrackPublications.flow.collectAsState(initial = emptyList())
+    val cameraPub = videoPubs
+        .filter { (pub) -> pub.subscribed }
+        .map { (pub) -> pub }
+        .firstOrNull { pub -> pub.source == Track.Source.CAMERA }
+    var muted by remember(remote.sid) { mutableStateOf(true) }
+    LaunchedEffect(cameraPub) {
+        val pub = cameraPub
+        if (pub == null) {
+            muted = true
+            return@LaunchedEffect
+        }
+        pub::muted.flow.collect { muted = it }
+    }
+    return !muted
 }
 
 /**

@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -100,7 +99,9 @@ class AccountFragment : Fragment() {
             SetCustomIdActivity.startActivity(requireActivity(), getContactId())
         }
 
-        setCheckChangeListener()
+        binding.switchCanIdSearch.setOnToggleRequestListener { _, requested ->
+            changeIdSearchSetting(requested)
+        }
 
         updateUidUI()
 
@@ -183,61 +184,49 @@ class AccountFragment : Fragment() {
         }
     }
 
-    private fun changeIdSearchSetting(
-        switch: SwitchCompat,
-        idSwitchRule: Int,
-    ) {
+    /**
+     * Controlled toggle: the switch only moves once the server accepted the value, so a failure
+     * leaves it where it was and needs no rollback.
+     */
+    private fun changeIdSearchSetting(enabled: Boolean) {
+        val idSwitchRule = if (enabled) 1 else 0
         val token = (userManager.getUserData()?.microToken ?: "")
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    settingRepo.setProfile(token, searchByCustomUid = idSwitchRule)
-                }
-                if (!isAdded || view == null) return@launch
-                if (result.status != 0) {
-                    L.e { "[Settings] change id search setting error, status:${result.status} reason:${result.reason}" }
-                    showErrorAndRestoreSwitch(result.reason, switch)
-                } else {
-                    // 设置成功后，立即更新 userManager 中的数据，避免下次进入时显示旧状态
-                    userManager.update {
-                        this.searchByCustomUid = idSwitchRule
+        ComposeDialogManager.showWait(requireActivity(), "")
+        binding.switchCanIdSearch.guardWhile(
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    val result = withContext(Dispatchers.IO) {
+                        settingRepo.setProfile(token, searchByCustomUid = idSwitchRule)
                     }
+                    if (!isAdded || view == null) return@launch
+                    if (result.status != 0) {
+                        L.e { "[Settings] change id search setting error, status:${result.status} reason:${result.reason}" }
+                        ToastUtil.show(result.reason ?: getString(R.string.operation_failed))
+                    } else {
+                        // Update userManager right away so a re-entry does not show the old state.
+                        userManager.update {
+                            this.searchByCustomUid = idSwitchRule
+                        }
+                        binding.switchCanIdSearch.isChecked = enabled
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (!isAdded || view == null) return@launch
+                    L.e(e) { "[Settings] changeIdSearchSetting error:" }
+                    ToastUtil.show(getString(R.string.operation_failed))
+                } finally {
+                    // Runs on cancellation too, so the dialog never outlives the request.
+                    activity?.let { ComposeDialogManager.dismissWait(it) }
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (!isAdded || view == null) return@launch
-                L.e(e) { "[Settings] changeIdSearchSetting error:" }
-                showErrorAndRestoreSwitch(getString(R.string.operation_failed), switch)
             }
-        }
-    }
-
-    private fun showErrorAndRestoreSwitch(errorMessage: String?, switch: SwitchCompat) {
-        errorMessage?.let { ToastUtil.show(it) }
-
-        switch.setOnCheckedChangeListener(null)
-        switch.isChecked = !switch.isChecked
-
-        setCheckChangeListener()
-    }
-
-    private fun setCheckChangeListener() {
-        binding.switchCanIdSearch.setOnCheckedChangeListener { _, isChecked ->
-            val idSwitchRule = if (isChecked) 1 else 0
-            changeIdSearchSetting(binding.switchCanIdSearch, idSwitchRule)
-        }
+        )
     }
 
     private fun updateUidUI() {
         val searchByCustomUid = userManager.getUserData()?.searchByCustomUid
         binding.tvId.text = getContactId()
-        
-        // Remove listener, set initial state, then re-set listener
-        // This prevents triggering callback during initialization
-        binding.switchCanIdSearch.setOnCheckedChangeListener(null)
         binding.switchCanIdSearch.isChecked = searchByCustomUid == 1
-        setCheckChangeListener()
     }
 
     private fun getContactId(): String {

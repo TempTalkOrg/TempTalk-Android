@@ -13,7 +13,6 @@ import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.common.SendType
-import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.message.LocalMessageCreator
@@ -32,19 +31,15 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
-import difft.android.messageserialization.model.Attachment
 import difft.android.messageserialization.model.AttachmentStatus
+import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.ROOM_SENDING_STATUS_ACTIVE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
-import difft.android.messageserialization.model.isAudioMessage
-import difft.android.messageserialization.model.keepEncryptedAtRest
 import kotlinx.coroutines.launch
 import org.difft.app.database.delete
-import org.difft.app.database.members
-import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.MessageModel
@@ -86,6 +81,9 @@ class PushTextSendJob @AssistedInject constructor(
     private val attachmentUploadHelper: com.difft.android.chat.gif.favorite.AttachmentUploadHelper
         get() = EntryPointAccessors.fromApplication<EntryPoint>(context).attachmentUploadHelper
 
+    /** Which attachment row this job writes, and where a resend's staged bytes are. */
+    private val attachmentIdentity = AttachmentSendIdentity(textMessage.id)
+
     private var startExecuteTime by Delegates.notNull<Long>()
 
     override fun serialize(): Data {
@@ -125,6 +123,26 @@ class PushTextSendJob @AssistedInject constructor(
                 L.i { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Starting attachment upload, RetryCount: $runAttempt" }
                 uploadAttachment()
                 L.i { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Attachment upload completed, RetryCount: $runAttempt" }
+            }
+
+            // A forward carries no attachment of its own — its files hang off the forward tree, whose
+            // pointers are re-authorized by the forward flow instead of uploaded. A leaf whose
+            // authorization MISSED is repaired here (issue #1181), before the data message is built
+            // from it, so the wire and the row see the same new pointer. A leaf whose authorization
+            // HIT never enters the repair, so the ordinary forward keeps exactly the failure modes it
+            // had; deliberately NOT guarded against throwing, because a leaf with no local bytes must
+            // fail the send rather than deliver a pointer nobody can ever download.
+            textMessage.forwardContext?.let {
+                ForwardAttachmentReupload.repairMissingAuthorizations(
+                    forwardContext = it,
+                    messageId = textMessage.id,
+                    // Lazy: resolved only when a leaf actually needs a repair, so the ordinary
+                    // all-authorized forward neither pays the group-members lookup nor gains a
+                    // new failure mode from it.
+                    recipients = { sendRecipients(textMessage.forWhat, groupUtil) },
+                    uploadHelper = attachmentUploadHelper,
+                    identity = attachmentIdentity
+                )
             }
 
             startExecuteTime = System.currentTimeMillis()
@@ -322,59 +340,50 @@ class PushTextSendJob @AssistedInject constructor(
         )
     }
 
-    /**
-     * Update attachment with all relevant fields (authorityId, key, digest, status).
-     * Uses updateRow instead of DELETE + INSERT to avoid WCDB soft-delete issues.
-     */
-    private fun updateAttachment(attachment: Attachment) {
-        wcdb.attachment.updateRow(
-            arrayOf(
-                Value(attachment.authorityId),
-                Value(attachment.key),
-                Value(attachment.digest),
-                Value(attachment.status)
-            ),
-            arrayOf(
-                DBAttachmentModel.authorityId,
-                DBAttachmentModel.key,
-                DBAttachmentModel.digest,
-                DBAttachmentModel.status
-            ),
-            DBAttachmentModel.id.eq(attachment.id).and(DBAttachmentModel.messageId.eq(textMessage.id))
-        )
-    }
-
     private suspend fun uploadAttachment() {
         val attachment = textMessage.attachments?.firstOrNull() ?: return
-        val path = attachment.path ?: return
+
+        // Progress key = the copy's own localId, the same value the rendering bubble derives via
+        // `getAttachmentIdForProgress`. A job persisted before the localId column carries none, so
+        // the row's id is recovered and adopted first — emitting under the message id would leave
+        // that bubble's spinner unfed. Only a row that cannot be named at all keeps the old key.
+        // Resolved BEFORE the upload source so a source that cannot be resolved at all can still
+        // reconcile the row and the bubble under the key they are rendered by.
+        val progressKey = attachmentIdentity.localIdOf(attachment)
+            ?: attachmentIdentity.recoverLocalId(attachment)
+            ?: textMessage.id
+
+        // The staged path is serialized WITH the job, so a job queued before per-copy addressing
+        // carries the owner-message address — which the migration copies away from and stage 5
+        // reclaims once the copy is verified. Only a path that still holds bytes is trusted; anything
+        // else falls through to the resend recovery, which resolves the copy's CURRENT address
+        // (migrating a legacy file across on the way) instead of uploading from a dead path.
+        // A recovery that finds nothing throws: mark the row FAILED first, exactly as an upload
+        // failure below does, so the bubble does not keep rendering a transfer that will never run.
+        val path = try {
+            attachment.path?.takeIf { File(it).let { file -> file.isFile && file.length() > 0 } }
+                ?: attachmentIdentity.resendSourcePath(attachment)
+                ?: return
+        } catch (e: Exception) {
+            L.e { "[PushTextSendJob] upload source unresolvable, messageId=${textMessage.id}: ${e.stackTraceToString()}" }
+            attachment.status = AttachmentStatus.FAILED.code
+            attachmentIdentity.updateRow(attachment)
+            FileUtil.emitProgressUpdate(progressKey, -1)
+            throw e
+        }
 
         attachment.status = AttachmentStatus.LOADING.code
-        updateAttachment(attachment)
-        FileUtil.emitProgressUpdate(textMessage.id, 0)
+        attachmentIdentity.updateRow(attachment)
+        FileUtil.emitProgressUpdate(progressKey, 0)
 
         val file = File(path)
-        val isAudio = attachment.isAudioMessage()
-        // Encrypted-at-rest types (audio + images) keep the .encrypt file on disk (read on demand via
-        // the EncryptedAttachmentProvider) and delete the plaintext original. Non-at-rest types
-        // (video / generic files) delete the ciphertext after upload and keep the plaintext. The
-        // ciphertext path stays "<path>.encrypt".
-        val keepEncrypted = textMessage.attachments?.firstOrNull()?.keepEncryptedAtRest() == true
+        // Every attachment is encrypted at rest (see EncryptedAttachmentAccess): only the .encrypt
+        // file stays on disk, read on demand via the EncryptedAttachmentProvider, and the plaintext
+        // original is deleted after the upload. The ciphertext path stays "<path>.encrypt".
         val encryptPath = "$path.encrypt"
 
-        val recipientIds = ArrayList<String>()
-        if (textMessage.forWhat is For.Account) {
-            recipientIds.add(textMessage.forWhat.id)
-            recipientIds.add(globalServices.myId)
-        } else {
-            val group = groupUtil.getSingleGroupInfo(textMessage.forWhat.id, false)
-            group?.members?.forEach { member -> member.id?.let { recipientIds.add(it) } }
-        }
-
-        val attachmentType = when {
-            isAudio -> AttachmentUploadType.VOICE
-            attachment.size > 200 * 1024 * 1024 -> AttachmentUploadType.LARGE
-            else -> AttachmentUploadType.NORMAL
-        }
+        val recipientIds = sendRecipients(textMessage.forWhat, groupUtil)
+        val attachmentType = attachmentUploadType(attachment)
 
         // Progress throttling (every 50ms or >=5% delta) preserved from the original inline path.
         var lastEmitTime = System.currentTimeMillis()
@@ -386,14 +395,13 @@ class PushTextSendJob @AssistedInject constructor(
                 recipients = recipientIds,
                 attachmentType = attachmentType,
                 encryptPath = encryptPath,
-                // At-rest types (audio + images) must RETAIN the ciphertext on disk for on-demand
-                // decryption; only non-at-rest types delete it after upload. (Deleting it here for
-                // images left neither ciphertext nor plaintext -> broken image on reopen.)
-                deleteEncryptFile = !keepEncrypted,
+                // An at-rest attachment must RETAIN its ciphertext on disk for on-demand decryption.
+                // (Deleting it here left neither ciphertext nor plaintext -> broken image on reopen.)
+                deleteEncryptFile = false,
                 onProgress = { progress ->
                     val now = System.currentTimeMillis()
                     if ((now - lastEmitTime >= 50) || (progress - lastEmitProgress >= 5)) {
-                        FileUtil.emitProgressUpdate(textMessage.id, progress)
+                        FileUtil.emitProgressUpdate(progressKey, progress)
                         lastEmitTime = now
                         lastEmitProgress = progress
                     }
@@ -404,18 +412,17 @@ class PushTextSendJob @AssistedInject constructor(
             attachment.authorityId = uploaded.authorizeId
             attachment.key = uploaded.key
             attachment.status = AttachmentStatus.SUCCESS.code
-            updateAttachment(attachment)
+            attachmentIdentity.updateRow(attachment)
 
-            if (keepEncrypted) {
-                // Keep the .encrypt file for on-demand decryption (bubble, preview, share, save to gallery); delete the plaintext original.
-                file.delete()
-            }
-            FileUtil.emitProgressUpdate(textMessage.id, 100)
+            // The .encrypt file is kept for on-demand decryption (bubble, preview, share, save to
+            // gallery); the plaintext original must not survive the upload.
+            file.delete()
+            FileUtil.emitProgressUpdate(progressKey, 100)
         } catch (e: Exception) {
             L.e { "[PushTextSendJob] Upload failed, RetryCount: $runAttempt, Exception: ${e.stackTraceToString()}" }
             attachment.status = AttachmentStatus.FAILED.code
-            updateAttachment(attachment)
-            FileUtil.emitProgressUpdate(textMessage.id, -1)
+            attachmentIdentity.updateRow(attachment)
+            FileUtil.emitProgressUpdate(progressKey, -1)
             throw e
         }
     }

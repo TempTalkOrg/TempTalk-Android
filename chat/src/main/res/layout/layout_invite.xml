@@ -23,7 +23,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="20dp"
-        app:cardBackgroundColor="@color/bg.modal"
+        app:cardBackgroundColor="@color/bg.popup"
         app:cardCornerRadius="4dp"
         app:cardElevation="0dp"
         app:layout_constraintBottom_toTopOf="@+id/ll_bottom_actions"

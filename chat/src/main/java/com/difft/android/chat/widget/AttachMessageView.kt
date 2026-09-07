@@ -9,11 +9,15 @@ import com.difft.android.base.utils.FileUtil
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.chat.R
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.AttachmentDownloadAction
+import com.difft.android.chat.attachment.AttachmentDownloadDecision
+import com.difft.android.chat.attachment.AttachmentStatusRepair
 import com.difft.android.chat.databinding.LayoutAttachMessageViewBinding
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.message.getAttachmentIdForProgress
 import com.difft.android.chat.message.getAttachmentProgress
-import com.difft.android.chat.message.shouldDecrypt
 import com.hi.dhl.binding.viewbind
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isLongText
@@ -37,13 +41,13 @@ class AttachMessageView @JvmOverloads constructor(
     private var currentMessage: TextChatMessage? = null
 
     fun setupAttachmentView(message: TextChatMessage) {
-        currentAttachmentId = message.id
+        // Progress key authority — must match what the emit side publishes.
+        currentAttachmentId = message.getAttachmentIdForProgress()
         currentMessage = message
 
         val attachment = message.attachment ?: return
 
-        val fileName: String = attachment.fileName ?: ""
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(message.id) + fileName
+        val attachmentPath = AttachmentPathResolver.fileFor(attachment)
 
         binding.open.visibility = View.INVISIBLE
         binding.progress.visibility = View.INVISIBLE
@@ -57,9 +61,15 @@ class AttachMessageView @JvmOverloads constructor(
         // plaintext-only isFileValid() would report "not downloaded" and trigger an endless
         // re-download loop (each re-download resets status to LOADING), which in turn keeps the
         // long-text Read-more gate closed → only the 2KB preview shows. Gate on isReadable instead.
-        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
-
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath, attachment.size)
         val isCurrentDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+        // An outgoing upload stages its file at this exact address before it starts, so file presence
+        // says nothing about the transfer while it runs.
+        val isUploading = AttachmentDownloadDecision.isUploadInFlight(isCurrentDeviceSend, progress)
+        // A readable file is the authority on "downloaded"; repair a lagging status before the
+        // branches below read it, so no branch can order a download for a file we have.
+        if (isFileValid && !isUploading) AttachmentStatusRepair.markSuccessIfStale(attachment)
+
         if (!isCurrentDeviceSend) {
             // Priority 1: Show expired view if file has expired
             val isExpired = if (progress != null) {
@@ -89,9 +99,7 @@ class AttachMessageView @JvmOverloads constructor(
 
             // Priority 2: Show download prompt for files > 10M
             val fileSize = attachment.size
-            val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
-
-            if (isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null) {
+            if (AttachmentDownloadDecision.shouldPromptManualDownload(isFileValid, fileSize, progress)) {
                 // Show download prompt (reuse fail view with different text)
                 binding.tvDownloadHint.visibility = View.VISIBLE
                 binding.tvDownloadHint.text = context.getString(R.string.chat_tap_to_download)
@@ -99,23 +107,33 @@ class AttachMessageView @JvmOverloads constructor(
             }
         }
 
-        if (isFileValid) {
+        // `open` and `progress` share one FrameLayout cell (both layout_gravity=center), so the ready
+        // affordance must not be raised while the upload branch below claims that cell.
+        if (isFileValid && !isUploading) {
             binding.open.visibility = View.VISIBLE
             binding.open.setOnClickListener {
                 context.viewFile(attachmentPath)
             }
         }
 
-        // Priority 3: Show progress or auto download (for files <= 10M)
-        if (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) {
-            if (progress == null) {
-                if (!isCurrentDeviceSend) {
-                    downloadAttachment(message, attachmentPath)
-                }
-            } else {
-                binding.progress.visibility = View.VISIBLE
-                binding.progress.setProgress(progress)
+        // Priority 3: Show progress or auto download (for files <= 10M). An outgoing upload owns the
+        // progress bar — the download decision sees its staged file and would call it READY.
+        if (isUploading) {
+            binding.progress.visibility = View.VISIBLE
+            binding.progress.setProgress(progress ?: 0)
+        } else when (AttachmentDownloadDecision.downloadAction(isFileValid, progress)) {
+            AttachmentDownloadAction.AUTO_DOWNLOAD -> if (
+                AttachmentDownloadDecision.shouldAutoDownload(isCurrentDeviceSend, isFileValid, attachment.status, progress)
+            ) {
+                downloadAttachment(message, attachmentPath)
             }
+
+            AttachmentDownloadAction.SHOW_PROGRESS -> {
+                binding.progress.visibility = View.VISIBLE
+                binding.progress.setProgress(progress ?: 0)
+            }
+
+            AttachmentDownloadAction.READY -> Unit
         }
 
     }
@@ -135,7 +153,7 @@ class AttachMessageView @JvmOverloads constructor(
                                 // sufficient (partial files pass), so also require status=SUCCESS or progress=100.
                                 val attachment = it.attachment
                                 if (attachment?.isLongText() == true) {
-                                    val path = FileUtil.getMessageAttachmentFilePath(it.id) + (attachment.fileName ?: "")
+                                    val path = AttachmentPathResolver.fileFor(attachment)
                                     // Mirror AttachContentBinder.isLongTextDownloaded exactly: a valid
                                     // ".encrypt" alone means done (see isLongTextReady), while the
                                     // status/progress signal only gates legacy plaintext. Keeping these two
@@ -162,19 +180,19 @@ class AttachMessageView @JvmOverloads constructor(
     }
 
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {
-        message.attachment?.key?.let { key ->
-            ApplicationDependencies.getJobManager().add(
-                DownloadAttachmentJob(
-                    message.id,
-                    message.attachment?.id ?: "",
-                    attachmentPath,
-                    message.attachment?.authorityId ?: 0,
-                    key,
-                    message.shouldDecrypt(),
-                    false // Attachment files should never auto-save to photos
-                )
+        val attachment = message.attachment ?: return
+        val key = attachment.key ?: return
+        ApplicationDependencies.getJobManager().add(
+            DownloadAttachmentJob(
+                attachment.localId,
+                message.id,
+                attachment.id,
+                attachmentPath,
+                attachment.authorityId,
+                key,
+                false // Attachment files should never auto-save to photos
             )
-        }
+        )
     }
 
     fun openFile() {
