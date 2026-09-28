@@ -2,7 +2,6 @@ package com.difft.android.linkeddevices
 
 import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.test.TestDispatcherRule
 import com.difft.android.websocket.api.messages.multidevice.DeviceInfo
@@ -34,7 +33,6 @@ class LinkedDevicesViewModelTest {
     val dispatcherRule = TestDispatcherRule()
 
     private lateinit var repo: DeviceRepository
-    private lateinit var logoutManager: LogoutManager
     private lateinit var countStore: LinkedDevicesCountStore
 
     private val builtViewModels = mutableListOf<LinkedDevicesViewModel>()
@@ -42,7 +40,6 @@ class LinkedDevicesViewModelTest {
     @Before
     fun setup() {
         repo = mockk()
-        logoutManager = mockk(relaxed = true)
         countStore = mockk(relaxed = true)
     }
 
@@ -50,11 +47,11 @@ class LinkedDevicesViewModelTest {
     fun tearDown() {
         builtViewModels.forEach { it.viewModelScope.cancel() }
         builtViewModels.clear()
-        clearMocks(repo, logoutManager, countStore)
+        clearMocks(repo, countStore)
     }
 
     private fun buildViewModel() =
-        LinkedDevicesViewModel(repo, logoutManager, countStore).also { builtViewModels += it }
+        LinkedDevicesViewModel(repo, countStore).also { builtViewModels += it }
 
     private fun device(id: Int, name: String? = "dev$id", created: Long = 1000L, lastSeen: Long = 2000L) =
         DeviceInfo(id = id, name = name, created = created, lastSeen = lastSeen)
@@ -92,15 +89,17 @@ class LinkedDevicesViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
     }
 
-    // U4
+    // U4 — the session decision moved to SessionAuthGuard (reached via DeviceRepository); this
+    // ViewModel now owns only the UI reaction, so assert on the resulting state.
     @Test
-    fun `refresh auth failure logs out and clears loading flags`() = runTest {
+    fun `refresh auth failure clears loading flags and counts as loaded`() = runTest {
         coEvery { repo.getDevices() } throws AuthorizationFailedException(401, "unauthorized")
         val vm = buildViewModel()
         vm.pullRefresh()
-        coVerify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
-        assertFalse(vm.uiState.value.isLoading)
-        assertFalse(vm.uiState.value.isRefreshing)
+        val s = vm.uiState.value
+        assertFalse(s.isLoading)
+        assertFalse(s.isRefreshing)
+        assertTrue(s.hasLoadedOnce)
     }
 
     // U5 — a generic failure emits a one-shot FetchFailed (toast) and keeps any list already shown;
@@ -127,7 +126,6 @@ class LinkedDevicesViewModelTest {
         coEvery { repo.getDevices() } throws CancellationException("cancelled")
         val vm = buildViewModel()
         vm.refresh()
-        coVerify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
         verify(exactly = 0) { countStore.update(any()) }
     }
 
@@ -309,15 +307,14 @@ class LinkedDevicesViewModelTest {
         assertEquals(1, vm.uiState.value.devices.size)
     }
 
-    // U14
+    // U14 — as U4: the session decision is no longer this ViewModel's; only the row state is.
     @Test
-    fun `unlink auth failure logs out and clears unlinking flag`() = runTest {
+    fun `unlink auth failure clears unlinking flag`() = runTest {
         coEvery { repo.getDevices() } returns listOf(device(2))
         coEvery { repo.removeDevice(any()) } throws AuthorizationFailedException(403, "forbidden")
         val vm = buildViewModel()
         vm.refresh()
         vm.unlink(2)
-        coVerify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
         assertFalse(vm.uiState.value.devices.first { it.id == 2 }.isUnlinking)
     }
 
@@ -333,7 +330,7 @@ class LinkedDevicesViewModelTest {
             expectNoEvents()
             cancelAndIgnoreRemainingEvents()
         }
-        coVerify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
+        assertTrue(vm.uiState.value.devices.first { it.id == 2 }.isUnlinking)
     }
 
     // U16

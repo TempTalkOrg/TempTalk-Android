@@ -15,7 +15,7 @@ import com.difft.android.base.utils.TextSizeUtil
  *  - 26 UX fields carved out of the legacy 43-field `UserData` blob (Section A).
  *  - 9 keys migrated from `sp_chative_account` SharedPreferences (Section B).
  *  - 2 keyboard-height keys (Section C — historically split across `sp_chative_account`
- *    and `${packageName}_preferences`; `sp_chative_account` wins per design §4.3).
+ *    and `${packageName}_preferences`; `sp_chative_account` wins).
  *  - 1 migration bookkeeping marker (Section D, private to migration code).
  *
  * **Key-string preservation**: legacy key literals (`"SP_BYC_DOMAINS_TIME"`,
@@ -49,6 +49,9 @@ object AppStateKeys {
     val SAVE_TO_PHOTOS = booleanPreferencesKey("save_to_photos")
     val VOICE_PLAYBACK_SPEED = floatPreferencesKey("voice_playback_speed")
     val DUAL_PANE_RATIO = floatPreferencesKey("dual_pane_ratio")
+    val DUAL_PANE_LIST_COLLAPSED = booleanPreferencesKey("dual_pane_list_collapsed")
+    val LEGACY_MIGRATION_GUIDE_SHOWN = booleanPreferencesKey("legacy_migration_guide_shown")
+    val DUAL_PANE_RAIL_COLLAPSED = booleanPreferencesKey("dual_pane_rail_collapsed")
     val CALL_VOICE_CHANGER_PRESET = stringPreferencesKey("call_voice_changer_preset")
     val CALL_MIC_PERMISSION_REQUESTED = booleanPreferencesKey("call_mic_permission_requested")
     val CALL_CAMERA_PERMISSION_REQUESTED = booleanPreferencesKey("call_camera_permission_requested")
@@ -85,7 +88,7 @@ object AppStateKeys {
     // Historically the Kotlin path (`InsetAwareConstraintLayout`) wrote to `sp_chative_account`
     // and the Java path (`KeyboardAwareLinearLayout`) wrote to `${packageName}_preferences`.
     // Both legacy SP files carry the same key names; migration order picks `sp_chative_account`
-    // first (wins) per design §4.3.
+    // first, so it wins.
     val KEY_KEYBOARD_HEIGHT_PORTRAIT = intPreferencesKey("keyboard_height_portrait")
     val KEY_KEYBOARD_HEIGHT_LANDSCAPE = intPreferencesKey("keyboard_height_landscape")
 
@@ -115,6 +118,67 @@ object AppStateKeys {
     // One-time archive-tombstone sentinel re-anchor (WCDBUpdateService). Set only after the
     // migration completes, so a failed run retries on the next start.
     val ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED = booleanPreferencesKey("archive_tombstone_sentinel_migrated")
+
+    // ---------- Section H: Attachment address migration bookkeeping (#1178) ----------
+    //
+    // Highest migration version whose stages have all completed — the same versioned-marker shape as
+    // `LegacyPlaintextAttachmentMigration`'s KEY_VERSION and the `syncedContactsVn` contact refresh:
+    // a later wave raises the target version and the module replays only the stages that version
+    // adds. Version 1 = forwarded attachments moved to their per-copy directories.
+    val ATTACHMENT_MIGRATION_VERSION = intPreferencesKey("attachment_migration_version")
+
+    // In-flight progress of the version currently being migrated, cleared when it completes: the
+    // last finished stage, and the last attachment row (databaseId) whose file was processed, so an
+    // interrupted run resumes instead of rescanning. All three are cleared with the rest of
+    // app_state on logout, which is correct — the files are gone by then too.
+    val ATTACHMENT_MIGRATION_STAGE = intPreferencesKey("attachment_migration_stage")
+    val ATTACHMENT_MIGRATION_WATERMARK = intPreferencesKey("attachment_migration_watermark")
+
+    // Completed file-migration passes (stage 2). A row whose file cannot be copied (a persistently
+    // full disk, a stale directory occupying the target name) would otherwise keep the stage
+    // unfinished forever, re-running the full table scan on every cold start and never stamping.
+    // After MAX attempts the stage reports done despite the failures; the row is not abandoned, it
+    // is materialized on demand by the per-row rescue path the next time the user opens it.
+    val ATTACHMENT_MIGRATION_FILE_ATTEMPTS = intPreferencesKey("attachment_migration_file_attempts")
+
+    // Completed sweep passes over the legacy directories (stage 3). The sweep can only ever delete —
+    // a directory it keeps N runs in a row is permanently unverifiable garbage (a nested dir, a
+    // stray entry from a row deleted pre-upgrade), so after MAX attempts the migration stamps its
+    // version with the residue left in place instead of re-walking the attachment root on every
+    // launch forever.
+    val ATTACHMENT_MIGRATION_SWEEP_ATTEMPTS = intPreferencesKey("attachment_migration_sweep_attempts")
+
+    // Completed normal-attachment migration passes (stage 4). Same give-up budget as the file stage
+    // above, and deliberately a SEPARATE counter: the two stages belong to different migration
+    // versions and only the version stamp clears either, so sharing one key would let a device that
+    // already gave up in stage 2 abandon stage 4's rows on their very first pass.
+    val ATTACHMENT_MIGRATION_NORMAL_ATTEMPTS = intPreferencesKey("attachment_migration_normal_attempts")
+
+    // ---------- Section I: Same-device no-login migration handoff ----------
+    //
+    // Plain bookkeeping markers, never credential material: the in-flight handoff id (sender), the
+    // adopted handoff id (receiver), and when the sender signed itself out. They live in app_state
+    // because the passive sign-out that ends the handoff clears secure_user but leaves app_state
+    // intact, so the "moved to the new app" page and the reconciler can still read them.
+    val MIGRATION_HANDOFF_ID = stringPreferencesKey("migration_handoff_id")
+    val MIGRATION_HANDOFF_COMPLETED_ID = stringPreferencesKey("migration_handoff_completed_id")
+    val MIGRATION_HANDOFF_DONE_AT = longPreferencesKey("migration_handoff_done_at")
+
+    /** JSON of the one P2P send awaiting the receiver's verdict; see `PendingVerdictStore`. Absent when none. */
+    val MIGRATION_PENDING_VERDICT = stringPreferencesKey("migration_pending_verdict")
+
+    // ---------- Section J: Auto-translate model download ----------
+    //
+    // One JSON blob keyed by ML Kit model code: consecutive failures, last attempt, last failure
+    // reason, next allowed retry. A single key because `AppStateKeys` is a static catalog and
+    // cannot mint a key per model; the `GRAY_MAP_JSON` / `SP_KEY_CRITICAL_ALERT_INFOS` entries in
+    // Section B are the same shape.
+    //
+    // "Ready" is deliberately NOT persisted — `RemoteModelManager.isModelDownloaded` is the only
+    // authority on what is on the device, so a stale cache can never gate translation wrongly.
+    // Cleared with the rest of app_state on active logout; the downloaded models themselves are
+    // device-level resources and are kept.
+    val TRANSLATE_MODEL_DOWNLOAD_STATE = stringPreferencesKey("translate_model_download_state")
 }
 
 /**
@@ -144,6 +208,9 @@ object AppStateDefaults {
     const val VOICE_PLAYBACK_SPEED = 1.0f
     /** Sentinel -1f = no user override; UI falls back to mode default (mirrors DualPaneRatioUtil.NO_OVERRIDE). */
     const val DUAL_PANE_RATIO = -1f
+    const val DUAL_PANE_LIST_COLLAPSED = false
+    const val LEGACY_MIGRATION_GUIDE_SHOWN = false
+    const val DUAL_PANE_RAIL_COLLAPSED = false
     const val CALL_VOICE_CHANGER_PRESET = "original"
     const val CALL_MIC_PERMISSION_REQUESTED = false
     const val CALL_CAMERA_PERMISSION_REQUESTED = false
@@ -181,4 +248,20 @@ object AppStateDefaults {
 
     // Section G defaults
     const val ARCHIVE_TOMBSTONE_SENTINEL_MIGRATED = false
+
+    // Section H defaults — 0 = nothing migrated yet (fresh install and pre-migration installs alike).
+    const val ATTACHMENT_MIGRATION_VERSION = 0
+    const val ATTACHMENT_MIGRATION_STAGE = 0
+    const val ATTACHMENT_MIGRATION_WATERMARK = 0
+    const val ATTACHMENT_MIGRATION_FILE_ATTEMPTS = 0
+    const val ATTACHMENT_MIGRATION_SWEEP_ATTEMPTS = 0
+    const val ATTACHMENT_MIGRATION_NORMAL_ATTEMPTS = 0
+
+    // Section I defaults — "" = no handoff in flight / none adopted; 0L = never signed out by a handoff.
+    const val MIGRATION_HANDOFF_ID = ""
+    const val MIGRATION_HANDOFF_COMPLETED_ID = ""
+    const val MIGRATION_HANDOFF_DONE_AT = 0L
+
+    // Section J defaults — nullable-string sentinel; "" means "no failure recorded for any model".
+    const val TRANSLATE_MODEL_DOWNLOAD_STATE = ""
 }

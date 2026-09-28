@@ -29,7 +29,7 @@ class CallCleanupManager(
     fun cleanup(
         lifecycleObserver: CallLifecycleObserver?,
         dialogManager: CallDialogManager?,
-        proximitySensorManager: ProximitySensorManager?,
+        proximityScreenOffController: ProximityScreenOffController?,
         pictureInPictureManager: PictureInPictureManager?,
         callActivityBroadcastReceiver: CallActivityBroadcastReceiver?,
         screenUnlockBroadcastReceiver: ScreenUnlockBroadcastReceiver?,
@@ -53,7 +53,7 @@ class CallCleanupManager(
 
         runCatching {
             releaseManagers(
-                proximitySensorManager,
+                proximityScreenOffController,
                 pictureInPictureManager,
                 callActivityBroadcastReceiver,
                 screenUnlockBroadcastReceiver
@@ -112,14 +112,14 @@ class CallCleanupManager(
      * 释放各种管理器资源
      */
     private fun releaseManagers(
-        proximitySensorManager: ProximitySensorManager?,
+        proximityScreenOffController: ProximityScreenOffController?,
         pictureInPictureManager: PictureInPictureManager?,
         callActivityBroadcastReceiver: CallActivityBroadcastReceiver?,
         screenUnlockBroadcastReceiver: ScreenUnlockBroadcastReceiver?
     ) {
         // 释放传感器管理器
-        proximitySensorManager?.release()
-        L.d { "[Call] CallCleanupManager released proximity sensor manager" }
+        proximityScreenOffController?.release()
+        L.d { "[Call] CallCleanupManager released proximity screen-off controller" }
 
         // 释放 PIP 管理器
         pictureInPictureManager?.release()

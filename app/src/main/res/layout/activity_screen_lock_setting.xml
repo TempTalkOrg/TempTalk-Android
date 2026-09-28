@@ -20,7 +20,7 @@
             android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/t.primary" />
+            app:tint="@color/icon" />
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_title"
@@ -43,9 +43,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:layout_marginRight="16dp"
-        android:background="@drawable/chat_group_info_bg"
+        android:background="@drawable/base_bg_settings_group"
         android:orientation="vertical">
 
         <!-- Pattern Lock -->
@@ -53,7 +53,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:paddingStart="16dp"
-            android:paddingEnd="12dp">
+            android:paddingEnd="16dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_pattern_lock"
@@ -68,9 +68,8 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/switch_pattern" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.difft.android.base.widget.DifftSwitchView
                 android:id="@+id/switch_pattern"
-                style="@style/Widget.Chative.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -81,14 +80,14 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/bg" />
+            android:background="@color/divider" />
 
         <!-- Passcode Lock -->
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:paddingStart="16dp"
-            android:paddingEnd="12dp">
+            android:paddingEnd="16dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_passcode_lock"
@@ -103,9 +102,8 @@
                 app:layout_constraintLeft_toLeftOf="parent"
                 app:layout_constraintTop_toTopOf="@+id/switch_passcode" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.difft.android.base.widget.DifftSwitchView
                 android:id="@+id/switch_passcode"
-                style="@style/Widget.Chative.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -120,10 +118,10 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="25dp"
-        android:background="@drawable/chat_group_info_bg"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/base_bg_settings_group"
         android:paddingStart="16dp"
-        android:paddingEnd="12dp"
+        android:paddingEnd="16dp"
         android:visibility="gone"
         tools:visibility="visible">
 
@@ -143,7 +141,7 @@
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_centerVertical="true"
-            android:layout_marginEnd="10dp"
+            android:layout_marginEnd="8dp"
             android:gravity="center_vertical"
             android:lineSpacingExtra="5sp"
             android:textColor="@color/t.third"
@@ -153,10 +151,9 @@
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/arrow"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/chat_ic_arrow_right"
-            android:tint="@color/t.primary"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/base_ic_chevron_right"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
@@ -170,10 +167,10 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="25dp"
-        android:background="@drawable/chat_group_info_bg"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/base_bg_settings_group"
         android:paddingStart="16dp"
-        android:paddingEnd="12dp"
+        android:paddingEnd="16dp"
         android:visibility="gone"
         tools:visibility="visible">
 
@@ -190,9 +187,8 @@
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="@+id/switch_pattern_show_path" />
 
-        <androidx.appcompat.widget.SwitchCompat
+        <com.difft.android.base.widget.DifftSwitchView
             android:id="@+id/switch_pattern_show_path"
-            style="@style/Widget.Chative.Switch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:layout_constraintBottom_toBottomOf="parent"

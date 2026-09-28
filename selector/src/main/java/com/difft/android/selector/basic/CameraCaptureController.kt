@@ -1,6 +1,5 @@
 package com.difft.android.selector.basic
 
-import android.content.DialogInterface
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
@@ -11,9 +10,10 @@ import com.difft.android.selector.config.PermissionEvent
 import com.difft.android.selector.config.PictureConfig
 import com.difft.android.selector.config.PictureMimeType
 import com.difft.android.selector.config.SelectMimeType
-import com.difft.android.selector.dialog.PhotoItemSelectedDialog
+import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.selector.R
 import com.difft.android.selector.entity.LocalMedia
-import com.difft.android.selector.interfaces.OnItemClickListener
 import com.difft.android.selector.permissions.PermissionChecker
 import com.difft.android.selector.permissions.PermissionConfig
 import com.difft.android.selector.permissions.PermissionResultCallback
@@ -55,24 +55,30 @@ internal class CameraCaptureController(private val host: PictureCommonFragment) 
     }
 
     fun onSelectedOnlyCamera() {
-        val selectedDialog = PhotoItemSelectedDialog.newInstance()
-        selectedDialog.setOnItemClickListener(object : OnItemClickListener {
-            override fun onItemClick(v: View, position: Int) {
-                when (position) {
-                    PhotoItemSelectedDialog.IMAGE_CAMERA -> openImageCamera()
-                    PhotoItemSelectedDialog.VIDEO_CAMERA -> openVideoCamera()
-                    else -> {}
-                }
-            }
-        })
-        selectedDialog.setOnDismissListener(object : PhotoItemSelectedDialog.OnDismissListener {
-            override fun onDismiss(isCancel: Boolean, dialog: DialogInterface) {
+        val activity = host.activity ?: return
+        var isCancel = true
+        var dialog: ComposeDialog? = null
+        dialog = ComposeDialogManager.showBottomDialog(
+            activity = activity,
+            layoutId = R.layout.ps_dialog_camera_selected,
+            onDismiss = {
                 if (config.isOnlyCamera && isCancel) {
                     host.onKeyBackFragmentFinish()
                 }
             }
-        })
-        selectedDialog.show(host.childFragmentManager, "PhotoItemSelectedDialog")
+        ) { view ->
+            view.findViewById<View>(R.id.ps_tv_photo).setOnClickListener {
+                isCancel = false
+                openImageCamera()
+                dialog?.dismiss()
+            }
+            view.findViewById<View>(R.id.ps_tv_video).setOnClickListener {
+                isCancel = false
+                openVideoCamera()
+                dialog?.dismiss()
+            }
+            view.findViewById<View>(R.id.ps_tv_cancel).setOnClickListener { dialog?.dismiss() }
+        }
     }
 
     fun openImageCamera() {

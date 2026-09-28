@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
@@ -201,13 +198,13 @@ private fun StatusNotificationPill(status: CallStatusNotification) {
         modifier = Modifier
             .shadow(
                 elevation = 6.dp,
-                shape = RoundedCornerShape(8.dp),
+                shape = DifftTheme.radius.largeShape,
                 spotColor = Color(0x14000000),
                 ambientColor = Color(0x14000000),
             )
             .background(
                 color = DifftTheme.colors.backgroundTertiary,
-                shape = RoundedCornerShape(8.dp),
+                shape = DifftTheme.radius.largeShape,
             )
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
@@ -226,7 +223,7 @@ private fun StatusNotificationPill(status: CallStatusNotification) {
         Text(
             modifier = Modifier.testTag("call_status_notification_text"),
             text = status.text,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp),
+            style = DifftTheme.typography.p4,
             color = DifftTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

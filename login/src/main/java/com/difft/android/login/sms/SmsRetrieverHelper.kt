@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.GmsHealth
 import com.google.android.gms.auth.api.phone.SmsRetriever
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
@@ -46,6 +47,10 @@ class SmsRetrieverHelper(
      * This method is safe to call even if Google Play Services is not available.
      */
     fun startListening() {
+        if (GmsHealth.isGmsBroken(context)) {
+            L.w { "[SmsRetriever] Skipped: GMS installed but gservices provider missing" }
+            return
+        }
         L.i { "[SmsRetriever] Attempting to start" }
         try {
             val client = SmsRetriever.getClient(context)

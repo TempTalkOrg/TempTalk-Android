@@ -103,6 +103,7 @@
     <string name="db_key_unavailable_retry">重试</string>
 
     <string name="dual_pane_divider_drag_hint">拖动以调整面板宽度</string>
+    <string name="dual_pane_list_expand_hint">展开会话列表</string>
 
     <!-- 自建代理 -->
     <string name="proxy_settings_title">使用代理</string>
@@ -134,6 +135,40 @@
     <string name="proxy_passphrase_wrong">口令不正确，请重试。</string>
     <string name="proxy_passphrase_confirm">确定</string>
     <string name="proxy_passphrase_cancel">取消</string>
+
+    <!-- Data-migration backup (A3) — notification surface -->
+
+    <!-- Data-migration P2P transfer (I5) — 前台服务通知文案 -->
+    <string name="migration_p2p_notification_channel_progress">设备迁移(进行中)</string>
+    <string name="migration_p2p_notification_channel_result">设备迁移(结果)</string>
+    <string name="migration_p2p_notification_title_running">正在迁移你的数据…</string>
+    <string name="migration_p2p_notification_text_running">请保持 App 打开，直到迁移完成。</string>
+    <string name="migration_p2p_notification_action_cancel">取消</string>
+    <string name="migration_p2p_notification_title_success">迁移完成</string>
+    <string name="migration_p2p_notification_text_restored">数据已迁移到本设备。</string>
+    <string name="migration_p2p_notification_text_uploaded">新设备已接收完成。</string>
+    <string name="migration_p2p_notification_title_failure">迁移失败</string>
+    <string name="migration_p2p_notification_title_unconfirmed">迁移结果未确认</string>
+    <string name="migration_p2p_notification_text_unconfirmed">请在新设备上确认迁移是否已完成。</string>
+    <string name="migration_p2p_notification_text_pairing_timeout">配对超时</string>
+
+    <!-- Data-migration backup (A3) — Me 入口 + 用户界面文案 -->
+
+    <!-- 数据迁移 v2 (A5) — 登录时导入 UI(选文件 / 口令 / 进度 / 错误)-->
+    <!-- 返回到导入方式选择弹窗(而非登录)— 退出子页会重新弹出选择器 -->
+    <!-- PRD §8.9 错误文案,按 MigrationError code 映射 -->
+    <!-- I4 — P2P 接收(新设备显示二维码) -->
+
+    <!-- P2P 发送（旧设备）— 主页入口 + 发送页文案 -->
+
+    <!-- 统一落地页：两个选项简介 + 已有备份分区标题 -->
+    <string name="migration_p2p_send_scan_button">扫描新设备的二维码</string>
+    <string name="migration_p2p_send_scanning">正在打开扫描器…</string>
+    <string name="migration_p2p_send_scan_not_p2p">这不是迁移二维码。</string>
+    <string name="migration_p2p_send_scan_no_key">这不是新设备的迁移二维码。</string>
+    <string name="migration_p2p_send_scan_first">请先扫描新设备的二维码。</string>
+    <string name="migration_p2p_send_transfer_in_flight">已有迁移正在进行，请先取消后再开始新的迁移。</string>
+    <string name="migration_p2p_send_scanner_unavailable">无法打开扫描器，请重试。</string>
     <string name="proxy_e2e_checking">正在验证与 Quicall 的连接…</string>
     <string name="proxy_e2e_ok">已通过代理连接到 Quicall。</string>
     <string name="proxy_e2e_failed">无法通过代理连接到 Quicall。</string>
@@ -161,4 +196,143 @@
     <string name="linked_devices_unlink_confirm_body">被解绑的设备将无法接收和发送消息。</string>
     <string name="linked_devices_unlink_failed">解绑设备失败。</string>
     <string name="linked_devices_list_update_failed">设备列表更新失败。</string>
+
+    <!-- 同设备迁移(旧包 → 同一台手机上的新包) -->
+    <string name="migration_p2p_receive_relaunch_legacy">重新打开旧版 App</string>
+    <string name="migration_p2p_receive_legacy_open_failed">无法打开旧版 App，请确认已安装官方版本后重试。</string>
+    <string name="migration_p2p_receive_scan_not_export_code">这不是电脑的导出二维码。请在电脑上选择「迁移到手机」，再扫描它显示的二维码。</string>
+    <string name="link_login_title">登录 Quicall 电脑版</string>
+    <string name="link_login_device_generic">这台电脑</string>
+    <string name="link_login_size_label">预计同步大小</string>
+    <string name="link_login_sync_switch">同步聊天记录</string>
+    <string name="link_login_sync_off_note">关闭后，这台电脑只显示新收到的消息</string>
+    <string name="link_login_legacy_desktop_note">如需同步聊天记录，请先将电脑上的 Quicall 更新到最新版本，再重新扫码登录。</string>
+    <string name="link_login_unavailable_note">这台电脑当前无法同步聊天记录，仍可登录。</string>
+    <string name="link_login_same_account_note">这台电脑上已有此账号的聊天记录。</string>
+    <string name="link_login_different_account_note">这台电脑上有其他账号的聊天记录，同步前会请你在电脑上确认。</string>
+    <string name="link_login_unreachable_note">未能连接电脑，本次不同步。</string>
+    <string name="link_login_sign_in_and_sync">登录并同步</string>
+    <string name="link_login_sign_in">登录</string>
+    <string name="link_login_pin_expired">二维码已刷新，请重新扫描。</string>
+    <string name="link_login_failed">登录电脑失败，请重试。</string>
+
+    <!-- 旧包：迁移到新版 App 指引 -->
+    <string name="legacy_migration_title">迁移到「%1$s」</string>
+    <string name="legacy_migration_why">因 Google 政策变更，当前 App 将停止更新。「%1$s」的功能和账号体系与当前 App 完全相同，账号与聊天记录可以一并迁移。迁移成功后，当前 App 将退出登录。</string>
+    <string name="legacy_migration_download">前往获取「%1$s」</string>
+    <string name="legacy_migration_later">稍后</string>
+    <string name="legacy_migration_open_failed">无法打开，请重试。</string>
+
+    <!-- 同机免登录迁移 -->
+    <string name="migration_app_name_new">Quicall（新版）</string>
+    <string name="migration_app_name_legacy">Quicall（旧版）</string>
+    <string name="migration_handoff_entry_title">从「%1$s」迁移？</string>
+    <string name="migration_handoff_entry_body">迁移账号和聊天记录，无需重新登录。</string>
+    <string name="migration_handoff_entry_primary">从「%1$s」迁移</string>
+    <string name="migration_handoff_entry_secondary">使用其他方式登录</string>
+    <string name="migration_handoff_target_not_empty">当前 App 已有账号或聊天数据，无法接收迁移。</string>
+    <string name="migration_handoff_send_target">将此账号和聊天记录迁移到「%1$s」</string>
+    <string name="migration_handoff_auth_title">验证身份后继续</string>
+    <string name="migration_handoff_auth_desc">迁移会把此账号的登录状态转移到新版 App。</string>
+    <string name="migration_handoff_auth_failed">未完成验证，迁移已取消。</string>
+    <string name="migration_handoff_done_sign_in_again">重新登录</string>
+    <string name="legacy_migration_handoff_cta">打开「%1$s」</string>
+    <string name="legacy_migration_handoff_peer_occupied">「%1$s」中已有账号或聊天数据，无法接收迁移。</string>
+    <string name="migration_r1_title">迁移聊天记录</string>
+    <string name="migration_r1_body">聊天记录只保存在你的设备上，不会上传服务器。可以从旧设备直接迁移过来。</string>
+    <string name="migration_r1_from_phone">从另一部手机迁移</string>
+    <string name="migration_r1_from_desktop">从电脑迁移</string>
+    <string name="migration_r1_skip">不迁移并继续</string>
+    <!-- R2 body: the instruction and both network lines as one paragraph (Chinese sentences need no joiner). -->
+    <string name="migration_r2_qr_copy">在旧手机上打开 Quicall，扫描上方二维码。请将两台设备连接到同一 Wi-Fi，或让一台连接另一台的热点，并关闭 VPN；建议使用家庭 Wi-Fi 或手机热点。</string>
+    <string name="migration_r2_network">请将两台设备连接到同一 Wi-Fi，或让一台连接另一台的热点，并关闭 VPN；建议使用家庭 Wi-Fi 或手机热点。</string>
+    <string name="migration_r2_qr_refreshed">二维码已过期，正在刷新。</string>
+    <string name="migration_r2_scan_title">扫描电脑上的二维码</string>
+    <string name="migration_r2_scan_body">在电脑上打开 Quicall，进入「设置 → 数据迁移」。</string>
+    <string name="migration_r2_locked">此迁移已在另一台设备上开始。</string>
+    <string name="migration_r2_desktop_cancelled">已在电脑上取消。</string>
+    <string name="migration_s1_target">将此账号的聊天记录迁移到「%1$s」</string>
+    <string name="migration_s1_current_account">当前账号</string>
+    <string name="migration_s1_calculating">正在计算迁移大小…</string>
+    <string name="migration_s1_size_label">预计迁移大小</string>
+    <string name="migration_s1_include_attachments">包含附件</string>
+    <string name="migration_s1_attachments_note">图片、视频和文件共 %1$s。关闭后，这些附件只要没过期，仍可在聊天中下载。</string>
+    <string name="migration_s1_start">开始迁移</string>
+    <string name="link_login_waiting_note">请在电脑上确认后继续。</string>
+    <string name="migration_p1_preparing_title">正在准备迁移</string>
+    <string name="migration_p1_preparing_hint">正在准备聊天数据并建立加密通道，尚未开始传输。</string>
+    <string name="migration_p1_transferring_title">正在迁移聊天记录</string>
+    <string name="migration_p1_transferring_hint">请保持两台设备上的 Quicall 在前台，不要切换 App、锁屏或离开迁移页面。</string>
+    <string name="migration_p1_transferring_hint_same_device">请保持「Quicall（新版）」打开，不要锁屏。「Quicall（旧版）」会在后台继续运行。</string>
+    <string name="migration_p1_verifying_title">正在验证聊天记录</string>
+    <string name="migration_p1_finishing_title">正在完成迁移</string>
+    <string name="migration_p1_finishing_hint">正在等待另一台设备确认结果，完成后此设备将退出登录。</string>
+    <string name="migration_p1_cancel">取消迁移</string>
+    <string name="migration_p2_done_title">迁移完成</string>
+    <string name="migration_p2_receiver_body">聊天记录已迁移到这台设备。</string>
+    <string name="migration_p2_new_app_body">账号和聊天记录已迁移完成。迁移期间收到的新消息也会在这里显示。</string>
+    <string name="migration_p2_sender_transferred_body">聊天记录已传送。请在新设备确认迁移和登录结果，确认前请保留本设备。</string>
+    <string name="migration_p2_old_app_title">已迁移到「%1$s」</string>
+    <string name="migration_p2_old_app_body">现在可以卸载「%1$s」。</string>
+    <string name="migration_p2_done">完成</string>
+    <string name="migration_p2_ok">好</string>
+    <string name="migration_warm_up_title">正在整理数据</string>
+    <string name="migration_warm_up_body">正在完成数据迁移…</string>
+    <string name="migration_p2_signing_in_title">正在完成数据迁移…</string>
+    <string name="migration_p2_signing_in_body">请保持 Quicall 打开，正在完成聊天记录的初始化。</string>
+    <string name="migration_p2_sign_in_failed_title">登录未完成</string>
+    <string name="migration_p2_sign_in_failed_body">聊天记录已在此设备上，无需再次迁移。可直接重试登录，或重新验证账号。</string>
+    <string name="migration_p2_sign_in_failed_body_short">聊天记录已在此设备上，无需再次迁移。</string>
+    <string name="migration_p2_retry_sign_in">重试</string>
+    <string name="migration_p2_continue_sign_in">重新验证账号</string>
+    <string name="migration_p3_failed_title">迁移失败</string>
+    <string name="migration_p3_blocked_title">无法迁移</string>
+    <string name="migration_p3_space_title">存储空间不足</string>
+    <string name="migration_p3_reason_label">失败原因</string>
+    <string name="migration_p3_space_reason_label">需要释放</string>
+    <string name="migration_p3_reason_conn">两台设备的连接已中断。请将它们连接到同一 Wi-Fi，或让一台设备连接另一台的热点。</string>
+    <string name="migration_p3_reason_fg">迁移过程中 Quicall 未保持打开，连接已中断。</string>
+    <string name="migration_p3_reason_device">无法确认两台设备属于同一账号，本次迁移已停止。</string>
+    <string name="migration_p3_reason_integrity">收到的数据未通过完整性验证，因此没有写入这台设备。</string>
+    <string name="migration_p3_reason_read">来源设备上的部分聊天数据无法读取，因此未进行迁移。</string>
+    <string name="migration_p3_reason_source">来源设备已离线、关闭 Quicall 或取消了迁移。</string>
+    <string name="migration_p3_reason_switch">暂时无法完成设备切换。来源设备仍可继续使用。</string>
+    <string name="migration_p3_reason_unknown">出现意外错误，请重新开始迁移。</string>
+    <string name="migration_p3_reason_no_account">「%1$s」中没有可迁移的账号。</string>
+    <string name="migration_p3_reason_space">请在这台设备上释放至少 %1$s，或返回并关闭附件迁移。</string>
+    <string name="migration_p3_reason_expired">二维码已过期，请在另一台设备上刷新后重新扫描。</string>
+    <string name="migration_p3_reason_peer_timeout">等待电脑确认超时，请重新扫码。</string>
+    <string name="migration_p3_reason_target_not_empty">「%1$s」中已有账号或聊天数据，因此没有迁移任何内容。</string>
+    <string name="migration_p3_reason_handoff_disabled">暂不支持从旧版 App 迁移。</string>
+    <string name="migration_p3_retry">重新开始</string>
+    <string name="migration_p3_rescan">重新扫码</string>
+    <string name="migration_p3_other_login">使用其他方式登录</string>
+    <string name="migration_p3_back">返回</string>
+    <string name="migration_p3_manage_storage">管理存储空间</string>
+    <string name="migration_p3_drop_attachments">返回并关闭附件</string>
+    <string name="migration_p3_recovering">正在恢复…</string>
+    <string name="migration_p3_recheck">重新检查</string>
+    <string name="migration_p4_unconfirmed_title">迁移结果未确认</string>
+    <string name="migration_p4_waiting_body">新设备已收到全部数据，但尚未回应结果，正在继续等待…</string>
+    <string name="migration_p4_idle_body">新设备一直没有回应结果。请先不要在此设备重新开始迁移，到新设备上查看迁移是否已完成。</string>
+    <string name="migration_p4_unreachable_body">无法连接到新设备，请在新设备上确认迁移结果。</string>
+    <string name="migration_p4_checking">正在检查…</string>
+    <string name="migration_p4_start_over">新设备上没有迁移成功？重新开始</string>
+    <string name="migration_p4_close">关闭</string>
+    <string name="migration_p4_cancel_too_late">新设备已在导入数据，现在无法取消。</string>
+    <string name="migration_common_cancel">取消</string>
+    <string name="migration_m1_title">取消迁移？</string>
+    <string name="migration_m1_body">当前迁移将停止，之后可以重新开始。</string>
+    <string name="migration_m1_keep">继续迁移</string>
+    <string name="migration_m1_go">取消迁移</string>
+    <string name="migration_m2_title">不迁移聊天记录？</string>
+    <string name="migration_m2_body_cross">继续后，将无法再从旧设备迁移本次聊天记录。</string>
+    <string name="migration_m2_body_same_device">登录后将无法再从「%1$s」迁移聊天记录。</string>
+    <string name="migration_m2_keep">返回迁移</string>
+    <string name="migration_m2_go">不迁移并继续</string>
+    <string name="migration_m3_title">需要更新 Quicall</string>
+    <string name="migration_m3_body">请在这台设备上更新 Quicall，然后重新开始迁移。</string>
+    <string name="migration_m3_body_peer">「%1$s」当前版本不支持迁移，请先更新到最新版本。</string>
+    <string name="migration_m3_go">更新 Quicall</string>
+    <string name="share_file_access_error">无法访问共享的文件，请重新尝试分享。</string>
 </resources>

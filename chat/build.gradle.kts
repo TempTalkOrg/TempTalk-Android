@@ -39,6 +39,9 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // Gradle's 512m default overflows once Robolectric has loaded the several android-all
+        // framework jars this suite spans (API 27–34); mirrors :call.
+        unitTests.all { it.maxHeapSize = "2g" }
     }
 }
 
@@ -66,6 +69,9 @@ dependencies {
     // :chat needs it as a direct dependency to compile against the new
     // OfflineAudioPipeline / PipelineTapConfig types in `voice/`.
     implementation(libs.denoise.filter)
+
+    // Lottie: image-editor HUD / text entry and the message-list loading animation.
+    implementation(libs.lottie)
 
     // Hilt
     implementation(libs.hilt.android)
@@ -120,8 +126,4 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
-    implementation(libs.mlkit.translate)
-    implementation(libs.language.detector) {
-        exclude(group = "com.intellij", module = "annotations")
-    }
 }

@@ -38,11 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
@@ -213,13 +209,8 @@ fun VideoItemTrackSelector(
 
                 Text(
                     text = ResUtils.getString(R.string.call_screen_sharing_placeholder),
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = DifftTheme.colors.textTertiary,
-                    )
+                    style = DifftTheme.typography.p3,
+                    color = DifftTheme.colors.textTertiary,
                 )
             }
         }

@@ -8,11 +8,15 @@ import android.os.Build
 import android.os.Environment
 import android.os.Environment.MEDIA_MOUNTED
 import android.os.ParcelFileDescriptor
+import android.os.Process
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.StorageNames
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import java.io.Closeable
@@ -46,6 +50,9 @@ object FileUtil {
     /** Large file threshold for manual download prompt (10MB) */
     const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
 
+    /** Coarsest mtime resolution to tolerate when comparing file timestamps (FAT family: 2s). */
+    private const val MTIME_GRANULARITY_SLACK_MS = 2_000L
+
     @JvmStatic
     fun canWriteToMediaStore(): Boolean {
         return Build.VERSION.SDK_INT > 28 ||
@@ -66,6 +73,23 @@ object FileUtil {
         val valid = file.exists() && file.isFile && file.length() > 0
         if (valid) fileValidityCache[path] = true
         return valid
+    }
+
+    /**
+     * Drops the cached validity of [path] and of its `.encrypt` sibling.
+     *
+     * The cache stores only positive results keyed by exact path and is otherwise cleared just on
+     * logout, so any code that DELETES or MOVES a file must call this — a surviving `true` would keep
+     * reporting a file that is no longer there.
+     */
+    fun invalidateFileValidity(path: String) {
+        fileValidityCache.remove(path)
+        fileValidityCache.remove("$path.encrypt")
+    }
+
+    /** [invalidateFileValidity] for every cached path under [directoryPath]. */
+    fun invalidateFileValidityUnder(directoryPath: String) {
+        fileValidityCache.keys.removeAll { it.startsWith(directoryPath) }
     }
 
     fun isFileNameValid(filename: String?): Boolean {
@@ -112,7 +136,11 @@ object FileUtil {
     }
 
     fun deleteMessageFile(messageId: String) {
-        deleteFolder(File(getFilePath(FILE_DIR_ATTACHMENT + File.separator + messageId)))
+        val directoryPath = getFilePath(FILE_DIR_ATTACHMENT + File.separator + messageId)
+        deleteFolder(File(directoryPath))
+        // The validity cache keys on exact paths and caches only `true`; without this the deleted
+        // files keep reporting as valid until logout.
+        invalidateFileValidityUnder(directoryPath)
     }
 
     private fun deleteFolder(folder: File): Boolean {
@@ -181,7 +209,21 @@ object FileUtil {
         return name.contains("_log_") && name.endsWith(".txt")
     }
 
-    private fun deleteDirectoryContents(directory: File, preserveLogs: Boolean) {
+    /**
+     * The encrypted `secure_config` store and the Tink keyset that unlocks it: global config, call
+     * URL state and the one verified sign-in held across another account's wipe — no account
+     * material. A full clear leaves both alone; a `.pb` without its keyset is unreadable.
+     */
+    @VisibleForTesting
+    internal fun isSecureConfigFile(file: File): Boolean {
+        if (file.isDirectory) return false
+        val parent = file.parentFile?.name ?: return false
+        return (parent == "datastore" && file.name == StorageNames.SECURE_CONFIG_FILE) ||
+            (parent == "shared_prefs" && file.name == "${StorageNames.SECURE_CONFIG_KEYSET_PREFS_FILE}.xml")
+    }
+
+    @VisibleForTesting
+    internal fun deleteDirectoryContents(directory: File, preserveLogs: Boolean) {
         if (!directory.exists() || !directory.isDirectory) return
 
         directory.listFiles()?.forEach { file ->
@@ -190,10 +232,13 @@ object FileUtil {
                 L.d { "[FileUtil] Preserving log file: ${file.absolutePath}" }
                 return@forEach
             }
+            if (isSecureConfigFile(file)) return@forEach
 
             try {
                 if (file.isDirectory) {
                     deleteDirectoryContents(file, preserveLogs)
+                    // A directory that still holds a preserved file stays, silently.
+                    if (file.listFiles()?.isNotEmpty() == true) return@forEach
                 }
                 if (!file.delete()) {
                     L.w { "[FileUtil] Failed to delete file: ${file.absolutePath}, exists: ${file.exists()}, canRead: ${file.canRead()}, canWrite: ${file.canWrite()}" }
@@ -229,18 +274,66 @@ object FileUtil {
         }
     }
 
-    private val progressMap = hashMapOf<String, Int>()
+    /**
+     * Transfer progress per attachment copy (keyed by `Attachment.localId`). Written from job
+     * threads and read from the main thread, hence concurrent.
+     *
+     * Only a SUCCESS terminal (100) is evictable: once published, the file on disk is the durable
+     * answer, so after [TERMINAL_RETENTION_MS] the entry is dropped — without this the map would
+     * grow by one entry per transfer for the process lifetime. A failure (-1) / expired (-2) marker
+     * stays for the whole process instead: the job's terminal write goes to the DB row only, the
+     * in-memory bubble's status is never refreshed, so evicting the marker would make the next
+     * rebind read progress=null + stale LOADING status and auto-re-download the failed/expired
+     * attachment in an endless loop. Growth from failure markers is naturally bounded (one entry
+     * per failed transfer). Eviction is lazy (next touch of the same key, plus a sweep once the map
+     * grows past [SWEEP_THRESHOLD]); deliberately no timer.
+     */
+    private val progressMap = ConcurrentHashMap<String, Int>()
+
+    /** Publish time of the evictable terminal value held for a key; absent while a transfer runs. */
+    private val terminalAtMap = ConcurrentHashMap<String, Long>()
+
+    private const val TERMINAL_RETENTION_MS = 30_000L
+    private const val SWEEP_THRESHOLD = 256
+
+    /** Time source for terminal-progress expiry; overridden by tests so they need not wait it out. */
+    @VisibleForTesting
+    internal var progressClock: () -> Long = { System.currentTimeMillis() }
 
     private val _progressUpdate = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 64)
     val progressUpdate: SharedFlow<String> = _progressUpdate
 
+    private fun isEvictableProgress(progress: Int): Boolean = progress == 100
+
     fun emitProgressUpdate(id: String, progress: Int) {
         progressMap[id] = progress
+        if (isEvictableProgress(progress)) {
+            terminalAtMap[id] = progressClock()
+            if (progressMap.size > SWEEP_THRESHOLD) sweepExpiredTerminalProgress()
+        } else {
+            // A restarted transfer — or a sticky failure/expired marker — makes the key
+            // non-evictable again.
+            terminalAtMap.remove(id)
+        }
         _progressUpdate.tryEmit(id)
     }
 
     fun getProgress(id: String): Int? {
+        evictTerminalProgressIfExpired(id)
         return progressMap[id]
+    }
+
+    private fun evictTerminalProgressIfExpired(id: String) {
+        val terminalAt = terminalAtMap[id] ?: return
+        if (progressClock() - terminalAt < TERMINAL_RETENTION_MS) return
+        terminalAtMap.remove(id)
+        // Drop only while the value is still the evictable one — a transfer restarted in between
+        // must keep its live progress.
+        progressMap.computeIfPresent(id) { _, value -> if (isEvictableProgress(value)) null else value }
+    }
+
+    private fun sweepExpiredTerminalProgress() {
+        terminalAtMap.keys.toList().forEach { evictTerminalProgressIfExpired(it) }
     }
 
     private val downloadingMap = hashMapOf<Long, String>()
@@ -416,22 +509,29 @@ object FileUtil {
     /**
      * Clear temp directories on startup.
      * These directories are used for intermediate files during attachment processing.
-     * After app restart, any files here are orphaned and can be safely deleted.
+     * Only files written by a previous process are orphans: a share received during this cold
+     * start may already be staged in draft_blobs by the time the sweep runs, so files newer than
+     * the process start are kept.
      */
     fun clearDraftAttachmentsDirectory() {
         try {
+            val processStartWallMs = System.currentTimeMillis() -
+                (SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime())
+            // lastModified() can be truncated to whole seconds (FUSE-backed external storage, FAT
+            // family), so a file written right after process start could read as older than the
+            // millisecond start time. Only files clearly older than that are treated as orphans.
+            val staleBeforeMs = processStartWallMs - MTIME_GRANULARITY_SLACK_MS
             // Clear current draft_blobs directory
             val draftDir = FilePathManager.draftAttachmentsDir
             if (draftDir.exists()) {
-                draftDir.listFiles()?.forEach { file ->
-                    if (file.isFile) {
-                        file.delete()
-                    }
-                }
-                L.i { "[FileUtil] Cleared draft_blobs directory" }
+                val stale = draftDir.listFiles().orEmpty()
+                    .filter { it.isFile && it.lastModified() < staleBeforeMs }
+                stale.forEach { it.delete() }
+                L.i { "[FileUtil] draft_blobs sweep deleted=${stale.size}" }
             }
 
-            // Clear legacy temp_attachments directory (for users upgrading from older versions)
+            // Clear legacy temp_attachments directory (for users upgrading from older versions).
+            // Nothing writes here any more, so no process-start guard is needed.
             val legacyTempDir = File(draftDir.parentFile, "temp_attachments")
             if (legacyTempDir.exists()) {
                 legacyTempDir.listFiles()?.forEach { file ->

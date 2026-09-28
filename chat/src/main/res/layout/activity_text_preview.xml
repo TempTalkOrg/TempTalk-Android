@@ -11,7 +11,9 @@
         android:id="@+id/rootLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true">
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingBottom="@dimen/detail_close_button_content_inset">
 
         <FrameLayout
             android:id="@+id/contentWrapper"
@@ -37,30 +39,15 @@
 
     </androidx.core.widget.NestedScrollView>
 
-    <!-- Floating close button (bottom-center). Style mirrors the chat list "scroll to bottom"
-         button. Touch handling in TextPreviewActivity routes any gesture starting on this
-         button straight to super.dispatchTouchEvent, so it never interferes with long-press
-         word selection / drag-to-select on the text. -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cv_close"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+    <!-- Floating close button (bottom-center), shared with every message detail page. Touch
+         handling in TextPreviewActivity routes any gesture starting on this button straight to
+         super.dispatchTouchEvent, so it never interferes with long-press word selection /
+         drag-to-select on the text. -->
+    <com.difft.android.base.widget.DetailCloseButtonView
+        android:id="@+id/btn_close"
+        android:layout_width="@dimen/detail_close_button_size"
+        android:layout_height="@dimen/detail_close_button_size"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="32dp"
-        app:cardBackgroundColor="@color/bg3"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="3dp"
-        app:cardMaxElevation="3dp">
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/iv_close"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_gravity="center"
-            android:contentDescription="@string/chat_select_dialog_close"
-            android:src="@drawable/ic_close"
-            app:tint="@color/icon" />
-
-    </androidx.cardview.widget.CardView>
+        android:layout_marginBottom="@dimen/detail_close_button_margin" />
 
 </FrameLayout>

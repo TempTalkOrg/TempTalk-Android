@@ -294,7 +294,7 @@ class WCDBPagedMessageAccessTest {
         val readMaxTimestamp = 5_000L    // WHERE bound (server axis, systemShowTimestamp)
         val readAt = 4_200L              // SET value (actual read moment) — distinct from the bound
         val cond = DBMessageModel.roomId.eq("rrt")
-            .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
+            .and(DBMessageModel.readTime.le(0L).or(DBMessageModel.readTime.isNull()))
             .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
         wcdbInstance.message.updateValue(readAt, DBMessageModel.readTime, cond)
 
@@ -312,7 +312,7 @@ class WCDBPagedMessageAccessTest {
         val readMaxTimestamp = 5_000L
         val readAt = 4_200L
         val cond = DBMessageModel.roomId.eq("rrt-empty")
-            .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
+            .and(DBMessageModel.readTime.le(0L).or(DBMessageModel.readTime.isNull()))
             .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
         wcdbInstance.message.updateValue(readAt, DBMessageModel.readTime, cond)   // must not throw
         assertEquals(0L, messageCount(DBMessageModel.roomId.eq("rrt-empty")))

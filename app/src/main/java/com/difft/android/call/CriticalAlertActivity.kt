@@ -341,7 +341,7 @@ class CriticalAlertActivity: ComponentActivity() {
                     messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
                 } else {
                     // 2. 如果当前未进行通话，则调用 getCallingList 方法获取最新的会议列表
-                    val response = callService.getCallingList((globalServices.userManager.getUserData()?.microToken ?: ""))
+                    val response = callService.getCallingList()
 
                     if (response.status != 0) {
                         L.e { "[CriticalAlert] getCallingList failed with status: ${response.status}" }

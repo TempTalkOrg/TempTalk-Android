@@ -28,12 +28,12 @@ class PrivacySettingViewModel @Inject constructor() : ViewModel() {
     private val mSetStatusResultData = MutableLiveData<Resource<BaseResponse<GetProfileResponse>>>()
     internal val setStatusResultData: LiveData<Resource<BaseResponse<GetProfileResponse>>> = mSetStatusResultData
 
-    fun getStatus(token: String) {
+    fun getStatus() {
         mGetStatusResultData.value = Resource.loading()
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    privacySettingRepo.getProfile(token)
+                    privacySettingRepo.getProfile()
                 }
                 mGetStatusResultData.value = Resource.success(result)
             } catch (e: CancellationException) {
@@ -44,12 +44,12 @@ class PrivacySettingViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    fun setStatus(token: String, searchByPhone: Int, searchByEmail: Int) {
+    fun setStatus(searchByPhone: Int, searchByEmail: Int) {
         mSetStatusResultData.value = Resource.loading()
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    privacySettingRepo.setProfile(token, searchByPhone, searchByEmail)
+                    privacySettingRepo.setProfile(searchByPhone, searchByEmail)
                 }
                 mSetStatusResultData.value = Resource.success(result)
             } catch (e: CancellationException) {

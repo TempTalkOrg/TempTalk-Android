@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Runtime mirror of the dual-pane LAYOUT gate. Its qualifier set is deliberately
+        identical to app/src/main/res/layout-w673dp-h480dp/, so the resource resolver
+        answers "would activity_index.xml inflate a detail_pane in THIS configuration?"
+        without any code comparing dp to a constant — a runtime WindowMetrics-based gate
+        can disagree with the qualifier near the boundary (WindowMetrics bounds include
+        system decoration; Configuration.screenWidthDp does not) and must never be added.
+        The inflated view tree (detail_pane != null) stays the outcome every consumer
+        reads; this bool exists for code that needs the EXPECTATION before/without a
+        view tree, and for PaneGateResourceAgreementTest, which pins it equal to
+        inflation across the gate boundaries so the two directories cannot be renamed
+        apart. Rename values-w673dp-h480dp/ whenever layout-w673dp-h480dp/ is renamed.
+    -->
+    <bool name="dual_pane_layout_active">false</bool>
+</resources>

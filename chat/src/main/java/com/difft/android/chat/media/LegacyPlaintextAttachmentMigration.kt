@@ -49,7 +49,7 @@ object LegacyPlaintextAttachmentMigration {
     private const val KEY_VERSION = "legacy_plaintext_purge_version"
     // Retry counter kept purely for observability (logged), never used to abandon the migration.
     private const val KEY_ATTEMPTS = "legacy_plaintext_purge_attempts"
-    // v2: video added to keepEncryptedAtRest — bump so legacy plaintext videos are purged too.
+    // v2: video added to the encrypt-at-rest set — bump so legacy plaintext videos are purged too.
     // v3: long text (text/x-signal-plain) added — bump so legacy plaintext long-text files are purged too.
     // v4: all remaining generic files added (uniform encrypt-at-rest) — bump so legacy plaintext
     //     documents / audio files / archives / apk / octet-stream are purged too.
@@ -183,9 +183,11 @@ object LegacyPlaintextAttachmentMigration {
     }
 
     /**
-     * Mirrors `Attachment.keepEncryptedAtRest()` using the DB model fields. Keep in sync.
+     * Whether a legacy plaintext file of this row's type must be re-encrypted, decided from the DB
+     * model fields. Must stay in step with which types [EncryptedAttachmentAccess] states are kept
+     * encrypted at rest, and [CURRENT_VERSION] bumped whenever that set changes.
      *
-     * As of P4 all attachment types are kept encrypted-at-rest (uniform model), so every legacy
+     * All attachment types are kept encrypted at rest (uniform model), so every legacy
      * plaintext file with a usable key is migrated. A file whose DB row is missing or whose key is
      * unusable (`< 64B`) is still handled as a permanent skip by [migrateOne] (stays plaintext,
      * read via the plaintext-fallback path), so it never blocks migration completion.
@@ -195,8 +197,12 @@ object LegacyPlaintextAttachmentMigration {
 
     /**
      * Resolve the attachment DB row for `(messageId, fileName)`. Mirrors
-     * [EncryptedAttachmentProvider]'s lookup: normal messages match by `messageId`; forwarded single
-     * attachments are addressed by `authorityId`, so fall back to that when the id is numeric.
+     * [EncryptedAttachmentProvider]'s lookup: normal messages match by `messageId`; forward copies
+     * are addressed by their per-copy `localId` (the forward-attachment migration renames/copies
+     * legacy files — plaintext included — into `attachment/<localId>/` directories, so a
+     * localId-named directory holding a plaintext file MUST resolve here or the file would be
+     * misclassified as an orphan and left unencrypted at rest forever); forwarded single attachments
+     * at the pre-localId address are matched by `authorityId` when the id is numeric.
      */
     private fun findAttachment(messageId: String, fileName: String): AttachmentModel? {
         // DB read failures are transient — let them propagate so the whole run aborts and retries,
@@ -204,6 +210,8 @@ object LegacyPlaintextAttachmentMigration {
         // "no row" (orphan plaintext).
         val byMessage = wcdb.attachment.getAllObjects(DBAttachmentModel.messageId.eq(messageId))
         (byMessage.firstOrNull { it.fileName == fileName } ?: byMessage.firstOrNull())?.let { return it }
+
+        wcdb.attachment.getFirstObject(DBAttachmentModel.localId.eq(messageId))?.let { return it }
 
         val authorityId = messageId.toLongOrNull() ?: return null
         val byAuthority = wcdb.attachment.getAllObjects(DBAttachmentModel.authorityId.eq(authorityId))

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      LAN P2P transfer (LocalSend v2.1 wire format). Plain TCP/TLS needs no permission on Android;
+      INTERNET covers socket creation. Pairing is by QR only — no multicast discovery.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

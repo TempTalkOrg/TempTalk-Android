@@ -262,7 +262,9 @@ class AudioRouteRowsTest {
 
     // ── #76 ─────────────────────────────────────────────────────────────────────
     @Test
-    fun `every kind maps to a distinct picker and horn icon`() {
+    fun `every kind maps to a distinct picker icon and its horn glyph`() {
+        // Earpiece and loudspeaker share the horn glyph on purpose: the action bar shows the
+        // loudspeaker as the selected (white) circle, so the glyph itself need not differ.
         val picker = AudioDeviceKind.entries.map { it.pickerIconRes() }
         val horn = AudioDeviceKind.entries.map { it.hornIconRes() }
 
@@ -277,10 +279,10 @@ class AudioRouteRowsTest {
         )
         assertEquals(
             listOf(
-                R.drawable.call_btn_volume_phone,
-                R.drawable.call_btn_volume_speaker,
-                R.drawable.call_btn_volume_headphones,
-                R.drawable.call_btn_volume_airpod,
+                R.drawable.call_ic_volume_speaker,
+                R.drawable.call_ic_volume_speaker,
+                R.drawable.call_ic_volume_headphones,
+                R.drawable.call_ic_volume_airpod,
             ),
             horn,
         )

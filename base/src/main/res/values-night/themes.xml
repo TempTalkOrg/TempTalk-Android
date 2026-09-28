@@ -9,8 +9,8 @@
         <item name="colorSecondary">@android:color/transparent</item>
         <item name="colorSecondaryVariant">@android:color/transparent</item>
         <item name="colorOnSecondary">@android:color/transparent</item>
-        <!-- Default page background (settings idiom — light gray in light, dark in dark).
-             In dark mode bg == bg1 (#181A20), so visually unchanged from previous behavior. -->
+        <!-- Default page background: bg is bgpage-secondary (#0B0E11 in dark).
+             Content pages paint @color/bg1 on their root layout. -->
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
         <item name="android:navigationBarColor">@color/bg</item>

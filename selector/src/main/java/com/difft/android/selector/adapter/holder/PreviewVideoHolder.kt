@@ -161,6 +161,12 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
                 l.onLongPressDownload(m)
             }
         }
+
+        override fun onPlayerControllerVisibility(player: View, visible: Boolean) {
+            if (player === videoPlayer) {
+                mPreviewEventListener?.onPreviewVideoControllerVisibility(visible)
+            }
+        }
     }
 
     fun startPlay() {
@@ -233,8 +239,10 @@ class PreviewVideoHolder(itemView: View) : BasePreviewHolder(itemView) {
     override fun onViewDetachedFromWindow() {
         val engine = videoEngine()
         if (engine != null) {
-            engine.onPlayerDetachedFromWindow(videoPlayer!!)
+            // Stop listening first: tearing the player down hides its control bar, and that event
+            // must not reach the page that is now on screen.
             engine.removePlayListener(mPlayerListener)
+            engine.onPlayerDetachedFromWindow(videoPlayer!!)
         }
         playerDefaultUI()
     }

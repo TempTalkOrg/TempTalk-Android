@@ -7,6 +7,8 @@ import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.chat.ChatMessageListBehavior
 import com.difft.android.chat.ChatPaginationController
 import difft.android.messageserialization.For
+import com.difft.android.chat.translate.AutoTranslateCoordinator
+import com.difft.android.chat.translate.AutoTranslateCoordinatorFactory
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -123,7 +125,11 @@ abstract class ChatMessageViewModelTestBase {
         val jobs = createdViewModels.mapNotNull { it.viewModelScope.coroutineContext[Job] }
         jobs.forEach { it.cancel() }
         val deadline = System.currentTimeMillis() + DRAIN_TIMEOUT_MS
-        while (jobs.any { it.isActive } && System.currentTimeMillis() < deadline) {
+        // isCompleted, NOT isActive: a cancelled Job reports isActive=false immediately, while its
+        // already-running IO body is still unwinding — waiting on isActive exits at once and the
+        // unmockkStatic below lands under the straggler's feet (the exact poisoning this drain exists
+        // to prevent). Only isCompleted waits for the body to actually finish.
+        while (jobs.any { !it.isCompleted } && System.currentTimeMillis() < deadline) {
             shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(DRAIN_POLL_MS)
         }
@@ -158,6 +164,12 @@ abstract class ChatMessageViewModelTestBase {
         // (which ids reach the `IN` set, on which dispatcher) are about production code, and a
         // mocked hydrator would only replay whatever the test told it.
         childRowLoader = FakeMessageChildRowLoader(childRowCorpus)
+        // The coordinator is mocked, but its overlay MUST be a real flow: it is a combine source of
+        // the pipeline under test, and a mock that never emits would stall every assertion.
+        val translateCoordinator: AutoTranslateCoordinator = mockk(relaxed = true)
+        every { translateCoordinator.overlay } returns MutableStateFlow(emptyMap())
+        val translateFactory: AutoTranslateCoordinatorFactory = mockk()
+        every { translateFactory.create(any(), any()) } returns translateCoordinator
 
         return ChatMessageViewModel(
             forWhat = forWhat,
@@ -166,7 +178,7 @@ abstract class ChatMessageViewModelTestBase {
             dbRoomStore = mockk(relaxed = true),
             chatPaginationControllerFactory = factory,
             callManager = mockk(relaxed = true),
-            translateManager = mockk(relaxed = true),
+            autoTranslateCoordinatorFactory = translateFactory,
             speechToTextManager = mockk(relaxed = true),
             pushReadReceiptSendJobFactory = mockk(relaxed = true),
             activityNoticeDispatcher = mockk(relaxed = true),
@@ -181,7 +193,12 @@ abstract class ChatMessageViewModelTestBase {
 
     companion object {
         const val MY_ID = "my-uid"
-        private const val DRAIN_TIMEOUT_MS = 2_000L
+
+        // Must comfortably outlast a loaded parallel test JVM: when the drain misses this deadline,
+        // unmockkStatic lands before the in-flight IO coroutine resumes, which then hits the real
+        // WCDB binding, throws UnsatisfiedLinkError (an Error — not held by the production catch),
+        // and poisons the NEXT runTest on the same worker. 2s flaked regularly as the suite grew.
+        private const val DRAIN_TIMEOUT_MS = 15_000L
         private const val DRAIN_POLL_MS = 5L
     }
 }

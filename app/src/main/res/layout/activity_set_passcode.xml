@@ -23,7 +23,7 @@
             android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/t.primary" />
+            app:tint="@color/icon" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -81,20 +81,14 @@
             <requestFocus />
         </androidx.appcompat.widget.AppCompatEditText>
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.difft.android.base.widget.DifftButtonView
             android:id="@+id/btn_next"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="48dp"
-            android:background="@drawable/login_handle_zone_bg"
-            android:clickable="false"
             android:enabled="false"
-            android:gravity="center"
-            android:text="@string/login_next"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="@dimen/login_next_size" />
+            android:text="@string/login_next" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
@@ -168,20 +162,14 @@
             android:textStyle="bold"
             tools:text="123" />
 
-        <androidx.appcompat.widget.AppCompatButton
+        <com.difft.android.base.widget.DifftButtonView
             android:id="@+id/btn_confirm"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="48dp"
-            android:background="@drawable/login_handle_zone_bg"
-            android:clickable="false"
             android:enabled="false"
-            android:gravity="center"
-            android:text="@string/settings_passcode_confirm"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="@dimen/login_next_size" />
+            android:text="@string/settings_passcode_confirm" />
 
     </LinearLayout>
 

@@ -12,7 +12,7 @@ import com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity
 import com.difft.android.chat.contacts.data.FriendSourceType
 import com.difft.android.chat.databinding.ActivityEnterCodeBinding
 import com.hi.dhl.binding.viewbind
-import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.widget.withWait
 import com.difft.android.chat.R
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.cancellation.CancellationException
@@ -48,10 +48,11 @@ class InviteCodeActivity : BaseActivity() {
             ScanActivity.startActivity(this@InviteCodeActivity)
         }
 
-        mBinding.addText.setOnClickListener {
+        mBinding.btnAdd.setOnClickListener {
             mBinding.tvError.text = ""
-            mBinding.customUid.text?.let { text ->
-                val textStr = text.toString()
+            // Empty input no longer fires a pointless network query (previously an empty
+            // Editable still entered the block and called queryByCustomUid("")).
+            mBinding.customUid.query.takeIf { it.isNotEmpty() }?.let { textStr ->
                 // 判断text是否为4位数字，如果是则调用queryByInviteCode，否则调用 queryByCustomUid
                 if (textStr.length == 4 && textStr.all { it.isDigit() }) {
                     queryByInviteCode(textStr)
@@ -63,13 +64,13 @@ class InviteCodeActivity : BaseActivity() {
     }
 
     private fun queryByInviteCode(inviteCode: String) {
-        ComposeDialogManager.showWait(this@InviteCodeActivity,"")
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    inviteRepo.queryByInviteCode(inviteCode)
+                val result = withWait {
+                    withContext(Dispatchers.IO) {
+                        inviteRepo.queryByInviteCode(inviteCode)
+                    }
                 }
-                ComposeDialogManager.dismissWait()
                 if (result.status == 0) {
                     result.data?.uid?.let { uid ->
                         ContactDetailActivity.startActivity(this@InviteCodeActivity, uid, sourceType = FriendSourceType.RANDOM_CODE, avatar = result.data?.avatar, joinedAt = result.data?.joinedAt)
@@ -82,7 +83,6 @@ class InviteCodeActivity : BaseActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ComposeDialogManager.dismissWait()
                 L.w { "[InviteCodeActivity] queryByInviteCode error: ${e.stackTraceToString()}" }
                 mBinding.tvError.text = e.message
                 mBinding.tvError.visibility = View.VISIBLE
@@ -91,13 +91,13 @@ class InviteCodeActivity : BaseActivity() {
     }
 
     private fun queryByCustomUid(customUid: String) {
-        ComposeDialogManager.showWait(this@InviteCodeActivity,"")
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    inviteRepo.queryByCustomUid(1, customUid)
+                val result = withWait {
+                    withContext(Dispatchers.IO) {
+                        inviteRepo.queryByCustomUid(1, customUid)
+                    }
                 }
-                ComposeDialogManager.dismissWait()
                 if (result.status == 0) {
                     val uid = result.data?.uid
                     val resultCustomUid = result.data?.customUid
@@ -113,7 +113,6 @@ class InviteCodeActivity : BaseActivity() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ComposeDialogManager.dismissWait()
                 L.w { "[InviteCodeActivity] queryByCustomUid error: ${e.stackTraceToString()}" }
                 mBinding.tvError.text = e.message
                 mBinding.tvError.visibility = View.VISIBLE

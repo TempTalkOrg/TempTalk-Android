@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "954364286",
-    "project_id": "temptalk-open-source",
-    "storage_bucket": "temptalk-open-source.firebasestorage.app"
+    "project_number": "1041365052180",
+    "project_id": "tt-open-source",
+    "storage_bucket": "tt-open-source.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:954364286:android:e8d2ab3c14e268a456832f",
+        "mobilesdk_app_id": "1:1041365052180:android:7d18fc171334e42baa7001",
         "android_client_info": {
-          "package_name": "org.difft.chative"
+          "package_name": "org.difft.temptalk"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBb_d50g9YCkOsxqLUolq7AQbZlV8Fuo4o"
+          "current_key": "AIzaSyDWLoPGKuiXrd_dLKTkXzqEX4CfGXQbKw8"
         }
       ],
       "services": {
@@ -26,15 +26,15 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:954364286:android:bd89ae88baf9d60956832f",
+        "mobilesdk_app_id": "1:1041365052180:android:87f5fd7b277fb3c8aa7001",
         "android_client_info": {
-          "package_name": "org.difft.chative.test"
+          "package_name": "org.difft.temptalk.test"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBb_d50g9YCkOsxqLUolq7AQbZlV8Fuo4o"
+          "current_key": "AIzaSyDWLoPGKuiXrd_dLKTkXzqEX4CfGXQbKw8"
         }
       ],
       "services": {

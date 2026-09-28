@@ -1,20 +1,12 @@
 package com.difft.android.call.ui.feedback
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -30,13 +22,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallFeedbackRequestBody
+import com.difft.android.base.ui.compose.DifftCheckBox
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
@@ -61,8 +50,7 @@ internal fun CallQuestionView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .wrapContentHeight()
-            .background(color = DifftTheme.colors.backgroundPopup, shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 0.dp, bottomEnd = 0.dp)),
+            .wrapContentHeight(),
         verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Top),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -83,14 +71,9 @@ internal fun CallQuestionView(
             ) {
                 Text(
                     text = ResUtils.getString(R.string.call_rating_question_title),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(510),
-                        color = DifftTheme.colors.textPrimary,
-                        textAlign = TextAlign.Center,
-                    )
+                    style = DifftTheme.typography.h5,
+                    color = DifftTheme.colors.textPrimary,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -116,16 +99,11 @@ internal fun CallQuestionView(
                     text = {
                         Text(
                             text = tab.title,
-                            style = TextStyle(
-                                fontSize = 16.sp,
-                                lineHeight = 24.sp,
-                                fontFamily = FontFamily.Default,
-                                fontWeight = FontWeight(400),
-                                color = if (selectedTabIndex == index)
-                                    DifftTheme.colors.textPrimary
-                                else
-                                    DifftTheme.colors.textTertiary
-                            )
+                            style = DifftTheme.typography.p2,
+                            color = if (selectedTabIndex == index)
+                                DifftTheme.colors.textPrimary
+                            else
+                                DifftTheme.colors.textTertiary,
                         )
                     }
                 )
@@ -141,109 +119,37 @@ internal fun CallQuestionView(
             horizontalAlignment = Alignment.Start,
         ) {
             currentTab.reasons.forEach { reason ->
-                Row(
+                DifftCheckBox(
+                    checked = selectedReasons.contains(reason),
+                    onCheckedChange = { isSelected ->
+                        if (isSelected) selectedReasons.add(reason)
+                        else selectedReasons.remove(reason)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(
-                            vertical = 8.dp
-                        )
-                        .toggleable(
-                            value = selectedReasons.contains(reason),
-                            onValueChange = { isSelected ->
-                                if (isSelected) selectedReasons.add(reason)
-                                else selectedReasons.remove(reason)
-                            }
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.Start),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = selectedReasons.contains(reason),
-                        onCheckedChange = null,
-                        colors = CheckboxDefaults.colors(
-                            checkedColor = DifftTheme.colors.primary,
-                            uncheckedColor = DifftTheme.colors.textDisabled
-                        )
-                    )
-                    Text(text = reason, color = DifftTheme.colors.textPrimary, fontSize = 15.sp)
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-        ) {
-            Row(
-                modifier = Modifier
-                    .border(width = 1.dp, color = DifftTheme.colors.line, shape = RoundedCornerShape(size = 8.dp))
-                    .weight(1f)
-                    .height(48.dp)
-                    .clickable {
-                        onDismiss()
-                    },
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = ResUtils.getString(R.string.call_rating_action_cancel),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = DifftTheme.colors.textPrimary,
-                        textAlign = TextAlign.Center,
-                    )
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .background(color = if (selectedReasons.isEmpty()) DifftTheme.colors.backgroundDisabled else DifftTheme.colors.primary, shape = RoundedCornerShape(size = 8.dp))
-                    .clickable {
-                        val reasonIndexMap = tabs.flatMap { tab ->
-                            tab.reasons.mapIndexed { index, reason ->
-                                reason to (tab.key to index)
-                            }
-                        }.toMap()
-
-                        val reasons = selectedReasons
-                            .mapNotNull { reasonIndexMap[it] }
-                            .groupBy({ it.first }, { it.second })
-                            .mapValues { it.value.sorted() }
-
-                        val params = CallFeedbackRequestBody(
-                            userIdentity = callInfo.userIdentity,
-                            userSid = callInfo.userSid,
-                            roomSid = callInfo.roomSid,
-                            roomId = callInfo.roomId,
-                            rating = rating,
-                            reasons = reasons
-                        )
-                        onSubmit(params)
-                    },
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = ResUtils.getString(R.string.call_rating_action_submit),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = if (selectedReasons.isEmpty()) DifftTheme.colors.textDisabled else Color.White,
-                        textAlign = TextAlign.Center,
-                    )
+                        .padding(vertical = 8.dp),
+                    label = reason,
                 )
             }
         }
+
+        CallFeedbackActions(
+            onCancel = onDismiss,
+            submitEnabled = selectedReasons.isNotEmpty(),
+            onSubmit = {
+                val reasonIndexMap = tabs.flatMap { tab ->
+                    tab.reasons.mapIndexed { index, reason ->
+                        reason to (tab.key to index)
+                    }
+                }.toMap()
+
+                val reasons = selectedReasons
+                    .mapNotNull { reasonIndexMap[it] }
+                    .groupBy({ it.first }, { it.second })
+                    .mapValues { it.value.sorted() }
+
+                onSubmit(callInfo.toRequestBody(rating, reasons))
+            },
+        )
     }
 }

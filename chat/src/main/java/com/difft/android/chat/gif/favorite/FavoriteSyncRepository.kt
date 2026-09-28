@@ -2,7 +2,6 @@ package com.difft.android.chat.gif.favorite
 
 import android.util.Base64
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
 import com.difft.android.chat.media.FavoriteEncryptedAttachmentProvider
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
@@ -55,12 +54,9 @@ data class FavoriteGifUiItem(
 class FavoriteSyncRepository @Inject constructor(
     @param:ChativeHttpClientModule.Chat private val httpClient: ChativeHttpClient,
     private val urlManager: UrlManager,
-    private val keyRepo: FavoriteKeyRepo,
-    private val userManager: UserManager
+    private val keyRepo: FavoriteKeyRepo
 ) {
     private val favoritesUrl: String get() = urlManager.gifs + "v1/gifs/favorites"
-    // The `/gifs/` route requires token auth (JWT/microToken); the Basic baseAuth fallback gets 401.
-    private fun token(): String = userManager.getUserData()?.microToken ?: ""
 
     private val _favorites = MutableStateFlow<List<FavoriteGifUiItem>>(emptyList())
     /** Observable favorites list, descending by addedListVersion, pending items on top. */
@@ -97,7 +93,7 @@ class FavoriteSyncRepository @Inject constructor(
 
     /** GET the favorites envelope. */
     suspend fun getFavorites(): FavoritesResponse? = withContext(Dispatchers.IO) {
-        val resp = httpClient.httpService.getFavorites(token(), favoritesUrl)
+        val resp = httpClient.httpService.getFavorites(favoritesUrl)
         if (!resp.isSuccess()) {
             L.w { "[FavoriteSync] getFavorites non-success status=${resp.status}" }
             return@withContext null

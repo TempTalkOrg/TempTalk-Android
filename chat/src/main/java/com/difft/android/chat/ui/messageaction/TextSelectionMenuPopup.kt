@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
@@ -35,7 +34,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.DifftThemePreview
@@ -48,7 +46,9 @@ import com.difft.android.chat.R
  * Adds ComposeView to Activity's content view for proper lifecycle support
  */
 class TextSelectionMenuPopup(
-    private val activity: FragmentActivity
+    private val activity: FragmentActivity,
+    /** False on a build that ships no translate backend; the Translate item is then omitted. */
+    private val translateSupported: Boolean,
 ) {
     
     /**
@@ -133,6 +133,7 @@ class TextSelectionMenuPopup(
                                 }
                         ) {
                             TextSelectionMenuContent(
+                                translateSupported = translateSupported,
                                 onCopy = {
                                     this@TextSelectionMenuPopup.callbacks?.onCopy(currentSelectedText)
                                     dismiss()
@@ -247,6 +248,7 @@ class TextSelectionMenuPopup(
  */
 @Composable
 fun TextSelectionMenuContent(
+    translateSupported: Boolean,
     onCopy: () -> Unit,
     onForward: () -> Unit,
     onTranslate: () -> Unit,
@@ -255,9 +257,9 @@ fun TextSelectionMenuContent(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = DifftTheme.radius.largeShape,
         colors = CardDefaults.cardColors(
-            containerColor = DifftTheme.colors.backgroundPopup
+            containerColor = MessageActionMenuColors.panel
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 4.dp
@@ -278,11 +280,13 @@ fun TextSelectionMenuContent(
                 label = stringResource(R.string.chat_message_action_forward),
                 onClick = onForward
             )
-            SelectionActionButton(
-                iconRes = R.drawable.chat_message_action_translate,
-                label = stringResource(R.string.chat_message_action_translate),
-                onClick = onTranslate
-            )
+            if (translateSupported) {
+                SelectionActionButton(
+                    iconRes = R.drawable.chat_message_action_translate,
+                    label = stringResource(R.string.chat_message_action_translate),
+                    onClick = onTranslate
+                )
+            }
             SelectionActionButton(
                 iconRes = R.drawable.chat_message_action_select_all,
                 label = stringResource(R.string.chat_message_action_select_all),
@@ -311,12 +315,12 @@ private fun SelectionActionButton(
             painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier.size(16.dp),
-            tint = DifftTheme.colors.textPrimary
+            tint = MessageActionMenuColors.contentDefault
         )
         Text(
             text = label,
-            fontSize = 12.sp,
-            color = DifftTheme.colors.textPrimary
+            style = DifftTheme.typography.p4,
+            color = MessageActionMenuColors.contentDefault
         )
     }
 }
@@ -328,6 +332,7 @@ private fun SelectionActionButton(
 private fun TextSelectionMenuContentPreview() {
     DifftThemePreview {
         TextSelectionMenuContent(
+            translateSupported = true,
             onCopy = {},
             onForward = {},
             onTranslate = {},
@@ -341,6 +346,7 @@ private fun TextSelectionMenuContentPreview() {
 private fun TextSelectionMenuContentDarkPreview() {
     DifftThemePreview(darkTheme = true) {
         TextSelectionMenuContent(
+            translateSupported = true,
             onCopy = {},
             onForward = {},
             onTranslate = {},

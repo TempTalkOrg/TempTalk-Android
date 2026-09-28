@@ -108,6 +108,7 @@
     <string name="db_key_unavailable_retry">Retry</string>
 
     <string name="dual_pane_divider_drag_hint">Drag to resize panes</string>
+    <string name="dual_pane_list_expand_hint">Expand conversation list</string>
 
     <!-- Self-hosted proxy -->
     <string name="proxy_settings_title">Use proxy</string>
@@ -139,6 +140,40 @@
     <string name="proxy_passphrase_wrong">Incorrect passphrase. Try again.</string>
     <string name="proxy_passphrase_confirm">OK</string>
     <string name="proxy_passphrase_cancel">Cancel</string>
+
+    <!-- Data-migration backup (A3) — notification surface -->
+
+    <!-- Data-migration P2P transfer (I5) — foreground-service notification surface -->
+    <string name="migration_p2p_notification_channel_progress">Device transfer (in progress)</string>
+    <string name="migration_p2p_notification_channel_result">Device transfer (result)</string>
+    <string name="migration_p2p_notification_title_running">Transferring your data…</string>
+    <string name="migration_p2p_notification_text_running">Keep the app open until the migration finishes.</string>
+    <string name="migration_p2p_notification_action_cancel">Cancel</string>
+    <string name="migration_p2p_notification_title_success">Transfer complete</string>
+    <string name="migration_p2p_notification_text_restored">Your data is now on this device.</string>
+    <string name="migration_p2p_notification_text_uploaded">The new device has received everything.</string>
+    <string name="migration_p2p_notification_title_failure">Transfer failed</string>
+    <string name="migration_p2p_notification_title_unconfirmed">Transfer result unconfirmed</string>
+    <string name="migration_p2p_notification_text_unconfirmed">Check your new device to see whether the migration finished.</string>
+    <string name="migration_p2p_notification_text_pairing_timeout">Pairing timed out</string>
+
+    <!-- Data-migration backup (A3) — Me entry + user-facing UI surface -->
+
+    <!-- Data-migration v2 (A5) — import-on-login UI (file picker / passphrase / progress / error) -->
+    <!-- Bounces back to the import method chooser (not to login) — backing out re-shows the chooser -->
+    <!-- PRD §8.9 error messages, keyed by MigrationError code -->
+    <!-- I4 — P2P receive (NEW device shows QR) -->
+
+    <!-- P2P SEND (OLD device) — main-screen entry + send screen copy -->
+
+    <!-- Unified landing: option intros + existing-backup section header -->
+    <string name="migration_p2p_send_scan_button">Scan your new device\'s QR</string>
+    <string name="migration_p2p_send_scanning">Opening the scanner…</string>
+    <string name="migration_p2p_send_scan_not_p2p">This isn\'t a migration code.</string>
+    <string name="migration_p2p_send_scan_no_key">This isn\'t the new device\'s migration code.</string>
+    <string name="migration_p2p_send_scan_first">Scan your new device\'s QR first.</string>
+    <string name="migration_p2p_send_transfer_in_flight">A transfer is already running. Cancel it before starting another.</string>
+    <string name="migration_p2p_send_scanner_unavailable">Couldn\'t open the scanner. Try again.</string>
     <string name="proxy_e2e_checking">Verifying connection to Quicall…</string>
     <string name="proxy_e2e_ok">Connected to Quicall through the proxy.</string>
     <string name="proxy_e2e_failed">Unable to connect to Quicall through the proxy.</string>
@@ -166,4 +201,142 @@
     <string name="linked_devices_unlink_confirm_body">By unlinking this device, it will no longer be able to send or receive messages.</string>
     <string name="linked_devices_unlink_failed">Quicall was unable to unlink your device.</string>
     <string name="linked_devices_list_update_failed">Failed to update device list.</string>
+
+    <!-- Same-device migration (old package → new package on one phone) -->
+    <string name="migration_p2p_receive_relaunch_legacy">Open the old app again</string>
+    <string name="migration_p2p_receive_legacy_open_failed">Couldn\'t open the old app. Make sure the official version is installed and try again.</string>
+    <string name="migration_p2p_receive_scan_not_export_code">This isn\'t the computer\'s export code. Choose “Migrate to phone” on the computer, then scan the code it shows.</string>
+    <string name="link_login_title">Sign In to Quicall Desktop</string>
+    <string name="link_login_device_generic">This computer</string>
+    <string name="link_login_size_label">Estimated size</string>
+    <string name="link_login_sync_switch">Sync Chat History</string>
+    <string name="link_login_sync_off_note">This computer will only show messages received from now on</string>
+    <string name="link_login_legacy_desktop_note">To sync your chat history, update Quicall on your computer to the latest version, then scan the code again.</string>
+    <string name="link_login_unavailable_note">This computer can\'t sync chat history right now. You can still sign in.</string>
+    <string name="link_login_same_account_note">This computer already has your chat history.</string>
+    <string name="link_login_different_account_note">Another account\'s history is on this computer; you\'ll be asked to confirm there before syncing.</string>
+    <string name="link_login_unreachable_note">Couldn\'t reach the computer, so nothing will be synced this time.</string>
+    <string name="link_login_sign_in_and_sync">Sign In and Sync</string>
+    <string name="link_login_sign_in">Sign In</string>
+    <string name="link_login_pin_expired">The code has refreshed. Please scan it again.</string>
+    <string name="link_login_failed">Couldn\'t sign in on the computer. Please try again.</string>
+
+    <!-- Retiring package: "move to the new app" guide -->
+    <string name="legacy_migration_title">Move to %1$s</string>
+    <string name="legacy_migration_why">Due to a Google policy change, this app will no longer be updated. %1$s works the same way and uses the same account — both your account and chat history can be transferred. This app will be signed out once the transfer completes.</string>
+    <string name="legacy_migration_download">Get %1$s</string>
+    <string name="legacy_migration_later">Not Now</string>
+    <string name="legacy_migration_open_failed">Couldn\'t open that. Please try again.</string>
+
+    <!-- Same-device no-login migration (handoff) -->
+    <string name="migration_app_name_new">Quicall (New)</string>
+    <string name="migration_app_name_legacy">Quicall (Old)</string>
+    <string name="migration_handoff_entry_title">Transfer from %1$s?</string>
+    <string name="migration_handoff_entry_body">Transfer your account and chat history without signing in again.</string>
+    <string name="migration_handoff_entry_primary">Transfer from %1$s</string>
+    <string name="migration_handoff_entry_secondary">Sign In Another Way</string>
+    <string name="migration_handoff_target_not_empty">This app already holds an account or chat data and can\'t receive a transfer.</string>
+    <string name="migration_handoff_send_target">Transfer this account and its chat history to %1$s</string>
+    <string name="migration_handoff_auth_title">Confirm It\'s You</string>
+    <string name="migration_handoff_auth_desc">Transferring moves this account\'s sign-in to the new app.</string>
+    <string name="migration_handoff_auth_failed">Verification wasn\'t completed, so the transfer was canceled.</string>
+    <string name="migration_handoff_done_sign_in_again">Sign in again</string>
+    <string name="legacy_migration_handoff_cta">Open %1$s</string>
+    <string name="legacy_migration_handoff_peer_occupied">“%1$s” already holds an account or chat data and can\'t receive a transfer.</string>
+    <string name="migration_r1_title">Transfer Chat History</string>
+    <string name="migration_r1_body">Chat history is stored only on your device, never uploaded to a server. You can transfer it directly from your old device.</string>
+    <string name="migration_r1_from_phone">Transfer from Another Phone</string>
+    <string name="migration_r1_from_desktop">Transfer from Computer</string>
+    <string name="migration_r1_skip">Continue Without Transferring</string>
+    <string name="migration_r2_qr_copy">Open Quicall on your old phone and scan the code above. Connect both devices to the same Wi-Fi network (or use one device’s hotspot) and turn off any VPN. A home network works best.</string>
+    <string name="migration_r2_network">Connect both devices to the same Wi-Fi network (or use one device’s hotspot) and turn off any VPN. A home network works best.</string>
+    <string name="migration_r2_qr_refreshed">This code has expired. Refreshing…</string>
+    <string name="migration_r2_scan_title">Scan the Code on Your Computer</string>
+    <string name="migration_r2_scan_body">On your computer, open Quicall and go to Settings → Data Migration.</string>
+    <string name="migration_r2_locked">This transfer has already started on another device.</string>
+    <string name="migration_r2_desktop_cancelled">Canceled on the computer.</string>
+    <string name="migration_s1_target">Transfer your chat history to “%1$s”</string>
+    <string name="migration_s1_current_account">Current account</string>
+    <string name="migration_s1_calculating">Calculating transfer size…</string>
+    <string name="migration_s1_size_label">Estimated size</string>
+    <string name="migration_s1_include_attachments">Include Attachments</string>
+    <string name="migration_s1_attachments_note">Photos, videos, and files take up %1$s. If you turn this off, you can still download them in chats until they expire.</string>
+    <string name="migration_s1_start">Start Transfer</string>
+    <string name="link_login_waiting_note">Confirm on your computer to continue.</string>
+    <string name="migration_p1_preparing_title">Preparing Transfer</string>
+    <string name="migration_p1_preparing_hint">Preparing chat data and setting up an encrypted connection. Nothing has been transferred yet.</string>
+    <string name="migration_p1_transferring_title">Transferring Chat History</string>
+    <string name="migration_p1_transferring_hint">Keep Quicall open on both devices. Don’t switch apps, lock either device, or leave the transfer screen.</string>
+    <string name="migration_p1_transferring_hint_same_device">Keep Quicall (New) open and don’t lock your phone. Quicall (Old) will keep running in the background.</string>
+    <string name="migration_p1_verifying_title">Verifying Chat History</string>
+    <string name="migration_p1_finishing_title">Completing Transfer</string>
+    <string name="migration_p1_finishing_hint">Waiting for the other device to confirm. This device will be signed out once the transfer completes.</string>
+    <string name="migration_p1_cancel">Cancel Transfer</string>
+    <string name="migration_p2_done_title">Transfer Complete</string>
+    <string name="migration_p2_receiver_body">Your chat history has been transferred to this device.</string>
+    <string name="migration_p2_new_app_body">Your account and chat history are now on this device. Messages received during the transfer will appear here too.</string>
+    <string name="migration_p2_sender_transferred_body">Your chat history has been sent. Check the transfer and sign-in results on the new device before discarding this device.</string>
+    <string name="migration_p2_old_app_title">Moved to %1$s</string>
+    <string name="migration_p2_old_app_body">You can now uninstall %1$s.</string>
+    <string name="migration_p2_done">Done</string>
+    <string name="migration_p2_ok">OK</string>
+    <string name="migration_warm_up_title">Preparing your messages</string>
+    <string name="migration_warm_up_body">Finishing data migration…</string>
+    <string name="migration_p2_signing_in_title">Finishing data migration…</string>
+    <string name="migration_p2_signing_in_body">Keep Quicall open while it finishes setting up your transferred chat history.</string>
+    <string name="migration_p2_sign_in_failed_title">Sign-In Not Finished</string>
+    <string name="migration_p2_sign_in_failed_body">Your chat history is already on this device — you won’t need to transfer again. Try signing in again, or verify the account with a new code.</string>
+    <string name="migration_p2_sign_in_failed_body_short">Your chat history is already on this device — you won’t need to transfer again.</string>
+    <string name="migration_p2_retry_sign_in">Try Again</string>
+    <string name="migration_p2_continue_sign_in">Verify Account Again</string>
+    <string name="migration_p3_failed_title">Transfer Failed</string>
+    <string name="migration_p3_blocked_title">Can\'t Transfer</string>
+    <string name="migration_p3_space_title">Not Enough Storage</string>
+    <string name="migration_p3_reason_label">What went wrong</string>
+    <string name="migration_p3_space_reason_label">What’s needed</string>
+    <string name="migration_p3_reason_conn">The connection between your devices was lost. Connect both to the same Wi-Fi network, or use one device’s hotspot.</string>
+    <string name="migration_p3_reason_fg">Quicall was closed during the transfer, so the connection was lost.</string>
+    <string name="migration_p3_reason_device">These devices aren’t signed in to the same account, so the transfer stopped.</string>
+    <string name="migration_p3_reason_integrity">The data that arrived didn’t pass verification, so nothing was saved to this device.</string>
+    <string name="migration_p3_reason_read">Some chat data on the other device couldn’t be read, so the transfer didn’t run.</string>
+    <string name="migration_p3_reason_source">The other device went offline, closed Quicall, or canceled the transfer.</string>
+    <string name="migration_p3_reason_switch">The device switch couldn’t be completed. Your other device still works as before.</string>
+    <string name="migration_p3_reason_unknown">Something went wrong. Try the transfer again.</string>
+    <string name="migration_p3_reason_no_account">There\'s no account to transfer from “%1$s”.</string>
+    <string name="migration_p3_reason_space">Free up at least %1$s on this device, or go back and exclude attachments.</string>
+    <string name="migration_p3_reason_expired">The QR code has expired. Refresh it on the other device, then scan again.</string>
+    <string name="migration_p3_reason_peer_timeout">The computer didn\'t confirm in time. Scan the code again.</string>
+    <string name="migration_p3_reason_target_not_empty">“%1$s” already holds an account or chat data, so nothing was transferred.</string>
+    <string name="migration_p3_reason_handoff_disabled">Transferring from the old app isn\'t available right now.</string>
+    <string name="migration_p3_retry">Try Again</string>
+    <string name="migration_p3_rescan">Scan Again</string>
+    <string name="migration_p3_other_login">Sign In Another Way</string>
+    <string name="migration_p3_back">Back</string>
+    <string name="migration_p3_manage_storage">Manage Storage</string>
+    <string name="migration_p3_drop_attachments">Exclude Attachments</string>
+    <string name="migration_p3_recovering">Recovering…</string>
+    <string name="migration_p3_recheck">Check Again</string>
+    <string name="migration_p4_unconfirmed_title">Result Unconfirmed</string>
+    <string name="migration_p4_waiting_body">Your new device has received everything but hasn’t reported a result yet. Still waiting for it…</string>
+    <string name="migration_p4_idle_body">Your new device never reported a result. Don’t start the transfer again on this device yet — check the new device to see whether the migration finished.</string>
+    <string name="migration_p4_unreachable_body">Couldn’t reach your new device. Check the migration result on the new device itself.</string>
+    <string name="migration_p4_checking">Checking…</string>
+    <string name="migration_p4_start_over">Nothing arrived on the new device? Start over</string>
+    <string name="migration_p4_close">Close</string>
+    <string name="migration_p4_cancel_too_late">Your new device is already importing, so the transfer can’t be cancelled now.</string>
+    <string name="migration_common_cancel">Cancel</string>
+    <string name="migration_m1_title">Cancel Transfer?</string>
+    <string name="migration_m1_body">The transfer will stop. You can start it again later.</string>
+    <string name="migration_m1_keep">Continue Transfer</string>
+    <string name="migration_m1_go">Cancel Transfer</string>
+    <string name="migration_m2_title">Continue Without Transferring?</string>
+    <string name="migration_m2_body_cross">If you continue, this chat history can no longer be transferred from your old device.</string>
+    <string name="migration_m2_body_same_device">Once you sign in, chat history can no longer be transferred from “%1$s”.</string>
+    <string name="migration_m2_keep">Back to Transfer</string>
+    <string name="migration_m2_go">Continue Without Transferring</string>
+    <string name="migration_m3_title">Quicall Update Needed</string>
+    <string name="migration_m3_body">Update Quicall on this device, then start the transfer again.</string>
+    <string name="migration_m3_body_peer">This version of “%1$s” doesn\'t support transfers. Update it to the latest version first.</string>
+    <string name="migration_m3_go">Update Quicall</string>
+    <string name="share_file_access_error">Unable to access the shared file. Please try sharing again.</string>
 </resources>

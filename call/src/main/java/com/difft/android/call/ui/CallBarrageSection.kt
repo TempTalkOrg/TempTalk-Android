@@ -17,8 +17,6 @@ internal fun CallBarrageMessageSection(
     callConfig: CallConfig,
     autoHideTimeout: Long,
     isOneVOneCall: Boolean,
-    isDualPane: Boolean,
-    isShareScreening: Boolean,
     room: Room,
 ) {
     val barrageConfig = remember(callConfig, autoHideTimeout, isOneVOneCall) {
@@ -38,8 +36,6 @@ internal fun CallBarrageMessageSection(
     BarrageMessageView(
         viewModel,
         config = barrageConfig,
-        isDualPane = isDualPane,
-        isShareScreening = isShareScreening,
         sendBarrageMessage = { message, type, _ ->
             viewModel.rtm.sendChatBarrage(message, type, onComplete = { status ->
                 if (status) {

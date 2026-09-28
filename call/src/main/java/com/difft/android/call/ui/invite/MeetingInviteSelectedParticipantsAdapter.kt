@@ -4,24 +4,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.call.LCallManager
-import com.difft.android.call.LCallToChatController
 import com.difft.android.call.R
 import com.difft.android.call.data.AvatarData
-import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 
 data class MeetingInviteSelectedParticipantItem(
@@ -55,37 +44,29 @@ class MeetingInviteSelectedParticipantsAdapter(
         holder.bind(getItem(position))
     }
 
+    override fun onViewRecycled(holder: ParticipantViewHolder) {
+        super.onViewRecycled(holder)
+        holder.recycle()
+    }
+
     class ParticipantViewHolder(
         itemView: View,
         private val onParticipantClick: (String) -> Unit,
-        private val lifecycleScope: CoroutineScope
+        lifecycleScope: CoroutineScope
     ) : RecyclerView.ViewHolder(itemView) {
 
-        private val avatarContainer: ViewGroup = itemView.findViewById(R.id.avatar_container)
-        private val textViewAvatarLetter: TextView = itemView.findViewById(R.id.textview_avatar_letter)
         private val textViewName: TextView = itemView.findViewById(R.id.textview_name)
         private val buttonRemove: View = itemView.findViewById(R.id.button_remove)
-
-        private val entryPoint by lazy {
-            EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(
-                ApplicationHelper.instance
-            )
-        }
-        private val contactorCacheManager: ContactorCacheManager by lazy {
-            entryPoint.contactorCacheManager
-        }
-        private val callToChatController: LCallToChatController by lazy {
-            entryPoint.callToChatController
-        }
-
-        private var loadAvatarJob: Job? = null
+        private val avatar = InviteRowAvatarBinder.create(
+            container = itemView.findViewById(R.id.avatar_container),
+            scope = lifecycleScope,
+            logTag = "MeetingInviteSelected",
+        )
 
         fun bind(item: MeetingInviteSelectedParticipantItem) {
-            val displayName = item.contact.getDisplayNameForUI()
-            textViewName.text = displayName
+            textViewName.text = item.contact.getDisplayNameForUI()
 
-            loadAvatarJob?.cancel()
-            loadAvatar(item.contact, displayName)
+            avatar.bind(item.contact.id, AvatarData.FromContactor(item.contact))
 
             itemView.setOnClickListener {
                 onParticipantClick(item.contact.id)
@@ -95,67 +76,6 @@ class MeetingInviteSelectedParticipantsAdapter(
             }
         }
 
-        private fun loadAvatar(contact: ContactorModel, displayName: String) {
-            avatarContainer.removeAllViews()
-            textViewAvatarLetter.visibility = View.GONE
-
-            val firstLetter = if (displayName.isNotBlank()) {
-                val firstChar = displayName.firstOrNull()?.uppercaseChar() ?: '#'
-                if (firstChar.isLetter() || firstChar in '\u4e00'..'\u9fa5') {
-                    firstChar.toString()
-                } else {
-                    "#"
-                }
-            } else {
-                "#"
-            }
-
-            loadAvatarJob = lifecycleScope.launch {
-                try {
-                    val displayInfo = contactorCacheManager.getParticipantDisplayInfo(contact.id)
-
-                    withContext(Dispatchers.Main) {
-                        if (adapterPosition != RecyclerView.NO_POSITION) {
-                            val avatarView = when (val data = displayInfo.avatarData) {
-                                is AvatarData.FromContactor ->
-                                    callToChatController.getAvatarByContactor(itemView.context, data.contactor)
-                                is AvatarData.FromNameOrUid ->
-                                    callToChatController.createAvatarByNameOrUid(itemView.context, data.name, data.userId)
-                                null -> null
-                            }
-                            if (avatarView != null) {
-                                avatarView.layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                                avatarContainer.addView(avatarView)
-                            } else {
-                                showDefaultAvatar(firstLetter)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    L.e { "[MeetingInviteSelected] loadAvatar failed: ${e.stackTraceToString()}" }
-                    if (adapterPosition != RecyclerView.NO_POSITION) {
-                        showDefaultAvatar(firstLetter)
-                    }
-                }
-            }
-        }
-
-        private fun showDefaultAvatar(letter: String) {
-            textViewAvatarLetter.text = letter
-            textViewAvatarLetter.visibility = View.VISIBLE
-            textViewAvatarLetter.setTextColor(
-                itemView.context.getColor(android.R.color.white)
-            )
-            textViewAvatarLetter.background = AppCompatResources.getDrawable(
-                itemView.context,
-                com.difft.android.call.R.drawable.bg_circle_avatar
-            ) ?: android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(itemView.context.getColor(com.difft.android.base.R.color.primary))
-            }
-        }
+        fun recycle() = avatar.cancel()
     }
 }

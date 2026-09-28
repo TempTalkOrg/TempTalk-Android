@@ -1,10 +1,13 @@
 package com.difft.android.chat.contacts.contactsdetail
 
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.FragmentManager
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -13,6 +16,10 @@ import dagger.hilt.android.AndroidEntryPoint
  */
 @AndroidEntryPoint
 class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
+
+    // Contact detail is also a full page and paints the page colour itself; keep the container on
+    // that colour so its bg.elevated cards keep contrast and the drag handle shows no seam.
+    override fun getContainerBackgroundRes(): Int = com.difft.android.base.R.drawable.base_bg_bottom_sheet_page
 
     companion object {
         private const val TAG = "ContactDetailBottomSheet"
@@ -108,4 +115,66 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
 
     // No need for expandable in fit-to-contents mode
     override fun isExpandable(): Boolean = false
+
+    private var sheetView: View? = null
+    private var sheetBehavior: BottomSheetBehavior<*>? = null
+    private var expandedForEditing = false
+    private var dismissGesturesEnabled = true
+
+    override fun onBottomSheetReady(sheet: View, behavior: BottomSheetBehavior<*>) {
+        sheetView = sheet
+        sheetBehavior = behavior
+        // Edit mode may have been requested before the dialog showed (e.g. recreation mid-edit),
+        // in which case both requests were only recorded and are applied now.
+        if (expandedForEditing) applyExpansion()
+        if (!dismissGesturesEnabled) applyDismissGestures()
+    }
+
+    /**
+     * Remark edit mode pushes the half-height card to full height (the app's usual full-screen sheet)
+     * so the keyboard leaves room for the content; leaving edit mode restores auto height. Swiping
+     * down still dismisses unless [setDismissGesturesEnabled] locked it for an unsaved change.
+     *
+     * Idempotent: the binder re-emits the current mode on every lifecycle restart. The request is
+     * recorded even before the sheet exists and applied from [onBottomSheetReady].
+     */
+    fun setExpandedForEditing(expanded: Boolean) {
+        if (expanded == expandedForEditing) return
+        expandedForEditing = expanded
+        applyExpansion()
+    }
+
+    private fun applyExpansion() {
+        val sheet = sheetView ?: return
+        val behavior = sheetBehavior ?: return
+        val expanded = expandedForEditing
+        sheet.layoutParams = sheet.layoutParams.apply {
+            height = if (expanded) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        // Keep the base fit-to-contents mode so the only stops are EXPANDED and HIDDEN; fitToContents=false
+        // would add a HALF_EXPANDED stop a slow drag settles on. skipCollapsed drops the 16:9 auto-peek
+        // stop a full-height sheet would otherwise park at instead of dismissing.
+        behavior.skipCollapsed = expanded
+        behavior.peekHeight = BottomSheetBehavior.PEEK_HEIGHT_AUTO
+        behavior.state = BottomSheetBehavior.STATE_EXPANDED
+    }
+
+    /**
+     * Swipe-to-dismiss and scrim taps cannot show the unsaved-changes prompt, so they are switched
+     * off while a remark draft differs from the stored remark; close / back still prompt.
+     *
+     * Like [setExpandedForEditing] the request is recorded even before the sheet exists, so a
+     * recreation mid-edit re-applies the lock from [onBottomSheetReady].
+     */
+    fun setDismissGesturesEnabled(enabled: Boolean) {
+        if (enabled == dismissGesturesEnabled) return
+        dismissGesturesEnabled = enabled
+        applyDismissGestures()
+    }
+
+    private fun applyDismissGestures() {
+        sheetBehavior?.isHideable = dismissGesturesEnabled
+        dialog?.setCanceledOnTouchOutside(dismissGesturesEnabled)
+    }
+
 }

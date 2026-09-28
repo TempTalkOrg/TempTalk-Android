@@ -16,7 +16,8 @@ import javax.inject.Singleton
 @Singleton
 class WebSocketManager @Inject constructor(
     private val appWebSocketHelper: AppWebSocketHelper,
-    private val incomingMessageObserver: IncomingMessageObserver
+    private val incomingMessageObserver: IncomingMessageObserver,
+    private val sessionAuthGuard: SessionAuthGuard,
 ) : IConnectionRefresher {
     // @Volatile: read by reconnectAfterProxyChange() outside the @Synchronized
     // start/stop/reset path. Without @Volatile, a writer thread's update would
@@ -45,6 +46,10 @@ class WebSocketManager @Inject constructor(
         // Start message observer immediately
         incomingMessageObserver.start()
 
+        // The guard owns the kick-out decision for as long as there is a session to protect.
+        // Its own job?.isActive check makes a sticky-service restart of start() a no-op.
+        sessionAuthGuard.start()
+
         L.i { "[ws] WebSocket connection and message observer started successfully" }
     }
 
@@ -63,6 +68,8 @@ class WebSocketManager @Inject constructor(
 
         // Stop message observer first
         incomingMessageObserver.stop()
+
+        sessionAuthGuard.stop()
 
         // Stop WebSocket monitoring
         appWebSocketHelper.chatDataWebSocketConnection.stopMonitoring()

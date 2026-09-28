@@ -3,11 +3,9 @@ package com.difft.android.chat.group
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
 import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
-import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
@@ -223,21 +221,16 @@ class GroupSelectMemberActivity : BaseActivity() {
         binding.clSearch.visibility = View.VISIBLE
         searchContacts(null)
 
-        binding.edittextSearchInput.addTextChangedListener {
-            val etContent = binding.edittextSearchInput.text.toString().trim()
-            if (!TextUtils.isEmpty(etContent)) {
+        binding.searchInput.onQueryChanged = {
+            val etContent = it.trim()
+            if (etContent.isNotEmpty()) {
                 searchContacts(etContent)
             } else {
                 searchContacts(null)
             }
-            resetButtonClear(etContent)
         }
-
-        binding.buttonClear.setOnClickListener {
-            binding.edittextSearchInput.text = null
-        }
-
-        resetButtonClear(null)
+        // Must pass null, not "": the two take different branches in searchContacts.
+        binding.searchInput.onClear = { searchContacts(null) }
     }
 
 
@@ -428,14 +421,6 @@ class GroupSelectMemberActivity : BaseActivity() {
 
         val sortedList = searchResultList.sortedByPinyin()
         mAdapter.submitList(sortedList)
-    }
-
-    private fun resetButtonClear(etContent: String?) {
-        binding.buttonClear.animate().apply {
-            cancel()
-            val toAlpha = if (!TextUtils.isEmpty(etContent)) 1.0f else 0f
-            alpha(toAlpha)
-        }
     }
 
     /**

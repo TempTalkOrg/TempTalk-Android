@@ -5,6 +5,7 @@ import com.difft.android.chat.ChatNormalPaginationController
 import com.difft.android.chat.ChatPaginationController
 import com.difft.android.chat.group.GroupChatContentActivity.Companion.groupID
 import com.difft.android.chat.pagination.ChatMessageWindowSource
+import com.difft.android.chat.setting.translate.mvi.TranslateSettingsViewModel
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.contactorID
 import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
@@ -124,6 +125,16 @@ interface PushActivityNoticeSendJobFactory {
 }
 
 @AssistedFactory
+interface PushScreenShotSendJobFactory {
+    fun create(
+        @Assisted
+        parameters: Job.Parameters?,
+        @Assisted
+        textMessage: TextMessage,
+    ): com.difft.android.chat.jobs.PushScreenShotSendJob
+}
+
+@AssistedFactory
 interface ChatNormalPaginationControllerFactory {
     /**
      * [source] is assisted rather than injected because an `@AssistedFactory` method must return a
@@ -167,4 +178,11 @@ interface ChatSettingViewModelFactory {
     fun create(
         forWhat: For
     ): ChatSettingViewModel
+}
+
+@AssistedFactory
+interface TranslateSettingsViewModelFactory {
+    fun create(
+        forWhat: For
+    ): TranslateSettingsViewModel
 }

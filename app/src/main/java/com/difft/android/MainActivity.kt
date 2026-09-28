@@ -5,11 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.text.TextUtils
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
-import com.auth0.android.jwt.JWT
 import com.difft.android.app.TempTalkApplication
+import com.difft.android.app.startup.LocalTokenVerifier
 import com.difft.android.app.startup.needsIdentityKeyRelogin
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
@@ -24,6 +23,21 @@ import com.difft.android.chat.group.GroupChatPopupActivity
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatPopupActivity
 import com.difft.android.login.LoginActivity
+import com.difft.android.login.VerifyCodeActivity
+import com.difft.android.login.entry.PendingLoginStore
+import com.difft.android.login.viewmodel.LoginViewModel
+import com.difft.android.migration.legacy.LegacyGuideMode
+import com.difft.android.migration.legacy.LegacyMigrationGuideActivity
+import com.difft.android.migration.v2.handoff.HandoffOffer
+import com.difft.android.migration.v2.handoff.HandoffState
+import com.difft.android.migration.v2.handoff.MigrationHandoffEntryActivity
+import com.difft.android.migration.v2.handoff.MigrationHandoffGate
+import com.difft.android.migration.v2.handoff.MigrationStatusClient
+import com.difft.android.migration.v2.login.MigrationSuccessActivity
+import com.difft.android.migration.v2.login.PostRestoreWarmUp
+import com.difft.android.migration.v2.login.PostRestoreWarmUpPage
+import com.difft.android.migration.v2.restore.RestoreFlagStore
+import com.difft.android.network.auth.AuthTokenProvider
 import com.difft.android.chat.util.NotificationTrampolineActivity
 import com.difft.android.ui.DatabaseRecoveryScreen
 import com.difft.android.ui.KeyUnavailableScreen
@@ -33,6 +47,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.difft.app.database.DatabaseRecoveryState
 import org.difft.app.database.WCDB
 import org.difft.app.database.wcdb
@@ -48,6 +63,23 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
 
     @Inject
     lateinit var logoutManager: LogoutManager
+
+    @Inject
+    lateinit var authTokenProvider: AuthTokenProvider
+
+    /** Same-device no-login migration: whether to offer it here, and whether it already happened. */
+    @Inject
+    lateinit var handoffGate: MigrationHandoffGate
+
+    @Inject
+    lateinit var statusClient: MigrationStatusClient
+
+    /** A sign-in verified just before another account's data was wiped — see [PendingLoginStore]. */
+    @Inject
+    lateinit var pendingLoginStore: PendingLoginStore
+
+    @Inject
+    lateinit var postRestoreWarmUp: PostRestoreWarmUp
 
     /**
      * Recovery circuit-breaker. Bounds consecutive recovery attempts so a permanently
@@ -104,10 +136,63 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                 } else {
                     false
                 }
-                StartupState(loggedIn, identityMissing)
+                // Cold-start restore resume already ran in TempTalkApplication's blocking startup
+                // chain, before the WCDB singleton opened; it is not repeated here.
+                // A restore-path sign-in leaves the restore flag at COMPLETED for exactly this launch:
+                // consume it here (one flag-file read + delete) so the success page shows once.
+                val flagStore = RestoreFlagStore(this@MainActivity)
+                val account = userManager.getUserData()?.account.orEmpty()
+                // A credential handoff writes the session directly, so a process death can leave the
+                // flag at SIGNING_IN although the restore finished: logged in as the same account
+                // means done — show the page once, clear the orphan.
+                val migrationJustCompleted = flagStore.consumeCompleted() ||
+                    (loggedIn && flagStore.consumeSigningInFor(account))
+                val handoffCompletedHere = userManager.getUserData()?.migrationHandoffCompletedId.orEmpty().isNotEmpty()
+                val migratedToNewApp = !loggedIn && (userManager.getUserData()?.migrationHandoffDoneAt ?: 0L) > 0
+                val handoffOffer = if (loggedIn || migratedToNewApp) HandoffOffer.NONE else probeHandoffOffer()
+                // The held sign-in is honoured only on the fresh install the wipe produced; anything
+                // else means the wipe did not happen or another account got here first, and it is dropped.
+                val pendingAccountSwitch = if (!loggedIn && account.isEmpty()) pendingLoginStore.consume() else null.also { pendingLoginStore.clear() }
+                StartupState(
+                    isLoggedIn = loggedIn,
+                    needsIdentityRelogin = identityMissing,
+                    migrationJustCompleted = migrationJustCompleted,
+                    migratedViaHandoff = handoffCompletedHere,
+                    migratedToNewApp = migratedToNewApp,
+                    handoffOffer = handoffOffer,
+                    pendingAccountSwitch = pendingAccountSwitch,
+                )
             }
 
+            if (state.isLoggedIn && state.migrationJustCompleted) warmUpAfterRestore()
+
             when {
+                // This install already handed its session to the new package: the login page alone
+                // would say nothing about where the account went.
+                !state.isLoggedIn && state.migratedToNewApp -> {
+                    startActivity(LegacyMigrationGuideActivity.createIntent(this@MainActivity, LegacyGuideMode.MIGRATED))
+                    finish()
+                }
+                // The user agreed to replace another account's data and already verified the code:
+                // reopen the code page on that sign-in, which goes straight to the migration chooser.
+                !state.isLoggedIn && state.pendingAccountSwitch != null -> {
+                    L.i { "[MainActivity] held sign-in after an account switch → migration chooser" }
+                    startActivities(
+                        arrayOf(
+                            Intent(this@MainActivity, LoginActivity::class.java),
+                            Intent(this@MainActivity, VerifyCodeActivity::class.java)
+                                .putExtras(VerifyCodeActivity.createResumeBundle(state.pendingAccountSwitch)),
+                        ),
+                    )
+                    finish()
+                }
+                // The old app holds a session that can travel — offer the no-login migration before
+                // asking for a phone number and a verification code.
+                !state.isLoggedIn && state.handoffOffer != HandoffOffer.NONE -> {
+                    L.i { "[MigrationV2][Handoff] startup offer=${state.handoffOffer}" }
+                    startActivity(MigrationHandoffEntryActivity.createIntent(this@MainActivity))
+                    finish()
+                }
                 !state.isLoggedIn -> {
                     startActivity(Intent(this@MainActivity, LoginActivity::class.java))
                     finish()
@@ -119,6 +204,14 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                     FirebaseCrashlytics.getInstance().log("[LegacyCleanup] identity-key-missing relogin")
                     logoutManager.doLogoutWithoutRemoveData()
                     // doLogoutWithoutRemoveData() eventually calls Process.killProcess; code below never runs.
+                }
+                // First launch after a same-device credential handoff: show the one-shot success page,
+                // since that path restarts straight out of the import with no page of its own. A
+                // cross-device restore already showed its completion page, so it falls through.
+                state.migrationJustCompleted && state.migratedViaHandoff -> {
+                    L.i { "[MainActivity] handoff completed on the previous launch → migration success page" }
+                    startActivity(MigrationSuccessActivity.createIntent(this@MainActivity, credentialHandoff = true))
+                    finish()
                 }
                 // Popup branch runs only after integrity + auth + identity-key checks pass.
                 // EXTRA_OPEN_POPUP is set by NotificationTrampolineActivity but MainActivity is
@@ -153,34 +246,54 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         }
     }
 
+    /**
+     * First cold start after a restore: conversations are on disk, contactor and group tables are
+     * not. Hold here until the first sync lands (bounded — see [PostRestoreWarmUp]) so the chat list
+     * opens complete instead of showing every friend as a stranger for a few seconds.
+     */
+    private suspend fun warmUpAfterRestore() {
+        L.i { "[MainActivity] restore completed on the previous launch → warming up contacts and groups first" }
+        setContent { DifftTheme { PostRestoreWarmUpPage() } }
+        postRestoreWarmUp.run()
+    }
+
     private data class StartupState(
         val isLoggedIn: Boolean,
         val needsIdentityRelogin: Boolean,
+        val migrationJustCompleted: Boolean = false,
+        /** The session arrived through a credential handoff, so the success copy says so. */
+        val migratedViaHandoff: Boolean = false,
+        /** This (retiring) install handed its session over and signed itself out. */
+        val migratedToNewApp: Boolean = false,
+        val handoffOffer: HandoffOffer = HandoffOffer.NONE,
+        /** The user agreed to replace another account's data and has already verified the code. */
+        val pendingAccountSwitch: LoginViewModel.PendingSignIn? = null,
     )
 
-    private fun verifyLocalToken(): Boolean {
-        val basicAuth = (userManager.getUserData()?.baseAuth ?: "")
-        if (TextUtils.isEmpty(basicAuth)) {
-            return false
-        }
-
-        val account = userManager.getUserData()?.account
-        val token = (userManager.getUserData()?.microToken ?: "")
-
-        // Inconsistent state: basicAuth present but account/token missing (partial logout,
-        // migration edge). Treat as unauthenticated — this is a security gate (issue #758).
-        if (TextUtils.isEmpty(account) || TextUtils.isEmpty(token)) {
-            L.w {
-                "[MainActivity] verifyLocalToken: basicAuth set but account/token missing, " +
-                    "account.empty=${TextUtils.isEmpty(account)} token.empty=${TextUtils.isEmpty(token)}"
+    /**
+     * Bounded probe of the same-device no-login migration. Runs on every not-logged-in cold start, so
+     * it must never hold the launch open: the timeout collapses to "do not offer" (ordinary login).
+     */
+    private suspend fun probeHandoffOffer(): HandoffOffer =
+        withTimeoutOrNull(HANDOFF_PROBE_TIMEOUT_MS) {
+            if (!handoffGate.canReceive()) return@withTimeoutOrNull HandoffOffer.NONE
+            when (val reply = statusClient.queryStatus()) {
+                MigrationStatusClient.PeerStatusReply.TooOld -> HandoffOffer.PEER_TOO_OLD
+                MigrationStatusClient.PeerStatusReply.Unavailable -> HandoffOffer.NONE
+                is MigrationStatusClient.PeerStatusReply.Ok ->
+                    if (reply.state == HandoffState.READY) {
+                        HandoffOffer.OFFER
+                    } else {
+                        HandoffOffer.NONE
+                    }
             }
-            return false
-        }
+        } ?: HandoffOffer.NONE
 
-        val jwt = JWT(token)
-        val uid = jwt.getClaim("uid").asString()
-        return uid.equals(account)
-    }
+    private fun verifyLocalToken(): Boolean = LocalTokenVerifier.isLocalTokenValid(
+        baseAuth = userManager.getUserData()?.baseAuth,
+        account = userManager.getUserData()?.account,
+        token = authTokenProvider.peek(),
+    )
 
     /**
      * Navigate to IndexActivity, passing all deeplink/share data via Intent.
@@ -236,8 +349,18 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                 L.e { "[MainActivity] Exception handling share Intent: ${e.stackTraceToString()}" }
             }
         }
-        
-        startActivity(newIntent)
+
+        try {
+            startActivity(newIntent)
+        } catch (e: SecurityException) {
+            // UriGrantsManagerService rejects FLAG_GRANT_READ_URI_PERMISSION for a content uri this
+            // process cannot read itself (sender granted nothing, media access is partial, or the grant
+            // expired across a process kill). The file is unreadable either way, so drop the share
+            // payload instead of crashing.
+            L.w { "[MainActivity] share uri grant rejected, entering IndexActivity without share payload" }
+            ToastUtil.showLong(R.string.share_file_access_error)
+            startActivity(Intent(this@MainActivity, IndexActivity::class.java))
+        }
         finish()
     }
 
@@ -284,6 +407,11 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         }
         intent?.let { launchIntent -> runCatching { startActivity(launchIntent) }.onFailure { e -> L.w { "[MainActivity][DBRecovery] relaunch failed: ${e.message}" } } }
         Runtime.getRuntime().exit(0)
+    }
+
+    private companion object {
+        /** The whole probe — gate read plus one binder round trip — or the login page instead. */
+        const val HANDOFF_PROBE_TIMEOUT_MS = 2_000L
     }
 
     /**

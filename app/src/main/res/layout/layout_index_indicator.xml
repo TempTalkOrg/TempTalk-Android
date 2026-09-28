@@ -7,13 +7,17 @@
     android:clipChildren="false"
     android:clipToPadding="false"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:paddingHorizontal="8dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="0dp">
 
+    <!-- Bottombar metrics: 10 top inset + 24 icon + 1 gap + 14 label = 49 dp tall, the iOS
+         content area without its safe area. Shared with the dual-pane rail, so the phone bar
+         adds its own breathing room below (activity_index.xml) instead of this layout. -->
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/imageview_icon"
-        android:layout_width="35dp"
-        android:layout_height="35dp"
-        android:layout_marginTop="8dp"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
         android:duplicateParentState="true"
         app:layout_constraintBottom_toTopOf="@+id/textview_label"
         app:layout_constraintEnd_toEndOf="parent"
@@ -38,7 +42,7 @@
         android:textColor="@color/white"
         android:textSize="8sp"
         android:translationX="6dp"
-        android:translationY="-6dp"
+        android:translationY="-2dp"
         android:visibility="invisible"
         app:layout_constraintEnd_toEndOf="@+id/imageview_icon"
         app:layout_constraintTop_toTopOf="@+id/imageview_icon"
@@ -46,16 +50,17 @@
         tools:text="99+"
         tools:visibility="visible" />
 
+    <!-- Library label is 10/14 Medium; XML has no Medium weight, so textStyle stays normal. -->
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/textview_label"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="1dp"
         android:duplicateParentState="true"
         android:ellipsize="end"
         android:gravity="center_horizontal"
         android:lines="1"
-        android:textSize="14sp"
+        android:textSize="10sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHeight_percent="0.2"

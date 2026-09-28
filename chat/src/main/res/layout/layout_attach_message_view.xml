@@ -101,21 +101,22 @@
             app:layout_constraintVertical_bias="1"
             tools:text="1.2M" />
 
+        <!-- Status copy: occupies the size line's slot (size goes INVISIBLE), so the row height never changes -->
         <TextView
             android:id="@+id/tv_download_hint"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
             android:ellipsize="end"
             android:gravity="top"
             android:lineSpacingExtra="3sp"
             android:lines="1"
-            android:textColor="@color/t.secondary"
+            android:textColor="@color/t.third"
             android:textSize="12sp"
             android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toBottomOf="@+id/attachment_size"
             app:layout_constraintEnd_toEndOf="@+id/attachment_name"
-            app:layout_constraintStart_toEndOf="@+id/attachment_size"
+            app:layout_constraintStart_toStartOf="@+id/attachment_name"
+            app:layout_constraintTop_toTopOf="@+id/attachment_size"
             tools:text="@string/download_failed" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 

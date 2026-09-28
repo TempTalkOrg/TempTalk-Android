@@ -393,9 +393,8 @@
                 android:text="@string/ImageEditorHud_blur_faces"
                 android:textColor="@color/core_white" />
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.difft.android.base.widget.DifftSwitchView
                 android:id="@+id/image_editor_hud_blur_toggle"
-                style="@style/Widget.Chative.Switch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:checked="false"

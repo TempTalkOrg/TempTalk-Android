@@ -22,7 +22,9 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos
  * Builds MessageActionPopup configuration based on message conditions
  */
 class MessageActionConfigBuilder(
-    private val globalConfigsManager: IGlobalConfigsManager
+    private val globalConfigsManager: IGlobalConfigsManager,
+    /** False on a build that ships no translate backend; the translate actions are then omitted. */
+    private val translateSupported: Boolean,
 ) {
     
     /**
@@ -168,11 +170,17 @@ class MessageActionConfigBuilder(
             }
 
             // ② Transform — Translate (text)
-            if (hasTextContent(message)) {
-                if (message.translateData == null || message.translateData?.translateStatus == TranslateStatus.Invisible) {
-                    actions.add(MessageAction.translate())
-                } else {
+            if (translateSupported && hasTextContent(message)) {
+                // "Turn off" is only meaningful while a translation is actually on screen. The
+                // transient states (translating / same language / failed) render nothing, so
+                // offering "off" there would be a button that does nothing.
+                val translateStatus = message.translateData?.translateStatus
+                val showingTranslation =
+                    translateStatus == TranslateStatus.ShowCN || translateStatus == TranslateStatus.ShowEN
+                if (showingTranslation) {
                     actions.add(MessageAction.translateOff())
+                } else {
+                    actions.add(MessageAction.translate())
                 }
             }
 

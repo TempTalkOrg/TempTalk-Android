@@ -11,14 +11,14 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import com.difft.android.call.ui.HideNavigationBarEffect
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import com.difft.android.base.ui.compose.DifftButton
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -37,16 +37,12 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.PopupPositionProvider
@@ -72,7 +68,6 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
     )
     val isCriticalAlertEnable by viewModel.callUiController.showCriticalAlertConfirmViewEnabled.collectAsState(false)
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
-    val isParticipantSharedScreen by viewModel.callUiController.isShareScreening.collectAsState(false)
     val callType by viewModel.callType.collectAsState()
     val gid = if(callType == CallType.GROUP.type) viewModel.conversationId else null
     val invitees by viewModel.participantManager.awaitingJoinInvitees.collectAsState(emptyList())
@@ -106,23 +101,18 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
 
     if (isCriticalAlertEnable && !isInPipMode) {
 
-        ModalBottomSheet (
-            modifier = Modifier
-                .then(if (isParticipantSharedScreen) Modifier.width(375.dp) else Modifier.fillMaxWidth())
-                .wrapContentHeight(),
+        DifftModalBottomSheet(
             sheetState = sheetState,
-            containerColor = DifftTheme.colors.backgroundTertiary,
             contentWindowInsets = { WindowInsets.navigationBars },
+            hideNavigationBar = true,
             onDismissRequest = {
                 onDismiss()
             },
         ) {
-            HideNavigationBarEffect()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
-                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomStart = 0.dp, bottomEnd = 0.dp))
                     .padding(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -151,13 +141,8 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                         ) {
                             Text(
                                 text = ResUtils.getString(R.string.call_toolbar_bottom_critical_alert_text),
-                                style = TextStyle(
-                                    fontSize = 16.sp,
-                                    lineHeight = 24.sp,
-                                    fontFamily = FontFamily.Default,
-                                    fontWeight = FontWeight(400),
-                                    color = DifftTheme.colors.textPrimary,
-                                )
+                                style = DifftTheme.typography.p2,
+                                color = DifftTheme.colors.textPrimary,
                             )
 
                             Image(
@@ -203,41 +188,19 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
                                 .width(343.dp)
                                 .wrapContentHeight(),
                             text = message.value,
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                fontFamily = FontFamily.Default,
-                                fontWeight = FontWeight(400),
-                                color = DifftTheme.colors.textSecondary,
-                                textAlign = TextAlign.Center,
-                            )
+                            style = DifftTheme.typography.p3,
+                            color = DifftTheme.colors.textSecondary,
+                            textAlign = TextAlign.Center,
                         )
                     }
 
-                    Row(
-                        modifier = Modifier
-                            .width(343.dp)
-                            .height(48.dp)
-                            .background(color = DifftTheme.colors.primary, shape = RoundedCornerShape(size = 8.dp))
-                            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 8.dp)
-                            .clickable{
-                                sendCriticalAlert(gid)
-                            },
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = ResUtils.getString(R.string.call_critical_alert_confirm_view_button_send),
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                fontFamily = FontFamily.Default,
-                                fontWeight = FontWeight(400),
-                                color = DifftTheme.colors.textPrimary,
-                                textAlign = TextAlign.Center,
-                            )
-                        )
-                    }
+                    // Full width, never a fixed width: the sheet is already inset, and a fixed
+                    // width overflows on a narrow screen.
+                    DifftButton(
+                        text = ResUtils.getString(R.string.call_critical_alert_confirm_view_button_send),
+                        onClick = { sendCriticalAlert(gid) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
         }
@@ -311,11 +274,8 @@ private fun TooltipBubble(text: String) {
         }
         Text(
             text = text,
+            style = DifftTheme.typography.p3,
             color = Color.White,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight(400),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .alpha(0.95f)

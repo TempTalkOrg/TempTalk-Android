@@ -46,8 +46,14 @@ sealed interface FavoriteSource {
      * message ciphertext (via messageId+fileName+authorizeId) on a miss.
      */
     data class FromMessageRef(
+        /**
+         * The attachment's DIRECTORY key, as `AttachmentPathResolver.directoryKeyFor` computes it —
+         * the copy's own local id. Callers MUST take it from the resolver; hand-rolling `message.id`
+         * here would point the lookup at a directory that holds nothing.
+         */
         val messageId: String,
         val fileName: String,
+        /** Message-domain local id of the source attachment; internal to this domain, never sent. */
         val attachmentId: String,
         val authorizeId: Long,
         val key: ByteArray,

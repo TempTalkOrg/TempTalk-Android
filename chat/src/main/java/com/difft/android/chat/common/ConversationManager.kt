@@ -98,7 +98,7 @@ class ConversationManagerImpl @Inject constructor(
 
         val serverKeys: List<PublicKeyInfo>? = try {
             chatHttpClient.httpService
-                .getPublicKeys((globalServices.userManager.getUserData()?.microToken ?: ""), GetPublicKeysReq(uids))
+                .getPublicKeys(GetPublicKeysReq(uids))
                 .data
                 ?.keys
         } catch (e: Exception) {
@@ -175,7 +175,7 @@ class ConversationManagerImpl @Inject constructor(
                 // 2) Fetch keys, distinguishing null (network failure/body error) from empty (server says none)
                 val serverKeys: List<PublicKeyInfo>? = try {
                     chatHttpClient.httpService
-                        .getPublicKeys((globalServices.userManager.getUserData()?.microToken ?: ""), GetPublicKeysReq(uids))
+                        .getPublicKeys(GetPublicKeysReq(uids))
                         .data
                         ?.keys
                 } catch (e: Exception) {
@@ -240,7 +240,7 @@ class ConversationManagerImpl @Inject constructor(
         if (ids.isNullOrEmpty()) return null
         return try {
             chatHttpClient.httpService
-                .getPublicKeys((globalServices.userManager.getUserData()?.microToken ?: ""), GetPublicKeysReq(ids))
+                .getPublicKeys(GetPublicKeysReq(ids))
                 .data
                 ?.keys
         } catch (e: Exception) {

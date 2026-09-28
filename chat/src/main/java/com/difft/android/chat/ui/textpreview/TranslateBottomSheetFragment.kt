@@ -2,16 +2,20 @@ package com.difft.android.chat.ui.textpreview
 
 import android.os.Bundle
 import android.view.View
+import androidx.annotation.StringRes
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.LayoutTranslateBottomSheetContentBinding
-import com.difft.android.chat.translate.TranslateManager
-import com.google.mlkit.nl.translate.TranslateLanguage
+import com.difft.android.chat.translate.TranslateLang
+import com.difft.android.chat.translate.TranslateMode
+import com.difft.android.chat.translate.TranslateQueue
+import com.difft.android.chat.translate.TranslateResult
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
 
@@ -23,19 +27,21 @@ import javax.inject.Inject
 class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
     @Inject
-    lateinit var translateManager: TranslateManager
+    lateinit var translateQueue: TranslateQueue
 
     private var _binding: LayoutTranslateBottomSheetContentBinding? = null
     private val binding get() = _binding!!
 
     private var originalText: String = ""
-    private var targetLanguage: String = ""
-    private var alternativeLanguage: String = ""
+    private lateinit var targetLanguage: TranslateLang
+    private lateinit var alternativeLanguage: TranslateLang
     private var alternativeLanguageName: String = ""
 
     companion object {
         private const val TAG = "TranslateBottomSheet"
         private const val ARG_ORIGINAL_TEXT = "arg_original_text"
+
+        private const val OWNER = "text-preview"
 
         fun show(activity: FragmentActivity, text: String) {
             val fragment = TranslateBottomSheetFragment().apply {
@@ -57,14 +63,14 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
         when (appLocale.language) {
             Locale.CHINA.language, "zh" -> {
                 // App is Chinese: translate to Chinese, show "Translate to English" as switch option
-                targetLanguage = TranslateLanguage.CHINESE
-                alternativeLanguage = TranslateLanguage.ENGLISH
+                targetLanguage = TranslateLang.ZH
+                alternativeLanguage = TranslateLang.EN
                 alternativeLanguageName = getString(R.string.language_english)
             }
             else -> {
                 // App is English: translate to English, show "Translate to Chinese" as switch option
-                targetLanguage = TranslateLanguage.ENGLISH
-                alternativeLanguage = TranslateLanguage.CHINESE
+                targetLanguage = TranslateLang.EN
+                alternativeLanguage = TranslateLang.ZH
                 alternativeLanguageName = getString(R.string.language_chinese)
             }
         }
@@ -103,7 +109,7 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
         val tempLang = targetLanguage
 
         // Determine new alternative name based on new target
-        alternativeLanguageName = if (alternativeLanguage == TranslateLanguage.CHINESE) {
+        alternativeLanguageName = if (alternativeLanguage == TranslateLang.ZH) {
             getString(R.string.language_english)
         } else {
             getString(R.string.language_chinese)
@@ -119,21 +125,39 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
     }
 
     private fun startTranslation() {
-        translateManager.translateText(
-            scope = viewLifecycleOwner.lifecycleScope,
-            text = originalText,
-            targetLang = targetLanguage,
-            onSuccess = { translatedText ->
-                if (_binding != null) {
-                    showResult(translatedText)
+        val target = targetLanguage
+        // A selection preview has no message id, so the text has to be part of the dedup key —
+        // otherwise a second selection joins the first one's result.
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = translateQueue.submit(
+                owner = OWNER,
+                key = "preview#${target.name}#${originalText.hashCode()}",
+                messageId = "",
+                priority = TranslateQueue.Priority.NEW_INCOMING,
+                text = originalText,
+                target = target,
+                mode = TranslateMode.MANUAL,
+            ).await()
+            if (_binding == null || targetLanguage != target) return@launch
+            render(result)
+        }
+    }
+
+    private fun render(result: TranslateResult) {
+        when (result) {
+            is TranslateResult.Translated -> showResult(result.text)
+            // Already in the target language: the original is the best thing to show.
+            TranslateResult.SameLanguage -> showResult(originalText)
+            TranslateResult.ModelNotReady -> showError(R.string.chat_translate_model_not_ready_short)
+            is TranslateResult.Unsupported -> showError(
+                if (result.reason == TranslateResult.Reason.TOO_LONG) {
+                    R.string.chat_translate_too_long
+                } else {
+                    R.string.chat_translate_failed_retry
                 }
-            },
-            onFailure = { _ ->
-                if (_binding != null) {
-                    showError()
-                }
-            }
-        )
+            )
+            is TranslateResult.Failed -> showError(R.string.chat_translate_failed_retry)
+        }
     }
 
     private fun showLoading() {
@@ -150,15 +174,16 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
         binding.tvError.isVisible = false
     }
 
-    private fun showError() {
+    private fun showError(@StringRes messageResId: Int) {
         binding.progressBar.isVisible = false
         binding.tvTranslatedText.isVisible = false
         binding.tvError.isVisible = true
-        binding.tvError.text = getString(R.string.chat_translate_fail)
+        binding.tvError.text = getString(messageResId)
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
+        translateQueue.cancelOwner(OWNER)
         _binding = null
     }
 }

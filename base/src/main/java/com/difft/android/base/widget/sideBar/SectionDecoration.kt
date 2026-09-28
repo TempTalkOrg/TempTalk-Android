@@ -8,23 +8,36 @@ import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.View
+import androidx.annotation.ColorInt
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.ItemDecoration
 import com.difft.android.base.R
 import com.difft.android.base.utils.dp
 import java.util.Locale
 
-class SectionDecoration(context: Context, private val callback: DecorationCallback) : ItemDecoration() {
+/**
+ * Sticky group-header band for letter-indexed lists.
+ *
+ * [bandColor] should be the host surface's own colour so the band reads as part of the page
+ * (the contacts page passes its page colour, matching iOS). The default is `bg3`, which stays
+ * visible on `bg.popup` sheet grounds where `bg2` would merge with the sheet in dark mode.
+ */
+class SectionDecoration(
+    context: Context,
+    private val callback: DecorationCallback,
+    @ColorInt bandColor: Int = ContextCompat.getColor(context, R.color.bg3),
+) : ItemDecoration() {
     private val textPaint: TextPaint
     private val paint: Paint = Paint()
     private val topGap: Int
     private val fontMetrics: Paint.FontMetrics = Paint.FontMetrics()
 
     init {
-        paint.color = context.resources.getColor(R.color.bg2)
+        paint.color = bandColor
         textPaint = TextPaint()
         textPaint.isAntiAlias = true
-        textPaint.color = context.resources.getColor(R.color.t_primary)
+        textPaint.color = ContextCompat.getColor(context, R.color.t_primary)
         textPaint.textSize = 14.dp.toFloat()
         textPaint.getFontMetrics(fontMetrics)
         textPaint.textAlign = Paint.Align.LEFT

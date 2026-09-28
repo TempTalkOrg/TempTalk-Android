@@ -2,8 +2,6 @@ package com.difft.android.chat.common
 
 import com.difft.android.base.utils.globalServices
 
-import com.difft.android.base.user.UserData
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.BaseResponse
@@ -59,16 +57,9 @@ class ConversationManagerImplTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        // Mock top-level globalServices for `globalServices.myId` access and
-        // `globalServices.userManager.getUserData()?.microToken` (post-issue-#725
-        // replacement of the deleted SecureSharedPrefsUtil.getToken()).
-        val mockUserManager = mockk<UserManager>(relaxed = true).also {
-            val userData = UserData().apply { microToken = "test-token" }
-            every { it.getUserData() } returns userData
-        }
+        // Mock top-level globalServices for `globalServices.myId` access.
         val mockGlobal = mockk<GlobalHiltEntryPoint>(relaxed = true).also {
             every { it.myId } returns "selfUid"
-            every { it.userManager } returns mockUserManager
         }
         mockkStatic("com.difft.android.base.utils.ExtensionsKt")
         every { com.difft.android.base.utils.globalServices } returns mockGlobal
@@ -98,7 +89,7 @@ class ConversationManagerImplTest {
     )
 
     private fun stubServerReturns(keys: List<PublicKeyInfo>?) {
-        coEvery { httpService.getPublicKeys(any(), any()) } returns
+        coEvery { httpService.getPublicKeys(any()) } returns
             BaseResponse<GetPublicKeysResp>(
                 ver = 1,
                 status = 0,
@@ -161,7 +152,7 @@ class ConversationManagerImplTest {
         stubServerReturns(listOf(serverKey("peer"), serverKey("selfUid")))
 
         val reqSlot = slot<GetPublicKeysReq>()
-        coEvery { httpService.getPublicKeys(any(), capture(reqSlot)) } answers {
+        coEvery { httpService.getPublicKeys(capture(reqSlot)) } answers {
             BaseResponse(
                 ver = 1, status = 0, reason = null,
                 data = GetPublicKeysResp(listOf(serverKey("peer"), serverKey("selfUid")))
@@ -183,7 +174,7 @@ class ConversationManagerImplTest {
         stubGroupMembers(gid, members)
 
         val reqSlot = slot<GetPublicKeysReq>()
-        coEvery { httpService.getPublicKeys(any(), capture(reqSlot)) } answers {
+        coEvery { httpService.getPublicKeys(capture(reqSlot)) } answers {
             BaseResponse(
                 ver = 1, status = 0, reason = null,
                 data = GetPublicKeysResp(members.map { serverKey(it) })
@@ -223,7 +214,7 @@ class ConversationManagerImplTest {
         val result = manager.updatePublicKeyInfoData(emptyList())
 
         assertTrue(result)
-        coVerify(exactly = 0) { httpService.getPublicKeys(any(), any()) }
+        coVerify(exactly = 0) { httpService.getPublicKeys(any()) }
         coVerify(exactly = 0) { publicKeyInfoStore.upsert(any()) }
     }
 
@@ -262,7 +253,7 @@ class ConversationManagerImplTest {
         val result = manager.getPublicKeyInfos(null)
 
         assertNull(result)
-        coVerify(exactly = 0) { httpService.getPublicKeys(any(), any()) }
+        coVerify(exactly = 0) { httpService.getPublicKeys(any()) }
     }
 
     @Test
@@ -300,7 +291,7 @@ class ConversationManagerImplTest {
 
         assertEquals(PublicKeyUpdateResult.EntityInvalid, result)
         // status!=0 short-circuits before any getPublicKeys / members read.
-        coVerify(exactly = 0) { httpService.getPublicKeys(any(), any()) }
+        coVerify(exactly = 0) { httpService.getPublicKeys(any()) }
     }
 
     /** T12/G-unresolved (runnable): group==null (fetch threw / concurrent guard) → Unresolved (transient). */
@@ -312,7 +303,7 @@ class ConversationManagerImplTest {
         val result = manager.updatePublicKeyInfoDataResult(For.Group(gid))
 
         assertEquals(PublicKeyUpdateResult.Unresolved, result)
-        coVerify(exactly = 0) { httpService.getPublicKeys(any(), any()) }
+        coVerify(exactly = 0) { httpService.getPublicKeys(any()) }
     }
 
     /** ARCH-CRIT-1 (runnable): concurrent guard returns null → Unresolved (transient, not permanent). */
@@ -331,7 +322,7 @@ class ConversationManagerImplTest {
     /** T3 (runnable): For.Account, getPublicKeys throws → FetchFailed (transient). */
     @Test
     fun updateResult_account_fetch_throws_returns_fetchFailed() = runTest {
-        coEvery { httpService.getPublicKeys(any(), any()) } throws java.io.IOException("network down")
+        coEvery { httpService.getPublicKeys(any()) } throws java.io.IOException("network down")
 
         val result = manager.updatePublicKeyInfoDataResult(For.Account("peer"))
 

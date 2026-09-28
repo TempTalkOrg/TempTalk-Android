@@ -147,4 +147,49 @@ class LanguageUtilsTest {
         LanguageUtils.saveLanguage(context, Locale.forLanguageTag("zh-CN"))
         assertEquals(Locale.forLanguageTag("zh-CN"), LanguageUtils.getLanguageNonBlocking())
     }
+
+    // appLocaleFor: the APK ships English and Simplified Chinese only.
+    @Test
+    fun `appLocaleFor maps Hans Chinese to CHINA regardless of region or script tag`() {
+        assertEquals(Locale.CHINA, LanguageUtils.appLocaleFor(Locale.forLanguageTag("zh-CN")))
+        assertEquals(Locale.CHINA, LanguageUtils.appLocaleFor(Locale.forLanguageTag("zh-Hans-CN")))
+        assertEquals(Locale.CHINA, LanguageUtils.appLocaleFor(Locale.forLanguageTag("zh-SG")))
+    }
+
+    @Test
+    fun `appLocaleFor maps Hant Chinese and every other language to US`() {
+        assertEquals(Locale.US, LanguageUtils.appLocaleFor(Locale.forLanguageTag("zh-TW")))
+        assertEquals(Locale.US, LanguageUtils.appLocaleFor(Locale.forLanguageTag("zh-Hant-HK")))
+        assertEquals(Locale.US, LanguageUtils.appLocaleFor(Locale.forLanguageTag("en-GB")))
+        assertEquals(Locale.US, LanguageUtils.appLocaleFor(Locale.forLanguageTag("fr-FR")))
+    }
+
+    @Test
+    fun `isCurrentChoice needs the checked row to also be the rendered language`() {
+        LanguageUtils.saveLanguage(context, Locale.forLanguageTag("zh-Hans-CN"))
+        assertTrue(LanguageUtils.isCurrentChoice(context, Locale.CHINA))
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.US))
+
+        LanguageUtils.saveLanguage(context, Locale.forLanguageTag("zh-TW"))
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.CHINA))
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.US))
+
+        LanguageUtils.saveLanguage(context, Locale.forLanguageTag("en-GB"))
+        assertTrue(LanguageUtils.isCurrentChoice(context, Locale.US))
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.CHINA))
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "zh-rTW")
+    fun `with no stored preference a Traditional Chinese system locale still offers both restarts`() {
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.US))
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.CHINA))
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "zh-rCN")
+    fun `with no stored preference a Simplified Chinese system locale is current for zh-CN`() {
+        assertTrue(LanguageUtils.isCurrentChoice(context, Locale.CHINA))
+        assertFalse(LanguageUtils.isCurrentChoice(context, Locale.US))
+    }
 }

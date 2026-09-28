@@ -110,6 +110,9 @@ abstract class BasePreviewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         fun onPreviewVideoTitle(videoName: String?)
 
         fun onLongPressDownload(media: LocalMedia)
+
+        /** Video pages only: the player's control bar was shown or hidden. */
+        fun onPreviewVideoControllerVisibility(visible: Boolean) {}
     }
 
     companion object {

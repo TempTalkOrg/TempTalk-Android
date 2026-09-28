@@ -20,14 +20,12 @@ import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.smoothScrollToPositionWithHelper
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ChativePopupView
 import com.difft.android.base.widget.ChativePopupWindow
-import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
@@ -50,7 +48,6 @@ import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.group.AddOrRemoveMembersReq
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.proxy.ProxyConfigProvider
-import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
@@ -75,6 +72,9 @@ import dagger.Lazy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.difft.android.base.migration.LegacyMigrationGate
+import com.difft.android.base.migration.PeerApps
+import com.difft.android.base.ui.theme.DifftTheme
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
@@ -100,9 +100,6 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var dbRoomStore: DBRoomStore
-
-    @Inject
-    lateinit var logoutManager: LogoutManager
 
     @Inject
     lateinit var callDataManagerLazy: Lazy<CallDataManager>
@@ -458,6 +455,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
         // Proxy toggle may have changed in settings while we were away — re-gate the shield.
         updateProxyStatusIcon()
+        refreshLegacyMigrationEntry()
 
         recentChatViewModel.retrieveCallingList()
 
@@ -528,6 +526,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 popupItemList
             )
         }
+        setupLegacyMigrationEntry()
         binding.ivProxyStatus.setOnClickListener {
             startActivity(
                 Intent(
@@ -572,68 +571,6 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         binding.ivProxyStatus.setImageResource(icon)
     }
 
-    private fun checkDevices() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                // Retrofit suspend fun handles threading and responds to cancellation
-                // (fixes LeakCanary issue with old blocking PushServiceSocket call)
-                recentChatViewModel.checkDeviceAuth()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[RecentChatFragment] checkDevices error: ${e.stackTraceToString()}" }
-                // DeviceRepository.checkDeviceAuth() throws AuthorizationFailedException
-                // for BOTH 401 AND 403, matching PushServiceSocket.validateResponse() exactly.
-                // See PR #395 for prior incident where error handling was lost during migration.
-                if (e is AuthorizationFailedException) {
-                    L.i { "[Message] Auth failed (code=${e.code}), logging out" }
-                    logoutManager.doLogoutWithoutRemoveData()
-                }
-            }
-        }
-    }
-
-    private var inactiveDeviceDialog: ComposeDialog? = null
-
-    //显示设备非活跃激活提示对话框
-    private fun showInactiveDeviceDialog() {
-        inactiveDeviceDialog?.dismiss()
-        inactiveDeviceDialog = null
-
-        inactiveDeviceDialog = ComposeDialogManager.showMessageDialog(
-            context = requireActivity(),
-            title = getString(R.string.activate_device_title),
-            message = getString(R.string.activate_device_tips),
-            confirmText = getString(R.string.activate_device),
-            cancelable = false,
-            showCancel = false,
-            onConfirm = {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    try {
-                        val result = withContext(Dispatchers.IO) {
-                            recentChatViewModel.activateDevice()
-                        }
-                        if (!isAdded || view == null) return@launch
-                        if (result.status == 0) {
-                            ToastUtil.show(R.string.activate_device_success)
-                            inactiveDeviceDialog?.dismiss()
-                            inactiveDeviceDialog = null
-                        } else {
-                            result.reason?.let { message -> ToastUtil.show(message) }
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        if (!isAdded || view == null) return@launch
-                        L.e { "activate Device fail:" + e.stackTraceToString() }
-                        e.message?.let { message -> ToastUtil.show(message) }
-                    }
-                }
-            }
-        )
-    }
-
-
     private suspend fun sortingChatRooms(
         list: List<RoomViewData>
     ) {
@@ -659,18 +596,15 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 lastWebSocketState = state
                 updateProxyStatusIcon()
                 when (state) {
+                    // Display only: the kick-out decision (AUTHENTICATION_FAILED) and the
+                    // activation prompt (INACTIVE_FAILED) are owned app-wide by SessionAuthGuard.
                     WebSocketConnectionState.DISCONNECTED,
                     WebSocketConnectionState.FAILED,
                     WebSocketConnectionState.AUTHENTICATION_FAILED,
                     WebSocketConnectionState.UNKNOWN_HOST_FAILED,
+                    WebSocketConnectionState.INACTIVE_FAILED,
                         -> {
                         binding.chatTitle.text = getString(R.string.chat_state_offline)
-                        checkDevices()
-                    }
-
-                    WebSocketConnectionState.INACTIVE_FAILED -> {
-                        binding.chatTitle.text = getString(R.string.chat_state_offline)
-                        showInactiveDeviceDialog()
                     }
 
                     WebSocketConnectionState.CONNECTING,
@@ -838,5 +772,32 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         }
     }
 
+    /**
+     * Retiring package only: the title-bar entry into the "move to the new app" guide. The first time
+     * the entry is open the guide page is shown once, whatever the new app's install state; after that
+     * the pill is the only entry. [LegacyMigrationGate] decides whether the entry is open, re-evaluated
+     * on every resume so a flag flipped while the app runs takes effect without a restart.
+     */
+    private fun setupLegacyMigrationEntry() {
+        if (!PeerApps.isLegacy(requireContext())) return
+        binding.migrateEntry.setContent {
+            DifftTheme { LegacyMigrationEntryChip(onClick = ::openLegacyMigrationGuide) }
+        }
+        refreshLegacyMigrationEntry()
+    }
 
+    private fun refreshLegacyMigrationEntry() {
+        if (!PeerApps.isLegacy(requireContext())) return
+        val open = LegacyMigrationGate.isOpen(requireContext(), globalConfigsManager)
+        binding.migrateEntry.visibility = if (open) View.VISIBLE else View.GONE
+        if (!open || userManager.getUserData()?.legacyMigrationGuideShown == true) return
+        // Once: the guide page carries the reason and the one action; "later" on it is the exit and
+        // the page is never opened by itself again.
+        userManager.update { legacyMigrationGuideShown = true }
+        openLegacyMigrationGuide()
+    }
+
+    private fun openLegacyMigrationGuide() {
+        startActivity(Intent().setClassName(requireContext().packageName, PeerApps.LEGACY_GUIDE_ACTIVITY))
+    }
 }

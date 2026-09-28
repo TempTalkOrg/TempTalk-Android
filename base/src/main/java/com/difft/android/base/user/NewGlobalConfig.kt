@@ -25,7 +25,20 @@ data class Data(
     val domains: List<Domain>? = null,
     val services: List<Service>? = null,
     val chatFolder: ChatFolder? = null,
-    val proxy: ProxyConfigData? = null
+    val proxy: ProxyConfigData? = null,
+    val migration: MigrationConfig? = null
+)
+
+/**
+ * Cross-package data-migration section, read only by the retiring `org.difft.chative` family.
+ *
+ * [androidLegacyEntryEnabled] opens the migration entry in the old app (home title-bar icon,
+ * one-time notice, guide page). An absent key reads as closed
+ * (`LegacyMigrationGate.DEFAULT_OPEN_WHEN_ABSENT`): the entry must not appear before the new
+ * package is published on every channel the guide sends users to.
+ */
+data class MigrationConfig(
+    val androidLegacyEntryEnabled: Boolean? = null,
 )
 
 /**

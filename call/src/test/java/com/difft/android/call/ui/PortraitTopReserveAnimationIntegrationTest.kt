@@ -31,6 +31,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import com.difft.android.call.core.CallUiController
+import com.difft.android.call.ui.actionbar.CallActionBarPlanner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -45,6 +46,14 @@ import kotlin.math.abs
 
 /** Status-bar inset the harnesses feed in place of real window insets. */
 private val HARNESS_TOP_INSET = 24.dp
+
+/**
+ * Bottom reserve for the harness window (360 x 640, group grid): production's own function over
+ * the plan that window resolves to, so the expectation moves with the planner instead of pinning
+ * a literal.
+ */
+private val PORTRAIT_BOTTOM_RESERVED =
+    portraitBottomReserved(CallActionBarPlanner.resolve(360, 640, isGroup = true, isLandscape = false))
 
 /** Mirrors production's private `PORTRAIT_HORIZONTAL_PADDING`. */
 private val HARNESS_HORIZONTAL_PADDING = 16.dp
@@ -240,7 +249,7 @@ class PortraitTopReserveAnimationIntegrationTest {
             // Production owns the whole padding decision — the harness only supplies the inset.
             val reveal = rememberTopBarRevealProgress(controller)
             val contentPadding =
-                rememberGalleryContentPadding(HARNESS_TOP_INSET, participantCount, reveal)
+                rememberGalleryContentPadding(HARNESS_TOP_INSET, participantCount, reveal, PORTRAIT_BOTTOM_RESERVED)
             ParticipantGrid(
                 participantCount = participantCount,
                 gridModifier = Modifier,

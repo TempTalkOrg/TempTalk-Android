@@ -8,21 +8,14 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import com.difft.android.base.utils.windowWidthPx
 import com.difft.android.chat.R
+import com.difft.android.chat.widget.chatContainerWidthPx
 
 class ChatMessageContainerView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
-
-    /**
-     * Container width passed from ViewHolder for precise width calculation.
-     * Set this before the view is measured (e.g., during bind).
-     * 0 means use displayMetrics as fallback.
-     */
-    var containerWidth: Int = 0
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // Reset paddings to default before measuring to ensure clean state for RecyclerView reuse
@@ -251,11 +244,13 @@ class ChatMessageContainerView @JvmOverloads constructor(
                 }
             }
 
-            // Use containerWidth if set, otherwise fallback to current Activity window bounds.
-            // displayMetrics.widthPixels gives the device display, not the current app window —
-            // on foldables in dual-pane / multi-window this overshoots. windowWidthPx() returns
-            // the actual window width (see PR #580 for the same fix pattern).
-            val availableWidth = if (containerWidth > 0) containerWidth else windowWidthPx()
+            // Conversation viewport width from the message RecyclerView ancestor (ContentSize.kt):
+            // correct in the dual-pane detail pane, tracks a pane-divider drag on the next
+            // measure pass, and is allocation-free — this runs per measure, where
+            // WindowMetricsCalculator (reflection on API 26-29) is not affordable. Deliberately
+            // UNCAPPED: this asks "how much room does the bubble actually have", and a
+            // wrap_content text bubble can occupy the full container.
+            val availableWidth = chatContainerWidthPx()
 
             // Get our own margins
             val ourParams = layoutParams as? MarginLayoutParams
@@ -273,7 +268,7 @@ class ChatMessageContainerView @JvmOverloads constructor(
         }
 
         // Fallback calculation if parent info is not available
-        val screenWidth = if (containerWidth > 0) containerWidth else windowWidthPx()
+        val screenWidth = chatContainerWidthPx()
         // Account for typical margins: 40dp on one side + 8-12dp on the other
         val marginsDp = 60
         val marginsPixels = (marginsDp * resources.displayMetrics.density).toInt()

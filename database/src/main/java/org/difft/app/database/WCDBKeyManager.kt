@@ -12,6 +12,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.difft.android.base.log.WCDBKeyUnavailableException
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.database.BuildConfig
 import com.difft.android.base.utils.globalServices
 import java.io.File
 import java.security.KeyStore
@@ -104,6 +105,18 @@ object WCDBKeyManager {
     private const val KEY_FILE_TMP_NAME = "wcdb_key.bin.tmp"
 
     /**
+     * The WCDB cipher key for this build, mirroring `WCDB.createDatabase()`'s encryption policy
+     * exactly: a real key in release, null (plaintext, no cipher key) in debug.
+     *
+     * The data-migration engine opens its own WCDB handles for the snapshot read, the staging write
+     * and the promote key-install, and each must mirror the real DB's encryption state for the build
+     * type, or it opens a DB whose cipher state mismatches the file and throws
+     * `WCDBCorruptOrIOException` Code 26. This helper is the single source of truth for that.
+     */
+    fun cipherKeyForCurrentBuild(context: Context): ByteArray? =
+        if (!BuildConfig.DEBUG) getOrCreateKey(context) else null
+
+    /**
      * Returns the 48-byte plaintext WCDB cipher key.
      *
      * Order of operations:
@@ -149,6 +162,76 @@ object WCDBKeyManager {
         writeAtomic(context, fresh)
         L.i { "[WCDBKeyManager] generated and persisted fresh WCDB key" }
         return fresh
+    }
+
+    /**
+     * Install `key` as the real WCDB cipher key, atomically replacing `wcdb_key.bin` via the same
+     * temp-file and rename path [getOrCreateKey] uses. The migration's promote step calls it just
+     * before moving a staging DB file into place, so the next cold start opens the promoted DB.
+     *
+     * Idempotent: installing the same key twice is a no-op replacement, which promote crash-recovery
+     * relies on. [getOrCreateKey] still generates a fresh key when `wcdb_key.bin` is absent, and
+     * promote always writes its marker and installs the key together so a half-promote is detectable.
+     */
+    fun installKey(context: Context, key: ByteArray) {
+        require(key.size == PLAINTEXT_KEY_SIZE) {
+            "WCDB cipher key must be $PLAINTEXT_KEY_SIZE bytes; got ${key.size}"
+        }
+        writeAtomic(context, key)
+        L.i { "[WCDBKeyManager] installed WCDB key via installKey (size=${key.size})" }
+    }
+
+    /**
+     * Encrypt `plaintext` into the same Keystore-GCM wire format `wcdb_key.bin` uses, for a caller that
+     * must persist a WCDB-class secret elsewhere — the restore promote-marker stores the staging cipher
+     * key this way, so the raw key never lands on disk in plaintext. Decrypt with [unprotectKey].
+     */
+    fun protectKey(plaintext: ByteArray): ByteArray {
+        require(plaintext.size == PLAINTEXT_KEY_SIZE) {
+            "key to protect must be $PLAINTEXT_KEY_SIZE bytes; got ${plaintext.size}"
+        }
+        return encrypt(plaintext)
+    }
+
+    /**
+     * Inverse of [protectKey], used by promote crash-recovery to recover the staging cipher key from
+     * the marker.
+     *
+     * @throws WCDBKeyUnavailableException on a malformed blob, a tampered tag, a missing Keystore
+     *   alias, or a wrong decrypted length.
+     */
+    fun unprotectKey(blob: ByteArray): ByteArray {
+        if (blob.size != WIRE_FORMAT_SIZE) {
+            throw WCDBKeyUnavailableException(
+                "Corrupt protected key blob — expected $WIRE_FORMAT_SIZE bytes, got ${blob.size}"
+            )
+        }
+        val iv = blob.copyOfRange(0, GCM_IV_SIZE)
+        val ciphertextAndTag = blob.copyOfRange(GCM_IV_SIZE, WIRE_FORMAT_SIZE)
+        // getKeystoreEntry returns a typed result (#1033), so a clean absence stays separate from a
+        // real Keystore failure, whose cause is preserved.
+        val secretKey = when (val entry = getKeystoreEntry(KEY_ALIAS)) {
+            is KeystoreEntryResult.Found -> entry.key
+            KeystoreEntryResult.Absent -> throw WCDBKeyUnavailableException(
+                "Keystore alias '$KEY_ALIAS' missing while unprotecting key"
+            )
+            is KeystoreEntryResult.Failed -> throw WCDBKeyUnavailableException(
+                "Keystore read failed for alias '$KEY_ALIAS' while unprotecting key", entry.cause
+            )
+        }
+        val plaintext = try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_BITS, iv))
+            cipher.doFinal(ciphertextAndTag)
+        } catch (e: Throwable) {
+            throw WCDBKeyUnavailableException("Failed to decrypt protected key blob", e)
+        }
+        if (plaintext.size != PLAINTEXT_KEY_SIZE) {
+            throw WCDBKeyUnavailableException(
+                "Unprotected key wrong length — expected $PLAINTEXT_KEY_SIZE, got ${plaintext.size}"
+            )
+        }
+        return plaintext
     }
 
     // --------------------------------------------------------------------- read

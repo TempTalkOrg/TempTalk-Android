@@ -70,6 +70,10 @@ class AppWebSocketHelper
                     L.i { "[AppWebSocketHelper] read message conversation empty:" + request.requestId }
                     sendAckToChatDataWebSocket(request.requestId);
                     return Pair(request.requestId, ChatDataMessageFlag.END_CONVERSATION_PREVIEW_MGS)
+                } else if (isSocketEmptyRequest(request)) {
+                    L.i { "[AppWebSocketHelper] read message queue empty requestId=${request.requestId}" }
+                    sendAckToChatDataWebSocket(request.requestId);
+                    return Pair(request.requestId, ChatDataMessageFlag.END_QUEUE)
                 } else {
                     L.i { "[AppWebSocketHelper] read message other type:" + request.path }
                     sendAckToChatDataWebSocket(request.requestId);

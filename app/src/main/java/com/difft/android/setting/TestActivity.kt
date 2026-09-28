@@ -62,7 +62,7 @@ class TestActivity : BaseActivity() {
                     },
                     onDialogTest = {
                         DialogTestActivity.startActivity(this@TestActivity)
-                    }
+                    },
                 )
             }
         }

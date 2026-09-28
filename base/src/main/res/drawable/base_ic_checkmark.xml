@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma ic/checkmark-f (filled checkmark, 16dp viewport). Used by DifftCheckBox; tinted at use site. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="@color/t.white"
+        android:pathData="M13.6455,5.08105L6.10352,12.623L4.68945,11.209V11.208L2.33301,8.85156L3.74707,7.43652L6.10449,9.79395L12.2314,3.66699L13.6455,5.08105Z" />
+</vector>

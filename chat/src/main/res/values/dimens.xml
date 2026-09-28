@@ -23,4 +23,10 @@
     <dimen name="image_editor_hud_tool_filled_circle_padding">6dp</dimen>
     <dimen name="image_editor_hud_tool_invisible_circle_diameter">40dp</dimen>
     <dimen name="image_editor_hud_tool_invisible_circle_padding">6dp</dimen>
+
+    <!-- Band-independent ceiling on content the app sizes itself (today: the image/video
+         bubble), so a photo does not stretch edge-to-edge on a wide full-screen window.
+         Above every phone width, so phone rendering is unchanged. Consumed by
+         View.chatContentWidthPx() (widget/ContentSize.kt). -->
+    <dimen name="chat_content_max_width">560dp</dimen>
 </resources>

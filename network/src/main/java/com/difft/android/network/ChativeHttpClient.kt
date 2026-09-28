@@ -1,6 +1,7 @@
 package com.difft.android.network
 
 import android.content.Context
+import com.difft.android.network.auth.AuthTokenProvider
 import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
 import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.network.proxy.ProxyTunnelDns
@@ -33,7 +34,17 @@ class ChativeHttpClient(
      * self-hosted proxy (TLS-in-TLS) whenever the provider reports an active
      * config. Read at connect time, so runtime enable/disable needs no rebuild.
      */
-    private val proxyConfigProvider: ProxyConfigProvider? = null
+    private val proxyConfigProvider: ProxyConfigProvider? = null,
+    /** JWT source for token-authenticated endpoints. Lazy so the graph stays acyclic (issue #1231). */
+    authTokenProvider: dagger.Lazy<AuthTokenProvider>? = null,
+    /** 0 = no call timeout, matching OkHttp's default and today's behaviour on every client. */
+    callTimeoutSeconds: Long = 0,
+    /**
+     * DEBUG log level. false logs headers only — for clients whose request body carries a
+     * credential (the fileshare token travels in the body), which [HttpLoggingInterceptor]
+     * cannot redact. Issue #1231.
+     */
+    debugLogBodies: Boolean = true,
 ) {
 
     interface AuthProvider {
@@ -62,7 +73,15 @@ class ChativeHttpClient(
             if (removeHeader) {
                 addInterceptor(NoHeaderInterceptor())
             } else {
-                addInterceptor(HeaderInterceptor(authProvider))
+                addInterceptor(
+                    HeaderInterceptor(
+                        authProvider = authProvider,
+                        tokenProvider = authTokenProvider,
+                        // Clients without HttpClientInterceptor hand raw statuses to their
+                        // repositories, which map 401/403 themselves.
+                        handleRejection = useHttpClientInterceptor,
+                    )
+                )
             }
             if (useHttpClientInterceptor) {
                 addInterceptor(HttpClientInterceptor(pinnedConnection = useCustomCa))
@@ -74,9 +93,7 @@ class ChativeHttpClient(
 //                    TrustAllSSLSocketFactory.create(manager),
 //                    manager
 //                )
-                val loggingInterceptor = HttpLoggingInterceptor()
-                loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY)
-                addInterceptor(loggingInterceptor)
+                addInterceptor(buildDebugLogger(debugLogBodies))
             }
             if (useCustomCa) {
                 val officialSSLSocketFactoryCreator = OfficialSSLSocketFactoryCreator(applicationContext)
@@ -89,6 +106,11 @@ class ChativeHttpClient(
             proxyConfigProvider?.let { provider ->
                 dns(ProxyTunnelDns(provider))
                 socketFactory(ProxyTunnelSocketFactory(provider))
+            }
+            // Bounds the whole call, not just one socket phase: a client awaited from inside
+            // another client's interceptor must not be able to block that worker indefinitely.
+            if (callTimeoutSeconds > 0) {
+                callTimeout(callTimeoutSeconds, TimeUnit.SECONDS)
             }
         }
         .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
@@ -114,4 +136,23 @@ class ChativeHttpClient(
 
     val httpService = getService(HttpService::class.java)
     fun <T> getService(service: Class<T>): T = retrofit.create(service)
+}
+
+/**
+ * The DEBUG-build request logger. Debug logs are what gets attached to internal bug reports, and
+ * `Authorization` carries either the password-equivalent Basic credential or the account JWT, so it
+ * is always redacted (case-insensitively). [debugLogBodies] false drops to HEADERS for clients
+ * whose request body carries a credential, which [HttpLoggingInterceptor] cannot redact.
+ *
+ * Extracted from the builder above so the redaction itself is testable. Issue #1231.
+ */
+internal fun buildDebugLogger(
+    debugLogBodies: Boolean,
+    logger: HttpLoggingInterceptor.Logger = HttpLoggingInterceptor.Logger.DEFAULT,
+): HttpLoggingInterceptor = HttpLoggingInterceptor(logger).apply {
+    setLevel(
+        if (debugLogBodies) HttpLoggingInterceptor.Level.BODY
+        else HttpLoggingInterceptor.Level.HEADERS
+    )
+    redactHeader(HeaderInterceptor.HEADER_KEY_AUTHORIZATION)
 }

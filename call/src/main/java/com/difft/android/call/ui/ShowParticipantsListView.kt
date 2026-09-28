@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,13 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -49,29 +44,56 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil3.compose.rememberAsyncImagePainter
-import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.avatar.AvatarLetterSize
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.Palette
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
-import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
-import com.difft.android.call.data.MUTE_ACTION_INDEX
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
+import kotlin.math.roundToInt
 
+
+/**
+ * Whether the window is wide enough for the participants side panel: ≥ 600dp or landscape.
+ * Reads the real container size; only the very first composition falls back to Configuration.
+ */
+@SuppressLint("ConfigurationScreenWidthHeight")
+@Composable
+fun rememberParticipantsPanelWide(): Boolean {
+    val containerSize = LocalWindowInfo.current.containerSize
+    val configuration = LocalConfiguration.current
+    val widthDp = if (containerSize.width > 0) {
+        with(LocalDensity.current) { containerSize.width.toDp() }
+    } else {
+        configuration.screenWidthDp.dp
+    }
+    return if (containerSize.width > 0 && containerSize.height > 0) {
+        widthDp >= 600.dp || containerSize.width > containerSize.height
+    } else {
+        widthDp >= 600.dp || configuration.screenWidthDp > configuration.screenHeightDp
+    }
+}
+
+/**
+ * The single gate for the 216dp participants panel. Every entry point that toggles
+ * `showUsersEnabled` (bar People control, More-sheet People, overflow tile) must be offered only
+ * where this is true, otherwise the flag flips with nothing rendered.
+ */
+fun participantsPanelAvailable(isUserSharingScreen: Boolean, isWideScreen: Boolean): Boolean =
+    isUserSharingScreen || isWideScreen
 
 @SuppressLint("ConfigurationScreenWidthHeight")
 @OptIn(ExperimentalFoundationApi::class)
@@ -94,24 +116,11 @@ fun ShowParticipantsListView(
     val contactorCacheManager = entryPoint.contactorCacheManager
     val displayInfoMap by contactorCacheManager.participantDisplayMap.collectAsState()
 
-    val containerSize = LocalWindowInfo.current.containerSize
-    val configuration = LocalConfiguration.current
-    // Fall back to Configuration on the first composition, before the first layout pass populates
-    // containerSize. Otherwise width would be 0 and isWideScreen would be wrong for the first frame.
-    val widthDp = if (containerSize.width > 0) {
-        with(LocalDensity.current) { containerSize.width.toDp() }
-    } else {
-        configuration.screenWidthDp.dp
-    }
-    val isWideScreen = if (containerSize.width > 0 && containerSize.height > 0) {
-        widthDp >= 600.dp || containerSize.width > containerSize.height
-    } else {
-        widthDp >= 600.dp || configuration.screenWidthDp > configuration.screenHeightDp
-    }
+    val isWideScreen = rememberParticipantsPanelWide()
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val panelTopPadding = if (!isUserSharingScreen && isWideScreen) statusBarTop + 16.dp else 24.dp
 
-    if(!isInPipMode && isShowUsersEnabled && (isUserSharingScreen || isWideScreen)) {
+    if (!isInPipMode && isShowUsersEnabled && participantsPanelAvailable(isUserSharingScreen, isWideScreen)) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopEnd
@@ -174,7 +183,7 @@ fun ShowParticipantsListView(
                                         centerVerticallyTo(parent)
                                     },
                                 text = "${getString(R.string.call_attendees)} (${participants.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                style = DifftTheme.typography.p3,
                                 color = Color.White,
                                 maxLines = 1
                             )
@@ -231,10 +240,8 @@ fun ShowParticipantsListView(
                                     userDisplayInfo = displayInfoMap[uid] ?: CallUserDisplayInfo(null, null, null),
                                     muteOtherEnabled = muteOtherEnabled,
                                     speakingEnabled = speakingEnabled,
-                                    onClickMute = {
-                                        L.d { "Mute toggled for participant ${participant.identity?.value}" }
-                                        viewModel.toggleMute(participant)
-                                    },
+                                    onClickMute = { name -> viewModel.toggleMute(participant, name) },
+                                    onMenuOpenChanged = viewModel.callUiController::setParticipantMenuOpen,
                                 )
                             }
                         }
@@ -255,12 +262,16 @@ fun SmallParticipantViewItem(
     userDisplayInfo: CallUserDisplayInfo,
     muteOtherEnabled: Boolean,
     speakingEnabled: Boolean = true,
-    onClickMute: () -> Unit
+    onClickMute: (displayName: String) -> Unit,
+    onMenuOpenChanged: (Boolean) -> Unit = {},
 ){
     val isSpeaking by participant::isSpeaking.flow.collectAsState()
     val effectiveIsSpeaking = isSpeaking && speakingEnabled
     val imageLoader = LocalImageLoaderProvider.localImageLoader()
-    var expanded by remember { mutableStateOf(false) }
+    var muteMenuVisible by remember { mutableStateOf(false) }
+    var muteMenuTouch by remember { mutableStateOf(Offset.Zero) }
+    val displayName = rememberParticipantDisplayName(participant, userDisplayInfo.name)
+    val avatarSize = DifftTheme.spacing.avatarSmall
 
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
@@ -283,30 +294,16 @@ fun SmallParticipantViewItem(
         pub::muted.flow.collect { muted -> audioMuted = muted }
     }
 
-    fun onClickItem(index: Int, setExpanded: (Boolean) -> Unit, onClickMute: () -> Unit) {
-        setExpanded(false)
-        if (index == MUTE_ACTION_INDEX) onClickMute()
-    }
-
     Box(
         modifier = Modifier
             .testTag("call_participants_item_$participantIndex")
             .fillMaxWidth()
-            .height(34.dp)
-            .pointerInput(Unit) {
-                detectTapGestures (
-                    onTap = {
-                        if(participant.isMicrophoneEnabled && muteOtherEnabled){
-                            expanded = true
-                        }
-                    }
-                )
-            }
+            .height(PANEL_ROW_HEIGHT)
     ){
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(34.dp),
+                .height(PANEL_ROW_HEIGHT),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ){
@@ -322,25 +319,13 @@ fun SmallParticipantViewItem(
                 ){
                     val (avatarView, userNameView, shareStatusView, speakStatusView) = createRefs()
                     userDisplayInfo.avatarData?.let { avatarData ->
-                        AndroidView(
-                            factory = { ctx ->
-                                when (avatarData) {
-                                    is AvatarData.FromContactor ->
-                                        callToChatController.getAvatarByContactor(ctx, avatarData.contactor)
-                                    is AvatarData.FromNameOrUid ->
-                                        callToChatController.createAvatarByNameOrUid(
-                                            ctx,
-                                            avatarData.name,
-                                            avatarData.userId
-                                        )
-                                }
+                        callToChatController.Avatar(
+                            data = avatarData,
+                            size = avatarSize,
+                            modifier = Modifier.constrainAs(avatarView) {
+                                start.linkTo(parent.start)
                             },
-                            modifier = Modifier
-                                .constrainAs(avatarView){
-                                    start.linkTo(parent.start)
-                                }
-                                .height(32.dp)
-                                .width(32.dp)
+                            letterTextSizeDp = AvatarLetterSize.forDiameterDp(avatarSize.value.roundToInt()),
                         )
                     }
 
@@ -350,16 +335,11 @@ fun SmallParticipantViewItem(
                                 start.linkTo(avatarView.end, 5.dp)
                                 centerVerticallyTo(parent)
                             },
-                        text = StringUtil.truncateWithEllipsis(userDisplayInfo.name ?: "", 14),
+                        text = StringUtil.truncateWithEllipsis(displayName, PARTICIPANT_NAME_MAX_LENGTH),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight(400),
-                            color = Color.White,
-                        )
+                        style = DifftTheme.typography.p3,
+                        color = Color.White,
                     )
 
                     if(isScreenSharing){
@@ -387,7 +367,7 @@ fun SmallParticipantViewItem(
 
                     val tintColor = when {
                         audioMuted -> Color.Unspecified // 不设置颜色，或者根据需要设置
-                        else -> Color(0xFF82C1FC)
+                        else -> Palette.Blue200
                     }
 
                     Icon(
@@ -406,14 +386,38 @@ fun SmallParticipantViewItem(
             }
         }
 
-        ShowItemOnClickView(listOf("Mute"), expanded, setExpanded = { value -> expanded = value} ,
-            onClickItem = {
-                    index ->
-                onClickItem(index,
-                    setExpanded = {value -> expanded = value},
-                    onClickMute= { onClickMute()}
+        // The trailing status-icon cluster (mic, plus the share indicator when present) is the mute
+        // entry; avatar / name stay free for other actions. A transparent minTouchTarget-wide zone
+        // over the trailing end of the row; the row's own 34dp is the height cap, since the next
+        // row starts 8dp below and hit zones must not overlap.
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(DifftTheme.spacing.minTouchTarget)
+                .fillMaxHeight()
+                .testTag("call_participants_item_mic_$participantIndex")
+                .muteMenuTapTarget(
+                    participant = participant,
+                    muteOtherEnabled = muteOtherEnabled,
+                    onTap = { touch ->
+                        muteMenuTouch = touch
+                        muteMenuVisible = true
+                    },
                 )
-            }
-        )
+        ) {
+            ParticipantMuteMenu(
+                visible = muteMenuVisible,
+                touchInAnchor = muteMenuTouch,
+                targetName = displayName,
+                onDismissRequest = { muteMenuVisible = false },
+                onMute = {
+                    muteMenuVisible = false
+                    onClickMute(displayName)
+                },
+                onOpenChanged = onMenuOpenChanged,
+            )
+        }
     }
 }
+
+private val PANEL_ROW_HEIGHT = 34.dp

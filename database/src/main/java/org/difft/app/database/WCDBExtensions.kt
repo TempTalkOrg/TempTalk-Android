@@ -260,7 +260,9 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     val attachments = if (attachmentModels.isNotEmpty()) {
         attachmentModels.map { am ->
             Attachment(
-                id = am.id!!,
+                // Empty for every row written since the server-side id stopped being seeded; it
+                // identifies nothing locally and only feeds the legacy job locator for older rows.
+                id = am.id.orEmpty(),
                 authorityId = am.authorityId!!,
                 contentType = am.contentType!!,
                 key = am.key,
@@ -271,10 +273,11 @@ fun MessageModel.convertToTextMessage(): TextMessage {
                 flags = am.flags,
                 width = am.width,
                 height = am.height,
-                path = am.path,
+                path = null, // not persisted; send-time transient only
                 status = am.status,
                 totalTime = am.totalTime,
                 amplitudes = convertAmplitudes(am.amplitudes),
+                localId = am.localId ?: am.synthesizedLocalId(),
             )
         }
     } else {
@@ -328,9 +331,16 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     )
 }
 
+/**
+ * A row whose `localId` column is still NULL gets a synthesized id so the domain object always has
+ * one — deterministic per row (see [synthesizedLocalId]), so repeated reads agree with each other
+ * and with the backfill stage. The synthesized id is NOT written back here — persisting it is the
+ * migration's job, and a read path must never write.
+ */
 fun AttachmentModel.toAttachment(): Attachment {
     return Attachment(
-        id = id!!,
+        // See convertToTextMessage: empty for every row written since the id stopped being seeded.
+        id = id.orEmpty(),
         authorityId = authorityId!!,
         contentType = contentType!!,
         key = key,
@@ -341,16 +351,23 @@ fun AttachmentModel.toAttachment(): Attachment {
         flags = flags,
         width = width,
         height = height,
-        path = path,
+        path = null, // not persisted; send-time transient only
         status = status,
         totalTime = totalTime,
         amplitudes = convertAmplitudes(amplitudes),
+        localId = localId ?: synthesizedLocalId(),
+        // The row's own table membership is the authoritative ownership fact: an attachment carrying a
+        // forwardModelDatabaseId hangs off a Forward, so it is addressed by localId, not by a message id.
+        isForwardCopy = forwardModelDatabaseId != null,
     )
 }
 
 fun Attachment.toAttachmentModel(messageId: String): AttachmentModel {
     return AttachmentModel().also {
-        it.id = id
+        // NULL, never "": the legacy job locator queries `id.eq(<job's id>)`, and an empty string
+        // stored here would make every id-less row a candidate for the same query.
+        it.id = id.takeIf { value -> value.isNotEmpty() }
+        it.localId = localId
         it.messageId = messageId
         it.authorityId = authorityId
         it.contentType = contentType
@@ -362,14 +379,15 @@ fun Attachment.toAttachmentModel(messageId: String): AttachmentModel {
         it.flags = flags
         it.width = width
         it.height = height
-        it.path = path
         it.status = status
     }
 }
 
 fun Attachment.toAttachmentModel(forwardDatabaseId: Long): AttachmentModel {
     return AttachmentModel().also {
-        it.id = id
+        // NULL, never "" — see the message-owned overload above.
+        it.id = id.takeIf { value -> value.isNotEmpty() }
+        it.localId = localId
         it.forwardModelDatabaseId = forwardDatabaseId
         it.authorityId = authorityId
         it.contentType = contentType
@@ -381,7 +399,6 @@ fun Attachment.toAttachmentModel(forwardDatabaseId: Long): AttachmentModel {
         it.flags = flags
         it.width = width
         it.height = height
-        it.path = path
         it.status = status
     }
 }
@@ -588,7 +605,6 @@ fun WCDB.insertChildrenAndBuildMessageModel(message: TextMessage, roomReadPositi
                 size = bytes?.size ?: 0 // mirror toAttachmentModel: persist size alongside thumbnail bytes
                 width = qa.thumbnail?.width ?: 0
                 height = qa.thumbnail?.height ?: 0
-                path = qa.thumbnail?.path
                 status = qa.thumbnail?.status ?: AttachmentStatus.SUCCESS.code
             }
             this.attachment.insertObject(attachmentModel)
@@ -895,7 +911,7 @@ suspend fun forEachMessagePaged(
 
 fun MessageModel.deleteRelatedDataForMessage() {
     try {
-        FileUtil.deleteMessageFile(id)
+        deleteOwnAttachmentFiles()
         wcdb.attachment.deleteObjects(DBAttachmentModel.messageId.eq(id))
         wcdb.mention.deleteObjects(DBMentionModel.messageId.eq(id))
         wcdb.reaction.deleteObjects(DBReactionModel.messageId.eq(id))
@@ -929,12 +945,66 @@ fun MessageModel.deleteRelatedDataForMessage() {
     }
 }
 
+/**
+ * Removes the files of the attachments this message owns directly (its forward tree and its quote are
+ * cascaded separately).
+ *
+ * One directory per attachment ROW, not one per message: with per-copy addressing a message's two
+ * attachments live in two directories, and neither is named by the message. The message-named
+ * directory is still cleared while legacy addresses may exist, because a file written before the
+ * addressing flip is there and this deletion is the last chance to reclaim it — see
+ * [LegacyAttachmentAddresses].
+ *
+ * Both deletions are directory-scoped and driven by rows this message owns, so neither can reach
+ * another message's file. `deleteMessageFile` also drops the affected paths from the file-validity
+ * cache, which otherwise keeps reporting the deleted files as readable.
+ */
+private fun MessageModel.deleteOwnAttachmentFiles() {
+    val rowLocalIds = wcdb.attachment
+        .getOneColumnString(DBAttachmentModel.localId, DBAttachmentModel.messageId.eq(id))
+    messageAttachmentDirectoryKeys(id, rowLocalIds, LegacyAttachmentAddresses.isWindowOpen)
+        .forEach { FileUtil.deleteMessageFile(it) }
+}
+
+/**
+ * Directory keys a message's own deletion clears: one per attachment row that names a local id, plus
+ * the message's own key while legacy addresses may still hold a file (see [deleteOwnAttachmentFiles]).
+ *
+ * A row whose localId column is still NULL contributes nothing — it names no directory, and its file
+ * is reached through the message key instead.
+ */
+internal fun messageAttachmentDirectoryKeys(
+    messageId: String,
+    rowLocalIds: List<String?>,
+    legacyWindowOpen: Boolean
+): List<String> {
+    val keys = rowLocalIds.mapNotNull { it?.takeIf { localId -> localId.isNotEmpty() } }
+    return if (legacyWindowOpen) (keys + messageId).distinct() else keys.distinct()
+}
+
+/**
+ * Attachment directories a forward node's deletion removes: one per attachment (not just the first —
+ * writing inserts them all), each the attachment's OWN per-copy directory, so removing one message's
+ * copy can never take another message's file with it.
+ *
+ * A row whose localId column is still NULL reads back as a synthesized id that names no directory on
+ * disk, so it contributes a harmless no-op — deliberately: its file may still sit in a shared legacy
+ * directory that other rows reference, and only the migration's verified sweep may remove that.
+ */
+internal fun forwardAttachmentDirectoryKeys(attachments: List<Attachment>): List<String> =
+    attachments.mapNotNull { it.localId.takeIf { localId -> localId.isNotEmpty() } }
+
 private fun ForwardModel.deleteForwardRelatedData() {
-    this.attachments().firstOrNull()?.let {
-        FileUtil.deleteMessageFile(it.authorityId.toString())
-    }
+    val attachments = this.attachments()
+    forwardAttachmentDirectoryKeys(attachments).forEach { FileUtil.deleteMessageFile(it) }
+    val legacyAuthorityIds = attachments.asSequence().map { it.authorityId }.filter { it != 0L }.distinct().toList()
     wcdb.attachment.deleteObjects(DBAttachmentModel.forwardModelDatabaseId.eq(databaseId))
     wcdb.mention.deleteObjects(DBMentionModel.forwardModelDatabaseId.eq(databaseId))
+    // With this node's rows gone, reclaim any legacy shared directory whose LAST reference just
+    // disappeared. The migration's sweep enumerates legacy directories from LIVE rows only, so a
+    // pre-migration forward deleted before the sweep visits it would otherwise leave its media on
+    // disk forever.
+    legacyAuthorityIds.forEach { reclaimLegacyAttachmentDirectory(it) }
 
     val subForwards = wcdb.forward.getAllObjects(DBForwardModel.parentForwardModelDatabaseId.eq(databaseId))
     subForwards.forEach { sf ->
@@ -943,6 +1013,29 @@ private fun ForwardModel.deleteForwardRelatedData() {
     wcdb.forward.deleteObjects(DBForwardModel.parentForwardModelDatabaseId.eq(databaseId))
 
     wcdb.forward.deleteObjects(DBForwardModel.databaseId.eq(databaseId))
+}
+
+/**
+ * Removes the shared legacy `attachment/<authorityId>/` directory once the LAST row referencing
+ * that authorityId is gone. Two guards keep it safe: any remaining referencing row keeps the
+ * directory (per-copy deletion never reaches across messages), and a directory whose name collides
+ * with a live message id is never touched.
+ *
+ * That second guard is deliberately CONSERVATIVE now that no attachment is addressed by a message
+ * id: what it protects is a file the migration has not moved out of that message's directory yet.
+ * Once it has, the guard only ever declines to delete a directory that is already empty — failing to
+ * delete costs nothing, and deleting something that cannot be verified is the one thing none of this
+ * is allowed to do.
+ */
+private fun reclaimLegacyAttachmentDirectory(authorityId: Long) {
+    try {
+        if (wcdb.attachment.getFirstObject(DBAttachmentModel.authorityId.eq(authorityId)) != null) return
+        val key = authorityId.toString()
+        if (wcdb.message.getFirstObject(DBMessageModel.id.eq(key)) != null) return
+        FileUtil.deleteMessageFile(key)
+    } catch (e: Exception) {
+        L.e { "[Attachment] reclaim legacy dir failed authorityId=$authorityId: ${e.stackTraceToString()}" }
+    }
 }
 
 /**

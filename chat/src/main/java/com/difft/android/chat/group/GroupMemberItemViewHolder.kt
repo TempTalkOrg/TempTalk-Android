@@ -4,11 +4,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.View.OnClickListener
 import android.view.ViewGroup
-import android.widget.CheckBox
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.databinding.ChatItemGroupMemberBinding
+import com.difft.android.base.widget.DifftCheckBoxView
 
 class GroupMemberItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
     val inflater = LayoutInflater.from(parentView.context)
@@ -41,7 +41,7 @@ class GroupMemberItemViewHolder(parentView: ViewGroup) : ViewHolder(run {
             binding.selectMark.isChecked = value
         }
 
-    var checkBox: CheckBox = binding.selectMark
+    var checkBox: DifftCheckBoxView = binding.selectMark
 
     var rootView: View = binding.root
 

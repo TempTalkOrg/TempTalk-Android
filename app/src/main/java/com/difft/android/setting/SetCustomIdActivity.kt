@@ -19,17 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,23 +29,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.airbnb.lottie.LottieAnimationView
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.DifftButton
+import com.difft.android.base.ui.compose.input.DifftClearableTextField
+import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
+import com.difft.android.base.widget.WaitDialogEffect
 import com.difft.android.chat.R
 import com.difft.android.setting.viewmodel.SetCustomIdViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.getValue
+
+/** Server-side contact-ID rules: 6-20 characters. */
+private const val MIN_CUSTOM_ID_LENGTH = 6
+private const val MAX_CUSTOM_ID_LENGTH = 20
 
 @AndroidEntryPoint
 class SetCustomIdActivity : BaseActivity() {
@@ -117,7 +106,12 @@ fun SetOwnIdScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    val isValid = input.length in 6..20
+    val isValid = input.length in MIN_CUSTOM_ID_LENGTH..MAX_CUSTOM_ID_LENGTH
+
+    // The view model invokes its callback (which finishes this Activity on success) before it
+    // clears isLoading, so the flag never reaches false in a live composition on the happy path —
+    // the effect's dispose is what releases the dialog there.
+    WaitDialogEffect(isLoading)
 
     // 验证函数：检查输入是否符合规则
     fun validateInput(text: String): Boolean {
@@ -149,7 +143,7 @@ fun SetOwnIdScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(color = colorResource(com.difft.android.base.R.color.bg1)),
+            .background(color = DifftTheme.colors.background),
         verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.Top),
         horizontalAlignment = Alignment.Start,
     ) {
@@ -161,150 +155,63 @@ fun SetOwnIdScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // TextField
-        OutlinedTextField(
+        // The library form field owns the box, the error line and the character counter; the
+        // counter takes the trailing slot, so there is no clear icon here (library "word count").
+        DifftClearableTextField(
             value = input,
             onValueChange = { newValue ->
-                if (newValue.length <= 20) {
-                    input = newValue
-                    
-                    // 输入时重置错误状态显示
-                    viewModel.resetResponseStatus()
-                    viewModel.resetErrorTip()
-                    
-                    // 实时验证输入内容
-                    if (newValue.isNotEmpty() && newValue.length >= 6) {
-                        validateInput(newValue)
-                    } else {
-                        viewModel.setErrorTip(ResUtils.getString(com.difft.android.R.string.settings_contact_ID_status_uid_length_invalid))
-                    }
+                input = newValue
+
+                // 输入时重置错误状态显示
+                viewModel.resetResponseStatus()
+                viewModel.resetErrorTip()
+
+                // 实时验证输入内容
+                if (newValue.length >= MIN_CUSTOM_ID_LENGTH) {
+                    validateInput(newValue)
+                } else {
+                    viewModel.setErrorTip(ResUtils.getString(com.difft.android.R.string.settings_contact_ID_status_uid_length_invalid))
                 }
             },
+            onClear = {},
+            hint = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_input_hint),
+            style = DifftTextFieldStyle.Form,
+            isError = errorTip != null,
+            supportingText = errorTip,
+            showCounter = true,
+            maxLength = MAX_CUSTOM_ID_LENGTH,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
                 .padding(horizontal = 16.dp),
-            shape = RoundedCornerShape(8.dp),
-            singleLine = true,
-            placeholder = {
-                Text(text = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_input_hint))
-            },
-            textStyle = TextStyle(
-                fontSize = 16.sp,
-                lineHeight = 24.sp,
-                fontFamily = FontFamily.Default,
-                fontWeight = FontWeight(400),
-                color = colorResource(com.difft.android.base.R.color.t_primary),
-            ),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = colorResource(com.difft.android.base.R.color.line),
-                unfocusedBorderColor = colorResource(com.difft.android.base.R.color.line),
-            ),
-            trailingIcon = {
-                if (input.isNotEmpty()) {
-                    IconButton(onClick = { input = "" }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear text"
-                        )
-                    }
-                }
-            }
         )
-
-        if (errorTip != null) {
-            errorTip?.let { text ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    text = text,
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = colorResource(com.difft.android.base.R.color.t_error),
-                    )
-                )
-            }
-        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
             modifier = Modifier.padding(horizontal = 16.dp),
             text = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_valid_tip),
-
-            // SF/P3
-            style = TextStyle(
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                fontFamily = FontFamily.Default,
-                fontWeight = FontWeight(400),
-                color = colorResource(com.difft.android.base.R.color.t_secondary),
-            )
+            style = DifftTheme.typography.p3,
+            color = DifftTheme.colors.textSecondary
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
         // Save Button
-        Button(
+        DifftButton(
+            text = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_button_save),
             onClick = {
                 // 防止加载时重复点击
-                if (isLoading) return@Button
+                if (isLoading) return@DifftButton
 
                 // 再次验证输入内容是否合法
-                if(validateInput(input)) {
+                if (validateInput(input)) {
                     onSave(input)
                 }
             },
             enabled = isValid,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = colorResource(com.difft.android.base.R.color.primary),
-                disabledContainerColor = colorResource(com.difft.android.base.R.color.t_disable),
-                contentColor = colorResource(com.difft.android.base.R.color.t_white),
-                disabledContentColor = colorResource(com.difft.android.base.R.color.t_white)
-            )
-        ) {
-            if (isLoading) {
-                LottieLoadingAnimation()
-            } else {
-                Text(
-                    text = ResUtils.getString(com.difft.android.R.string.settings_contact_ID_button_save),
-                    // SF/P2
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        lineHeight = 24.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = colorResource(com.difft.android.base.R.color.t_white),
-                        textAlign = TextAlign.Center,
-                    )
-                )
-            }
-        }
+                .padding(horizontal = 16.dp),
+        )
     }
-}
-
-@Composable
-fun LottieLoadingAnimation() {
-    AndroidView(
-        factory = { ctx ->
-            LottieAnimationView(ctx).apply {
-                setAnimation("login_loading_anim.json")
-                playAnimation()
-            }
-        },
-        update = { view ->
-            if (!view.isAnimating) {
-                view.playAnimation()
-            }
-        },
-        modifier = Modifier.size(24.dp)
-    )
 }

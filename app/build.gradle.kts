@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-val appVersionName = "2.3.9"
+val appVersionName = "2.4.4"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -46,7 +46,7 @@ fun getStoreFile(): String {
     if (properties.contains("storeFile")) {
         return properties["storeFile"].toString()
     }
-    return "/Users/difft/.ssh/DifftKey/chative.key"
+    return "/Users/difft/.ssh/DifftKey/temptalk.key"
 }
 
 fun getStorePassword(): String? {
@@ -99,7 +99,7 @@ android {
         create("TTDev") {
             dimension = flavorDimensionEnvironment
 
-            applicationId = "org.difft.chative.test"
+            applicationId = "org.difft.temptalk.test"
             versionCode = resolvedVersionCode
             versionName = appVersionName
 
@@ -122,7 +122,7 @@ android {
         create("TTOnline") {
             dimension = flavorDimensionEnvironment
 
-            applicationId = "org.difft.chative"
+            applicationId = "org.difft.temptalk"
             versionCode = resolvedVersionCode
             versionName = appVersionName
 
@@ -167,6 +167,20 @@ android {
         }
     }
 
+    // One shared source set for every channel that may ship Google proprietary code, holding the
+    // ML Kit translate backend and its unit tests. The fdroid channel deliberately maps neither and
+    // compiles src/fdroid/java + src/testFdroid/java instead, so dropping ML Kit for F-Droid is a
+    // dependency change only.
+    // kotlin.srcDir, not java.srcDir: with AGP 9's built-in Kotlin support the Kotlin compilation
+    // reads the `kotlin` source directory set, and a java-only mapping compiles nothing.
+    sourceSets {
+        listOf("google", "official", "insider").forEach { channel ->
+            getByName(channel).kotlin.srcDir("src/gms/java")
+            getByName("test${channel.replaceFirstChar { it.uppercase() }}")
+                .kotlin.srcDir("src/testGms/java")
+        }
+    }
+
     signingConfigs {
         create("release") {
             storeFile = file(getStoreFile())
@@ -201,6 +215,10 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // Gradle's 512m default overflows here: the container reader's cap test declares a frame at
+        // MAX_FRAME_PAYLOAD_BYTES (64 MiB) and the reader buffers that length before it can see the
+        // frame is truncated. Mirrors :chat / :call / :base.
+        unitTests.all { it.maxHeapSize = "2g" }
     }
 
     compileOptions {
@@ -282,6 +300,19 @@ roborazzi {
     outputDir.set(rootProject.file("screenshots/app"))
 }
 
+// The root project's detekt source set is src/main/** + src/test/** only, so the per-channel
+// translate-backend trees would go unscanned. Add them here — new production code must be linted.
+extensions.configure<dev.detekt.gradle.extensions.DetektExtension> {
+    source.from(
+        files(
+            "src/gms/java",
+            "src/fdroid/java",
+            "src/testGms/java",
+            "src/testFdroid/java",
+        )
+    )
+}
+
 hilt {
     enableAggregatingTask = true
 }
@@ -295,6 +326,11 @@ dependencies {
     implementation(project(":security"))
     implementation(project(":call"))
 
+    // P2P transfer engine for cross-device migration (a shipping feature). src/main glue
+    // (P2pContainerFusion/Pipe/ReceiveSink, MigrationHandshakeGate) depends on it, so it must be on
+    // every variant's classpath. The module's demo/self-test UI stays debug-only via :p2p's own
+    // src/debug source set — release gets the engine, not the demo.
+    implementation(project(":p2p"))
     // Bundled Conscrypt: registered as the top JSSE provider on API < 30 (see
     // TempTalkApplication.initTlsProvider) so inner TLS uses the stream-based
     // ConscryptEngineSocket. The platform Conscrypt there defaults to a raw-fd
@@ -321,6 +357,16 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
+    // ML Kit translation, used only by MlKitTranslateBackend under src/gms/java. Declared per
+    // channel rather than for the whole module: the fdroid channel binds UnavailableTranslateBackend
+    // and must not carry any Google proprietary artifact.
+    "googleImplementation"(libs.mlkit.translate)
+    "googleImplementation"(libs.mlkit.language.id)
+    "officialImplementation"(libs.mlkit.translate)
+    "officialImplementation"(libs.mlkit.language.id)
+    "insiderImplementation"(libs.mlkit.translate)
+    "insiderImplementation"(libs.mlkit.language.id)
+
     // 其他依赖
     implementation(libs.jwtdecode)
     debugImplementation(libs.leakcanary)
@@ -342,6 +388,7 @@ dependencies {
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
+    testImplementation(testFixtures(project(":database")))
     // Compose test
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)

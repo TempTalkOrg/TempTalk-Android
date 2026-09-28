@@ -10,6 +10,20 @@ import javax.crypto.spec.SecretKeySpec
 
 object ContactRemarkUtil {
 
+    /** Wire prefix marking a remark / remark-avatar value as `V1|base64(iv ‖ AES-GCM)`. */
+    const val V1_PREFIX = "V1|"
+
+    /** AES-256 key for a contact's private remark data, derived from the contact's uid. */
+    fun keyForUid(uid: String): ByteArray =
+        (uid + uid + uid).padEnd(32, '+').toByteArray().copyOf(32)
+
+    /** `V1|` ciphertext for the server. Empty plain returns empty (server treats it as clear). */
+    fun encryptRemarkV1(uid: String, plain: String): String {
+        if (plain.isEmpty()) return ""
+        val cipher = encryptRemark(plain.toByteArray(), keyForUid(uid))
+        return if (cipher.isNullOrEmpty()) "" else V1_PREFIX + cipher
+    }
+
     fun encryptRemark(contentBytes: ByteArray, key: ByteArray): String? {
         try {
             val secretKey = SecretKeySpec(key, "AES")

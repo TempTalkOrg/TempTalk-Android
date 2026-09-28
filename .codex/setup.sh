@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision TempTalk Android for an OpenAI Codex Cloud environment.
+# Provision Difft Android for an OpenAI Codex Cloud environment.
 #
 # Codex Cloud runs this script with network access before the agent phase. The
 # script is intentionally idempotent so it can also repair a resumed cache.
@@ -32,9 +32,9 @@ GH_VERSION="2.95.0"
 CODEX_CLI_VERSION="0.146.0"
 DYNAMIC_WORKFLOW_MARKETPLACE="cctools-codex-plugins"
 DYNAMIC_WORKFLOW_PLUGIN_ID="dynamic-workflow@${DYNAMIC_WORKFLOW_MARKETPLACE}"
-DYNAMIC_WORKFLOW_VERSION="0.2.1"
+DYNAMIC_WORKFLOW_VERSION="0.2.2"
 DYNAMIC_WORKFLOW_SOURCE="pchalasani/claude-code-tools"
-DYNAMIC_WORKFLOW_REF="6c8a74da1a33ae4ddf6a43b9997a6b998ed7fa6a"
+DYNAMIC_WORKFLOW_REF="8c1d08e65bf71e0b1bb62d5ee9d1bc9cdd05442f"
 MARKITDOWN_VERSION="0.1.7"
 SDKMANAGER_LICENSE_TIMEOUT="${CODEX_SDKMANAGER_LICENSE_TIMEOUT:-120}"
 SDKMANAGER_INSTALL_TIMEOUT="${CODEX_SDKMANAGER_INSTALL_TIMEOUT:-900}"
@@ -412,22 +412,16 @@ install_codex() {
 }
 
 dynamic_workflow_record() {
-    if [ "${1:-}" = "--available" ]; then
-        set -- --available
-    else
-        set --
-    fi
     codex plugin list \
         --marketplace "$DYNAMIC_WORKFLOW_MARKETPLACE" \
-        "$@" \
         --json 2>/dev/null \
         | node -e '
             let input = "";
             process.stdin.on("data", chunk => { input += chunk; });
             process.stdin.on("end", () => {
                 const data = JSON.parse(input);
-                const plugins = [...(data.installed || []), ...(data.available || [])];
-                const plugin = plugins.find(item => item.pluginId === process.argv[1]);
+                const plugin = (data.installed || [])
+                    .find(item => item.pluginId === process.argv[1]);
                 if (!plugin) process.exit(3);
                 const sourcePath = plugin.source && plugin.source.path ? plugin.source.path : "";
                 process.stdout.write([
@@ -440,14 +434,96 @@ dynamic_workflow_record() {
         ' "$DYNAMIC_WORKFLOW_PLUGIN_ID"
 }
 
+dynamic_workflow_marketplace_root() {
+    codex plugin marketplace list --json 2>/dev/null \
+        | node -e '
+            let input = "";
+            process.stdin.on("data", chunk => { input += chunk; });
+            process.stdin.on("end", () => {
+                const data = JSON.parse(input);
+                const marketplace = (data.marketplaces || [])
+                    .find(item => item.name === process.argv[1]);
+                if (!marketplace || !marketplace.root) process.exit(3);
+                process.stdout.write(marketplace.root);
+            });
+        ' "$DYNAMIC_WORKFLOW_MARKETPLACE"
+}
+
+dynamic_workflow_marketplace_ref_matches() {
+    local root="$1" revision status plugin_status
+    [ -d "$root" ] || return 1
+    revision="$(git -C "$root" rev-parse HEAD 2>/dev/null)" || return 1
+    [ "$revision" = "$DYNAMIC_WORKFLOW_REF" ] || return 1
+    status="$(git -C "$root" status --porcelain=v1 --untracked-files=all \
+        --ignore-submodules=none 2>/dev/null)" || return 1
+    case "$status" in
+        ""|"?? .codex-marketplace-install.json") ;;
+        *) return 1 ;;
+    esac
+    plugin_status="$(git -C "$root" status --porcelain=v1 \
+        --untracked-files=all --ignored=matching --ignore-submodules=none \
+        -- plugins/dynamic-workflow 2>/dev/null)" || return 1
+    [ -z "$plugin_status" ]
+}
+
+dynamic_workflow_extra_installed_plugins() {
+    codex plugin list \
+        --marketplace "$DYNAMIC_WORKFLOW_MARKETPLACE" \
+        --json 2>/dev/null \
+        | node -e '
+            let input = "";
+            process.stdin.on("data", chunk => { input += chunk; });
+            process.stdin.on("end", () => {
+                const data = JSON.parse(input);
+                const extras = (data.installed || [])
+                    .map(item => item.pluginId)
+                    .filter(id => id && id !== process.argv[1]);
+                process.stdout.write(extras.join(", "));
+            });
+        ' "$DYNAMIC_WORKFLOW_PLUGIN_ID"
+}
+
+dynamic_workflow_cache_root() {
+    local codex_config_root="${CODEX_HOME:-$HOME/.codex}"
+    printf '%s/plugins/cache/%s/dynamic-workflow/%s' \
+        "$codex_config_root" "$DYNAMIC_WORKFLOW_MARKETPLACE" "$DYNAMIC_WORKFLOW_VERSION"
+}
+
+dynamic_workflow_cache_matches() {
+    local cache_root="$1" marketplace_plugin_root="$2/plugins/dynamic-workflow"
+    [ -d "$cache_root" ] \
+        && cmp -s "$cache_root/.codex-plugin/plugin.json" \
+            "$marketplace_plugin_root/.codex-plugin/plugin.json" \
+        && cmp -s "$cache_root/bin/workflow.mjs" \
+            "$marketplace_plugin_root/bin/workflow.mjs" \
+        && cmp -s "$cache_root/skills/dynamic-workflow/SKILL.md" \
+            "$marketplace_plugin_root/skills/dynamic-workflow/SKILL.md" \
+        && cmp -s "$cache_root/skills/dynamic-workflow/references/workflow-api.md" \
+            "$marketplace_plugin_root/skills/dynamic-workflow/references/workflow-api.md"
+}
+
+dynamic_workflow_record_path_matches() {
+    local recorded_path="$1" expected_path="$2/plugins/dynamic-workflow"
+    [ -d "$recorded_path" ] && [ -d "$expected_path" ] \
+        || return 1
+    recorded_path="$(cd "$recorded_path" && pwd -P)" || return 1
+    expected_path="$(cd "$expected_path" && pwd -P)" || return 1
+    [ "$recorded_path" = "$expected_path" ]
+}
+
 verify_dynamic_workflow() {
-    local record version installed enabled plugin_path runner
+    local marketplace_root cache_root record version installed enabled plugin_path runner
     if ! command -v codex >/dev/null 2>&1; then
         warn "Codex CLI is unavailable."
         return 1
     fi
     if ! command -v node >/dev/null 2>&1; then
         warn "Node.js is unavailable."
+        return 1
+    fi
+    if ! marketplace_root="$(dynamic_workflow_marketplace_root)" \
+        || ! dynamic_workflow_marketplace_ref_matches "$marketplace_root"; then
+        warn "$DYNAMIC_WORKFLOW_MARKETPLACE is not at pinned ref $DYNAMIC_WORKFLOW_REF."
         return 1
     fi
     if ! record="$(dynamic_workflow_record)"; then
@@ -461,8 +537,17 @@ verify_dynamic_workflow() {
         warn "$DYNAMIC_WORKFLOW_PLUGIN_ID $DYNAMIC_WORKFLOW_VERSION is not installed and enabled."
         return 1
     fi
+    if ! dynamic_workflow_record_path_matches "$plugin_path" "$marketplace_root"; then
+        warn "$DYNAMIC_WORKFLOW_PLUGIN_ID does not reference the pinned marketplace path."
+        return 1
+    fi
 
-    runner="$plugin_path/bin/workflow.mjs"
+    cache_root="$(dynamic_workflow_cache_root)"
+    if ! dynamic_workflow_cache_matches "$cache_root" "$marketplace_root"; then
+        warn "The installed dynamic-workflow cache does not match the pinned marketplace."
+        return 1
+    fi
+    runner="$cache_root/bin/workflow.mjs"
     if [ ! -f "$runner" ] || ! node "$runner" help >/dev/null 2>&1; then
         warn "The dynamic-workflow runner failed verification."
         return 1
@@ -470,36 +555,94 @@ verify_dynamic_workflow() {
     return 0
 }
 
+add_dynamic_workflow_marketplace() {
+    log "Adding the pinned $DYNAMIC_WORKFLOW_MARKETPLACE marketplace."
+    if ! codex plugin marketplace add "$DYNAMIC_WORKFLOW_SOURCE" \
+            --ref "$DYNAMIC_WORKFLOW_REF" \
+            --json >/dev/null; then
+        warn "Could not add the pinned $DYNAMIC_WORKFLOW_MARKETPLACE marketplace."
+        return 1
+    fi
+}
+
+replace_dynamic_workflow_marketplace() {
+    local extras
+    if ! extras="$(dynamic_workflow_extra_installed_plugins)"; then
+        warn "Could not inspect installed $DYNAMIC_WORKFLOW_MARKETPLACE plugins before replacement."
+        return 1
+    fi
+    if [ -n "$extras" ]; then
+        warn "Refusing to replace $DYNAMIC_WORKFLOW_MARKETPLACE while other plugins are installed: $extras"
+        return 1
+    fi
+    # Detached runs copy their runner into durable run state before starting;
+    # replacing the plugin cache therefore cannot remove an active
+    # supervisor/notifier executable. Version 0.2.2 retains the existing state
+    # schema so its controls can inspect or resume older durable runs.
+    log "Replacing the stale $DYNAMIC_WORKFLOW_MARKETPLACE marketplace snapshot."
+    codex plugin remove "$DYNAMIC_WORKFLOW_PLUGIN_ID" --json >/dev/null 2>&1 || true
+    if ! codex plugin marketplace remove "$DYNAMIC_WORKFLOW_MARKETPLACE" \
+            --json >/dev/null; then
+        warn "Could not remove the stale $DYNAMIC_WORKFLOW_MARKETPLACE marketplace."
+        return 1
+    fi
+    add_dynamic_workflow_marketplace
+}
+
+ensure_dynamic_workflow_marketplace() {
+    local marketplace_root
+    if marketplace_root="$(dynamic_workflow_marketplace_root)"; then
+        if ! dynamic_workflow_marketplace_ref_matches "$marketplace_root"; then
+            replace_dynamic_workflow_marketplace || return 1
+        fi
+    else
+        add_dynamic_workflow_marketplace || return 1
+    fi
+
+    if ! marketplace_root="$(dynamic_workflow_marketplace_root)" \
+        || ! dynamic_workflow_marketplace_ref_matches "$marketplace_root"; then
+        warn "$DYNAMIC_WORKFLOW_MARKETPLACE did not resolve to pinned ref $DYNAMIC_WORKFLOW_REF."
+        return 1
+    fi
+}
+
 install_dynamic_workflow() {
-    local node_major marketplaces record version installed enabled plugin_path
+    local node_major marketplace_root cache_root record version installed enabled plugin_path
     node_major="$(node --version | sed -nE 's/^v([0-9]+).*/\1/p')"
     if [ -z "$node_major" ] || [ "$node_major" -lt 20 ]; then
         warn "dynamic-workflow requires Node.js 20 or newer."
         return 1
     fi
 
-    if ! marketplaces="$(codex plugin marketplace list --json 2>/dev/null)"; then
-        warn "Could not list Codex plugin marketplaces."
-        return 1
-    fi
-    if ! printf '%s' "$marketplaces" | grep -q "\"name\": \"${DYNAMIC_WORKFLOW_MARKETPLACE}\""; then
-        log "Adding the pinned $DYNAMIC_WORKFLOW_MARKETPLACE marketplace."
-        if ! codex plugin marketplace add "$DYNAMIC_WORKFLOW_SOURCE" \
-                --ref "$DYNAMIC_WORKFLOW_REF" \
-                --json >/dev/null; then
-            warn "Could not add the pinned $DYNAMIC_WORKFLOW_MARKETPLACE marketplace."
-            return 1
+    if record="$(dynamic_workflow_record)"; then
+        IFS=$'\t' read -r version installed enabled plugin_path <<< "$record"
+        if [ "$installed" = "true" ] && [ "$enabled" != "true" ]; then
+            warn "$DYNAMIC_WORKFLOW_PLUGIN_ID is installed but disabled."
+            return 2
         fi
     fi
 
-    if ! record="$(dynamic_workflow_record --available)"; then
-        warn "$DYNAMIC_WORKFLOW_PLUGIN_ID is missing from the pinned marketplace."
-        return 1
-    fi
-    IFS=$'\t' read -r version installed enabled plugin_path <<< "$record"
-    if [ "$version" != "$DYNAMIC_WORKFLOW_VERSION" ]; then
-        warn "Expected $DYNAMIC_WORKFLOW_PLUGIN_ID $DYNAMIC_WORKFLOW_VERSION, found ${version:-unknown}."
-        return 1
+    ensure_dynamic_workflow_marketplace || return 1
+
+    if record="$(dynamic_workflow_record)"; then
+        IFS=$'\t' read -r version installed enabled plugin_path <<< "$record"
+        if [ "$version" != "$DYNAMIC_WORKFLOW_VERSION" ]; then
+            log "Removing stale $DYNAMIC_WORKFLOW_PLUGIN_ID ${version:-unknown}."
+            codex plugin remove "$DYNAMIC_WORKFLOW_PLUGIN_ID" --json >/dev/null 2>&1 || return 1
+            installed="false"
+        else
+            marketplace_root="$(dynamic_workflow_marketplace_root)" || return 1
+            cache_root="$(dynamic_workflow_cache_root)"
+            if ! dynamic_workflow_record_path_matches "$plugin_path" "$marketplace_root" \
+                || ! dynamic_workflow_cache_matches "$cache_root" "$marketplace_root"; then
+                log "Removing mismatched $DYNAMIC_WORKFLOW_PLUGIN_ID cache."
+                codex plugin remove "$DYNAMIC_WORKFLOW_PLUGIN_ID" --json >/dev/null 2>&1 || return 1
+                installed="false"
+            fi
+        fi
+    else
+        installed="false"
+        enabled="false"
     fi
 
     if [ "$installed" != "true" ]; then
@@ -510,9 +653,10 @@ install_dynamic_workflow() {
         fi
     elif [ "$enabled" != "true" ]; then
         warn "$DYNAMIC_WORKFLOW_PLUGIN_ID is installed but disabled."
-        return 1
+        return 2
     fi
 
+    verify_dynamic_workflow || return 1
     log "Configured $DYNAMIC_WORKFLOW_PLUGIN_ID $DYNAMIC_WORKFLOW_VERSION."
 }
 
@@ -522,14 +666,7 @@ provision_dynamic_workflow() {
 
 repair_dynamic_workflow() {
     install_codex || return 1
-    install_dynamic_workflow || return 1
-    if verify_dynamic_workflow; then
-        return
-    fi
-
-    log "Reinstalling $DYNAMIC_WORKFLOW_PLUGIN_ID after failed maintenance verification."
-    codex plugin remove "$DYNAMIC_WORKFLOW_PLUGIN_ID" --json >/dev/null 2>&1 || true
-    install_dynamic_workflow && verify_dynamic_workflow
+    install_dynamic_workflow
 }
 
 android_sdk_complete() {
@@ -649,7 +786,15 @@ configure_signing() {
 
 configure_firebase_credentials() {
     [ -n "$FIREBASE_TOOLS_CONFIG_SECRET" ] || return 0
-    local config_dir="$HOME/.config/configstore"
+    local config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+    case "$config_home" in
+        /*) ;;
+        *)
+            warn "XDG_CONFIG_HOME must be absolute; Firebase CLI credentials were not configured."
+            return 0
+            ;;
+    esac
+    local config_dir="$config_home/configstore"
     local config_file="$config_dir/firebase-tools.json"
     mkdir -p "$config_dir"
     chmod 700 "$config_dir"

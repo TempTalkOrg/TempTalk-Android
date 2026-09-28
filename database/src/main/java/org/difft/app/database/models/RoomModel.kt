@@ -129,6 +129,15 @@ class RoomModel {
     var saveToPhotos: Int? = null
 
     /**
+     * Conversation-level auto-translate target. Local only, never synced to the server
+     * (the conversation-set API has no such field).
+     * 0: off (default) / 1: Chinese / 2: English
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var translateSetting: Int = 0
+
+    /**
      * Timestamp (ms) when the conversation last became empty
      * null: Conversation has content (not empty)
      * non-null: Conversation is empty, value is the time when it became empty
@@ -160,6 +169,7 @@ class RoomModel {
                 messageClearAnchor == other.messageClearAnchor &&
                 pinnedTime == other.pinnedTime &&
                 saveToPhotos == other.saveToPhotos &&
+                translateSetting == other.translateSetting &&
                 emptyRoomSince == other.emptyRoomSince
     }
 
@@ -184,6 +194,7 @@ class RoomModel {
         sendStatus,
         sendingStatus,
         saveToPhotos,
+        translateSetting,
         emptyRoomSince
     )
 
@@ -210,6 +221,7 @@ class RoomModel {
                 ", sendStatus=" + sendStatus +
                 ", sendingStatus=" + sendingStatus +
                 ", saveToPhotos=" + saveToPhotos +
+                ", translateSetting=" + translateSetting +
                 ", emptyRoomSince=" + emptyRoomSince +
                 '}'
 }

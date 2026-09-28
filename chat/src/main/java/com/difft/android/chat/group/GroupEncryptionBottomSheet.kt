@@ -17,13 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
 /**
@@ -54,14 +52,14 @@ fun GroupEncryptionBottomSheet(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(colorResource(com.difft.android.base.R.color.bg3)),
+                .background(DifftTheme.colors.backgroundTertiary),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(R.drawable.chat_ic_lock_cog),
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = colorResource(com.difft.android.base.R.color.t_secondary)
+                tint = DifftTheme.colors.textSecondary
             )
         }
 
@@ -73,8 +71,8 @@ fun GroupEncryptionBottomSheet(
                 if (isUpgrade) R.string.group_encrypted_title
                 else R.string.group_encrypted_info_title
             ),
-            fontSize = 16.sp,
-            color = colorResource(com.difft.android.base.R.color.t_primary),
+            style = DifftTheme.typography.p2,
+            color = DifftTheme.colors.textPrimary,
             textAlign = TextAlign.Center
         )
 
@@ -86,8 +84,8 @@ fun GroupEncryptionBottomSheet(
                 if (isUpgrade) R.string.group_upgrade_description
                 else R.string.group_encrypted_info_description
             ),
-            fontSize = 14.sp,
-            color = colorResource(com.difft.android.base.R.color.t_secondary),
+            style = DifftTheme.typography.p3,
+            color = DifftTheme.colors.textSecondary,
             textAlign = TextAlign.Center
         )
 
@@ -104,8 +102,9 @@ fun GroupEncryptionBottomSheet(
             ) {
                 Text(
                     text = stringResource(R.string.group_upgrade_button),
-                    fontSize = 16.sp,
-                    color = colorResource(com.difft.android.base.R.color.primary)
+                    // h5, not p2: TextButton's slot style is labelLarge (Medium).
+                    style = DifftTheme.typography.h5,
+                    color = DifftTheme.colors.primary
                 )
             }
             TextButton(
@@ -114,8 +113,9 @@ fun GroupEncryptionBottomSheet(
             ) {
                 Text(
                     text = stringResource(R.string.group_upgrade_cancel),
-                    fontSize = 16.sp,
-                    color = colorResource(com.difft.android.base.R.color.t_primary)
+                    // h5, not p2: TextButton's slot style is labelLarge (Medium).
+                    style = DifftTheme.typography.h5,
+                    color = DifftTheme.colors.textPrimary
                 )
             }
         } else {
@@ -131,8 +131,9 @@ fun GroupEncryptionBottomSheet(
                 ) {
                     Text(
                         text = stringResource(R.string.group_crypto_reset_title),
-                        fontSize = 16.sp,
-                        color = colorResource(com.difft.android.base.R.color.t_info)
+                        // h5, not p2: TextButton's slot style is labelLarge (Medium).
+                        style = DifftTheme.typography.h5,
+                        color = DifftTheme.colors.textInfo
                     )
                 }
             }
@@ -142,8 +143,10 @@ fun GroupEncryptionBottomSheet(
             ) {
                 Text(
                     text = stringResource(R.string.group_encrypted_info_dismiss),
-                    fontSize = 16.sp,
-                    color = colorResource(com.difft.android.base.R.color.t_primary)
+                    // h5, not p2: TextButton's slot style is labelLarge, so this label already
+                    // rendered Medium before the type scale.
+                    style = DifftTheme.typography.h5,
+                    color = DifftTheme.colors.textPrimary
                 )
             }
         }

@@ -9,4 +9,10 @@ internal class CompositeScheduler(vararg schedulers: Scheduler) : Scheduler {
             scheduler.schedule(delay, constraints)
         }
     }
+
+    override fun cancelAllExcept(keep: Set<Int>) {
+        for (scheduler in schedulers) {
+            scheduler.cancelAllExcept(keep)
+        }
+    }
 }

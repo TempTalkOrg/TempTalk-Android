@@ -96,4 +96,16 @@
         app:layout_constraintTop_toTopOf="@id/bottom_nar_bar" />
 
 
+    <!-- External non-confidential preview only: shared bottom-centre exit. Not part of the
+         tap-to-hide chrome; on video pages it yields while the player's control bar is showing. -->
+    <com.difft.android.base.widget.DetailCloseButtonView
+        android:id="@+id/ps_bottom_close"
+        android:layout_width="@dimen/detail_close_button_size"
+        android:layout_height="@dimen/detail_close_button_size"
+        android:layout_marginBottom="@dimen/detail_close_button_margin"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

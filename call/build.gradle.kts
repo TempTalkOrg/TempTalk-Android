@@ -70,6 +70,7 @@ dependencies {
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
+    testImplementation(testFixtures(project(":database")))
     // Compose test
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
@@ -87,6 +88,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil)
     implementation(libs.coil.gif)
+    // Lottie: the call wait dialog animation.
+    implementation(libs.lottie)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.compose.foundation)
     implementation(libs.kotlinx.serialization.core)

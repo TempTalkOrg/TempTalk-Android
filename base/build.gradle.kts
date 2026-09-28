@@ -27,6 +27,10 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // Gradle test workers default to 512m; the Robolectric/Compose suite OOMs there on CI.
+        // Mirrors :chat and :call. Kept per-module on purpose: the shared CI runner caps Gradle
+        // workers at 4 with a 4g daemon, so raising every module's workers at once would exceed it.
+        unitTests.all { it.maxHeapSize = "2g" }
     }
 
     testFixtures {
@@ -99,7 +103,6 @@ dependencies {
     api(libs.androidx.constraintlayout)
     api(libs.androidx.activity.ktx)
     api(libs.androidx.fragment.ktx)
-    api(libs.lottie)
 
     // AndroidX Lifecycle
     api(libs.bundles.androidx.lifecycle)

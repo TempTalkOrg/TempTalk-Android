@@ -13,11 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 
@@ -53,7 +51,7 @@ fun TitleBar(
                 Icon(
                     painter = painterResource(id = R.drawable.chative_ic_back),
                     contentDescription = "Back",
-                    tint = DifftTheme.colors.textPrimary
+                    tint = DifftTheme.colors.icon
                 )
             }
         } else {
@@ -64,9 +62,8 @@ fun TitleBar(
         Text(
             modifier = Modifier.weight(1f, false),
             text = titleText,
+            style = DifftTheme.typography.h4,
             color = DifftTheme.colors.textPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -74,9 +71,8 @@ fun TitleBar(
         if (titleEndText.isNotEmpty()) {
             Text(
                 text = titleEndText,
+                style = DifftTheme.typography.h4,
                 color = DifftTheme.colors.textPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Visible,
             )

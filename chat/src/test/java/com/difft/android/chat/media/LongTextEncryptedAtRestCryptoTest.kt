@@ -25,10 +25,10 @@ import java.io.File
  *  - the [EncryptedAttachmentAccess.hasEncrypted] readiness gate that the long-text bubble/attach
  *    view now use in place of a plaintext `isFileValid` check — accepts a structurally-valid
  *    ciphertext and rejects a truncated one (self-healing re-download);
- *  - the [EncryptedAttachmentAccess.isLongTextReady] "fully downloaded" gate: a valid ciphertext is
- *    ready regardless of the status/progress signal (this is what unblocks FORWARDED long text whose
- *    serialized attachment status never flips to SUCCESS), while a legacy plaintext-only file still
- *    defers to that signal;
+ *  - the [EncryptedAttachmentAccess.isLongTextReady] "fully downloaded" gate: the file decides — a
+ *    valid ciphertext is ready whatever the row's status/progress or the message's direction say
+ *    (this is what unblocks FORWARDED long text whose serialized attachment status never flips to
+ *    SUCCESS), while a legacy plaintext-only file must match the recorded plaintext size;
  *  - HMAC integrity: a valid file verifies, a tampered byte fails.
  */
 class LongTextEncryptedAtRestCryptoTest {
@@ -112,45 +112,51 @@ class LongTextEncryptedAtRestCryptoTest {
     }
 
     @Test
-    fun `isLongTextReady treats a valid ciphertext as ready regardless of the status signal`() {
+    fun `isLongTextReady treats a valid ciphertext as ready whatever size the row records`() {
         // Core of the forwarded-long-text fix: a forwarded attachment's serialized status stays
-        // LOADING and its in-memory progress is transient, so plaintextStatusReady is false — but the
-        // complete, MAC-guarded ".encrypt" on disk must still count as fully downloaded.
+        // LOADING and its in-memory progress is transient, and a forward copy's message id says
+        // nothing about who wrote the bytes — none of that is consulted. The complete, MAC-guarded
+        // ".encrypt" on disk counts as fully downloaded; the ciphertext arm ignores the plaintext size.
         val basePath = encryptText("forwarded long text, status never flips to SUCCESS")
-        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = false))
-        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = true))
+        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = 0))
+        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = 1))
     }
 
     @Test
-    fun `isLongTextReady defers to the status signal for a legacy plaintext-only file`() {
-        // Plaintext can't self-verify truncation, so it still needs the caller's
-        // status==SUCCESS / progress==100 / own-device-send signal.
-        val basePath = writePlaintext("legacy plaintext long text (pre-migration)")
-        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = false))
-        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = true))
+    fun `isLongTextReady size-verifies a legacy plaintext-only file`() {
+        // Plaintext can't self-verify truncation, so it must match the row's recorded plaintext size;
+        // an unknown size (<= 0) accepts any non-empty plaintext.
+        val text = "legacy plaintext long text (pre-migration)"
+        val basePath = writePlaintext(text)
+        val size = text.toByteArray(Charsets.UTF_8).size
+        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = size))
+        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = 0))
+        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = size + 1))
     }
 
     @Test
     fun `isLongTextReady is not ready when neither ciphertext nor plaintext exists`() {
         val basePath = File(tempFolder.root, "missing-longtext.txt").absolutePath
-        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = true))
-        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = false))
+        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = 0))
+        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = 42))
     }
 
     @Test
-    fun `isLongTextReady rejects a truncated ciphertext then applies the plaintext gate`() {
+    fun `isLongTextReady rejects a truncated ciphertext then size-verifies the plaintext`() {
         val basePath = encryptText("this download is truncated", name = "truncated-longtext.txt")
         val encFile = EncryptedAttachmentAccess.encryptedFile(basePath)
         val bytes = encFile.readBytes()
         encFile.writeBytes(bytes.copyOf(bytes.size - 1)) // break the (len-48)%16 invariant
 
-        // Truncated ciphertext alone (no plaintext) is never ready, even with a "ready" status.
-        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = true))
+        // Truncated ciphertext alone (no plaintext) is never ready.
+        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = 0))
 
-        // Once a legacy plaintext exists at the same base path, readiness falls back to the status gate.
-        File(basePath).writeText("legacy plaintext fallback", Charsets.UTF_8)
-        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = false))
-        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, plaintextStatusReady = true))
+        // Once a legacy plaintext exists at the same base path, readiness is its size check.
+        val fallback = "legacy plaintext fallback"
+        File(basePath).writeText(fallback, Charsets.UTF_8)
+        val size = fallback.toByteArray(Charsets.UTF_8).size
+        assertFalse(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = size - 1))
+        assertTrue(EncryptedAttachmentAccess.isLongTextReady(basePath, expectedPlainSize = size))
     }
 
     @Test

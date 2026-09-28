@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 24dp close glyph; callers tint it, so the stroke colour here is a placeholder. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M18.501,5.5L5.501,18.5M5.501,5.5L18.501,18.5"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@android:color/black"
+        android:strokeLineCap="round" />
+</vector>

@@ -6,13 +6,9 @@
     <color name="success" tools:ignore="ResourceName">#01BC6A</color>
     <color name="warning" tools:ignore="ResourceName">#FFC814</color>
     <color name="error" tools:ignore="ResourceName">#F84135</color>
-    <color name="divider" tools:ignore="ResourceName">#EAECEF</color>
     <color name="line" tools:ignore="ResourceName">#EAECEF</color>
     <color name="icon" tools:ignore="ResourceName">#474D57</color>
     <color name="number_of_missing_missing_muted" tools:ignore="ResourceName">#B7BDC6</color>
-
-    <color name="loading_primary_icon" tools:ignore="ResourceName">@color/t.white</color>
-    <color name="loading_secondary_icon" tools:ignore="ResourceName">@color/t.secondary</color>
 
     <!--Text Color-->
     <color name="t.primary" tools:ignore="ResourceName">#1E2329</color>
@@ -34,11 +30,12 @@
     <color name="bg2" tools:ignore="ResourceName">#FAFAFA</color>
     <color name="bg3" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="bg3.night" tools:ignore="ResourceName">#2B3139</color>
-    <color name="bg4" tools:ignore="ResourceName">#B7BDC6</color>
+    <color name="bg4" tools:ignore="ResourceName">#EAECEF</color>
     <color name="bg.disable" tools:ignore="ResourceName">#EAECEF</color>
     <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
-    <color name="bg.modal" tools:ignore="ResourceName">#FFFFFF</color>
     <color name="bg.popup" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bg_modal" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="divider" tools:ignore="ResourceName">#EAECEF</color>
     <color name="bg.popup.night" tools:ignore="ResourceName">#1E2329</color>
     <color name="bg.blue" tools:ignore="ResourceName">#EBF7FF</color>
     <color name="bg.sky" tools:ignore="ResourceName">#EBF7FF</color>
@@ -47,11 +44,12 @@
     <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>
     <color name="bg.confidential" tools:ignore="ResourceName">@color/gray_200</color>
     <color name="bg.confidential.area" tools:ignore="ResourceName">#F7FCFF</color>
-    <color name="bgpage_primary" tools:ignore="ResourceName">#0B0E11</color>
-    <color name="bg5" tools:ignore="ResourceName">#181A20</color>
-    <color name="border" tools:ignore="ResourceName">#2B3139</color>
+    <color name="bgpage_primary" tools:ignore="ResourceName">#FFFFFF</color>
+    <color name="bgpage_secondary" tools:ignore="ResourceName">#F5F5F5</color>
+    <color name="bg5" tools:ignore="ResourceName">#FAFAFA</color>
+    <color name="border" tools:ignore="ResourceName">#EAECEF</color>
 
-    <color name="bg" tools:ignore="ResourceName">#FAFAFA</color>
+    <color name="bg" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="bg.elevated" tools:ignore="ResourceName">#FFFFFF</color>
 
     <color name="login_logo_color" tools:ignore="ResourceName">#181A20</color>

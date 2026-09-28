@@ -3,48 +3,26 @@ package com.difft.android.chat.group
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
+import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.UserManager
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -57,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
+
 @AndroidEntryPoint
 class GroupGlobalNotificationSettingsActivity : BaseActivity() {
 
@@ -88,7 +67,6 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
         setContentView(composeView)
     }
 
-    @Preview
     @Composable
     private fun MainContent() {
         val currentType = remember {
@@ -103,8 +81,7 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                 onBackClick = { finish() }
             )
 
-            ItemViews(currentType) { newType ->
-                // 调用接口同步设置到服务端
+            OptionList(currentType.intValue) { newType ->
                 lifecycleScope.launch {
                     try {
                         val profileRequestBody = ProfileRequestBody(
@@ -114,23 +91,19 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
                         ComposeDialogManager.showWait(this@GroupGlobalNotificationSettingsActivity, "")
                         val response = withContext(Dispatchers.IO) {
                             httpClient.httpService.fetchSetProfile(
-                                baseAuth = (userManager.getUserData()?.baseAuth ?: ""),
                                 profileRequestBody = profileRequestBody
                             )
                         }
 
                         ComposeDialogManager.dismissWait()
                         if (response.isSuccess()) {
-                            // 接口调用成功，更新本地设置
                             userManager.update {
                                 this.globalNotification = newType
                             }
-                            // 更新本地状态
                             currentType.intValue = newType
 
                             setResult(Activity.RESULT_OK)
                         } else {
-                            // 接口调用失败，显示错误信息
                             ToastUtil.show(response.reason ?: getString(com.difft.android.chat.R.string.operation_failed))
                         }
                     } catch (e: Exception) {
@@ -143,138 +116,19 @@ class GroupGlobalNotificationSettingsActivity : BaseActivity() {
         }
     }
 
-    @Preview
     @Composable
-    private fun ItemViews(
-        selectedOption: State<Int> = remember { mutableIntStateOf(0) },
-        onNewOptionSelected: ((Int) -> Unit)? = null
-    ) {
-        val options = GlobalNotificationType.entries.map { it.value }
-
-        LazyColumn(modifier = Modifier.Companion.padding(16.dp)) {
-            items(options.size, key = { index -> options[index] }) { index ->
-                val option = options[index]
-                val context = LocalContext.current
-                val backgroundShape = remember(option) {
-                    when (option) {
-                        options.firstOrNull() -> RoundedCornerShape(
-                            topStart = 8.dp, topEnd = 8.dp
-                        )
-
-                        options.last() -> RoundedCornerShape(
-                            bottomStart = 8.dp, bottomEnd = 8.dp
-                        )
-
-                        else -> RectangleShape
-                    }
-                }
-
-                val bgItem = remember {
-                    Color(
-                        ContextCompat.getColor(
-                            context, R.color.bg_elevated
-                        )
-                    )
-                }
-                val dividerColor = remember {
-                    Color(
-                        ContextCompat.getColor(
-                            context, R.color.bg
-                        )
-                    )
-                }
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.Companion.CenterVertically,
-                        modifier = Modifier.Companion
-                            .fillMaxWidth()
-                            .background(bgItem, backgroundShape)
-                            .clickable {
-                                onNewOptionSelected?.invoke(option)
-                            }
-                            .padding(16.dp),
-                    ) {
-                        val isItemSelected = selectedOption.value == option
-                        val labelTextColor = remember {
-                            Color(
-                                ContextCompat.getColor(
-                                    context, R.color.t_primary
-                                )
-                            )
-                        }
-
-                        // 根据选项显示不同的内容
-                        when (option) {
-                            GlobalNotificationType.ALL.value -> {
-                                Text(
-                                    text = getString(com.difft.android.chat.R.string.notification_all),
-                                    modifier = Modifier.Companion.weight(1f),
-                                    color = labelTextColor,
-                                    fontSize = 16.sp
-                                )
-                            }
-
-                            GlobalNotificationType.MENTION.value -> {
-                                Column(
-                                    modifier = Modifier.Companion.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = getString(com.difft.android.chat.R.string.notification_mention_only),
-                                        color = labelTextColor,
-                                        fontSize = 16.sp
-                                    )
-                                    Text(
-                                        text = getString(com.difft.android.chat.R.string.notification_mention_only_description),
-                                        fontSize = 14.sp,
-                                        color = Color(
-                                            ContextCompat.getColor(
-                                                context, R.color.t_info
-                                            )
-                                        )
-                                    )
-                                }
-                            }
-
-                            GlobalNotificationType.OFF.value -> {
-                                Text(
-                                    text = getString(com.difft.android.chat.R.string.notification_off),
-                                    modifier = Modifier.Companion.weight(1f),
-                                    color = labelTextColor,
-                                    fontSize = 16.sp
-                                )
-                            }
-                        }
-
-                        if (isItemSelected) {
-                            val tint: Color = remember {
-                                Color(
-                                    ContextCompat.getColor(
-                                        context, R.color.t_secondary
-                                    )
-                                )
-                            }
-                            Image(
-                                imageVector = ImageVector.Companion.vectorResource(id = com.difft.android.chat.R.drawable.chat_ic_selected),
-                                colorFilter = ColorFilter.Companion.tint(tint),
-                                contentDescription = "Checked",
-                                modifier = Modifier.Companion.padding(start = 16.dp)
-                            )
-                        }
-                    }
-
-                    // 添加分割线，除了最后一个item
-                    if (index < options.size - 1) {
-                        Box(
-                            modifier = Modifier.Companion
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(dividerColor)
-                        )
-                    }
-                }
+    private fun OptionList(selected: Int, onNewOptionSelected: (Int) -> Unit) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = DifftSettingsDefaults.PageInset),
+        ) {
+            Spacer(Modifier.height(DifftSettingsDefaults.FirstGroupSpacing))
+            DifftSettingsGroup {
+                GlobalNotificationOptionRows(selected, onNewOptionSelected)
             }
+            Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
         }
     }
 }

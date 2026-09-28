@@ -1,6 +1,5 @@
 package com.difft.android.call
 
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -13,7 +12,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AppLockCallbackManager
-import com.difft.android.base.utils.WindowSizeClassUtil
+import com.difft.android.base.utils.OrientationPolicy
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
 import com.difft.android.call.handler.CallActionHandler
@@ -26,13 +25,15 @@ import com.difft.android.call.manager.CallLifecycleObserver
 import com.difft.android.call.manager.CallScreenshotController
 import com.difft.android.call.manager.CallServiceManager
 import com.difft.android.call.manager.PictureInPictureManager
-import com.difft.android.call.manager.ProximitySensorManager
+import com.difft.android.call.manager.ProximityScreenOffController
+import com.difft.android.call.manager.shouldHoldProximityLock
 import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.ui.CallContent
 import com.difft.android.call.util.CallWaitDialogUtil
-import com.difft.android.call.util.ViewUtil
+import com.difft.android.base.utils.hideNavigationBar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -48,9 +49,10 @@ import kotlinx.coroutines.withContext
  */
 
 internal fun LCallActivity.initializeState() {
-    if (WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    }
+    // sw600dp orientation policy (portrait on phones, free rotation on tablets / unfolded
+    // foldables) — LCallActivity is not a BaseActivity, so apply it directly. Overrides the
+    // manifest portrait lock on large screens, same as every policy-managed activity.
+    policyAppliedOrientation = OrientationPolicy.applyTo(this)
     onGoingCallStateManager.setIsInCalling(true)
 
     if (isAppLockEnabled()) {
@@ -160,11 +162,11 @@ internal fun LCallActivity.configureWindow() {
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
     allowOnLockScreen()
-    ViewUtil.hideNavigationBar(window)
+    window.hideNavigationBar()
     @Suppress("DEPRECATION")
     window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
         if (visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION == 0) {
-            ViewUtil.hideNavigationBar(window)
+            window.hideNavigationBar()
         }
     }
 }
@@ -254,10 +256,17 @@ internal fun LCallActivity.initializePictureInPictureManager() {
 }
 
 internal fun LCallActivity.initializeProximitySensor() {
-    proximitySensorManager = ProximitySensorManager(
-        activity = this,
-        isScreenSharingProvider = { viewModel.callUiController.isShareScreening.value }
-    ).also { it.initialize() }
+    proximityScreenOffController = ProximityScreenOffController(
+        context = this,
+        lifecycle = lifecycle,
+        scope = lifecycleScope,
+        shouldHold = combine(
+            viewModel.audioRoute,
+            viewModel.cameraEnabled,
+            viewModel.callUiController.isShareScreening,
+            ::shouldHoldProximityLock,
+        ),
+    ).also { it.start() }
 }
 
 internal fun LCallActivity.initializeDialogManager() {

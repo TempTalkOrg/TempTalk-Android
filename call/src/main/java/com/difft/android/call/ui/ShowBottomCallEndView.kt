@@ -12,10 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,8 +37,10 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.BottomButtonTextStyle
 import com.difft.android.call.data.BottomCallEndAction
-import com.difft.android.call.ui.HideNavigationBarEffect
 import kotlinx.coroutines.launch
+
+private const val END_BUTTON_WEIGHT = 238f
+private const val CANCEL_BUTTON_WEIGHT = 212f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,27 +70,23 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
 
 
     if (showBottomCallEndViewEnable || sheetState.isVisible) {
-        ModalBottomSheet (
+        DifftModalBottomSheet(
             scrimColor = Color.Transparent,
             containerColor = Color.Transparent,
-            dragHandle = null,
+            showDragHandle = false,
             shape = RoundedCornerShape(size = 12.dp),
-            modifier = Modifier
-                .background(color = Color.Transparent)
-                .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
-                .wrapContentHeight(),
             sheetState = sheetState,
+            hideNavigationBar = true,
             onDismissRequest = {
                 dismissSheet()
             },
-        ){
-            HideNavigationBarEffect()
+        ) {
             Column(
                 modifier = Modifier
                     .semantics { testTagsAsResourceId = BuildConfig.DEBUG }
                     .testTag("call_end_sheet")
                     .padding(start = 8.dp, end = 8.dp, bottom = 32.dp)
-                    .then(if (isShareScreening) Modifier.wrapContentWidth() else Modifier.fillMaxWidth())
+                    .fillMaxWidth()
             ) {
                 if (isShareScreening) {
                     HorizontalScreenButtonView(onClickItem = onClickItem, onCancelClick = dismissSheet)
@@ -103,9 +100,11 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
 
 @Composable
 fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCancelClick: () -> Unit = { onClickItem(BottomCallEndAction.CANCEL) }) {
+    // Buttons share the sheet width by ratio (238 : 238 : 212 in the design) so the row always
+    // fits inside the 640dp sheet cap instead of overflowing with fixed widths.
     Row(
         modifier = Modifier
-            .wrapContentWidth()
+            .fillMaxWidth()
             .height(60.dp),
         horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -114,7 +113,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
             modifier = Modifier
                 .testTag("call_end_sheet_end_for_all")
                 .padding(0.25.dp)
-                .width(238.dp)
+                .weight(END_BUTTON_WEIGHT)
                 .height(60.dp)
                 .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp, topStart = 12.dp, bottomStart = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
@@ -136,7 +135,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
             modifier = Modifier
                 .testTag("call_end_sheet_leave")
                 .padding(0.25.dp)
-                .width(238.dp)
+                .weight(END_BUTTON_WEIGHT)
                 .height(60.dp)
                 .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp, topStart = 0.dp, bottomStart = 0.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)
@@ -160,7 +159,7 @@ fun HorizontalScreenButtonView(onClickItem: (BottomCallEndAction) -> Unit, onCan
             modifier = Modifier
                 .testTag("call_end_sheet_cancel")
                 .padding(0.dp)
-                .width(212.dp)
+                .weight(CANCEL_BUTTON_WEIGHT)
                 .height(60.dp)
                 .background(color = DifftTheme.colors.backgroundSecondary, shape = RoundedCornerShape(size = 12.dp))
                 .padding(start = 16.dp, top = 18.dp, end = 16.dp, bottom = 18.dp)

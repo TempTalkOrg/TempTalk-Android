@@ -11,7 +11,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="@drawable/chat_fragment_search_input_bg_search_input"
-        android:drawableStart="@drawable/chat_fragment_search_input_ic_search_input"
+        android:drawableStart="@drawable/base_ic_search"
         android:drawablePadding="6dp"
         android:hint="@string/search_default_hint"
         android:textColorHint="@color/t.disable"

@@ -235,6 +235,7 @@
         android:layout_marginTop="5dp"
         android:layout_marginEnd="40dp"
         android:background="@drawable/chat_translate_bg"
+        android:minHeight="36dp"
         android:padding="12dp"
         app:layout_constrainedWidth="true"
         app:layout_constraintEnd_toEndOf="parent"
@@ -268,6 +269,37 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_goneMarginStart="0dp"
             tools:text="sdasd sdasd sdasd sdasd sdasd sdasd sdasd sdasd sdasd" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_translate_attribution"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:includeFontPadding="false"
+            android:text="@string/chat_translate_powered_by_google"
+            android:textColor="@color/t.third"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tv_translate_content"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_translate_error"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:lineSpacingMultiplier="1.2"
+            android:textColor="@color/t.error"
+            android:textSize="16sp"
+            android:visibility="gone"
+            app:layout_constrainedWidth="true"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="@string/chat_translate_failed_retry"
+            tools:visibility="visible" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -329,12 +361,11 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <androidx.appcompat.widget.AppCompatCheckBox
+    <com.difft.android.base.widget.DifftCheckBoxView
         android:id="@+id/checkbox_select_for_unpin"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="6dp"
-        android:buttonTint="@color/event_checkbox_color_selector"
         android:visibility="gone"
         app:layout_constrainedHeight="true"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -344,11 +375,13 @@
         tools:layout_width="20dp" />
 
     <!-- Voice playback speed button - shown only during audio playback -->
+    <!-- 5dp (not 8) keeps the playing-state row within the 337dp detail pane of the
+         narrowest dual-pane foldables: 26 start + 270 bubble + 5 + 36 button = 337dp. -->
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/tv_voice_speed"
         android:layout_width="36dp"
         android:layout_height="24dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="5dp"
         android:background="@drawable/chat_voice_speed_btn_bg"
         android:gravity="center"
         android:textColor="@color/t.secondary"

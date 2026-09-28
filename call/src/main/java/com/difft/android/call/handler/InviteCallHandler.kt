@@ -194,37 +194,6 @@ class InviteCallHandler(
     }
 
     /**
-     * 获取名称的首字母
-     */
-    private fun getFirstLetter(name: String?): String {
-        if (name.isNullOrBlank()) return "#"
-        val firstChar = name.firstOrNull()?.uppercaseChar() ?: return "#"
-        return if (firstChar.isLetter() || firstChar in '\u4e00'..'\u9fa5') {
-            firstChar.toString()
-        } else {
-            "#"
-        }
-    }
-
-    /**
-     * 从avatar JSON字符串中提取URL和key
-     */
-    private fun parseAvatarData(avatarJson: String?): Pair<String?, String?> {
-        if (avatarJson.isNullOrBlank()) return null to null
-        return try {
-            // 简单的JSON解析，提取attachmentId
-            val attachmentIdMatch = Regex("\"attachmentId\"\\s*:\\s*\"([^\"]+)\"").find(avatarJson)
-            val attachmentId = attachmentIdMatch?.groupValues?.get(1)
-            val encKeyMatch = Regex("\"encKey\"\\s*:\\s*\"([^\"]+)\"").find(avatarJson)
-            val encKey = encKeyMatch?.groupValues?.get(1)
-            attachmentId to encKey
-        } catch (e: Exception) {
-            L.e { "[Call] InviteCallHandler Failed to parse avatar data: ${e.message}" }
-            null to null
-        }
-    }
-
-    /**
      * 添加选中的联系人到成员列表
      */
     suspend fun addSelectedContacts(contactIds: List<String>) {
@@ -233,15 +202,7 @@ class InviteCallHandler(
                 wcdb.getContactorsFromAllTable(contactIds)
             }
             val newMembers = contactors.map { contactor ->
-                val displayName = contactor.getDisplayNameForUI()
-                val (avatarUrl, avatarEncKey) = parseAvatarData(contactor.avatar)
-                InviteMember(
-                    uid = contactor.id,
-                    name = displayName,
-                    avatarUrl = avatarUrl,
-                    avatarEncKey = avatarEncKey,
-                    sortLetter = getFirstLetter(displayName)
-                )
+                InviteMember(uid = contactor.id, name = contactor.getDisplayNameForUI())
             }
             _selectedMembers.update { existingMembers ->
                 (existingMembers + newMembers).distinctBy { it.uid }

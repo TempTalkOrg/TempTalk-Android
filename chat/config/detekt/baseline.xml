@@ -22,9 +22,7 @@
     <ID>LongMethod:FilePreSendActivity.kt:@Composable private fun FilePreSendScreen</ID>
     <ID>LongMethod:GroupChatFragment.kt:GroupChatFragment$private fun onCreateForShowingMessages</ID>
     <ID>LongMethod:GroupChatPopupActivity.kt:GroupChatPopupActivity$private fun onCreateForShowingMessages</ID>
-    <ID>LongMethod:GroupGlobalNotificationSettingsActivity.kt:GroupGlobalNotificationSettingsActivity$@Preview @Composable private fun ItemViews</ID>
     <ID>LongMethod:GroupInfoActivity.kt:GroupInfoActivity$private fun setOtherView</ID>
-    <ID>LongMethod:GroupNotificationSettingsActivity.kt:GroupNotificationSettingsActivity$@Preview @Composable private fun MainContent</ID>
     <ID>LongMethod:GroupUpdater.kt:GroupUpdater$private suspend fun processGroupNotifyMessage</ID>
     <ID>LongMethod:MediaReviewFragment.kt:MediaReviewFragment$override fun onViewCreated</ID>
     <ID>LongMethod:MessageActionPopup.kt:MessageActionPopup$fun show</ID>

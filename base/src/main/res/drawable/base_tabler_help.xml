@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tabler "help" icon, exported from Figma node 2979:82 (Wea Design system, Checkbox page):
+     14dp frame with the glyph inset 1.1667 on each side, stroke 1.1667. Placeholder color only
+     — tinted exclusively via Icon()/Drawable.setTint() at every call site. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="14"
+    android:viewportHeight="14">
+    <group
+        android:translateX="1.1667"
+        android:translateY="1.1667">
+        <path
+            android:pathData="M5.83333,11.0833C8.73283,11.0833 11.0833,8.73283 11.0833,5.83333C11.0833,2.93384 8.73283,0.583333 5.83333,0.583333C2.93384,0.583333 0.583333,2.93384 0.583333,5.83333C0.583333,8.73283 2.93384,11.0833 5.83333,11.0833Z"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#FF474D57"
+            android:strokeWidth="1.16667"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M5.83319,8.75002V8.75586M5.83319,6.70836C5.82245,6.51899 5.87353,6.33126 5.97874,6.17345C6.08395,6.01563 6.23759,5.89628 6.41652,5.83336C6.63578,5.74951 6.83259,5.61591 6.99144,5.44308C7.15029,5.27025 7.26686,5.0629 7.33196,4.83737C7.39707,4.61183 7.40893,4.37426 7.36662,4.14336C7.3243,3.91246 7.22897,3.69454 7.08812,3.50674C6.94728,3.31895 6.76476,3.16641 6.55495,3.06114C6.34513,2.95586 6.11374,2.90073 5.879,2.90008C5.64425,2.89943 5.41256,2.95328 5.20217,3.05738C4.99177,3.16149 4.80841,3.31301 4.66652,3.50003"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#FF474D57"
+            android:strokeWidth="1.16667"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

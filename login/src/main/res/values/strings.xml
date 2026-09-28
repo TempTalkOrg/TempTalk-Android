@@ -1,16 +1,18 @@
 <resources>
     <string name="login_sign_to_chative">Sign in to Quicall</string>
-    <string name="login_email_or_invite_code_hint">Email/Phone Number</string>
+    <string name="login_email_or_phone_hint">Email/Phone Number</string>
     <string name="login_next">Next</string>
     <string name="login_in">Log in</string>
     <string name="login_skip">Skip</string>
     <string name="login_otp_sent">OTP sent, please check</string>
     <string name="login_otp_sent_to">OTP sent to "%s"</string>
-    <string name="login_invite_code_invalid">Invalid , please check</string>
+    <string name="login_error_invalid_account">Invalid email or phone number</string>
     <string name="login_email_code_not_receive">Did\'t receive?</string>
     <string name="login_email_code_resend">Resend%s</string>
     <string name="login_error_not_exist">Code expired or does not exist, please check</string>
     <string name="login_error_verification_failed">Verification failed</string>
+    <string name="login_renew_failed">Sign-in expired. Please request a new code.</string>
+    <string name="login_restore_sign_in_again">Your data has been imported. Verify the account again to finish signing in.</string>
     <string name="login_error_too_many_attempts">Too many attempts. Please try again later.</string>
 
     <!-- Screen Lock Strings -->
@@ -60,4 +62,13 @@
     <string name="register_intro_page2_title">Only both sides can see it</string>
     <string name="register_intro_page2_body">End-to-end encryption. No one except you and the other side can view chat content.</string>
     <string name="login_use_proxy">Use proxy</string>
+
+    <!-- Data-migration v2 (A5) — import-on-login prompt -->
+    <string name="login_import_backup_title">Import backup?</string>
+    <string name="login_import_backup_message">Restore your chat history from a backup file before signing in. If you skip this, you will start with no history on this device.</string>
+    <string name="login_import_backup_confirm">Import</string>
+    <string name="login_import_backup_decline">Skip</string>
+    <!-- I4 — import method chooser (P2P vs File) + same-device file-only -->
+    <!-- Intro copy folded from the old pre-prompt into the single combined chooser dialog -->
+
 </resources>

@@ -7,10 +7,10 @@
         android:id="@+id/ps_tv_photo"
         android:layout_width="match_parent"
         android:layout_height="45dp"
-        android:background="@drawable/ps_item_select_bg"
+        android:background="@drawable/ps_popup_item_bg"
         android:gravity="center"
         android:text="@string/ps_photograph"
-        android:textColor="@color/ps_color_53575e"
+        android:textColor="@color/t.primary"
         android:textSize="14sp" />
 
     <View
@@ -18,17 +18,17 @@
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
         android:layout_below="@id/ps_tv_photo"
-        android:background="@color/ps_color_e" />
+        android:background="@color/line" />
 
     <TextView
         android:id="@+id/ps_tv_video"
         android:layout_width="match_parent"
         android:layout_height="45dp"
         android:layout_below="@id/top_line"
-        android:background="@drawable/ps_item_select_bg"
+        android:background="@drawable/ps_popup_item_bg"
         android:gravity="center"
         android:text="@string/ps_record_video"
-        android:textColor="@color/ps_color_53575e"
+        android:textColor="@color/t.primary"
         android:textSize="14sp" />
 
     <TextView
@@ -36,23 +36,23 @@
         android:layout_width="match_parent"
         android:layout_height="0.5dp"
         android:layout_below="@id/ps_tv_video"
-        android:background="@color/ps_color_e" />
+        android:background="@color/line" />
 
     <TextView
         android:id="@+id/bottom_line"
         android:layout_width="match_parent"
         android:layout_height="6dp"
         android:layout_below="@id/video_line"
-        android:background="@color/ps_color_e" />
+        android:background="@color/line" />
 
     <TextView
         android:id="@+id/ps_tv_cancel"
         android:layout_width="match_parent"
         android:layout_height="45dp"
         android:layout_below="@id/bottom_line"
-        android:background="@drawable/ps_item_select_bg"
+        android:background="@drawable/ps_popup_item_bg"
         android:gravity="center"
         android:text="@string/ps_cancel"
-        android:textColor="@color/ps_color_53575e"
+        android:textColor="@color/t.primary"
         android:textSize="14sp" />
 </RelativeLayout>

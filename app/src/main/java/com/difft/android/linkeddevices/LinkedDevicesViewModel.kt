@@ -3,7 +3,6 @@ package com.difft.android.linkeddevices
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.websocket.api.messages.multidevice.DeviceInfo
 import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
@@ -26,13 +25,12 @@ import javax.inject.Inject
  * Drives the Linked Devices list screen (MVI). Holds no Android Context.
  *
  * Pushes the count into [LinkedDevicesCountStore] on every successful load so the Settings badge
- * reflects an unlink instantly. 401/403 → [LogoutManager.doLogoutWithoutRemoveData]; the passive
- * badge store deliberately never logs out.
+ * reflects an unlink instantly. 401/403 → `SessionAuthGuard` (via `DeviceRepository`), which
+ * confirms before logging out; this ViewModel only owns the resulting UI reaction.
  */
 @HiltViewModel
 class LinkedDevicesViewModel @Inject constructor(
     private val deviceRepository: DeviceRepository,
-    private val logoutManager: LogoutManager,
     private val countStore: LinkedDevicesCountStore,
 ) : ViewModel() {
 
@@ -91,8 +89,8 @@ class LinkedDevicesViewModel @Inject constructor(
                 throw e
             } catch (e: AuthorizationFailedException) {
                 _uiState.update { it.copy(isLoading = false, isRefreshing = false, hasLoadedOnce = true) }
+                L.i { "[LinkedDevices] refresh: auth failed code=${e.code}" }
                 clearExpecting() // session is gone; the silent poll must not keep firing
-                logoutOnAuthFailure("refresh", e.code)
             } catch (e: Exception) {
                 // Keep any list already shown; surface a one-shot toast unless this is a silent poll.
                 // A failed attempt still counts as the first load, so retries never respin the
@@ -195,20 +193,14 @@ class LinkedDevicesViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AuthorizationFailedException) {
+                L.i { "[LinkedDevices] unlink id=$deviceId: auth failed code=${e.code}" }
                 setUnlinking(deviceId, false)
-                logoutOnAuthFailure("unlink id=$deviceId", e.code)
             } catch (e: Exception) {
                 L.w { "[LinkedDevices] unlink: failed id=$deviceId: ${e.stackTraceToString()}" }
                 setUnlinking(deviceId, false) // list unchanged, row retryable
                 _events.trySend(UiEvent.UnlinkFailed)
             }
         }
-    }
-
-    // Single point for the 401/403 logout policy shared by refresh() and unlink().
-    private fun logoutOnAuthFailure(scene: String, code: Int) {
-        L.i { "[LinkedDevices] $scene: auth failed code=$code, logging out" }
-        logoutManager.doLogoutWithoutRemoveData()
     }
 
     private fun setUnlinking(deviceId: Int, value: Boolean) =

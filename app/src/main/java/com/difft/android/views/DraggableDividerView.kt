@@ -13,7 +13,7 @@ import kotlin.math.abs
  * A vertical, draggable divider that reports horizontal drag deltas via [onDrag].
  *
  * Used between the list pane and the detail pane in the dual-pane layout
- * (`layout-w840dp-h480dp/activity_index.xml`). The view itself is ~24dp wide for
+ * (`layout-w673dp-h480dp/activity_index.xml`). The view itself is ~24dp wide for
  * a comfortable touch target; the visual line + drag handle pill are rendered via
  * the background drawable.
  *
@@ -36,16 +36,21 @@ class DraggableDividerView @JvmOverloads constructor(
 
     /**
      * Drag callback.
-     * - During a drag, fires with the latest delta and `isEnd=false`.
-     * - On ACTION_UP / ACTION_CANCEL after a drag, fires once with `delta=0, isEnd=true`.
+     * - During a drag, fires with the latest delta, `isEnd=false`, `velocityX=0`.
+     * - On ACTION_UP after a drag, fires once with `delta=0, isEnd=true` and the gesture's
+     *   horizontal fling velocity in px/s so the consumer can settle by position + velocity,
+     *   like the platform pane-expansion handles.
+     * - On ACTION_CANCEL after a drag, fires with `cancelled=true`: the system took the
+     *   gesture away, so the consumer should roll back instead of committing a snap.
      * - If the user's touch never crossed the touch-slop threshold, `isEnd` does not fire
      *   (treated as a tap, not a drag).
      */
-    var onDrag: ((delta: Int, isEnd: Boolean) -> Unit)? = null
+    var onDrag: ((delta: Int, isEnd: Boolean, velocityX: Float, cancelled: Boolean) -> Unit)? = null
 
     private var lastX: Float = 0f
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var movedBeyondSlop = false
+    private var velocityTracker: android.view.VelocityTracker? = null
     private val activeBandHeightPx by lazy {
         (ACTIVE_BAND_HEIGHT_DP * resources.displayMetrics.density).toInt()
     }
@@ -59,6 +64,18 @@ class DraggableDividerView @JvmOverloads constructor(
         }
         // Make the view eligible for click feedback (ripple) without needing a click handler.
         isClickable = true
+    }
+
+    /**
+     * Feed the tracker RAW screen coordinates: this view moves with the finger while the
+     * pane resizes, so view-local X stays nearly constant and would read a ~0 velocity.
+     */
+    private fun addRawMovement(event: MotionEvent) {
+        val tracker = velocityTracker ?: return
+        val copy = MotionEvent.obtain(event)
+        copy.setLocation(event.rawX, event.rawY)
+        tracker.addMovement(copy)
+        copy.recycle()
     }
 
     /**
@@ -83,6 +100,9 @@ class DraggableDividerView @JvmOverloads constructor(
                 lastX = event.rawX
                 movedBeyondSlop = false
                 isPressed = true
+                velocityTracker?.recycle()
+                velocityTracker = android.view.VelocityTracker.obtain()
+                addRawMovement(event)
                 // Block parent from intercepting (e.g., RecyclerView fling).
                 parent?.requestDisallowInterceptTouchEvent(true)
                 true
@@ -90,6 +110,7 @@ class DraggableDividerView @JvmOverloads constructor(
         }
 
         MotionEvent.ACTION_MOVE -> {
+            addRawMovement(event)
             if (!movedBeyondSlop) {
                 if (abs(event.rawX - lastX) > touchSlop) {
                     movedBeyondSlop = true
@@ -101,7 +122,7 @@ class DraggableDividerView @JvmOverloads constructor(
             } else {
                 val delta = (event.rawX - lastX).toInt()
                 if (delta != 0) {
-                    onDrag?.invoke(delta, false)
+                    onDrag?.invoke(delta, false, 0f, false)
                     lastX = event.rawX
                 }
             }
@@ -111,8 +132,24 @@ class DraggableDividerView @JvmOverloads constructor(
         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
             isPressed = false
             parent?.requestDisallowInterceptTouchEvent(false)
+            val cancelled = event.action == MotionEvent.ACTION_CANCEL
+            val velocityX = if (!cancelled) {
+                addRawMovement(event)
+                velocityTracker?.run {
+                    computeCurrentVelocity(1000)
+                    xVelocity
+                } ?: 0f
+            } else {
+                0f
+            }
+            velocityTracker?.recycle()
+            velocityTracker = null
             if (movedBeyondSlop) {
-                onDrag?.invoke(0, true)
+                onDrag?.invoke(0, true, velocityX, cancelled)
+            } else if (event.action == MotionEvent.ACTION_UP) {
+                // A touch that never crossed slop is a tap — deliver it (expand-when-collapsed,
+                // and the path TalkBack's activate action goes through).
+                performClick()
             }
             true
         }

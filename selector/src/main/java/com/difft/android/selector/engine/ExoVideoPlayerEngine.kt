@@ -66,6 +66,11 @@ class ExoVideoPlayerEngine : VideoPlayerEngine<PlayerView> {
             controllerShowTimeoutMs = 3000
             controllerHideOnTouch = false  // We handle controller visibility manually
             controllerAutoShow = false  // Don't auto-show on playback start
+            // Fires on every controller ux-state step (animating, progress-only, ...); the bar counts
+            // as up only once fully visible, so a fading-out bar already reads as hidden.
+            setControllerVisibilityListener(PlayerView.ControllerVisibilityListener {
+                listeners.forEach { it.onPlayerControllerVisibility(this, isControllerFullyVisible) }
+            })
             setShowNextButton(false)
             setShowPreviousButton(false)
             setShowFastForwardButton(true)

@@ -3,39 +3,26 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
+import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
+import com.difft.android.base.ui.compose.settings.DifftSettingsOptionRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.call.data.VoicePreset
@@ -62,8 +49,6 @@ class VoiceChangerSettingsActivity : BaseActivity() {
             activity.startActivity(intent)
         }
     }
-
-    private val options: List<VoicePreset> = VoicePreset.entries.toList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +81,7 @@ class VoiceChangerSettingsActivity : BaseActivity() {
                 onBackClick = { finish() }
             )
 
-            ItemViews(selectedPreset) { newPreset ->
+            OptionList(selectedPreset) { newPreset ->
                 if (selectedPreset != newPreset) {
                     selectedPreset = newPreset
                     userManager.update { callVoiceChangerPreset = newPreset.sdkKey }
@@ -106,76 +91,24 @@ class VoiceChangerSettingsActivity : BaseActivity() {
     }
 
     @Composable
-    private fun ItemViews(
-        selectedPreset: VoicePreset,
-        onNewOptionSelected: (VoicePreset) -> Unit
-    ) {
-        val context = LocalContext.current
-        // Resolve all palette entries once per composition instead of once per list item.
-        val bgItem = remember {
-            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.bg_elevated))
-        }
-        val labelTextColor = remember {
-            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary))
-        }
-        val checkmarkTint = remember {
-            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.t_secondary))
-        }
-        val dividerColor = remember {
-            Color(ContextCompat.getColor(context, com.difft.android.base.R.color.bg))
-        }
-
-        LazyColumn(modifier = Modifier.padding(16.dp)) {
-            itemsIndexed(options, key = { _, option -> option.sdkKey }) { index, option ->
-                // Keyed on `index` — `options` is a static enum list, but keying by position
-                // guarantees the memoized shape invalidates correctly if the list ever
-                // changes or items are reordered.
-                val backgroundShape = remember(index) {
-                    when (index) {
-                        0 -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                        options.size - 1 -> RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
-                        else -> RectangleShape
-                    }
-                }
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(bgItem, backgroundShape)
-                            .clickable { onNewOptionSelected(option) }
-                            .padding(start = 16.dp, end = 16.dp),
-                    ) {
-                        val isItemSelected = selectedPreset == option
-
-                        Text(
-                            text = option.displayText(),
-                            modifier = Modifier.weight(1f),
-                            color = labelTextColor
-                        )
-
-                        if (isItemSelected) {
-                            Image(
-                                imageVector = ImageVector.vectorResource(id = R.drawable.chat_ic_selected),
-                                colorFilter = ColorFilter.tint(checkmarkTint),
-                                contentDescription = "Checked",
-                                modifier = Modifier.padding(start = 16.dp)
-                            )
-                        }
-                    }
-
-                    if (index < options.size - 1) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(dividerColor)
-                        )
-                    }
+    private fun OptionList(selected: VoicePreset, onSelect: (VoicePreset) -> Unit) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = DifftSettingsDefaults.PageInset),
+        ) {
+            Spacer(Modifier.height(DifftSettingsDefaults.FirstGroupSpacing))
+            DifftSettingsGroup {
+                VoicePreset.entries.forEach { option ->
+                    DifftSettingsOptionRow(
+                        label = option.displayText(),
+                        selected = selected == option,
+                        onClick = { onSelect(option) },
+                    )
                 }
             }
+            Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
         }
     }
 }

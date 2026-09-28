@@ -1,6 +1,7 @@
 package difft.android.messageserialization.model
 
 import java.io.Serializable
+import java.util.UUID
 
 /**
  * Content type for long text messages converted to file attachments.
@@ -10,6 +11,11 @@ import java.io.Serializable
 const val CONTENT_TYPE_LONG_TEXT = "text/x-signal-plain"
 
 data class Attachment(
+    /**
+     * Server-side attachment id, shared by every local copy of the same file — it identifies a remote
+     * object, never a local one, so nothing local may be located by it. Empty on everything created
+     * since [localId] took over that job; it survives only to resolve rows written before then.
+     */
     val id: String,
     var authorityId: Long, //authorityId
     var contentType: String,
@@ -27,8 +33,63 @@ data class Attachment(
     var isPlaying: Boolean = false,
     var fileHash: String? = null,
     var totalTime: Long? = 0,
-    var amplitudes: List<Float>? = null
+    var amplitudes: List<Float>? = null,
+    /**
+     * Local identity of this attachment copy — generated at construction, never taken from a server
+     * response. Persisted to `AttachmentModel.localId`. It is what every local operation addresses
+     * by: the file's directory (`AttachmentPathResolver`), the row a write may touch, the progress
+     * key a bubble collects on.
+     *
+     * `copy()` INHERITS it (data-class semantics): a call site that produces a genuinely NEW local
+     * copy of an attachment must pass a fresh id explicitly.
+     *
+     * Deliberately excluded from [equals] / [hashCode]: a row whose column is still NULL gets a
+     * freshly synthesized id on every read, so including it would make two reads of the same row
+     * unequal and churn list diffing.
+     */
+    val localId: String = UUID.randomUUID().toString(),
+    /**
+     * Ownership marker: true when this attachment belongs to a Forward tree instead of to a message
+     * of its own.
+     *
+     * Addressing no longer reads it — every attachment lives under its own [localId]. What still
+     * needs it is the MIGRATION: a forwarded copy's pre-per-copy address was keyed by `authorityId`,
+     * an address a normal attachment must never be offered.
+     *
+     * Set at the boundaries that produce forward-tree attachments — the DB read (`forwardModelDatabaseId
+     * != null`), wire ingest, and the forward-send copy — never inferred from [id] or [authorityId],
+     * neither of which distinguishes a forward copy, and never from nesting depth.
+     *
+     * `copy()` inherits it.
+     */
+    val isForwardCopy: Boolean = false
 ) : Serializable {
+    /**
+     * On-disk source this forward copy should be materialized from at send time, captured while the
+     * ORIGINAL message context was still available (see `forwardSourceFilePath`). Null means "nothing
+     * readable locally, or the source is confidential" — the copy then stays LOADING and downloads.
+     *
+     * Transient by design: it is a send-time hint, not row content. Never persisted, never serialized
+     * into a job, and never part of [equals] / [hashCode].
+     */
+    @Transient
+    var forwardSourceFilePath: String? = null
+
+    /**
+     * Fallback source for this forward copy, set only when [forwardSourceFilePath] found nothing:
+     * the ORIGINAL attachment these bytes come from, plus the id of the message that owned it.
+     *
+     * Capture runs on the caller's (main) thread and may only LOOK at the current address, but the
+     * file may still be sitting at a pre-per-copy one. Carrying the original's identity lets the
+     * send-time materializer — which runs on IO — ask the migration seam for it before the copy
+     * degrades to a download. Nothing here knows what a legacy address looks like; that stays with
+     * the migration.
+     *
+     * Transient for the same reason as [forwardSourceFilePath]: a send-time hint, never row content.
+     */
+    @Transient
+    var forwardSourceFallback: ForwardSourceFallback? = null
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -89,6 +150,18 @@ data class Attachment(
     }
 }
 
+/**
+ * Where a forward copy's bytes can still be looked for when nothing was readable at the original
+ * attachment's current address: the [original] itself — the only object that can be resolved to an
+ * address, since the copy carries a different identity — and [legacyOwnerMessageId], the message
+ * that owned it. Both are plain data; interpreting the owner id as an address is the migration's
+ * business alone.
+ */
+class ForwardSourceFallback(
+    val original: Attachment,
+    val legacyOwnerMessageId: String?
+)
+
 /** Bitmask flag on [Attachment.flags], aligned with proto AttachmentPointer.Flags.GIF. */
 const val FLAG_GIF = 4
 
@@ -133,25 +206,6 @@ fun Attachment.isAudioFile(): Boolean {
 fun Attachment.isLongText(): Boolean {
     return this.contentType == CONTENT_TYPE_LONG_TEXT
 }
-
-/**
- * Whether this attachment is kept **encrypted at rest** (only the `.encrypt` ciphertext on disk,
- * decrypted on demand) instead of being decrypted to a plaintext file on download.
- *
- * Single source of truth for the download decision and consumer read paths. As of the P4 change
- * this covers **all** attachment types (aligning with Signal's uniform encrypt-at-rest model), so
- * no plaintext attachment ever touches disk:
- * - audio messages (voice) / audio files: decrypted to memory bytes and played (no plaintext file)
- * - images: read via EncryptedAttachmentProvider
- * - video: played/seeked on demand via EncryptedAttachmentProvider's seekable proxy fd (API26+)
- * - long text: read fully into memory on demand via EncryptedAttachmentProvider (sequential pipe)
- * - generic files (documents / archives / apk / octet-stream): opened / shared / saved / copied via
- *   the decrypting content uri (seekable proxy fd for external apps); never read from a plaintext file
- *
- * NOTE: [com.difft.android.chat.media.LegacyPlaintextAttachmentMigration.keepEncryptedAtRest] mirrors
- * this on the DB model and MUST be kept in sync (and the migration version bumped) when this changes.
- */
-fun Attachment.keepEncryptedAtRest(): Boolean = true
 
 enum class AttachmentStatus(val code: Int) {
     LOADING(2),

@@ -16,6 +16,7 @@ import com.bumptech.glide.request.target.Target
 import com.bumptech.glide.signature.ObjectKey
 import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.avatar.AvatarLetterSize
 import com.difft.android.chat.media.AvatarEncryptedProvider
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
@@ -69,7 +70,7 @@ class AvatarView @JvmOverloads constructor(
         key: String?,
         firstLetter: String?,
         id: String,
-        letterTextSizeDp: Int = 22,
+        letterTextSizeDp: Int = DEFAULT_LETTER_TEXT_SIZE_DP,
         targetSizePx: Int? = null,  // Optional: explicit size in pixels for Glide (useful in Compose AndroidView)
         fallbackUrl: String? = null,
         fallbackKey: String? = null,
@@ -149,15 +150,31 @@ class AvatarView @JvmOverloads constructor(
                         AvatarUtil.ensureCached(context.applicationContext, params.fallbackUrl, params.fallbackKey ?: "")
                     }
                 }
-                if (downloadedFile != null && currentLoadingUrl == url && isAttachedToWindow) {
-                    loadImageWithGlide(downloadedFile, loadedUrl, loadedKey, targetSize)
-                    binding.ivAvatar.visibility = VISIBLE
+                if (downloadedFile != null && currentLoadingUrl == url) {
+                    if (isAttachedToWindow) {
+                        loadImageWithGlide(downloadedFile, loadedUrl, loadedKey, targetSize)
+                        binding.ivAvatar.visibility = VISIBLE
+                    } else {
+                        // Download finished while detached (recycled off-screen): replay on re-attach,
+                        // targeting whichever url won so the replay hits that warm cache directly.
+                        if (loadedUrl != url) {
+                            currentLoadingUrl = loadedUrl
+                            pendingAvatarParams = params.copy(
+                                url = loadedUrl,
+                                key = loadedKey,
+                                fallbackUrl = null,
+                                fallbackKey = null,
+                            )
+                        } else {
+                            pendingAvatarParams = params
+                        }
+                    }
                 }
             }
         }
     }
 
-    fun setAvatar(contact: ContactorModel, letterTextSizeDp: Int = 22, targetSizePx: Int? = null) {
+    fun setAvatar(contact: ContactorModel, letterTextSizeDp: Int = DEFAULT_LETTER_TEXT_SIZE_DP, targetSizePx: Int? = null) {
         val effective = contact.getEffectiveAvatarJson()?.getContactAvatarData()
         val publicAvatar = contact.avatar?.getContactAvatarData()
         setAvatar(
@@ -316,6 +333,16 @@ class AvatarView @JvmOverloads constructor(
 
     companion object {
         private const val CROSSFADE_DURATION = 150L
+
+        /** Avatar diameter the default letter size was designed for. */
+        const val DEFAULT_AVATAR_SIZE_DP = AvatarLetterSize.DEFAULT_AVATAR_SIZE_DP
+
+        /** Letter size the [DEFAULT_AVATAR_SIZE_DP] list avatar was designed with. */
+        const val DEFAULT_LETTER_TEXT_SIZE_DP = AvatarLetterSize.DEFAULT_LETTER_TEXT_SIZE_DP
+
+        /** Letter size that keeps the designed letter/diameter ratio for an avatar rendered at [avatarSizeDp]. */
+        fun letterTextSizeDpFor(avatarSizeDp: Int): Int =
+            AvatarLetterSize.forDiameterDp(avatarSizeDp)
     }
 }
 

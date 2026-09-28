@@ -63,6 +63,18 @@
     <string name="call_toolbar_bottom_invite_text">Invite</string>
     <string name="call_toolbar_bottom_switch_text">Switch</string>
     <string name="call_toolbar_bottom_critical_alert_text">Critical Alert</string>
+    <!-- Action bar labels (two-row layout + More sheet quick actions) -->
+    <string name="call_action_mute">Mute</string>
+    <string name="call_action_unmute">Unmute</string>
+    <!-- Mute-other menu: item names the target; failure toast when the RTM mute request fails -->
+    <string name="call_mute_participant_menu_item">Mute %1$s</string>
+    <string name="call_mute_participant_failed">Couldn\'t mute %1$s. Try again.</string>
+    <string name="call_action_video">Video</string>
+    <string name="call_action_speaker">Speaker</string>
+    <string name="call_action_emoji">Emoji</string>
+    <string name="call_action_more">More</string>
+    <string name="call_action_end">End</string>
+    <string name="call_action_people">People</string>
     <string name="call_topbar_critical_alert_entrance_text1">No answer?</string>
     <string name="call_topbar_critical_alert_entrance_text2">Send a Critical Alert.</string>
     <string name="call_join_failed_tip">Failed to join the call, please try again.</string>
@@ -74,7 +86,6 @@
     <string name="call_params_startcall_exception_tip">Abnormal conference connection parameters.</string>
     <string name="call_proxy_turn_required_tip">This proxy doesn\'t support calls. Update the proxy address, or turn off the proxy and try again.</string>
     <string name="call_service_node_dashboard_title">Call service settings</string>
-    <string name="call_rating_feedback_no_choice_tip">Please give a rating</string>
     <string name="call_rating_feedback_title">Rate the quality of your call</string>
     <string name="call_rating_feedback_sub">Your answer is anonymous. We use it to help improve your call experience.</string>
     <string name="call_rating_level_very_bad">Very bad</string>
@@ -148,6 +159,7 @@
     <string name="call_server_node_connected" translatable="false">Connected</string>
     <string name="call_server_node_disconnected" translatable="false">Disconnected</string>
     <string name="call_server_node_select_server" translatable="false">Select Server</string>
+    <string name="call_server_node_refresh" translatable="false">Refresh</string>
     <string name="call_server_node_primary" translatable="false">Primary</string>
     <string name="call_server_node_fallback" translatable="false">Fallback</string>
     <string name="call_server_node_ips_label" translatable="false">IPs</string>

@@ -26,12 +26,13 @@ import androidx.core.graphics.drawable.toDrawable
  *
  * @param darkTheme Whether to use dark theme. Defaults to system setting.
  * @param useFlatBackground If false (default), uses `colors.bg` — the settings idiom
- *   page background that the majority of screens want. If true, uses `colors.background`
- *   (= bg1, pure white in light / #181A20 in dark) for immersive content pages such as
- *   FilePreSendActivity that need a flat surface without elevated cards. Only selects which
- *   color feeds [backgroundColor] below (`colorScheme.background` vs `extendedColors.bg`) —
- *   it does not affect colorScheme, typography, or any other rendered content, and is
- *   independent of [applyWindowBackground] (the two parameters compose freely).
+ *   page background (#F5F5F5 light / #0B0E11 dark) that the majority of screens want.
+ *   If true, uses `colors.background` (= bg1, #FFFFFF light / #181A20 dark) for content
+ *   pages such as FilePreSendActivity whose rows sit full-width on the page instead of on
+ *   cards. Only selects which color feeds [backgroundColor] below (`colorScheme.background`
+ *   vs `extendedColors.bg`) — it does not affect colorScheme, typography, or any other
+ *   rendered content, and is independent of [applyWindowBackground] (the two parameters
+ *   compose freely).
  * @param applyWindowBackground Whether this composition may write the computed background
  *   color onto the host Activity's `window` (affects the status/navigation bar tint on
  *   Android 15+). Defaults to `true`: a `DifftTheme` call is normally a one-time Activity-root
@@ -61,11 +62,11 @@ fun DifftTheme(
     }
     val extendedColors = if (darkTheme) createDarkExtendedColors() else createLightExtendedColors()
 
-    // Default = settings idiom (colors.bg). Immersive pages opt out with useFlatBackground = true.
+    // Default = settings idiom (colors.bg). Content pages opt out with useFlatBackground = true.
     val backgroundColor = if (useFlatBackground) {
-        colorScheme.background  // bg1 — flat surface for immersive content pages
+        colorScheme.background  // bg1 — content pages (rows sit full-width on the page)
     } else {
-        extendedColors.bg       // settings idiom — page bg, cards use colors.bgElevated
+        extendedColors.bg       // settings idiom — page bg, cards use colors.background (bg1)
     }
 
     // Set window background color to affect status bar on Android 15+.
@@ -85,14 +86,14 @@ fun DifftTheme(
     val typography = createDifftTypography()
     val shapes = createDifftShapes()
 
-    // Create extended typography and spacing
-    val extendedTypography = DifftExtendedTypography()
+    // Create the design type scale and spacing
+    val typeScale = DifftTypeScale()
     val spacing = DifftSpacing()
 
     // Provide all theme values via CompositionLocals
     CompositionLocalProvider(
         LocalDifftExtendedColors provides extendedColors,
-        LocalDifftExtendedTypography provides extendedTypography,
+        LocalDifftTypeScale provides typeScale,
         LocalDifftSpacing provides spacing
     ) {
         // Configure MaterialTheme with our color scheme, typography, and shapes
@@ -129,6 +130,7 @@ fun DifftThemePreview(
  * - Colors: DifftTheme.colors.primary
  * - Typography: DifftTheme.typography.bodyLarge
  * - Spacing: DifftTheme.spacing.insetMedium
+ * - Radius: DifftTheme.radius.largeShape
  * - Shapes: DifftTheme.shapes.medium
  */
 object DifftTheme {
@@ -151,12 +153,18 @@ object DifftTheme {
 
     /**
      * Access unified typography
-     * Combines Material3 Typography with Difft extended typography
+     * Combines the Figma type scale (h3…p4, footnote) with the Material3 Typography slots
      */
     val typography: DifftTypographyAccessor
         @Composable
         @ReadOnlyComposable
         get() = DifftTypographyAccessor
+
+    /**
+     * Access the design-library corner-radius tiers
+     */
+    val radius: DifftRadius
+        get() = DifftRadius
 
     /**
      * Access Material3 shapes
@@ -173,121 +181,28 @@ object DifftTheme {
  */
 object DifftColorAccessor {
     // ============== Material3 ColorScheme Colors ==============
+    // Only the roles the app actually reads are exposed. Everything else is either an
+    // extended token below or reachable via MaterialTheme.colorScheme for MD3 components.
     val primary: Color
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.colorScheme.primary
-
-    val onPrimary: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onPrimary
-
-    val primaryContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.primaryContainer
-
-    val onPrimaryContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onPrimaryContainer
-
-    val secondary: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.secondary
-
-    val onSecondary: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onSecondary
-
-    val secondaryContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.secondaryContainer
-
-    val onSecondaryContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onSecondaryContainer
-
-    val tertiary: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.tertiary
-
-    val onTertiary: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onTertiary
-
-    val tertiaryContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.tertiaryContainer
-
-    val onTertiaryContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onTertiaryContainer
 
     val error: Color
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.colorScheme.error
 
-    val onError: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onError
-
-    val errorContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.errorContainer
-
-    val onErrorContainer: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onErrorContainer
-
+    /**
+     * Raw `colorScheme.background` (= bg1). The settings-card fill, and the page surface of
+     * content pages opened with `DifftTheme(useFlatBackground = true)`; a settings page
+     * itself wants [bg] instead.
+     */
     val background: Color
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.colorScheme.background
 
-    val onBackground: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onBackground
-
-    val surface: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.surface
-
-    val onSurface: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onSurface
-
-    val surfaceVariant: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.surfaceVariant
-
-    val onSurfaceVariant: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.onSurfaceVariant
-
-    val outline: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.outline
-
-    val outlineVariant: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.outlineVariant
-
     val scrim: Color
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.colorScheme.scrim
-
-    val inverseSurface: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.inverseSurface
-
-    val inverseOnSurface: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.inverseOnSurface
-
-    val inversePrimary: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.inversePrimary
-
-    val surfaceTint: Color
-        @Composable @ReadOnlyComposable
-        get() = MaterialTheme.colorScheme.surfaceTint
 
     // ============== Extended Difft Colors ==============
     private val extended: DifftExtendedColors
@@ -298,21 +213,9 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.success
 
-    val successDark: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.successDark
-
     val warning: Color
         @Composable @ReadOnlyComposable
         get() = extended.warning
-
-    val warningDark: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.warningDark
-
-    val info: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.info
 
     val textPrimary: Color
         @Composable @ReadOnlyComposable
@@ -350,17 +253,23 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.textInfo
 
+    /** Orange caution text: a pending action (not an error), e.g. "Enhance Encryption" on a plain group. */
+    val textCaution: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.textCaution
+
     /**
      * Default page background (settings idiom).
      * Matches XML `@color/bg`. Use this for the page-level background on almost all screens —
      * `DifftTheme {}` already sets this as the window background by default.
      *
-     * In light mode this is #FAFAFA (= `bg2` value); in dark mode #181A20 (= `bg1` value).
-     * Pair with `colors.bgElevated` for cards/list items that visually sit on top of the page.
+     * In light mode this is #F5F5F5; in dark mode #0B0E11 (both = `bgpage-secondary` value).
+     * Pair with `colors.background` (bg1) for the cards/rows that sit on top of the page.
      *
      * NOT to be confused with `colors.background` (Material3 raw `colorScheme.background`,
-     * which equals `bg1` — pure white in light / #181A20 in dark; used for immersive pages
-     * via `DifftTheme(useFlatBackground = true)`).
+     * which equals `bg1` — #FFFFFF in light / #181A20 in dark; it is both the settings-card
+     * fill and the page background of content pages opened with
+     * `DifftTheme(useFlatBackground = true)`).
      */
     val bg: Color
         @Composable @ReadOnlyComposable
@@ -378,25 +287,27 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.backgroundQuaternary
 
-    val backgroundActionPopup: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.backgroundActionPopup
-
-    val backgroundBottomSheet: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.backgroundBottomSheet
-
     val backgroundDisabled: Color
         @Composable @ReadOnlyComposable
         get() = extended.backgroundDisabled
 
-    val backgroundModal: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.backgroundModal
-
+    /**
+     * Library `bgpopup`. Overlays only — popups, bottom sheets, floating panels. Settings
+     * cards and list items use `colors.background` (bg1) instead.
+     *
+     * In light mode this is #FFFFFF (= `bg1` value); in dark mode #1E2329 (= `bg2` value),
+     * one tier lighter than the `bg` page (#0B0E11) so an overlay reads as floating. The
+     * tier it maps to differs between light and dark — that's why semantic tokens are
+     * separate from raw tier tokens (`bg1` / `bg2`).
+     */
     val backgroundPopup: Color
         @Composable @ReadOnlyComposable
         get() = extended.backgroundPopup
+
+    /** Library `bgmodal`: dialogs, dropdown menus, notifications. */
+    val backgroundModal: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundModal
 
     val backgroundTooltip: Color
         @Composable @ReadOnlyComposable
@@ -406,35 +317,37 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.backgroundBlue
 
-    val backgroundElevate: Color
+    /** Library `bgspace`: the workspace / brand surface. */
+    val backgroundSpace: Color
         @Composable @ReadOnlyComposable
-        get() = extended.backgroundElevate
+        get() = extended.backgroundSpace
+
+    /** Library `bgpage-primary`: #FFFFFF light / #0B0E11 dark. */
+    val backgroundPagePrimary: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundPagePrimary
+
+    /** Library `bgpage-secondary`: #F5F5F5 light / #0B0E11 dark. */
+    val backgroundPageSecondary: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.backgroundPageSecondary
 
     /**
-     * Elevated/card background, sits one tier above `colors.bg`.
-     * Matches XML `@color/bg.elevated`. Use for cards / list items / sections that
-     * visually float on the page background.
-     *
-     * In light mode this is #FFFFFF (= `bg1` value, the page is the lighter gray `bg`);
-     * in dark mode #1E2329 (= `bg2` value, the page is the darker `bg`). The relationship
-     * between `bg` and `bgElevated` is **inverted** between light and dark — that's why
-     * semantic tokens (`bg` / `bgElevated`) are separate from raw tier tokens (`bg1` / `bg2`).
+     * Matches XML `@color/bg5` — the call surface, which is forced dark regardless of the
+     * system theme, so only the dark value (#181A20) is ever rendered.
      */
-    val bgElevated: Color
+    val bg5: Color
         @Composable @ReadOnlyComposable
-        get() = extended.bgElevated
-
-    val divider: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.divider
+        get() = extended.bg5
 
     val line: Color
         @Composable @ReadOnlyComposable
         get() = extended.line
 
-    val border: Color
+    /** Library `divider`: list/row separators. Distinct from [line], which is a border colour. */
+    val divider: Color
         @Composable @ReadOnlyComposable
-        get() = extended.border
+        get() = extended.divider
 
     val icon: Color
         @Composable @ReadOnlyComposable
@@ -448,22 +361,6 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.ripple
 
-    val overlay: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.overlay
-
-    val buttonPrimary: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.buttonPrimary
-
-    val buttonSecondary: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.buttonSecondary
-
-    val buttonDisabled: Color
-        @Composable @ReadOnlyComposable
-        get() = extended.buttonDisabled
-
     val statusBarColor: Color
         @Composable @ReadOnlyComposable
         get() = extended.statusBarColor
@@ -475,19 +372,10 @@ object DifftColorAccessor {
     val isDark: Boolean
         @Composable @ReadOnlyComposable
         get() = extended.isDark
-
-    // ============== Legacy Compatibility Aliases ==============
-    val primaryVariant: Color
-        @Composable @ReadOnlyComposable
-        get() = primaryContainer
-
-    val secondaryVariant: Color
-        @Composable @ReadOnlyComposable
-        get() = secondaryContainer
 }
 
 /**
- * Unified typography accessor that combines Material3 Typography with extended typography
+ * Unified typography accessor: the Figma type scale ([DifftTypeScale]) plus the Material3 slots
  * Provides single API for all text style access
  */
 object DifftTypographyAccessor {
@@ -552,66 +440,66 @@ object DifftTypographyAccessor {
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.typography.labelSmall
 
-    // ============== Extended Difft Typography ==============
-    private val extended: DifftExtendedTypography
+    // ============== Figma type scale (SF/H*, SF/P*) — see DifftTypeScale ==============
+    private val scale: DifftTypeScale
         @Composable @ReadOnlyComposable
-        get() = LocalDifftExtendedTypography.current
+        get() = LocalDifftTypeScale.current
 
-    val profileName: TextStyle
+    val h1: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.profileName
+        get() = scale.h1
 
-    val profileSubtitle: TextStyle
+    val h2: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.profileSubtitle
+        get() = scale.h2
 
-    val sectionTitle: TextStyle
+    val h3: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.sectionTitle
+        get() = scale.h3
 
-    val infoLabel: TextStyle
+    val h4: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.infoLabel
+        get() = scale.h4
 
-    val infoValue: TextStyle
+    val h5: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.infoValue
+        get() = scale.h5
 
-    val avatarInitials: TextStyle
+    val h6: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.avatarInitials
+        get() = scale.h6
 
-    val topBarTitle: TextStyle
+    val h7: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.topBarTitle
+        get() = scale.h7
 
-    val statusText: TextStyle
+    val p0: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.statusText
+        get() = scale.p0
 
-    val button: TextStyle
+    val p1: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.button
+        get() = scale.p1
 
-    val buttonSmall: TextStyle
+    val p2: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.buttonSmall
+        get() = scale.p2
 
-    val inputLabel: TextStyle
+    val p3: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.inputLabel
+        get() = scale.p3
 
-    val inputBody: TextStyle
+    val p4: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.inputBody
+        get() = scale.p4
 
-    val caption: TextStyle
+    val p5: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.caption
+        get() = scale.p5
 
-    val overline: TextStyle
+    val footnote: TextStyle
         @Composable @ReadOnlyComposable
-        get() = extended.overline
+        get() = scale.footnote
 
     // ============== Legacy Compatibility Aliases ==============
     val body: TextStyle

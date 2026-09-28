@@ -29,7 +29,9 @@ import difft.android.messageserialization.model.Mention
  */
 class MessageActionCoordinator(
     private val activity: FragmentActivity,
-    private val globalConfigsManager: IGlobalConfigsManager
+    private val globalConfigsManager: IGlobalConfigsManager,
+    /** False on a build that ships no translate backend. Forwarded to the action builder. */
+    private val translateSupported: Boolean,
 ) {
     
     /**
@@ -59,7 +61,7 @@ class MessageActionCoordinator(
         fun onDismiss()
     }
     
-    private val configBuilder = MessageActionConfigBuilder(globalConfigsManager)
+    private val configBuilder = MessageActionConfigBuilder(globalConfigsManager, translateSupported)
     private var messageActionPopup: MessageActionPopup? = null
     private var textSelectionManager: TextSelectionManager? = null
     

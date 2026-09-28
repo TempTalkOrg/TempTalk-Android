@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma tabler:check (24dp): the selected marker on single-select settings rows. Path data is the
+     Figma export verbatim. The stroke colour is the icon token so an XML consumer renders theme-correct
+     as-is; Compose callers tint with the same token. Not to be confused with base_ic_checkmark, the
+     16dp filled glyph used inside DifftCheckBox. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M4.99805,12L9.99805,17L19.998,6.99998"
+        android:fillColor="@color/transparent"
+        android:strokeColor="@color/icon"
+        android:strokeWidth="2.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

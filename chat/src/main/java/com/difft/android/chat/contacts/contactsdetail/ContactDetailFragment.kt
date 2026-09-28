@@ -7,8 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -16,7 +16,6 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -29,9 +28,11 @@ import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarCacheCipher
 import com.difft.android.chat.common.AvatarUtil
-import com.difft.android.chat.media.AvatarEncryptedProvider
-import com.difft.android.chat.media.AvatarPreview
-import com.difft.android.chat.contacts.contactsremark.ContactSetRemarkActivity
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.difft.android.chat.common.AvatarPreviewLauncher
+import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditContract
+import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditViewModel
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.chat.contacts.data.getContactAvatarData
@@ -48,15 +49,7 @@ import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
-import com.difft.android.selector.basic.PictureSelector
-import com.difft.android.selector.engine.ExoVideoPlayerEngine
-import com.difft.android.selector.entity.LocalMedia
-import com.difft.android.selector.interfaces.OnExternalPreviewEventListener
-import com.difft.android.selector.language.LanguageConfig
-import com.difft.android.selector.pictureselector.GlideEngine
-import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import com.difft.android.chat.util.Util
-import android.content.Context
 import com.difft.android.base.security.SafeLinkOpener
 import com.difft.android.network.UrlManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -93,9 +86,6 @@ class ContactDetailFragment : Fragment() {
 
     @Inject
     lateinit var contactorCacheManager: ContactorCacheManager
-
-    @Inject
-    lateinit var userManager: UserManager
 
     @Inject
     lateinit var callManager: LChatToCallController
@@ -191,6 +181,10 @@ class ContactDetailFragment : Fragment() {
     // Compose UI state
     private var uiState by mutableStateOf(ContactDetailUiState())
     private var commonGroupsCount by mutableIntStateOf(0)
+    private val remarkEditViewModel: ContactRemarkEditViewModel by viewModels()
+
+    // Field so the picker's permission contract registers before STARTED.
+    private val remarkEditBinder = ContactRemarkEditBinder(this, { remarkEditViewModel }, ::performClose)
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -201,8 +195,15 @@ class ContactDetailFragment : Fragment() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 DifftTheme(applyWindowBackground = !isPopupMode) {
+                    val remarkEdit by remarkEditViewModel.state.collectAsStateWithLifecycle()
                     ContactDetailScreen(
-                        uiState = uiState.copy(commonGroupsCount = commonGroupsCount),
+                        uiState = uiState.copy(
+                            commonGroupsCount = commonGroupsCount,
+                            isEditingRemark = remarkEdit.isEditing,
+                            editingRemarkName = remarkEdit.editingName,
+                            quickFillName = remarkEdit.quickFillName,
+                            showQuickFill = remarkEdit.showQuickFill,
+                        ),
                         isPopupMode = isPopupMode,
                         showBackButton = !isInDualPaneMode(),
                         onCloseClick = ::handleCloseClick,
@@ -217,7 +218,11 @@ class ContactDetailFragment : Fragment() {
                         onCommonGroupsClick = ::handleCommonGroupsClick,
                         onCopyUserId = ::handleCopyUserId,
                         onWebsiteClick = ::handleWebsiteClick,
-                        onRemoveNowClick = ::requestRemoveNow
+                        onRemoveNowClick = ::requestRemoveNow,
+                        onEditingRemarkNameChange = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.ChangeName(it)) },
+                        onSubmitRemark = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.SubmitName) },
+                        onAvatarClickInEdit = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.AvatarClick) },
+                        onQuickFillRemark = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.QuickFillName) }
                     )
                 }
             }
@@ -231,6 +236,7 @@ class ContactDetailFragment : Fragment() {
 
         initData()
         observeContactsUpdate()
+        remarkEditBinder.observe()
     }
 
     override fun onResume() {
@@ -401,7 +407,12 @@ class ContactDetailFragment : Fragment() {
         }
     }
 
+    /** Close / back go through the ViewModel so an unsaved remark change can prompt first. */
     private fun handleCloseClick() {
+        remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.RequestClose)
+    }
+
+    private fun performClose() {
         if (isPopupMode) {
             (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
         } else if (!isInDualPaneMode()) {
@@ -414,8 +425,9 @@ class ContactDetailFragment : Fragment() {
     }
 
     private fun handleEditClick() {
-        ContactSetRemarkActivity.startActivity(requireActivity(), contactId)
+        remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.EnterEdit)
     }
+
 
     private fun handleCallClick() {
         viewLifecycleOwner.lifecycleScope.launch {
@@ -461,21 +473,26 @@ class ContactDetailFragment : Fragment() {
 
     private fun navigateToChat() {
         val navigationCallback = activity as? ConversationNavigationCallback
+        // A sheet over the single-pane conversation list (contacts tab) has no chat underneath to
+        // pop a chat over, so the conversation opens as a full page, like a list tap would.
+        val sheetOverList = isPopupMode && navigationCallback != null && !navigationCallback.isDualPaneMode
         if (isPopupMode) {
             (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
-            val focusable = activity as? ChatInputFocusable
-            if (focusable?.focusCurrentChatInputIfMatches(contactId) != true) {
-                ChatPopupActivity.startActivity(
-                    requireContext(),
-                    contactId,
-                    sourceType = sourceType,
-                    source = source
-                )
+        }
+        when {
+            isPopupMode && !sheetOverList -> {
+                val focusable = activity as? ChatInputFocusable
+                if (focusable?.focusCurrentChatInputIfMatches(contactId) != true) {
+                    ChatPopupActivity.startActivity(
+                        requireContext(),
+                        contactId,
+                        sourceType = sourceType,
+                        source = source
+                    )
+                }
             }
-        } else if (navigationCallback?.isDualPaneMode == true) {
-            navigationCallback.onOneOnOneConversationSelected(contactId)
-        } else {
-            ChatActivity.startActivity(
+            navigationCallback?.isDualPaneMode == true -> navigationCallback.onOneOnOneConversationSelected(contactId)
+            else -> ChatActivity.startActivity(
                 requireContext(),
                 contactId,
                 sourceType = sourceType,
@@ -552,6 +569,8 @@ class ContactDetailFragment : Fragment() {
             contactor.customUid ?: customId ?: ""
         }
 
+        remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.Load(contactor))
+
         uiState = ContactDetailUiState(
             contactor = contactor,
             isFriend = isFriend,
@@ -577,7 +596,6 @@ class ContactDetailFragment : Fragment() {
             try {
                 val response = ContactorUtil.fetchAddFriendRequest(
                     requireContext(),
-                    (userManager.getUserData()?.microToken ?: ""),
                     contactId,
                     sourceType,
                     source
@@ -665,55 +683,10 @@ class ContactDetailFragment : Fragment() {
     }
 
     private fun previewAvatar(url: String?, key: String?) {
-        if (url.isNullOrEmpty()) return
+        val host = activity ?: return
         viewLifecycleOwner.lifecycleScope.launch {
-            val cacheFile = withContext(Dispatchers.IO) {
-                AvatarUtil.getCacheFile(url)
-            }
-            if (cacheFile != null) {
-                openAvatarPreview(cacheFile)
-                return@launch
-            }
-
-            L.i { "[ContactDetailFragment] Avatar cache not found, downloading..." }
-            ComposeDialogManager.showWait(requireActivity(), "")
-            val success = withContext(Dispatchers.IO) {
-                try {
-                    val bytes = AvatarUtil.fetchAvatar(requireContext(), url, key.orEmpty())
-                    val newCacheFile = java.io.File(
-                        com.difft.android.base.utils.FileUtil.getAvatarCachePath(),
-                        "avatar_${url.substringAfterLast("/")}"
-                    )
-                    AvatarCacheCipher.writeEncrypted(newCacheFile, bytes)
-                    true
-                } catch (e: Exception) {
-                    L.e { "[ContactDetailFragment] Failed to download avatar: ${e.message}" }
-                    false
-                }
-            }
-            ComposeDialogManager.dismissWait()
-            if (!success || !isAdded || view == null) return@launch
-            val newFile = withContext(Dispatchers.IO) {
-                AvatarUtil.getCacheFile(url)
-            } ?: return@launch
-            openAvatarPreview(newFile)
+            AvatarPreviewLauncher.previewContact(host, url, key)
         }
     }
 
-    private fun openAvatarPreview(cacheFile: java.io.File) {
-        if (!isAdded || activity == null) return
-
-        val list = arrayListOf<LocalMedia>().apply {
-            add(AvatarPreview.localMediaFor(AvatarEncryptedProvider.DIR_AVATAR, cacheFile))
-        }
-
-        PictureSelector.create(requireActivity())
-            .openPreview()
-            .isHidePreviewDownload(true)
-            .isHidePreviewShare(true)
-            .setDefaultLanguage(LanguageConfig.ENGLISH)
-            .setLanguage(PictureSelectorUtils.getLanguage(requireContext()))
-            .setImageEngine(GlideEngine.createGlideEngine())
-            .startActivityPreview(0, false, list)
-    }
 }

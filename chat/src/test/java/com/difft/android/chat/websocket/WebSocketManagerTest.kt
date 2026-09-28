@@ -31,16 +31,15 @@ import org.junit.Test
  *   `cancelConnection()` so any pooled idle socket built against the
  *   pre-toggle proxy state cannot be reused on the next `newWebSocket()`.
  *
- * Test surface: only [WebSocketManager.reconnectAfterProxyChange]. Other
- * methods (`start`, `stop`, `isConnected`, etc.) already had implicit
- * coverage via end-to-end manual smoke testing in earlier rounds and are
- * not in scope for this refinement.
+ * Test surface: [WebSocketManager.reconnectAfterProxyChange] plus the [SessionAuthGuard]
+ * lifetime binding added for issue #1230 (the guard must live exactly as long as the socket).
  */
 class WebSocketManagerTest {
 
     private lateinit var appWebSocketHelper: AppWebSocketHelper
     private lateinit var incomingMessageObserver: IncomingMessageObserver
     private lateinit var conn: WebSocketConnection
+    private lateinit var sessionAuthGuard: SessionAuthGuard
     private lateinit var manager: WebSocketManager
 
     /**
@@ -65,13 +64,32 @@ class WebSocketManagerTest {
         every { appWebSocketHelper.chatDataWebSocketConnection } returns conn
 
         incomingMessageObserver = mockk(relaxed = true)
+        sessionAuthGuard = mockk(relaxed = true)
 
-        manager = WebSocketManager(appWebSocketHelper, incomingMessageObserver)
+        manager = WebSocketManager(appWebSocketHelper, incomingMessageObserver, sessionAuthGuard)
     }
 
     @After
     fun tearDown() {
         unmockkAll()
+    }
+
+    // --- SessionAuthGuard lifetime binding (issue #1230) ---
+
+    @Test
+    fun `start arms the session auth guard once, duplicate start does not re-arm`() {
+        manager.start()
+        manager.start() // isStarted guard returns early
+
+        verify(exactly = 1) { sessionAuthGuard.start() }
+    }
+
+    @Test
+    fun `stop disarms the session auth guard`() {
+        manager.start()
+        manager.stop()
+
+        verify(exactly = 1) { sessionAuthGuard.stop() }
     }
 
     // --- reconnectAfterProxyChange: not started -> no-op ---

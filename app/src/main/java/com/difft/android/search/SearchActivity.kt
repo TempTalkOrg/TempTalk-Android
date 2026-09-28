@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
@@ -65,30 +64,8 @@ class SearchActivity : BaseActivity() {
     private fun initView() {
         mBinding.ibBack.setOnClickListener { finish() }
 
-        mBinding.edittextSearchInput.addTextChangedListener {
-            val text = it.toString()
-            searchJob?.cancel()
-            searchJob = lifecycleScope.launch {
-                delay(300)
-                val trimmed = text.trim()
-                if (trimmed == key) return@launch
-                key = trimmed
-                mRecentAdapter.setOrUpdateSearchKey(key)
-                mContactsAdapter.setOrUpdateSearchKey(key)
-                mGroupsAdapter.setOrUpdateSearchKey(key)
-                resetButtonClear()
-                if (key.isNotEmpty()) {
-                    searchWithCoroutines()
-                } else {
-                    showNoResults(getString(R.string.search_messages_default_tips))
-                }
-            }
-        }
-
-
-        mBinding.buttonClear.setOnClickListener {
-            mBinding.edittextSearchInput.text = null
-        }
+        mBinding.searchInput.onQueryChanged = { scheduleSearch(it) }
+        mBinding.searchInput.onClear = { scheduleSearch("") }
 
         mBinding.recyclerviewRecentChats.apply {
             this.adapter = mRecentAdapter
@@ -115,11 +92,21 @@ class SearchActivity : BaseActivity() {
         }
     }
 
-    private fun resetButtonClear() {
-        mBinding.buttonClear.animate().apply {
-            cancel()
-            val toAlpha = if (key.isNotEmpty()) 1.0f else 0f
-            alpha(toAlpha)
+    private fun scheduleSearch(raw: String) {
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch {
+            delay(300)
+            val trimmed = raw.trim()
+            if (trimmed == key) return@launch
+            key = trimmed
+            mRecentAdapter.setOrUpdateSearchKey(key)
+            mContactsAdapter.setOrUpdateSearchKey(key)
+            mGroupsAdapter.setOrUpdateSearchKey(key)
+            if (key.isNotEmpty()) {
+                searchWithCoroutines()
+            } else {
+                showNoResults(getString(R.string.search_messages_default_tips))
+            }
         }
     }
 
@@ -436,7 +423,7 @@ class SearchActivity : BaseActivity() {
                         ChatActivity.startActivity(this@SearchActivity, data.conversationId, jumpMessageTimeStamp = data.messageTimeStamp)
                     }
                 } else {
-                    val etContent = mBinding.edittextSearchInput.text.toString().trim()
+                    val etContent = mBinding.searchInput.query.trim()
                     SearchMessageActivity.startActivity(this@SearchActivity, data.conversationId, data.type == SearchChatHistoryViewData.Type.Group, etContent)
                 }
             }

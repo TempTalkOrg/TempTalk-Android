@@ -57,7 +57,7 @@ internal fun ParticipantWeakNetworkBadge(
         modifier = modifier
             .testTag("call_weak_network_badge")
             .size(BADGE_BOX)
-            .background(DifftTheme.colors.backgroundElevate, RoundedCornerShape(BADGE_CORNER)),
+            .background(DifftTheme.colors.backgroundPagePrimary, RoundedCornerShape(BADGE_CORNER)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

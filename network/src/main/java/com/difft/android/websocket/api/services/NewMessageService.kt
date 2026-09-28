@@ -1,8 +1,11 @@
 package com.difft.android.websocket.api.services
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.session.AuthFailureSink
+import com.difft.android.base.session.AuthFailureSource
 import com.google.protobuf.ByteString
 import com.difft.android.websocket.api.AppWebSocketHelper
+import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
 import com.difft.android.websocket.api.push.exceptions.NotFoundException
 import com.difft.android.websocket.internal.ServiceResponse
 import com.difft.android.websocket.internal.push.GroupMismatchedDevices
@@ -31,7 +34,12 @@ import javax.inject.Inject
  *
  * Note: To be expanded to have REST fallback and other messaging related operations.
  */
-class NewMessagingService @Inject constructor(private val appWebSocketHelper: AppWebSocketHelper) {
+class NewMessagingService @Inject constructor(
+    private val appWebSocketHelper: AppWebSocketHelper,
+    // Lazy breaks the Dagger cycle: the sink implementation confirms a rejection over the
+    // device endpoints, which pull in this module's http stack.
+    private val authFailureSink: dagger.Lazy<AuthFailureSink>,
+) {
     suspend fun send(
         newOutgoingPushMessage: NewOutgoingPushMessage,
         recipientId: String?,
@@ -131,7 +139,14 @@ class NewMessagingService @Inject constructor(private val appWebSocketHelper: Ap
         return try {
             val response = appWebSocketHelper.sendChatMessage(requestMessage)
             L.d { "[Message] send message response received, status=${response.status}" }
-            responseMapper.map(response)
+            val mapped = responseMapper.map(response)
+            // AuthorizationFailedException extends IOException, so NewSignalServiceMessageSender
+            // swallows it and falls back to HTTP. Report here, before that fallback can mask the
+            // rejection behind a plain network error.
+            if (mapped.applicationError.orElse(null) is AuthorizationFailedException) {
+                authFailureSink.get().onAuthRejected(AuthFailureSource.WS_RESPONSE)
+            }
+            mapped
         } catch (throwable: Throwable) {
             ServiceResponse.forUnknownError(throwable)
         }

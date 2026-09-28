@@ -1,6 +1,5 @@
 package com.difft.android.call
 
-import com.difft.android.base.utils.globalServices
 
 import com.difft.android.base.call.Args
 import com.difft.android.base.call.CallActionType
@@ -81,7 +80,7 @@ internal class CallInviteExecutor(
                     }
                 }
                 val requestBody = buildInviteRequest(roomId, callEncryptResult)
-                val response = callService.inviteCall((globalServices.userManager.getUserData()?.microToken ?: ""), requestBody)
+                val response = callService.inviteCall(requestBody)
                 handleResponse(response, inviteMembers, type, createdAt)
             } catch (error: CancellationException) {
                 throw error

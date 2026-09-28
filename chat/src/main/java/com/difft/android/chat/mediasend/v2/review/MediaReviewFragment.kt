@@ -721,7 +721,6 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(conversationId, confidentialMode = mode)
                     )
                 }

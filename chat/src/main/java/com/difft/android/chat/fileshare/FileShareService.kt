@@ -3,6 +3,8 @@ package com.difft.android.chat.fileshare
 import android.annotation.SuppressLint
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.auth.Auth
+import com.difft.android.network.auth.AuthStyle
 import com.difft.android.network.di.ChativeHttpClientModule
 import okhttp3.ConnectionSpec
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -16,6 +18,13 @@ import retrofit2.http.POST
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
+/**
+ * Fileshare authenticates on the `token` field of each request body, not on the `Authorization`
+ * header — so the header is removed rather than left carrying a credential this service never
+ * validates. Body-token rejections are retried by
+ * [com.difft.android.network.auth.withInvalidTokenRetry] at each call site (issues #1235, #1231).
+ */
+@Auth(AuthStyle.NONE)
 interface FileShareService {
     @POST("v1/file/isExists")
     fun isExist(@Body request: FileExistReq): Call<BaseResponse<FileExistResp?>>
@@ -28,9 +37,11 @@ interface FileShareService {
      * Status codes:
      * - 0: OK
      * - 1: INVALID_PARAMETER
-     * - 2: NO_PERMISSION (File expired)
+     * - 2: NO_PERMISSION (download authorization expired, 30 days) — file expired
      * - 9: NO_SUCH_FILE
-     * - 12: INVALID_FILE
+     * - 12: storage object already purged (35 days) — file expired
+     *   (2 and 12 semantics confirmed by the file-share server team, 2026-09-17; 12 is not in the
+     *   published STATUS enum)
      * - 99: OTHER_ERROR
      */
     @POST("v1/file/download")

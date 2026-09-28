@@ -1,6 +1,5 @@
 package com.difft.android.login.viewmodel
 
-import com.difft.android.base.utils.globalServices
 
 import android.app.Activity
 import androidx.lifecycle.LiveData
@@ -52,17 +51,13 @@ class ContactProfileSettingViewModel @Inject constructor(
         name: String?,
         contactor: ContactorModel?
     ) {
-        val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
         mSetProfileResultData.value = Resource.loading()
 
         viewModelScope.launch {
             try {
                 if (filePath == null) {
                     // 仅更新名称
-                    val result = httpClient.httpService.fetchSetProfile(
-                        basicAuth,
-                        ProfileRequestBody(avatar = null, name = name)
-                    )
+                    val result = httpClient.httpService.fetchSetProfile(ProfileRequestBody(avatar = null, name = name))
 
                     if (result.status == 0) {
                         contactor?.let {
@@ -86,7 +81,7 @@ class ContactProfileSettingViewModel @Inject constructor(
                             attachmentId = meta.serverId,
                         )
                     )
-                    val profileResult = httpClient.httpService.fetchSetProfile(basicAuth, ProfileRequestBody(avatar, name))
+                    val profileResult = httpClient.httpService.fetchSetProfile(ProfileRequestBody(avatar, name))
 
                     if (profileResult.status == 0) {
                         contactor?.let {

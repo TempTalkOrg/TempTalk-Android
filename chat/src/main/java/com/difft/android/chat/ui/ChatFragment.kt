@@ -32,6 +32,7 @@ import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
+import com.difft.android.chat.messages.PriorConversationReporter
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isOfficialAccount
@@ -115,6 +116,9 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
     lateinit var messageNotificationUtil: dagger.Lazy<MessageNotificationUtil>
 
     @Inject
+    lateinit var priorConversationReporter: PriorConversationReporter
+
+    @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     @Inject
@@ -171,6 +175,7 @@ class ChatFragment : Fragment(), ChatMessageListProvider {
 
         messageNotificationUtil.get().cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
+        priorConversationReporter.onConversationOpened(chatViewModel.forWhat)
         messageNotificationUtil.get().cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 

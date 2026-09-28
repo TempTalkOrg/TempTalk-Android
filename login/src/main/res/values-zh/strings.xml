@@ -1,16 +1,18 @@
 <resources>
     <string name="login_sign_to_chative">登录Quicall</string>
-    <string name="login_email_or_invite_code_hint">邮箱/手机号</string>
+    <string name="login_email_or_phone_hint">邮箱/手机号</string>
     <string name="login_next">下一步</string>
     <string name="login_in">登录</string>
     <string name="login_skip">跳过</string>
     <string name="login_otp_sent">OTP 已发送，请查看</string>
     <string name="login_otp_sent_to">已发送 OTP 至 "%s"</string>
-    <string name="login_invite_code_invalid">无效，请检查</string>
+    <string name="login_error_invalid_account">邮箱/手机号错误</string>
     <string name="login_email_code_not_receive">没有收到？</string>
     <string name="login_email_code_resend">重新发送%s</string>
     <string name="login_error_not_exist">登录码过期或不存在，请检查</string>
     <string name="login_error_verification_failed">验证失败</string>
+    <string name="login_renew_failed">登录已过期，请重新获取验证码</string>
+    <string name="login_restore_sign_in_again">数据已导入，请重新验证账号以完成登录。</string>
     <string name="login_error_too_many_attempts">尝试次数过多，请稍后再试。</string>
 
     <!-- Screen Lock Strings -->
@@ -60,4 +62,13 @@
     <string name="register_intro_page2_title">仅双方可见</string>
     <string name="register_intro_page2_body">端到端加密。除你和对方之外，任何人都无法查看聊天内容。</string>
     <string name="login_use_proxy">使用代理</string>
+
+    <!-- 数据迁移 v2 (A5) — 登录时导入弹窗 -->
+    <string name="login_import_backup_title">是否导入备份?</string>
+    <string name="login_import_backup_message">在登录前从备份文件恢复你的聊天记录。若跳过,本设备将不包含历史记录。</string>
+    <string name="login_import_backup_confirm">导入</string>
+    <string name="login_import_backup_decline">跳过</string>
+    <!-- I4 — 导入方式选择 (P2P / 文件) + 同设备仅文件 -->
+    <!-- 折叠自旧前置弹窗的引导文案,合并进单一组合选择弹窗 -->
+
 </resources>

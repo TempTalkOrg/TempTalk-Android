@@ -28,11 +28,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
@@ -85,7 +81,7 @@ fun BarrageInputOverlay(
                 .fillMaxWidth()
                 .displayCutoutPadding()
                 .padding(bottom = with(density) { imeBottomPadding.toDp() })
-                .background(DifftTheme.colors.bgElevated)
+                .background(DifftTheme.colors.backgroundPopup)
                 .clickable(enabled = false) {}
         ) {
             TextField(
@@ -97,23 +93,13 @@ fun BarrageInputOverlay(
                 singleLine = false,
                 minLines = 1,
                 maxLines = 4,
-                textStyle = TextStyle(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight(510),
-                    color = DifftTheme.colors.textPrimary
-                ),
+                // Library field type scale and caret; the overlay keeps its own transparent box.
+                textStyle = DifftTheme.typography.p3.copy(color = DifftTheme.colors.textPrimary),
                 placeholder = {
                     Text(
                         text = ResUtils.getString(R.string.call_barrage_message_input_tip),
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight(510),
-                            color = DifftTheme.colors.textDisabled
-                        )
+                        style = DifftTheme.typography.p3,
+                        color = DifftTheme.colors.textDisabled,
                     )
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -125,7 +111,7 @@ fun BarrageInputOverlay(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     disabledIndicatorColor = Color.Transparent,
-                    cursorColor = DifftTheme.colors.textPrimary
+                    cursorColor = DifftTheme.colors.primary
                 )
             )
         }

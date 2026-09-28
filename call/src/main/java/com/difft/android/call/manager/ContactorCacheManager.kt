@@ -1,7 +1,6 @@
 package com.difft.android.call.manager
 
 import android.content.Context
-import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.ValidatorUtil
@@ -120,44 +119,12 @@ class ContactorCacheManager @Inject constructor(
     }
     
     /**
-     * 通过UID获取用户头像
-     * 优先从缓存获取，缓存未命中时从数据库查询并更新缓存
-     * 
-     * @param context 上下文
-     * @param id 用户ID（可能包含设备ID）
-     * @return 头像视图，如果未找到则返回 null
-     */
-    suspend fun getAvatarByUid(context: Context, id: String?): ConstraintLayout? {
-        val userId = id?.split(".")?.firstOrNull() ?: return null
-        val contactor = getContactorByUserId(userId)
-        if (contactor == null) {
-            L.i { "[ContactorCacheManager] getAvatarByUid No avatar found for provided id." }
-            return null
-        }
-        return withContext(Dispatchers.Main) {
-            callToChatController.getAvatarByContactor(context, contactor)
-        }
-    }
-
-    /**
-     * 根据名称或UID创建头像
-     * 当无法获取用户信息时，使用名称或UID创建默认头像
-     * 
-     * @param context 上下文
-     * @param name 用户名称（可选）
-     * @param id 用户ID
-     * @return 头像视图
-     */
-    fun createAvatarByNameOrUid(context: Context, name: String?, id: String): ConstraintLayout {
-        return callToChatController.createAvatarByNameOrUid(context, name, id)
-    }
-    
-    /**
      * 获取参与者显示信息
      * 包含用户ID、显示名称和头像数据
      *
      * 整个方法体在 Dispatchers.IO 中执行，不再强制切回 Main 线程。
-     * 返回 data-only 的 [AvatarData]；UI 层在 AndroidView factory 中按需在 Main 线程构建实际的 View。
+     * 返回 data-only 的 [AvatarData]；渲染由 UI 层负责（Compose 走 `LCallToChatController.Avatar`，
+     * XML 行走每个 ViewHolder 持有的 `AvatarViewBinder`），本类不构建 View。
      *
      * 注意：本方法不接受 Context 参数。原 context 参数在重构后已无内部使用，
      * 而调用方传入的 LocalContext.current（Activity-backed）会被 IO 协程捕获，

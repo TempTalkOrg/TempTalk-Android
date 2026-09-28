@@ -1,8 +1,5 @@
 package com.difft.android.call.ui.screenshare
 
-import android.view.ViewGroup
-import android.widget.TextView
-import androidx.cardview.widget.CardView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,20 +11,20 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.call.LCallManager
 import com.difft.android.call.R
+import com.difft.android.call.data.AvatarData
 import com.difft.android.call.util.StringUtil
+import dagger.hilt.android.EntryPointAccessors
 import com.difft.android.base.R as BaseR
 
 @Composable
@@ -39,11 +36,7 @@ internal fun MicQueueList(waitingSpeakers: List<WaitingSpeakerDisplay>) {
         )
         Text(
             text = stringResource(id = R.string.call_screen_share_mic_queue),
-            style = TextStyle(
-                fontSize = 10.sp,
-                lineHeight = 14.sp,
-                fontWeight = FontWeight.Normal,
-            ),
+            style = DifftTheme.typography.p5,
             color = DifftTheme.colors.textSecondary,
         )
         waitingSpeakers.forEach { speaker ->
@@ -65,17 +58,13 @@ internal fun MicQueueItem(speaker: WaitingSpeakerDisplay) {
                 .size(AVATAR_SIZE)
                 .clip(CircleShape),
         ) {
-            AvatarContent(speaker.avatarModel)
+            AvatarContent(speaker.avatarData)
         }
         Text(
             text = StringUtil.truncateWithEllipsis(
                 speaker.displayName, MIC_QUEUE_NAME_MAX_LENGTH,
             ),
-            style = TextStyle(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.Normal,
-            ),
+            style = DifftTheme.typography.p4,
             color = DifftTheme.colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -84,42 +73,24 @@ internal fun MicQueueItem(speaker: WaitingSpeakerDisplay) {
 }
 
 @Composable
-internal fun AvatarContent(avatarModel: Any?) {
-    when (avatarModel) {
-        is ConstraintLayout -> {
-            key(avatarModel) {
-                AndroidView(
-                    factory = {
-                        (avatarModel.parent as? ViewGroup)?.removeView(avatarModel)
-                        avatarModel.apply {
-                            clipToOutline = true
-                            clipChildren = true
-                        }
-                        scaleLetterAvatarText(avatarModel)
-                        avatarModel
-                    },
-                    modifier = Modifier.size(AVATAR_SIZE),
-                )
-            }
-        }
-        else -> {
-            Box(
-                modifier = Modifier
-                    .size(AVATAR_SIZE)
-                    .background(DifftTheme.colors.backgroundSecondary),
-            )
-        }
+internal fun AvatarContent(avatarData: AvatarData?) {
+    if (avatarData == null) {
+        // Data not loaded yet — neutral disc, same footprint as the avatar it replaces.
+        Box(
+            modifier = Modifier
+                .size(AVATAR_SIZE)
+                .background(DifftTheme.colors.backgroundSecondary),
+        )
+        return
     }
-}
-
-internal fun scaleLetterAvatarText(view: ViewGroup) {
-    for (i in 0 until view.childCount) {
-        val child = view.getChildAt(i)
-        if (child is CardView) {
-            for (j in 0 until child.childCount) {
-                val textView = child.getChildAt(j) as? TextView ?: continue
-                textView.textSize = AVATAR_LETTER_TEXT_SIZE_DP
-            }
-        }
+    val controller = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(
+            ApplicationHelper.instance,
+        ).callToChatController
     }
+    controller.Avatar(
+        data = avatarData,
+        size = AVATAR_SIZE,
+        letterTextSizeDp = AVATAR_LETTER_TEXT_SIZE_DP,
+    )
 }

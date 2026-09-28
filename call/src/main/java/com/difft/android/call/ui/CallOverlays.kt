@@ -12,6 +12,7 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheetDialog
 import com.difft.android.base.user.CallConfig
 import com.difft.android.call.CallIntent
+import com.difft.android.call.ui.actionbar.isAnyPanelOpen
 import com.difft.android.call.ui.alert.ShowCriticalAlertConfirmView
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallEndType
@@ -49,6 +50,7 @@ fun CommonCallOverlays(
         callRole = callRole,
         conversationId = conversationId,
         onWindowZoomOutClick = onWindowZoomOutClick,
+        onInviteUsersClick = onInviteUsersClick,
         onExitClick = onExitClick,
         onE2eeHintClick = { showE2eeSheet = true },
     )
@@ -103,6 +105,7 @@ private fun RenderTopAndBottomOverlays(
     callRole: CallRole,
     conversationId: String?,
     onWindowZoomOutClick: () -> Unit,
+    onInviteUsersClick: () -> Unit,
     onExitClick: (CallExitParams, CallEndType?) -> Unit,
     onE2eeHintClick: () -> Unit,
 ) {
@@ -123,6 +126,15 @@ private fun RenderTopAndBottomOverlays(
             viewModel.callUiController.notifyScreenShareInteraction()
             while (isActive) {
                 delay(1_000L)
+                // A sheet (More / Emoji / end menu) or a participant mute menu lives in its own
+                // window, so browsing it never reaches the root pointer listener: treat an open
+                // panel or menu as ongoing interaction.
+                if (viewModel.callUiController.isAnyPanelOpen() ||
+                    viewModel.callUiController.participantMenuOpen.value
+                ) {
+                    viewModel.callUiController.notifyScreenShareInteraction()
+                    continue
+                }
                 val elapsed = System.currentTimeMillis() -
                     viewModel.callUiController.screenShareLastInteractionTime
                 if (elapsed >= 5_000L) {
@@ -149,7 +161,7 @@ private fun RenderTopAndBottomOverlays(
         MainPageWithBottomControlView(
             viewModel = viewModel,
             isOneVOneCall = isOneVOneCall,
-            isUserSharingScreen = isUserSharingScreen,
+            onInviteUsersClick = onInviteUsersClick,
             endCallAction = { callType, callEndType ->
                 val callExitParams = CallExitParams(
                     viewModel.getRoomId(),

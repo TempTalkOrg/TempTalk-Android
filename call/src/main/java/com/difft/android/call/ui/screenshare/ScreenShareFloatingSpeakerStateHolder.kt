@@ -1,20 +1,13 @@
 package com.difft.android.call.ui.screenshare
 
-import android.content.Context
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.call.LCallManager
-import com.difft.android.call.LCallToChatController
-import com.difft.android.call.data.AvatarData
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.ParticipantManager
-import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.util.flow
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +17,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
 private data class TrackFieldSnapshot(
@@ -38,7 +30,6 @@ class ScreenShareFloatingSpeakerStateHolder(
     private val scope: CoroutineScope,
     private val participantManager: ParticipantManager,
     private val speakingEnabled: StateFlow<Boolean>,
-    private val context: Context,
     private val contactorCacheManager: ContactorCacheManager,
     private val explicitFallback: StateFlow<Participant>,
 ) : ScreenShareFloatingSpeakerStatePort {
@@ -51,12 +42,6 @@ class ScreenShareFloatingSpeakerStateHolder(
 
     private var lastValidatedPrimaryWhileSpeaking: Participant? = null
 
-    private val callToChatController: LCallToChatController by lazy {
-        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(
-            ApplicationHelper.instance
-        ).callToChatController
-    }
-
     private fun initialUiState(): ScreenShareFloatingSpeakerUiState {
         val p = explicitFallback.value
         return ScreenShareFloatingSpeakerUiState(
@@ -65,7 +50,6 @@ class ScreenShareFloatingSpeakerStateHolder(
             isLocal = p is LocalParticipant,
             selectionSource = FloatingSpeakerSelectionSource.FALLBACK_SCREEN_SHARER,
             displayName = null,
-            avatarModel = null,
             cameraEnabled = p.isCameraEnabled,
             micMuted = !p.isMicrophoneEnabled,
             isSpeaking = p.isSpeaking && speakingEnabled.value,
@@ -167,7 +151,6 @@ class ScreenShareFloatingSpeakerStateHolder(
                     isLocal = participant is LocalParticipant,
                     selectionSource = source,
                     displayName = null,
-                    avatarModel = null,
                     cameraEnabled = participant.isCameraEnabled,
                     micMuted = !participant.isMicrophoneEnabled,
                     isSpeaking = participant.isSpeaking && speakingEnabled.value,
@@ -219,20 +202,9 @@ class ScreenShareFloatingSpeakerStateHolder(
         displayInfoJob = scope.launch {
             try {
                 val info = contactorCacheManager.getParticipantDisplayInfo(uid)
-                if (_uiState.value.videoParticipant.sid != participant.sid) return@launch
-                val avatarView = withContext(Dispatchers.Main) {
-                    when (val data = info.avatarData) {
-                        is AvatarData.FromContactor ->
-                            callToChatController.getAvatarByContactor(context, data.contactor)
-                        is AvatarData.FromNameOrUid ->
-                            callToChatController.createAvatarByNameOrUid(context, data.name, data.userId)
-                        null -> null
-                    }
-                }
-                if (_uiState.value.videoParticipant.sid != participant.sid) return@launch
                 _uiState.update { prev ->
                     if (prev.videoParticipant.sid != participant.sid) prev
-                    else prev.copy(displayName = info.name, avatarModel = avatarView)
+                    else prev.copy(displayName = info.name)
                 }
             } catch (e: CancellationException) {
                 throw e

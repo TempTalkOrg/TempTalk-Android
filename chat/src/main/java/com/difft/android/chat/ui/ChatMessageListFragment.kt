@@ -44,6 +44,8 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheet
 import com.difft.android.base.ui.noSmoothScrollToBottom
+import com.difft.android.chat.translate.backend.TranslateBackend
+import com.difft.android.chat.translate.ui.ChatTranslateListBinder
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.TextSizeUtil
@@ -72,6 +74,10 @@ import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.MessageActionHelper
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.attachment.AttachmentDownloadDecision
+import com.difft.android.chat.attachment.AttachmentTapAction
+import com.difft.android.chat.attachment.AttachmentTapBlockedReason
+import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isAttachmentMessage
@@ -104,8 +110,8 @@ import com.difft.android.selector.pictureselector.PictureSelectorUtils
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Attachment
-import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.CombinedForwardMode
+import difft.android.messageserialization.model.Forward
 import difft.android.messageserialization.model.ForwardContext
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.TranslateTargetLanguage
@@ -115,7 +121,6 @@ import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import difft.android.messageserialization.model.isImage
-import difft.android.messageserialization.model.keepEncryptedAtRest
 import difft.android.messageserialization.model.isVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -156,6 +161,9 @@ class ChatMessageListFragment : Fragment() {
     lateinit var globalConfigsManager: GlobalConfigsManager
 
     @Inject
+    lateinit var translateBackend: TranslateBackend
+
+    @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     @Inject
@@ -185,8 +193,15 @@ class ChatMessageListFragment : Fragment() {
     private val favoriteViewModel: com.difft.android.chat.gif.favorite.FavoriteViewModel by viewModels(
         ownerProducer = { parentFragment ?: requireActivity() }
     )
+    /** Auto-translate visible-range reporting; bound to the view lifecycle, nulled in onDestroyView. */
+    private var translateBinder: ChatTranslateListBinder? = null
+
     private val chatMessageAdapter: ChatMessageAdapter by lazy {
         object : ChatMessageAdapter(chatViewModel.forWhat, chatViewModel.contactorCache) {
+            override fun onTranslateRetry(message: TextChatMessage) {
+                chatViewModel.onTranslateRetry(message.id)
+            }
+
             override fun onItemClick(rootView: View, data: ChatMessage) {
                 if (data !is TextChatMessage) return
                 if (data.isMine && data.sendStatus == SendType.SentFailed.rawValue) {
@@ -197,6 +212,16 @@ class ChatMessageListFragment : Fragment() {
                     val forwardContext = data.forwardContext ?: return
                     val forwards = forwardContext.forwards ?: return
                     if (data.isConfidential()) {
+                        // A confidential single forward that is nothing but an attachment follows the
+                        // same rules as a plain confidential attachment: expired / still downloading
+                        // dead-end in a toast, failed re-fetches — opening the detail in those states
+                        // would send the view receipt and burn the message for a file the user never saw.
+                        attachmentOnlyForward(forwards)?.let { soleAttachment ->
+                            val consumed = handleAttachmentTapBeforeOpen(soleAttachment, data.getAttachmentProgress()) {
+                                downloadAttachment(data, soleAttachment)
+                            }
+                            if (consumed) return
+                        }
                         showConfidentialViewTipIfNeeded(data) {
                             ChatForwardMessageActivity.startActivity(
                                 requireActivity(),
@@ -212,14 +237,10 @@ class ChatMessageListFragment : Fragment() {
                         if (forwards.size == 1) {
                             val forward = forwardContext.forwards?.getOrNull(0) ?: return
                             val attachment = forward.attachments?.getOrNull(0) ?: return
-                            val progress = data.getAttachmentProgress()
-
-                            // Use authorityId for messageId to match file path in ImageAndVideoMessageView
-                            val forwardMessageId = attachment.authorityId.toString()
-                            if (shouldTriggerManualDownload(attachment, progress, forwardMessageId)) {
-                                downloadAttachment(forwardMessageId, attachment, data)
-                                return
+                            val consumed = handleAttachmentTapBeforeOpen(attachment, data.getAttachmentProgress()) {
+                                downloadAttachment(data, attachment)
                             }
+                            if (consumed) return
 
                             if (attachment.isImage() || attachment.isVideo()) {
                                 openPreview(generateMessageFromForward(forward) as TextChatMessage)
@@ -248,46 +269,7 @@ class ChatMessageListFragment : Fragment() {
                     sendConfidentialViewReceipt(data)
                     deleteConfidentialMessage(data)
                 } else if (data.isAttachmentMessage()) {
-                    val attachment = data.attachment ?: return
-                    val progress = data.getAttachmentProgress()
-
-                    if (shouldTriggerManualDownload(attachment, progress, data.id)) {
-                        downloadAttachment(data.id, attachment, data)
-                        return
-                    }
-
-                    if (attachment.isImage() || attachment.isVideo()) {
-                        if (data.isConfidential()) {
-                            showConfidentialViewTipIfNeeded(data) {
-                                openPreview(data)
-                            }
-                        } else {
-                            openPreview(data)
-                        }
-                    } else if (attachment.isAudioMessage() || attachment.isAudioFile()) {
-                        if (data.isConfidential()) {
-                            showConfidentialViewTipIfNeeded(data) {
-                                // VoiceMessageView handles download progress internally
-                                // View receipt is sent when user clicks play (not when dialog opens)
-                                showConfidentialAudioDialog(data)
-                            }
-                        }
-                    } else if (attachment.isLongText()) {
-                        // Long-text attachment is displayed as text — route to text dialog, not attachment dialog.
-                        if (data.isConfidential() && !TextUtils.isEmpty(data.message)) {
-                            showConfidentialViewTipIfNeeded(data) {
-                                showConfidentialTextDialog(data)
-                            }
-                        }
-                    } else {
-                        // Regular attachment (non-image/video/audio): send receipt on open, delete on dismiss.
-                        if (data.isConfidential()) {
-                            showConfidentialViewTipIfNeeded(data) {
-                                sendConfidentialViewReceipt(data)
-                                showConfidentialAttachmentDialog(data)
-                            }
-                        }
-                    }
+                    onAttachmentMessageClick(data)
                 } else {
                     if (data.isConfidential() && !TextUtils.isEmpty(data.message)
                     ) {
@@ -497,6 +479,9 @@ class ChatMessageListFragment : Fragment() {
             itemAnimator = null
 
             adapter = chatMessageAdapter
+            translateBinder = ChatTranslateListBinder(this, chatMessageAdapter) { ids, reason ->
+                chatViewModel.onVisibleMessages(ids, reason)
+            }
 
             addOnScrollListener(object : OnScrollListener() {
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -512,6 +497,7 @@ class ChatMessageListFragment : Fragment() {
                                 }
                                 sendAndUpdateMessageRead()
                                 checkAndRecordConfidentialPlaceholders()
+                                translateBinder?.onScrollIdle()
                                 userScrolling = false
                             }
                         }
@@ -702,16 +688,6 @@ class ChatMessageListFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            chatViewModel.translateEvent.collect { (messageId, translateData) ->
-                if (!isAdded || view == null) return@collect
-                (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
-                    it.translateData = translateData
-                    notifyItemChangedAndAnchorBottom(chatMessageAdapter.currentList.indexOf(it))
-                }
-            }
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
             chatViewModel.speechToTextEvent.collect { (messageId, speechToTextData) ->
                 if (!isAdded || view == null) return@collect
                 (chatMessageAdapter.currentList.find { it.id == messageId } as? TextChatMessage)?.let {
@@ -882,6 +858,7 @@ class ChatMessageListFragment : Fragment() {
 
             // After list update, check visible area for newly appeared placeholder messages
             checkAndRecordConfidentialPlaceholders()
+            translateBinder?.onListCommitted()
 
             // Last thing in the commit callback: the layout the trim decision reads is the one this
             // submitList just produced.
@@ -1064,6 +1041,7 @@ class ChatMessageListFragment : Fragment() {
         // Dismiss message action coordinator
         messageActionCoordinator?.dismiss()
         messageActionCoordinator = null
+        translateBinder = null
         super.onDestroyView()
     }
 
@@ -1154,11 +1132,28 @@ class ChatMessageListFragment : Fragment() {
     var voiceMessageView: VoiceMessageView? = null
     private var currentAudioMessage: TextChatMessage? = null
 
+    /**
+     * Whether the confidential voice / text viewer currently open has actually revealed its content
+     * (the voice was played, the text was pressed). Those two viewers open with the content still
+     * hidden, so opening alone is not "viewing": the view receipt goes out only on that reveal, and
+     * closing the viewer burns the message only if the reveal happened — otherwise the message stays,
+     * matching iOS and Mac. Image / file viewers show their content on open and are not gated by this.
+     * One flag is enough: the two viewers are never open at the same time.
+     */
+    private var confidentialViewerConsumed = false
+
+    /** The reveal inside a confidential voice / text viewer: send the view receipt and arm the burn-on-close. */
+    fun consumeConfidentialInViewer(message: ChatMessage) {
+        confidentialViewerConsumed = true
+        sendConfidentialViewReceipt(message)
+    }
+
     fun showConfidentialAudioDialog(message: TextChatMessage) {
         // 检查 Fragment 是否已附加且 Activity 存在
         if (!isAdded || activity == null) return
 
         currentAudioMessage = message
+        confidentialViewerConsumed = false
 
         // 使用 Activity 的 FragmentManager
         val fragmentManager = requireActivity().supportFragmentManager
@@ -1182,7 +1177,9 @@ class ChatMessageListFragment : Fragment() {
             message.attachment?.playProgress = 0
             voiceMessageView = null
 
-            if (!message.isMine) {
+            // Burn only after the voice was played: the receipt has gone out and the sender's copy is
+            // gone, so ours must follow. Closing without playing keeps the message for a later look.
+            if (!message.isMine && confidentialViewerConsumed) {
                 deleteConfidentialMessage(message)
             }
         }
@@ -1198,6 +1195,7 @@ class ChatMessageListFragment : Fragment() {
         if (!isAdded || activity == null) return
 
         currentTextMessage = message
+        confidentialViewerConsumed = false
 
         // 使用 Activity 的 FragmentManager
         val fragmentManager = requireActivity().supportFragmentManager
@@ -1217,7 +1215,9 @@ class ChatMessageListFragment : Fragment() {
 
     fun onConfidentialTextDialogDismiss() {
         currentTextMessage?.let { message ->
-            if (!message.isMine) {
+            // Same rule as voice: the text was revealed by a press, so the receipt is out and the
+            // message burns on close; opened-and-closed without a press keeps it.
+            if (!message.isMine && confidentialViewerConsumed) {
                 deleteConfidentialMessage(message)
             }
         }
@@ -1337,6 +1337,7 @@ class ChatMessageListFragment : Fragment() {
         if (!isAdded) {
             return
         }
+        translateBinder?.onFirstRender()
         backPressedCallback = BackPressedDelegate()
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -1346,7 +1347,8 @@ class ChatMessageListFragment : Fragment() {
         // Initialize message action coordinator
         messageActionCoordinator = MessageActionCoordinator(
             activity = requireActivity(),
-            globalConfigsManager = globalConfigsManager
+            globalConfigsManager = globalConfigsManager,
+            translateSupported = translateBackend.isSupported,
         ).apply {
             setActionListener(MessageActionListenerImpl())
         }
@@ -1662,13 +1664,14 @@ class ChatMessageListFragment : Fragment() {
 
     private fun saveAttachment(data: TextChatMessage) {
         val (attachment, messageId) = resolveActionAttachment(data) ?: return
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+        val attachmentPath = AttachmentPathResolver.fileFor(attachment)
         val progress = data.getAttachmentProgress()
+        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
 
         // Encrypted-at-rest media keeps only the ciphertext (.encrypt) on disk — the plaintext
         // file is gone, so File(...).exists() is false. Gate on isReadable and feed the save the
         // decrypting content uri so SaveAttachmentUtil can stream the plaintext on demand.
-        if (EncryptedAttachmentAccess.isReadable(attachmentPath) && (progress == null || progress == 100)) {
+        if (isFileValid && (progress == null || progress == 100)) {
             // Prefer the durable ciphertext (content uri) over the plaintext file: for a self-sent
             // attachment PushTextSendJob deletes the plaintext right after upload, so a plaintext
             // uri resolved here can ENOENT by the time this async save opens it (intermittent
@@ -1685,21 +1688,11 @@ class ChatMessageListFragment : Fragment() {
                 SaveAttachmentUtil.saveWithUI(requireContext(), attachmentToSave)
             }
         } else {
-            L.w { "[ChatMessageListFragment] save attachment error, readable=" + EncryptedAttachmentAccess.isReadable(attachmentPath) + " downloadCompleted=" + (progress == null || progress == 100) }
-            ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+            L.w { "[ChatMessageListFragment] save attachment error, readable=$isFileValid downloadCompleted=" + (progress == null || progress == 100) }
+            if (!rescueMissingAttachment(data, attachment, isFileValid)) {
+                ToastUtil.show(resources.getString(R.string.ConversationFragment_error_while_saving_attachments_to_sd_card))
+            }
         }
-    }
-
-    /**
-     * Resolve the actionable attachment + its on-disk storage messageId — the SINGLE source of truth
-     * shared by save AND favorite so their file-path resolution can never diverge again: a direct
-     * attachment is stored under message.id, a single-forward under the forward attachment's
-     * authorityId. Returns null when the message carries no actionable attachment.
-     */
-    private fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? {
-        val attachment = message.singleForwardableAttachment() ?: return null
-        val messageId = if (message.isAttachmentMessage()) message.id else attachment.authorityId.toString()
-        return attachment to messageId
     }
 
     private fun showTranslateDialog(data: TextChatMessage) {
@@ -1747,55 +1740,125 @@ class ChatMessageListFragment : Fragment() {
     }
 
     /**
-     * Check if attachment needs manual download (failed or large file not downloaded)
-     * @return true if needs to download, false otherwise
+     * The copy's own localId is both the job's row identity and its progress key — the collecting
+     * bubble derives the same value through `getAttachmentIdForProgress`.
      */
-    private fun shouldTriggerManualDownload(
-        attachment: Attachment,
-        progress: Int?,
-        messageId: String
-    ): Boolean {
-        // Check if download failed or expired
-        val isFailedOrExpired = if (progress != null) {
-            progress == -1 || progress == -2
-        } else {
-            attachment.status == AttachmentStatus.FAILED.code || attachment.status == AttachmentStatus.EXPIRED.code
-        }
-        if (isFailedOrExpired) return true
-
-        // Check if large file needs manual download (>10M)
-        val fileSize = attachment.size
-        val isLargeFile = fileSize > FileUtil.LARGE_FILE_THRESHOLD
-        val fileName = attachment.fileName ?: ""
-        val attachmentPath = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
-        val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath)
-
-        return isLargeFile && (attachment.status != AttachmentStatus.SUCCESS.code && progress != 100 || !isFileValid) && progress == null
-    }
-
-    private fun downloadAttachment(messageId: String, attachment: Attachment, message: ChatMessage) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(messageId) + attachment.fileName
+    private fun downloadAttachment(message: TextChatMessage, attachment: Attachment) {
+        val filePath = AttachmentPathResolver.fileFor(attachment)
         // Auto-save only for non-confidential images/videos when conversation setting allows
         val autoSave = chatMessageAdapter.shouldSaveToPhotos &&
                 !message.isConfidential() &&
                 (attachment.isImage() || attachment.isVideo())
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
-                messageId,
+                attachment.localId,
+                message.id,
                 attachment.id,
                 filePath,
                 attachment.authorityId,
                 attachment.key ?: byteArrayOf(),
-                !attachment.keepEncryptedAtRest(),
                 autoSave
             )
         )
     }
 
-    private fun openPreview(message: TextChatMessage) {
-        val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
+    /**
+     * What a main-thread read gate does when the file it needs is not readable: ask for the bytes
+     * when the row says they were transferred, and report whether it did so the caller can keep its
+     * own error message for the cases this cannot recover.
+     *
+     * An ENQUEUE, never a read: these gates run on the main thread, so the migration's rescue (which
+     * is blocking IO) belongs in the job, and the job runs it before any network call. That is what
+     * turns a permanent "load error" on a file still sitting at its pre-migration address into a
+     * bubble that fills in as soon as the copy lands.
+     */
+    private fun rescueMissingAttachment(
+        message: TextChatMessage,
+        attachment: Attachment?,
+        isFileValid: Boolean
+    ): Boolean {
+        val progress = message.getAttachmentProgress()
+        if (attachment == null ||
+            !AttachmentDownloadDecision.shouldRescueMissingFile(isFileValid, attachment.status, progress)
+        ) return false
+        L.i { "[ChatMessageListFragment] rescuing missing attachment localId=${attachment.localId} messageId=${message.id}" }
+        downloadAttachment(message, attachment)
+        ToastUtil.showLong(R.string.file_preparing)
+        return true
+    }
+
+    /** Routes a tap on an attachment bubble by attachment kind. */
+    private fun onAttachmentMessageClick(data: TextChatMessage) {
+        val attachment = data.attachment ?: return
+        // Everything short of opening is decided and performed here; only a readable file goes on to
+        // the preview / viewer, which for a confidential message is where the receipt and the burn live.
+        // Long text is the one kind whose dialog does not need the file to be complete — it renders the
+        // body preview and reads the file only once it is — so a missing file does not hold its tap.
+        val consumed = handleAttachmentTapBeforeOpen(
+            attachment,
+            data.getAttachmentProgress(),
+            rescueMissingFile = !attachment.isLongText()
+        ) { downloadAttachment(data, attachment) }
+        if (consumed) return
+
+        if (attachment.isImage() || attachment.isVideo()) {
+            if (data.isConfidential()) {
+                showConfidentialViewTipIfNeeded(data) {
+                    openPreview(data)
+                }
+            } else {
+                openPreview(data)
+            }
+        } else if (attachment.isAudioMessage() || attachment.isAudioFile()) {
+            if (data.isConfidential()) {
+                showConfidentialViewTipIfNeeded(data) {
+                    // VoiceMessageView handles download progress internally
+                    // View receipt is sent when user clicks play (not when dialog opens)
+                    showConfidentialAudioDialog(data)
+                }
+            }
+        } else if (attachment.isLongText()) {
+            // Long-text attachment is displayed as text — route to text dialog, not attachment dialog.
+            if (data.isConfidential() && !TextUtils.isEmpty(data.message)) {
+                showConfidentialViewTipIfNeeded(data) {
+                    showConfidentialTextDialog(data)
+                }
+            }
+        } else {
+            // Regular attachment (non-image/video/audio). Confidential: send receipt on open, delete
+            // on dismiss. Otherwise open the file directly, same as the bubble's open button.
+            if (data.isConfidential()) {
+                showConfidentialViewTipIfNeeded(data) {
+                    sendConfidentialViewReceipt(data)
+                    showConfidentialAttachmentDialog(data)
+                }
+            } else {
+                openAttachmentFile(data)
+            }
+        }
+    }
+
+    /** Opens a downloaded generic file attachment in an external app; tapping the bubble body equals the open button. */
+    private fun openAttachmentFile(message: TextChatMessage) {
+        // A running transfer owns the bubble (progress bar shown, open button hidden): ignore the tap
+        // instead of reporting a load error for a file that is still arriving.
+        if (AttachmentDownloadDecision.isTransferInFlight(message.getAttachmentProgress())) return
+        val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
         if (!EncryptedAttachmentAccess.isReadable(filePath)) {
-            ToastUtil.showLong(R.string.file_load_error)
+            if (!rescueMissingAttachment(message, message.attachment, isFileValid = false)) {
+                ToastUtil.showLong(R.string.file_load_error)
+            }
+            return
+        }
+        requireContext().viewFile(filePath)
+    }
+
+    private fun openPreview(message: TextChatMessage) {
+        val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
+        if (!EncryptedAttachmentAccess.isReadable(filePath)) {
+            if (!rescueMissingAttachment(message, message.attachment, isFileValid = false)) {
+                ToastUtil.showLong(R.string.file_load_error)
+            }
             return
         }
         if (!message.isMine && message.isConfidential()) {
@@ -1808,7 +1871,7 @@ class ChatMessageListFragment : Fragment() {
 
                 if (isConfidential) {
                     // Confidential: only show the current message, no swiping
-                    message.attachment?.let { mediaList.add(AttachmentPreview.localMediaFor(message.id, it)) }
+                    message.attachment?.let { mediaList.add(AttachmentPreview.localMediaFor(it)) }
                 } else {
                     chatMessageAdapter.currentList.forEach { msg ->
                         if (msg !is TextChatMessage) return@forEach
@@ -1818,9 +1881,13 @@ class ChatMessageListFragment : Fragment() {
                         //消息附件
                         msg.attachment?.takeIf { it.isImage() || it.isVideo() }?.let { attachment ->
                             attachment.fileName ?: return@let
-                            val path = FileUtil.getMessageAttachmentFilePath(msg.id) + attachment.fileName
+                            // Off the main thread, so this read gate may also bring a file still at
+                            // its pre-migration address across — same reason as the forward branch
+                            // below; without it such an attachment silently drops out of the swipe
+                            // list until the background migration reaches it.
+                            val path = AttachmentPathResolver.materializedFileFor(attachment, msg.id)
                             if (EncryptedAttachmentAccess.isReadable(path)) {
-                                mediaList.add(AttachmentPreview.localMediaFor(msg.id, attachment))
+                                mediaList.add(AttachmentPreview.localMediaFor(attachment))
                             }
                             return@forEach
                         }
@@ -1832,9 +1899,13 @@ class ChatMessageListFragment : Fragment() {
                             val forwardMessage = generateMessageFromForward(forward) as? TextChatMessage ?: return@forEach
                             val forwardMsgAttachment = forwardMessage.attachment ?: return@forEach
                             forwardMsgAttachment.fileName ?: return@forEach
-                            val path = FileUtil.getMessageAttachmentFilePath(forwardMessage.id) + forwardMsgAttachment.fileName
+                            // Off the main thread, so this read gate can also bring a forwarded file
+                            // that is still at its pre-migration address across; without it such a
+                            // copy would silently drop out of the swipe list until the background
+                            // migration reaches it.
+                            val path = AttachmentPathResolver.materializedFileFor(forwardMsgAttachment, forwardMessage.id)
                             if (EncryptedAttachmentAccess.isReadable(path)) {
-                                mediaList.add(AttachmentPreview.localMediaFor(forwardMessage.id, forwardMsgAttachment))
+                                mediaList.add(AttachmentPreview.localMediaFor(forwardMsgAttachment))
                             }
                         }
                     }
@@ -1857,6 +1928,8 @@ class ChatMessageListFragment : Fragment() {
                 .isAutoVideoPlay(true)
                 .isVideoPauseResumePlay(true)
                 .isShowConfidentialTip(isConfidential)
+                // Confidential previews keep their original close control and hint layout (parity with iOS).
+                .isHideBottomClose(isConfidential)
                 .setVideoPlayerEngine(ExoVideoPlayerEngine())
                 .setAttachViewLifecycle(object : IBridgeViewLifecycle {
                     override fun onViewCreated(fragment: Fragment?, view: View?, savedInstanceState: Bundle?) {}
@@ -2155,8 +2228,14 @@ class ChatMessageListFragment : Fragment() {
                                     && msg.playStatus == AudioMessageManager.PLAY_STATUS_NOT_PLAY
                         }.minByOrNull { msg -> msg.systemShowTimestamp }
                         nextAutoPlayMessage?.let { next ->
-                            val fileName: String = (next as TextChatMessage).attachment?.fileName ?: ""
-                            val attachmentPath = FileUtil.getMessageAttachmentFilePath(next.id) + fileName
+                            val nextAttachment = (next as TextChatMessage).attachment ?: return@let
+                            // Migrating read, off the main thread: auto-play-next is not a download
+                            // gate — the next clip is usually off-screen, so no bind funnel has run
+                            // for it, and one still at its pre-per-copy address would end the chain
+                            // silently.
+                            val attachmentPath = withContext(Dispatchers.IO) {
+                                AttachmentPathResolver.materializedFileFor(nextAttachment, next.id)
+                            }
                             AudioMessageManager.playOrPauseAudio(next, attachmentPath)
                         }
                     }
@@ -2272,11 +2351,11 @@ class ChatMessageListFragment : Fragment() {
             chatFragment.voiceMessageView = view.findViewById(R.id.voice_message_view)
             chatFragment.voiceMessageView?.setAudioMessage(currentMessage)
 
-            // Set up callback to send view receipt when user clicks play (requirement 3.5)
-            // Note: Only send receipt here, deletion happens in onConfidentialAudioDialogDismiss
+            // Playing is the reveal: it sends the view receipt and arms the burn that
+            // onConfidentialAudioDialogDismiss performs on close.
             if (!currentMessage.isMine) {
                 chatFragment.voiceMessageView?.onConfidentialPlayStarted = { message ->
-                    chatFragment.sendConfidentialViewReceipt(message)
+                    chatFragment.consumeConfidentialInViewer(message)
                 }
             }
 
@@ -2379,7 +2458,8 @@ class ChatMessageListFragment : Fragment() {
 
                                 when (event.action) {
                                     MotionEvent.ACTION_DOWN -> {
-                                        chatFragment.sendConfidentialViewReceipt(currentMessage)
+                                        // Pressing reveals the lines under the finger: this is the view.
+                                        chatFragment.consumeConfidentialInViewer(currentMessage)
                                         v.parent.requestDisallowInterceptTouchEvent(touchX <= regionWidth)
                                     }
 
@@ -2414,10 +2494,13 @@ class ChatMessageListFragment : Fragment() {
             // For long-text, load full file content and re-render to replace the 2KB body preview.
             val attachment = currentMessage.attachment
             if (attachment?.isLongText() == true) {
-                val filePath = FileUtil.getMessageAttachmentFilePath(currentMessage.id) + (attachment.fileName ?: "")
+                val ownerMessageId = currentMessage.id
                 val appContext = requireContext().applicationContext
                 viewLifecycleOwner.lifecycleScope.launch {
                     val fullText = withContext(Dispatchers.IO) {
+                        // materializedFileFor: rescues a pre-migration long-text file still at its
+                        // legacy owner-message address (IO context — allowed to migrate on access).
+                        val filePath = AttachmentPathResolver.materializedFileFor(attachment, ownerMessageId)
                         if (EncryptedAttachmentAccess.isReadable(filePath)) {
                             // Plaintext-first, otherwise stream-decrypt via provider (no plaintext on disk).
                             try { EncryptedAttachmentAccess.readDecryptedText(appContext, filePath) } catch (_: Exception) { null }
@@ -2543,10 +2626,10 @@ class ChatMessageListFragment : Fragment() {
                 // plaintext-only isFileValid() would report "not available" and block opening.
                 // Gate on isReadable; viewFile() already routes ciphertext through the decrypting
                 // content uri (and falls back to a FileProvider uri for any legacy plaintext).
-                val filePath = FileUtil.getMessageAttachmentFilePath(message.id) + message.attachment?.fileName
+                val filePath = message.attachment?.let { AttachmentPathResolver.fileFor(it) } ?: ""
                 if (EncryptedAttachmentAccess.isReadable(filePath)) {
                     requireContext().viewFile(filePath)
-                } else {
+                } else if (!chatFragment.rescueMissingAttachment(message, message.attachment, isFileValid = false)) {
                     ToastUtil.showLong(R.string.file_load_error)
                 }
             }
@@ -2595,4 +2678,67 @@ internal fun <T> resolveByMessageId(
 ): T? {
     val position = indexOf(messageId)
     return if (position >= 0) itemAt(position) else null
+}
+
+/**
+ * Resolve the actionable attachment + its directory key — the SINGLE source of truth shared by
+ * save AND favorite (in both the chat list and the forward detail) so their file-path resolution
+ * can never diverge. Returns null when the message carries no actionable attachment.
+ */
+internal fun resolveActionAttachment(message: TextChatMessage): Pair<Attachment, String>? {
+    val attachment = message.singleForwardableAttachment() ?: return null
+    return attachment to AttachmentPathResolver.directoryKeyFor(attachment)
+}
+
+/**
+ * Apply the shared tap policy ([AttachmentDownloadDecision.tapAction]) to an attachment and perform
+ * everything short of opening: the dead-end toasts, the retry, the rescue. Returns true when the tap
+ * was consumed here, false when the caller may open the preview / viewer / detail. `download` is the
+ * caller's own enqueue — the chat list and the forward detail build the job differently — and it is
+ * the ONLY thing that differs between surfaces, which is what keeps this the one place a tap is judged.
+ *
+ * @param rescueMissingFile whether [AttachmentTapAction.Rescue] holds the tap. False only for content
+ *   whose viewer does not need the file to be complete (long text shows its body preview), where the
+ *   tap proceeds to open and the bubble's own auto-download brings the file.
+ */
+internal fun handleAttachmentTapBeforeOpen(
+    attachment: Attachment,
+    progress: Int?,
+    rescueMissingFile: Boolean = true,
+    download: () -> Unit
+): Boolean {
+    val action = AttachmentDownloadDecision.tapAction(
+        status = attachment.status,
+        progress = progress,
+        isFileValid = EncryptedAttachmentAccess.isReadable(AttachmentPathResolver.fileFor(attachment)),
+        sizeBytes = attachment.size
+    )
+    when (action) {
+        is AttachmentTapAction.Blocked -> ToastUtil.show(action.reason.toastRes())
+        AttachmentTapAction.Download -> download()
+        AttachmentTapAction.Rescue -> {
+            if (!rescueMissingFile) return false
+            download()
+            ToastUtil.showLong(R.string.file_preparing)
+        }
+        AttachmentTapAction.Open -> return false
+    }
+    return true
+}
+
+private fun AttachmentTapBlockedReason.toastRes(): Int = when (this) {
+    AttachmentTapBlockedReason.EXPIRED -> R.string.file_expired_cannot_view
+    AttachmentTapBlockedReason.DOWNLOADING -> R.string.file_preparing
+}
+
+/**
+ * The attachment of a forward wrapper that is a single item whose ONLY content is that attachment,
+ * or null. Such a bubble is, to the user, just that attachment, so a tap on it follows the attachment
+ * tap rules instead of opening the detail page. A forward that also carries text (or nests further
+ * forwards) is not one: the text remains readable in the detail, whatever state the attachment is in.
+ */
+internal fun attachmentOnlyForward(forwards: List<Forward>): Attachment? {
+    val forward = forwards.singleOrNull() ?: return null
+    if (!forward.text.isNullOrBlank() || !forward.forwards.isNullOrEmpty()) return null
+    return forward.attachments?.singleOrNull()
 }

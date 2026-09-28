@@ -20,6 +20,10 @@ import com.android.tools.lint.detector.api.Issue
  *     / PrintStackTraceNoArg)
  *   - Project-specific helpers (ChativeHttpClientRequired /
  *     ForegroundServiceStarterRequired)
+ *   - Retrofit auth declarations (AuthStyleMissing /
+ *     AuthHeaderParamForbidden / AuthExplicitMissingHeader)
+ *   - UI unification (DifftWidgetRequired, DifftTypeScaleRequired,
+ *     DifftColorTokenRequired, DifftRadiusRequired)
  *
  * See `docs/claude/lintchecks-extension-roadmap.md` for the future-rule
  * roadmap (concurrency anti-patterns, Android-generic patterns, etc.).
@@ -40,7 +44,18 @@ class Registry : IssueRegistry() {
         PrintStackTraceDetector.PRINT_STACK_TRACE_NO_ARG,
         // Project-specific helpers — go through the project's wrappers
         ChativeHttpClientDetector.CHATIVE_HTTP_CLIENT_REQUIRED,
+        // Retrofit auth declarations — one style per endpoint, set only by HeaderInterceptor
+        AuthStyleDetector.AUTH_STYLE_MISSING,
+        AuthStyleDetector.AUTH_HEADER_PARAM_FORBIDDEN,
+        AuthStyleDetector.AUTH_EXPLICIT_MISSING_HEADER,
         ForegroundServiceStarterDetector.FOREGROUND_SERVICE_STARTER_REQUIRED,
+        // UI unification — raw button/switch/checkbox widgets only inside :base
+        DifftWidgetDetector.ISSUE,
+        // UI unification — text metrics come from DifftTheme.typography (issue #1232)
+        DifftTypeScaleDetector.ISSUE,
+        // Design-system alignment — colours and corner radii come from DifftTheme tokens
+        DifftColorTokenDetector.ISSUE,
+        DifftRadiusDetector.ISSUE,
     )
 
     override val api: Int = CURRENT_API

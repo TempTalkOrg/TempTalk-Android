@@ -33,4 +33,10 @@ internal class InAppScheduler(
             }
         }
     }
+
+    /**
+     * No-op: these timers only wake a process that is already running, so leaving one pending
+     * costs nothing to cancel for.
+     */
+    override fun cancelAllExcept(keep: Set<Int>) = Unit
 }

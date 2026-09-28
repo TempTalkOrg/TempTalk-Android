@@ -1,5 +1,7 @@
 package com.difft.android.network.signal
 
+import com.difft.android.network.auth.Auth
+import com.difft.android.network.auth.AuthStyle
 import com.difft.android.websocket.internal.push.NewOutgoingPushMessage
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -7,6 +9,7 @@ import retrofit2.http.Body
 import retrofit2.http.PUT
 import retrofit2.http.Path
 
+@Auth(AuthStyle.BASIC)
 interface MessageApiService {
 
     /** PUT /v4/messages/{recipientId} */

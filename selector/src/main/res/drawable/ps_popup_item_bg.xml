@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rows and buttons on the selector's bg.popup dialogs. An explicit state list rather than
+     ?attr/selectableItemBackground: RemindDialog runs under the platform android:Theme.Dialog,
+     where that attribute resolves to the legacy orange highlight. bg3 also marks the current
+     album row (PictureAlbumAdapter sets isSelected). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/bg3" android:state_pressed="true" />
+    <item android:drawable="@color/bg3" android:state_selected="true" />
+    <item android:drawable="@android:color/transparent" />
+</selector>

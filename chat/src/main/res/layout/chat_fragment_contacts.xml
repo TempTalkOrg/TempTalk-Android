@@ -5,18 +5,31 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Dual-pane only (self-hides on phones): collapses / expands the navigation rail. -->
+    <com.difft.android.base.widget.DualPaneRailToggleView
+        android:id="@+id/rail_toggle"
+        android:layout_width="44dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="6dp"
+        android:contentDescription="@string/dual_pane_rail_collapse_hint"
+        android:padding="10dp"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/chat_appcompattextview"
         android:layout_width="wrap_content"
         android:layout_height="52dp"
-        android:layout_marginStart="16dp"
+        android:layout_marginStart="4dp"
         android:gravity="center_vertical"
         android:text="@string/chat_contacts"
         android:textColor="@color/t.primary"
         android:textSize="20sp"
         android:textStyle="bold"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintStart_toEndOf="@id/rail_toggle"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_goneMarginStart="16dp" />
 
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/ib_add_contact"

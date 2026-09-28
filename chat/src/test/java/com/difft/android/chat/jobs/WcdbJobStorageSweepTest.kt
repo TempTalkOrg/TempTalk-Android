@@ -124,6 +124,28 @@ class WcdbJobStorageSweepTest {
         //          `roomIdsWithStaleSendingOutgoing narrows to real outgoing messages`.
     }
 
+    // #1265 — the startup reconcile that runs right after the sweep, from the same
+    // StartupCleanup.sweepStaleSendingMessages(app) task.
+    @Test
+    fun reconcile_clears_rooms_flagged_only_by_rows_the_aggregate_no_longer_counts() {
+        // Expected behavior:
+        //   Setup: room A flagged FAILED whose only failed row carries screenShotJson (a
+        //          screenshot notice persisted before PushScreenShotSendJob existed); room B
+        //          flagged FAILED with a genuine failed TEXT row; room C stored as NONE.
+        //   storage.reconcileFailedRoomTags() → returns 2 (the flagged rooms it visited).
+        //   Post-state: room A reads NONE, room B stays FAILED, room C untouched.
+        //   Scope: roomIdsWithNonNoneSendStatus() lists ALL flagged rooms, not just screenshot
+        //          ones, so a flag stale for any other reason heals on the same pass.
+        //   Race safety: each clear is clearRoomSendStatusIfNoFailure, whose UPDATE re-reads the
+        //          message table, so a send that fails concurrently is never wiped — the same
+        //          guarded-UPDATE argument as the sweep's sending-status cleanup.
+        //   Failure path: WCDB exception → L.e logged, returns 0 (not -1, not throw); startup
+        //          continues and the rooms heal on their next message change instead.
+        //   Executable form: RoomSendStatusQueriesTest
+        //          `flagged-room listing plus guarded clears heal a room flagged only by a
+        //          screenshot row`.
+    }
+
     @Test
     fun sweep_run_path_clears_stale_sendingStatus_flags_globally() {
         // Expected behavior:

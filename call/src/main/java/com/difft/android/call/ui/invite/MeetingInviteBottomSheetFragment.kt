@@ -86,12 +86,8 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
     }
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
-        // 覆盖默认容器背景色，并确保隐藏拖拽条
+        // 覆盖默认容器背景色；拖拽条保留（与消息转发弹窗一致）
         requireView().setBackgroundResource(R.drawable.bg_meeting_invite_bottom_sheet)
-        requireView().findViewById<View>(com.difft.android.base.R.id.drag_handle)?.apply {
-            setBackgroundColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bgpage_primary))
-            visibility = View.GONE
-        }
 
         // 获取 InviteCallHandler - 这里需要通过参数传递或从 Manager 获取
         // 暂时先通过回调设置

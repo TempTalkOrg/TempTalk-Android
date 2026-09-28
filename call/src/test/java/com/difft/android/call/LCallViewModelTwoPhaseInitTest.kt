@@ -219,6 +219,7 @@ class LCallViewModelTwoPhaseInitTest {
         userManager = mockk(relaxed = true),
         proxyConfigProvider = mockk(relaxed = true),
         urlManager = mockk(relaxed = true),
+        authTokenProvider = mockk(relaxed = true),
     )
 
     // ---------------------------------------------------------------------------------

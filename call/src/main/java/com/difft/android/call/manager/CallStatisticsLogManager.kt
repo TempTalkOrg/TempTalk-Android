@@ -110,21 +110,21 @@ class CallStatisticsLogManager @Inject constructor(
             ArrayList(queue).also { queue.clear() }
         }
         appScope.launch(Dispatchers.IO) {
-            val token = (globalServices.userManager.getUserData()?.microToken ?: "")
-            if (token.isNullOrEmpty()) {
+            // Login-state gate: with no persisted session token there is nothing to report.
+            if (globalServices.userManager.getUserData()?.microToken.isNullOrEmpty()) {
                 L.e { "[Call] CallStatisticsLogManager flush skipped: no token" }
                 return@launch
             }
             for ((index, payload) in batch.withIndex()) {
                 if (index > 0) delay(SEND_INTERVAL_MS)
-                sendSingle(token, payload)
+                sendSingle(payload)
             }
         }
     }
 
-    private suspend fun sendSingle(token: String, payload: LogPayLoad) {
+    private suspend fun sendSingle(payload: LogPayLoad) {
         try {
-            val response = callService.statisticsLog(token, StatisticsLogRequestBody(payload))
+            val response = callService.statisticsLog(StatisticsLogRequestBody(payload))
             if (response.status == 0) {
                 L.i { "[Call] CallStatisticsLogManager sent event=${payload.event}" }
             } else {

@@ -50,11 +50,18 @@ class RtmMessageHandler(
     }
 
     /**
-     * Toggles the mute state for a remote participant in the call.
+     * Toggles the mute state for a remote participant in the call. [onComplete] is invoked exactly
+     * once: on Main once a sent request completes, or synchronously on the caller's thread when
+     * the request cannot be sent at all (local participant, no identity) — that case reports false
+     * instead of dropping silently.
      */
-    fun toggleMute(target: Participant) {
-        if (target is LocalParticipant) return
-        val identities = target.identity?.let { listOf(it) } ?: return
+    fun toggleMute(target: Participant, onComplete: (Boolean) -> Unit) {
+        val identities = target.identity?.takeIf { target !is LocalParticipant }?.let { listOf(it) }
+        if (identities == null) {
+            L.w { "[Call] toggleMute skipped local=${target is LocalParticipant} hasIdentity=${target.identity != null}" }
+            onComplete(false)
+            return
+        }
         val timestamp = System.currentTimeMillis()
         val msg = RtmMessage(
             topic = RTM_MESSAGE_TOPIC_MUTE,
@@ -62,7 +69,7 @@ class RtmMessageHandler(
             sendTimestamp = timestamp
         )
         val payload = json.encodeToString(RtmMessage.serializer(), msg)
-        send(topic = RTM_MESSAGE_TOPIC_MUTE, payload = payload, timestamp = timestamp, encrypt = true, onComplete = {}, identities = identities)
+        send(topic = RTM_MESSAGE_TOPIC_MUTE, payload = payload, timestamp = timestamp, encrypt = true, onComplete = onComplete, identities = identities)
     }
 
     /**

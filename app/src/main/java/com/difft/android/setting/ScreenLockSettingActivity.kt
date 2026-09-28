@@ -18,9 +18,7 @@ import com.difft.android.login.BindAccountActivity
 import com.difft.android.login.ScreenLockActivity
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import util.TimeUtils
 import javax.inject.Inject
-import kotlin.time.Duration.Companion.seconds
 
 @AndroidEntryPoint
 class ScreenLockSettingActivity : BaseActivity() {
@@ -59,7 +57,7 @@ class ScreenLockSettingActivity : BaseActivity() {
                 LOCK_TYPE_PASSCODE -> SetPasscodeActivity.startActivity(this)
             }
         }
-        // 绑定失败或取消时不需要额外操作，因为开关状态已经在点击时重置过了
+        // Nothing to undo on failure or cancel: in controlled mode the switch never left the truth.
         pendingLockType = null
     }
 
@@ -94,6 +92,8 @@ class ScreenLockSettingActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Back from a verification / setup screen: the toggles accept input again.
+        clearLockToggleGuards()
         updateScreenLockView()
         checkAndShowBindingPrompt()
     }
@@ -101,31 +101,16 @@ class ScreenLockSettingActivity : BaseActivity() {
     private fun initView() {
         mBinding.ibBack.setOnClickListener { finish() }
 
-        // Pattern unlock switch - 使用点击监听器，阻止自动状态切换
-        mBinding.switchPattern.setOnClickListener { view ->
-            val userData = userManager.getUserData()
-            val currentlyEnabled = !userData?.pattern.isNullOrEmpty()
-            val targetState = !currentlyEnabled
-
-            // 阻止开关自动切换状态
-            mBinding.switchPattern.isChecked = currentlyEnabled
-
-            handleLockToggle(LOCK_TYPE_PATTERN, targetState)
+        // Controlled: the switch stays put until the lock is really set up or removed.
+        mBinding.switchPattern.setOnToggleRequestListener { _, requested ->
+            handleLockToggle(LOCK_TYPE_PATTERN, requested)
         }
 
-        // Passcode unlock switch - 使用点击监听器，阻止自动状态切换
-        mBinding.switchPasscode.setOnClickListener { view ->
-            val userData = userManager.getUserData()
-            val currentlyEnabled = !userData?.passcode.isNullOrEmpty()
-            val targetState = !currentlyEnabled
-
-            // 阻止开关自动切换状态
-            mBinding.switchPasscode.isChecked = currentlyEnabled
-
-            handleLockToggle(LOCK_TYPE_PASSCODE, targetState)
+        mBinding.switchPasscode.setOnToggleRequestListener { _, requested ->
+            handleLockToggle(LOCK_TYPE_PASSCODE, requested)
         }
 
-        // Pattern show path switch
+        // Local preference: takes effect immediately, so the state may flip with the click.
         mBinding.switchPatternShowPath.setOnCheckedChangeListener { _, isChecked ->
             userManager.update {
                 this.patternShowPath = isChecked
@@ -147,13 +132,7 @@ class ScreenLockSettingActivity : BaseActivity() {
             mBinding.switchPasscode.isChecked = !userData.passcode.isNullOrEmpty()
 
             // Update pattern show path switch
-            mBinding.switchPatternShowPath.setOnCheckedChangeListener(null)
             mBinding.switchPatternShowPath.isChecked = userData.patternShowPath
-            mBinding.switchPatternShowPath.setOnCheckedChangeListener { _, isChecked ->
-                userManager.update {
-                    this.patternShowPath = isChecked
-                }
-            }
 
             // Show/hide pattern show path option based on pattern lock status
             val patternEnabled = !userData.pattern.isNullOrEmpty()
@@ -163,10 +142,7 @@ class ScreenLockSettingActivity : BaseActivity() {
             val anyLockEnabled = !userData.passcode.isNullOrEmpty() || !userData.pattern.isNullOrEmpty()
             if (anyLockEnabled) {
                 mBinding.clTimeout.visibility = View.VISIBLE
-                mBinding.tvTimeout.text = if (userData.passcodeTimeout == 0)
-                    getString(R.string.settings_screen_lock_timeout_instant)
-                else
-                    TimeUtils.millis2FitTimeSpan(userData.passcodeTimeout.seconds.inWholeMilliseconds, 3, false)
+                mBinding.tvTimeout.text = passcodeTimeoutLabel(this, userData.passcodeTimeout)
             } else {
                 mBinding.clTimeout.visibility = View.GONE
             }
@@ -210,18 +186,15 @@ class ScreenLockSettingActivity : BaseActivity() {
         if (targetState) {
             // 要开启锁定，先检查是否已有其他锁定方式
             val userData = userManager.getUserData()
-            val hasAnyScreenLock = userData?.let { 
-                !it.passcode.isNullOrEmpty() || !it.pattern.isNullOrEmpty() 
+            val hasAnyScreenLock = userData?.let {
+                !it.passcode.isNullOrEmpty() || !it.pattern.isNullOrEmpty()
             } ?: false
-            
+
             if (hasAnyScreenLock) {
                 // 已设置其他锁定方式，需要先验证身份
                 pendingLockType = lockType
                 pendingAction = ACTION_ENABLE
-                val intent = Intent(this, ScreenLockActivity::class.java).apply {
-                    putExtra(ScreenLockActivity.EXTRA_VERIFICATION_MODE, true) // 标记为验证模式
-                }
-                screenLockVerificationLauncher.launch(intent)
+                launchVerification(lockType)
             } else {
                 // 没有设置任何锁定，直接执行开启流程
                 proceedWithEnableLock(lockType)
@@ -230,29 +203,49 @@ class ScreenLockSettingActivity : BaseActivity() {
             // 要关闭锁定，需要先验证身份
             pendingLockType = lockType
             pendingAction = ACTION_DELETE
-            val intent = Intent(this, ScreenLockActivity::class.java).apply {
-                putExtra(ScreenLockActivity.EXTRA_VERIFICATION_MODE, true) // 标记为验证模式
-            }
-            screenLockVerificationLauncher.launch(intent)
+            launchVerification(lockType)
         }
     }
-    
+
     /**
      * 继续执行开启锁定的流程
      * @param lockType 锁定类型
      */
     private fun proceedWithEnableLock(lockType: String) {
         if (needsAccountBinding()) {
-            // 需要先绑定账号
+            // Account binding first. No in-flight guard here: the bottom sheet is modal, and a
+            // guard set on this path would stay set if the sheet is cancelled (no onResume).
             pendingLockType = lockType
             showBindingChoiceBottomDialog()
         } else {
-            // 已绑定账号，直接进入设置页面
+            // Account already bound: straight to the setup screen. The guard is what stops a second
+            // tap on the direct path. Reached from the verification result instead, the onResume
+            // that follows clears it again just before the setup screen covers this one — a one to
+            // two frame window, accepted.
+            lockSwitch(lockType).toggleRequestInFlight = true
             when (lockType) {
                 LOCK_TYPE_PATTERN -> SetPatternActivity.startActivity(this)
                 LOCK_TYPE_PASSCODE -> SetPasscodeActivity.startActivity(this)
             }
         }
+    }
+
+    private fun launchVerification(lockType: String) {
+        // Guard the toggle so a second tap cannot start a second verification screen. onResume is
+        // the single release point: coming back from any of these screens always passes through it.
+        lockSwitch(lockType).toggleRequestInFlight = true
+        val intent = Intent(this, ScreenLockActivity::class.java).apply {
+            putExtra(ScreenLockActivity.EXTRA_VERIFICATION_MODE, true) // 标记为验证模式
+        }
+        screenLockVerificationLauncher.launch(intent)
+    }
+
+    private fun lockSwitch(lockType: String) =
+        if (lockType == LOCK_TYPE_PATTERN) mBinding.switchPattern else mBinding.switchPasscode
+
+    private fun clearLockToggleGuards() {
+        mBinding.switchPattern.toggleRequestInFlight = false
+        mBinding.switchPasscode.toggleRequestInFlight = false
     }
 
     /**

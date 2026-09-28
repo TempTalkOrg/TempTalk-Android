@@ -8,15 +8,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
 /**
- * Bottom sheet shown when the user taps the avatar in [ContactSetRemarkActivity]
+ * Bottom sheet shown when the user taps the avatar while editing the remark on the contact card
  * AND there is already a remark avatar set. Three rows: choose new photo,
  * restore (clear) the remark avatar, cancel. The first two are blue (t.info)
  * because they're affirmative actions; cancel is the default text color.
@@ -37,17 +36,17 @@ fun RemarkAvatarActionSheet(
     ) {
         ActionSheetRow(
             text = stringResource(R.string.contact_remark_avatar_choose_photos),
-            color = colorResource(com.difft.android.base.R.color.t_info),
+            color = DifftTheme.colors.textInfo,
             onClick = onChoosePhotos,
         )
         ActionSheetRow(
             text = stringResource(R.string.contact_remark_avatar_restore),
-            color = colorResource(com.difft.android.base.R.color.t_info),
+            color = DifftTheme.colors.textInfo,
             onClick = onRestore,
         )
         ActionSheetRow(
             text = stringResource(R.string.group_leave_cancel),
-            color = colorResource(com.difft.android.base.R.color.t_primary),
+            color = DifftTheme.colors.textPrimary,
             onClick = onCancel,
         )
     }
@@ -62,7 +61,7 @@ private fun ActionSheetRow(
     Text(
         text = text,
         color = color,
-        fontSize = 16.sp,
+        style = DifftTheme.typography.p2,
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()

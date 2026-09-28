@@ -9,6 +9,7 @@ import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.chat.message.TextChatMessage
 import com.tencent.wcdb.base.Value
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,13 +27,16 @@ object AudioAmplitudesHelper {
     val amplitudeExtractionComplete: SharedFlow<TextChatMessage> = _amplitudeExtractionComplete
 
     fun extractAmplitudesFromAacFile(filePath: String, message: TextChatMessage) {
-        val attachmentId = message.attachment?.id ?: return
-        if (processingMessages.containsKey(attachmentId)) {
-            L.d { "[AudioAmplitudesHelper] Message $attachmentId is already being processed" }
+        // Keyed by the copy's own local id, never the server-side attachment id: that id is shared by
+        // every copy of the same file, so it collapsed independent copies into one extraction and made
+        // the row update below land on whichever sibling the condition happened to match.
+        val localId = message.attachment?.localId?.takeIf { it.isNotEmpty() } ?: return
+        if (processingMessages.containsKey(localId)) {
+            L.d { "[AudioAmplitudesHelper] Attachment $localId is already being processed" }
             return
         }
 
-        val job = appScope.launch(Dispatchers.IO) {
+        val job = appScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             try {
                 AudioMessageManager.decryptIfNeeded(filePath, message)
 
@@ -123,10 +127,25 @@ object AudioAmplitudesHelper {
                     amplitude.toInt().toFloat()
                 }
 
+                // A pre-backfill row still has a NULL localId column while the domain object carries
+                // a synthesized transient id, so localId.eq alone matches nothing for it and the
+                // extraction would silently re-run on every bind. Those rows are rescued through the
+                // legacy id+message locator, scoped to un-backfilled rows only — the update can never
+                // cross into a sibling copy that already owns a persisted localId.
+                val serverId = message.attachment?.id
+                val rowCondition = if (serverId.isNullOrEmpty()) {
+                    DBAttachmentModel.localId.eq(localId)
+                } else {
+                    DBAttachmentModel.localId.eq(localId).or(
+                        DBAttachmentModel.localId.isNull().or(DBAttachmentModel.localId.eq(""))
+                            .and(DBAttachmentModel.id.eq(serverId))
+                            .and(DBAttachmentModel.messageId.eq(message.id))
+                    )
+                }
                 wcdb.attachment.updateRow(
                     arrayOf(Value(duration / 1000), Value(globalServices.gson.toJson(integerAmplitudes))),
                     arrayOf(DBAttachmentModel.totalTime, DBAttachmentModel.amplitudes),
-                    DBAttachmentModel.id.eq(attachmentId)
+                    rowCondition
                 )
 
                 AudioMessageManager.deleteDecryptedFile(filePath)
@@ -137,15 +156,28 @@ object AudioAmplitudesHelper {
                 // Emit completion event
                 _amplitudeExtractionComplete.emit(message)
 
-                L.i { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile success: ${message.id} ${integerAmplitudes}  ${duration / 1000} ${attachmentId}" }
+                L.i { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile success: ${message.id} ${integerAmplitudes}  ${duration / 1000} ${localId}" }
             } catch (e: Exception) {
                 L.e(e) { "[AudioAmplitudesHelper] extractAmplitudesFromAacFile error:" }
             } finally {
-                processingMessages.remove(attachmentId)
+                processingMessages.remove(localId)
             }
         }
 
-        processingMessages[attachmentId] = job
+        startIfUnclaimed(localId, job)
+    }
+
+    /**
+     * Claims the per-attachment slot before the job runs. One bubble is bound several times within
+     * milliseconds, and without this every bind starts its own extraction, so two of them decrypting
+     * to the same plaintext path truncate each other's file and all of them fail.
+     */
+    private fun startIfUnclaimed(localId: String, job: Job) {
+        if (processingMessages.putIfAbsent(localId, job) != null) {
+            job.cancel()
+            return
+        }
+        job.start()
     }
 
     fun release() {

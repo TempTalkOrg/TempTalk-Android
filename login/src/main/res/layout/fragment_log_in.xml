@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg1"
     tools:context=".ui.LoginFragment"
     tools:ignore="Overdraw">
 
@@ -91,31 +90,20 @@
                         app:layout_constraintTop_toTopOf="@+id/tv_phone_code" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <com.difft.android.base.widget.RuleEditText
+                <com.difft.android.base.widget.DifftClearableInputView
                     android:id="@+id/account"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
-                    android:background="@android:color/transparent"
-                    android:drawableEnd="@drawable/account_input_clear_icon"
-                    android:gravity="start|center_vertical"
-                    android:hint="@string/login_email_or_invite_code_hint"
-                    android:maxLines="1"
-                    android:singleLine="true"
-                    android:textAlignment="viewStart"
-                    android:textColor="@color/t.primary"
-                    android:textColorHint="@color/t.disable"
                     android:textSize="14sp"
-                    app:clearable="true"
+                    app:dsi_containerColor="@android:color/transparent"
+                    app:dsi_hint="@string/login_email_or_phone_hint"
+                    app:dsi_imeAction="done"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toEndOf="@+id/cl_phone"
                     app:layout_constraintTop_toTopOf="parent"
-                    app:layout_goneMarginStart="0dp"
-                    app:rule="not_empty">
-
-                    <!--                    <requestFocus />-->
-                </com.difft.android.base.widget.RuleEditText>
+                    app:layout_goneMarginStart="0dp" />
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <TextView
@@ -130,47 +118,20 @@
                 android:textColor="@color/login_red_one"
                 android:textSize="@dimen/login_hint_size"
                 android:visibility="gone"
-                tools:text="@string/login_invite_code_invalid"
+                tools:text="@string/login_error_invalid_account"
                 tools:visibility="visible" />
         </LinearLayout>
 
-        <RelativeLayout
-            android:id="@+id/handleZone"
+        <com.difft.android.base.widget.DifftButtonView
+            android:id="@+id/btn_next"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
-            android:background="@drawable/login_handle_zone_bg"
-            android:gravity="center"
+            android:text="@string/login_in"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/inputZone">
-
-            <Button
-                android:id="@+id/nextText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@android:color/transparent"
-                android:clickable="false"
-                android:gravity="center"
-                android:text="@string/login_in"
-                android:textAllCaps="false"
-                android:textColor="@color/white"
-                android:textSize="@dimen/login_next_size" />
-
-            <com.airbnb.lottie.LottieAnimationView
-                android:id="@+id/animationView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@android:color/transparent"
-                android:gravity="center"
-                android:visibility="gone"
-                app:lottie_autoPlay="true"
-                app:lottie_fileName="login_loading_anim.json"
-                app:lottie_loop="true"
-                tools:visibility="visible" />
-
-        </RelativeLayout>
+            app:layout_constraintTop_toBottomOf="@id/inputZone" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/sign_up"
@@ -179,7 +140,7 @@
             android:layout_marginTop="20dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/handleZone">
+            app:layout_constraintTop_toBottomOf="@+id/btn_next">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_new_user"

@@ -71,7 +71,7 @@ class MessageActionPopupWindowBackgroundTest {
                 isMine = true
                 message = "hello"
             }
-            val builder = MessageActionConfigBuilder(globalConfigsManager)
+            val builder = MessageActionConfigBuilder(globalConfigsManager, translateSupported = true)
             val config = builder.build(
                 message = message,
                 mostUseEmojis = listOf("👍"),

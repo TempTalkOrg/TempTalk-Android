@@ -14,7 +14,6 @@ data class ScreenShareFloatingSpeakerUiState(
     val isLocal: Boolean,
     val selectionSource: FloatingSpeakerSelectionSource,
     val displayName: String?,
-    val avatarModel: Any?,
     val cameraEnabled: Boolean,
     val micMuted: Boolean,
     val isSpeaking: Boolean,

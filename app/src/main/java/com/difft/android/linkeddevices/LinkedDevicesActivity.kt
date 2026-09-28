@@ -3,13 +3,16 @@ package com.difft.android.linkeddevices
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import androidx.fragment.app.commit
+import com.difft.android.R
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.ui.theme.DifftTheme
 import dagger.hilt.android.AndroidEntryPoint
 
-/** Phone fallback host for the Linked Devices screen. Tablet uses [LinkedDevicesFragment]. */
+/**
+ * Phone host for the Linked Devices screen: a fragment container, so [BaseActivity] applies the
+ * system-bar insets to the XML root exactly as it does for the tablet host. [LinkedDevicesFragment]
+ * owns the screen on both form factors.
+ */
 @AndroidEntryPoint
 class LinkedDevicesActivity : BaseActivity() {
 
@@ -18,24 +21,14 @@ class LinkedDevicesActivity : BaseActivity() {
             context.startActivity(Intent(context, LinkedDevicesActivity::class.java))
     }
 
-    private val viewModel: LinkedDevicesViewModel by viewModels()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            DifftTheme {
-                LinkedDevicesScreen(viewModel, showBackButton = true, onBack = { finish() })
+        setContentView(R.layout.activity_fragment_container)
+
+        if (savedInstanceState == null) {
+            supportFragmentManager.commit {
+                replace(R.id.fragment_container, LinkedDevicesFragment.newInstance())
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        viewModel.refresh()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        viewModel.stopExpecting() // stop the expect-more poll timer while off-screen
     }
 }

@@ -5,7 +5,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.fragment.app.Fragment
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.utils.DualPaneUtils
 import com.difft.android.me.FakeDualPaneHostActivity
 import com.difft.android.network.signal.DeviceRepository
@@ -39,10 +38,9 @@ class LinkedDevicesBackButtonTest {
     val composeTestRule = createComposeRule()
 
     private val repo: DeviceRepository = mockk()
-    private val logoutManager: LogoutManager = mockk(relaxed = true)
     private val countStore: LinkedDevicesCountStore = mockk(relaxed = true)
 
-    private fun buildViewModel() = LinkedDevicesViewModel(repo, logoutManager, countStore)
+    private fun buildViewModel() = LinkedDevicesViewModel(repo, countStore)
 
     @Test
     fun `I9 dual-pane hides the back button`() {

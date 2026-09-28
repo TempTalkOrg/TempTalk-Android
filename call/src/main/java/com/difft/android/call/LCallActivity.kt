@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
+import android.view.Display
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
@@ -22,6 +23,8 @@ import com.difft.android.base.user.CountdownTimer
 import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.utils.OrientationDisplayWatcher
+import com.difft.android.base.utils.OrientationPolicy
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.permission.CallMediaPermission
 import com.difft.android.call.handler.CallActionHandler
@@ -38,13 +41,13 @@ import com.difft.android.call.manager.CallServiceManager
 import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.PictureInPictureManager
-import com.difft.android.call.manager.ProximitySensorManager
+import com.difft.android.call.manager.ProximityScreenOffController
 import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.ScreenDeviceUtil
-import com.difft.android.call.util.ViewUtil
+import com.difft.android.base.utils.hideNavigationBar
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
@@ -120,7 +123,7 @@ class LCallActivity : AppCompatActivity() {
     internal val muteOtherEnabled: Boolean by lazy { callConfig.muteOtherEnabled }
 
     internal var pictureInPictureManager: PictureInPictureManager? = null
-    internal var proximitySensorManager: ProximitySensorManager? = null
+    internal var proximityScreenOffController: ProximityScreenOffController? = null
     internal var callErrorHandler: CallErrorHandler? = null
     internal var callExitHandler: CallExitHandler? = null
     internal var callActionHandler: CallActionHandler? = null
@@ -234,6 +237,47 @@ class LCallActivity : AppCompatActivity() {
         configureWindow()
     }
 
+    // The orientation value the policy last wrote for this activity (see BaseActivity's
+    // twin field): re-applies happen only while requestedOrientation still equals it, so
+    // ScreenSharingView's deliberate landscape lock is never clobbered mid-share.
+    internal var policyAppliedOrientation: Int? = null
+
+    // Same display-level replay BaseActivity has: a fold the OS answers with a letterbox delivers
+    // no configuration change at all, and a call is the screen most likely to be open across a fold.
+    private val orientationDisplayWatcher = OrientationDisplayWatcher(this) { display ->
+        reapplyOrientationPolicyIfOwned(display)
+    }
+
+    /**
+     * Re-apply the display-level orientation policy when the configuration changes: this
+     * activity's manifest configChanges swallow every fold key, so a mid-call unfold never
+     * recreates it and the folded posture's portrait lock would otherwise stick on the inner
+     * display. Not a BaseActivity, so it cannot inherit that re-apply. Skipped while pinned
+     * (PiP) and while another owner (screen-share landscape lock) holds the orientation.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isInPictureInPictureMode) return
+        reapplyOrientationPolicyIfOwned()
+    }
+
+    private fun reapplyOrientationPolicyIfOwned(display: Display? = null) {
+        val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
+        if (owned) {
+            policyAppliedOrientation = OrientationPolicy.applyTo(this, display)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        orientationDisplayWatcher.start()
+    }
+
+    override fun onStop() {
+        orientationDisplayWatcher.stop()
+        super.onStop()
+    }
+
     /**
      * Activity teardown.
      *
@@ -247,7 +291,7 @@ class LCallActivity : AppCompatActivity() {
         callCleanupManager?.cleanup(
             lifecycleObserver = callLifecycleObserver,
             dialogManager = callDialogManager,
-            proximitySensorManager = proximitySensorManager,
+            proximityScreenOffController = proximityScreenOffController,
             pictureInPictureManager = pictureInPictureManager,
             callActivityBroadcastReceiver = callActivityBroadcastReceiver,
             screenUnlockBroadcastReceiver = screenUnlockBroadcastReceiver,
@@ -264,7 +308,7 @@ class LCallActivity : AppCompatActivity() {
 
         callLifecycleObserver = null
         callDialogManager = null
-        proximitySensorManager = null
+        proximityScreenOffController = null
         pictureInPictureManager = null
         callActivityBroadcastReceiver = null
         screenUnlockBroadcastReceiver = null
@@ -279,18 +323,15 @@ class LCallActivity : AppCompatActivity() {
     /**
      * Invoked when the user leaves the Activity (Home key / task switch).
      *
-     * If no permission dialog is currently visible, attempt to enter PIP
-     * mode or surface the PIP permission prompt.
+     * Delegates to [enterPipOnUserLeaveHint], which decides whether this hint
+     * reflects an actual intent to leave before entering PIP mode or surfacing
+     * the PIP permission prompt.
      */
     @SuppressLint("MissingSuperCall")
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         L.i { "[Call] LCallActivity onUserLeaveHint" }
-        if (viewModel.isRequestingPermission()) {
-            L.i { "[Call] LCallActivity onUserLeaveHint ignored (permission dialog showing)" }
-            return
-        }
-        showPipPermissionToastOrEnterPipMode("onUserLeaveHint")
+        enterPipOnUserLeaveHint()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -314,7 +355,6 @@ class LCallActivity : AppCompatActivity() {
         if (!onGoingCallStateManager.isInCallEnding()) {
             callServiceManager?.updateOngoingCallNotification(true)
         }
-        proximitySensorManager?.unregister()
         screenshotController?.stopListening()
     }
 
@@ -324,7 +364,6 @@ class LCallActivity : AppCompatActivity() {
         if (onGoingCallStateManager.isInCalling()) {
             callServiceManager?.updateForegroundServiceType()
         }
-        proximitySensorManager?.register()
 
         onGoingCallStateManager.setIsInForeground(true)
         callServiceManager?.updateOngoingCallNotification(false)
@@ -336,7 +375,7 @@ class LCallActivity : AppCompatActivity() {
         // Never auto-enables anything — a fresh grant still waits for the next tap.
         viewModel.mediaPermissions.refresh(this)
         updateScreenshotListeningState()
-        ViewUtil.hideNavigationBar(window)
+        window.hideNavigationBar()
     }
 
     override fun onPictureInPictureModeChanged(
@@ -349,6 +388,12 @@ class LCallActivity : AppCompatActivity() {
             isScreenLocked = ScreenDeviceUtil.isScreenLocked(this)
         )
         updateScreenshotListeningState()
+        // Backstop for the PiP skips in onConfigurationChanged and the display watcher: a fold
+        // while pinned is ignored on purpose, so re-apply once the window is un-pinned (mirrors
+        // BaseActivity).
+        if (!isInPictureInPictureMode) {
+            reapplyOrientationPolicyIfOwned()
+        }
     }
 
     /**

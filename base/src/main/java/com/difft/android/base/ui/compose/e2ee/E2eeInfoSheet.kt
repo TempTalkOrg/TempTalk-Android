@@ -1,16 +1,13 @@
 package com.difft.android.base.ui.compose.e2ee
 
 import android.app.Activity
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.unit.dp
+import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ComposeActivityMount
 import kotlinx.coroutines.launch
@@ -42,18 +39,9 @@ object E2eeInfoSheet {
                             ComposeActivityMount.unmount(activity, composeView)
                         }
                     }
-                    ModalBottomSheet(
+                    DifftModalBottomSheet(
                         onDismissRequest = dismiss,
                         sheetState = sheetState,
-                        containerColor = DifftTheme.colors.backgroundBottomSheet,
-                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                        dragHandle = {
-                            BottomSheetDefaults.DragHandle(
-                                width = 35.dp,
-                                height = 5.dp,
-                                color = DifftTheme.colors.textDisabled,
-                            )
-                        },
                     ) {
                         E2eeInfoSheetContent(learnMoreUrl = learnMoreUrl, onDismissRequest = dismiss)
                     }
@@ -96,18 +84,9 @@ fun E2eeInfoSheetDialog(
         if (showSheet) sheetState.show() else sheetState.hide()
     }
     if (showSheet || sheetState.isVisible) {
-        ModalBottomSheet(
+        DifftModalBottomSheet(
             onDismissRequest = dismiss,
             sheetState = sheetState,
-            containerColor = DifftTheme.colors.backgroundBottomSheet,
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-            dragHandle = {
-                BottomSheetDefaults.DragHandle(
-                    width = 35.dp,
-                    height = 5.dp,
-                    color = DifftTheme.colors.textDisabled,
-                )
-            },
         ) {
             E2eeInfoSheetContent(learnMoreUrl = learnMoreUrl, onDismissRequest = dismiss)
         }

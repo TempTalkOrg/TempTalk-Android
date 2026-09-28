@@ -1,7 +1,5 @@
 package com.difft.android.chat.contacts
 
-import com.difft.android.base.user.UserData
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -69,7 +67,6 @@ class WeakContactReconcilerTest {
     private val dbMessageStore: DBMessageStore = mockk(relaxed = true)
     private val httpService: HttpService = mockk()
     private val contactorCacheManager: ContactorCacheManager = mockk(relaxed = true)
-    private val userManager: UserManager = mockk(relaxed = true)
     private val wcdb: WCDB = mockk(relaxed = true)
     private val gson = Gson()
 
@@ -80,9 +77,6 @@ class WeakContactReconcilerTest {
         mockkObject(ContactorUtil)
         every { ContactorUtil.emitContactsUpdate(any()) } just Runs
 
-        val userData = UserData().apply { microToken = "tok" }
-        every { userManager.getUserData() } returns userData
-
         clearClockAnchor()
 
         reconciler = WeakContactReconciler(
@@ -90,7 +84,6 @@ class WeakContactReconcilerTest {
             dbMessageStore = dbMessageStore,
             httpService = httpService,
             contactorCacheManager = contactorCacheManager,
-            userManager = userManager,
             wcdb = wcdb,
             gson = gson,
         )
@@ -99,7 +92,7 @@ class WeakContactReconcilerTest {
     @After
     fun tearDown() {
         unmockkObject(ContactorUtil)
-        clearMocks(pendingRepo, dbMessageStore, httpService, contactorCacheManager, userManager, wcdb)
+        clearMocks(pendingRepo, dbMessageStore, httpService, contactorCacheManager, wcdb)
         clearClockAnchor()
     }
 
@@ -176,7 +169,7 @@ class WeakContactReconcilerTest {
 
     @Test
     fun `T5 reconcile skips all side effects on fetch failure`() = runTest {
-        coEvery { httpService.fetchDeletedRecords(any()) } returns failResp()
+        coEvery { httpService.fetchDeletedRecords() } returns failResp()
 
         val ok = reconciler.reconcile("test")
 
@@ -192,7 +185,7 @@ class WeakContactReconcilerTest {
 
     @Test
     fun `T5b reconcile skips when fetch throws`() = runTest {
-        coEvery { httpService.fetchDeletedRecords(any()) } throws RuntimeException("offline")
+        coEvery { httpService.fetchDeletedRecords() } throws RuntimeException("offline")
 
         val ok = reconciler.reconcile("test")
 
@@ -209,7 +202,7 @@ class WeakContactReconcilerTest {
     // This path returns at the gate before any WINQ Expression, so it is host-JVM safe (like T5).
     @Test
     fun `T5c reconcile skips all side effects when data is null (200 but undeployed)`() = runTest {
-        coEvery { httpService.fetchDeletedRecords(any()) } returns nullDataResp()
+        coEvery { httpService.fetchDeletedRecords() } returns nullDataResp()
 
         val ok = reconciler.reconcile("test")
 
@@ -236,7 +229,7 @@ class WeakContactReconcilerTest {
             dto("ignored").copy(uid = "  "),  // blank also dropped
             dto("ignored").copy(uid = ""),    // empty also dropped
         )
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(dirty)
+        coEvery { httpService.fetchDeletedRecords() } returns successResp(dirty)
         coEvery { pendingRepo.snapshotBeforeOverwrite() } returns emptySet()
 
         // Must NOT throw (the bug was an NPE in toContactorSnapshot's `it.id = uid`).
@@ -254,7 +247,7 @@ class WeakContactReconcilerTest {
     fun `T5e reconcile skips the dirty record but still processes the valid one`() = runTest {
         // One dirty (null uid) + one valid. The dirty one is filtered; the valid one enters weak.
         val records = listOf(dto("valid"), dto("ignored").copy(uid = null))
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(records)
+        coEvery { httpService.fetchDeletedRecords() } returns successResp(records)
         coEvery { pendingRepo.snapshotBeforeOverwrite() } returns emptySet()
         stubContactorPresence(present = emptySet())
 
@@ -270,7 +263,7 @@ class WeakContactReconcilerTest {
     @Test
     fun `T13 removeNow pessimistic - DELETE fails - no local delete, returns failure`() = runTest {
         val uid = "u-fail"
-        coEvery { httpService.deleteDeletedRecord(uid, any()) } throws RuntimeException("offline")
+        coEvery { httpService.deleteDeletedRecord(uid) } throws RuntimeException("offline")
 
         val result = reconciler.removeNow(uid)
 
@@ -282,7 +275,7 @@ class WeakContactReconcilerTest {
     @Test
     fun `T14 removeNow pessimistic - DELETE succeeds - local removeWeak runs (real removal), returns success`() = runTest {
         val uid = "u-ok"
-        coEvery { httpService.deleteDeletedRecord(uid, any()) } returns
+        coEvery { httpService.deleteDeletedRecord(uid) } returns
             BaseResponse<Any>(ver = 1, status = 0, reason = null, data = null)
 
         val result = reconciler.removeNow(uid)
@@ -340,7 +333,7 @@ class WeakContactReconcilerTest {
         //   b: vanished → dropPlaceholderLocked → drop placeholder ONLY, KEEP the room (no
         //      contactor-presence check; cold-start contactor lag would misjudge a restored friend).
         coEvery { pendingRepo.snapshotBeforeOverwrite() } returns setOf("a", "b")
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(listOf(dto("a"), dto("c")))
+        coEvery { httpService.fetchDeletedRecords() } returns successResp(listOf(dto("a"), dto("c")))
         stubContactorPresence(present = emptySet())
 
         reconciler.reconcile("test")
@@ -366,7 +359,7 @@ class WeakContactReconcilerTest {
         // latest is empty → no backfill loop body and no toContactorSnapshot read → touches NO
         // Expression → runs live (same precedent as T5/T5c).
         coEvery { pendingRepo.snapshotBeforeOverwrite() } returns setOf("x")
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(emptyList())
+        coEvery { httpService.fetchDeletedRecords() } returns successResp(emptyList())
 
         val ok = reconciler.reconcile("test")
 
@@ -384,7 +377,7 @@ class WeakContactReconcilerTest {
         // before = {g}; latest = {g} → "still" branch. Contactor still holds g (notify=25 arrived
         // before the directory action that hard-deletes it — a NORMAL transient state, not a ghost).
         coEvery { pendingRepo.snapshotBeforeOverwrite() } returns setOf("g")
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(listOf(dto("g")))
+        coEvery { httpService.fetchDeletedRecords() } returns successResp(listOf(dto("g")))
         stubContactorPresence(present = setOf("g"))
 
         reconciler.reconcile("test")
@@ -399,7 +392,7 @@ class WeakContactReconcilerTest {
     @Ignore("Reconcile diff reads contactor via WINQ Expression (native lib); instrumentation only.")
     fun `T19b reconcile still-branch is a no-op when contactor absent too`() = runTest {
         coEvery { pendingRepo.snapshotBeforeOverwrite() } returns setOf("g")
-        coEvery { httpService.fetchDeletedRecords(any()) } returns successResp(listOf(dto("g")))
+        coEvery { httpService.fetchDeletedRecords() } returns successResp(listOf(dto("g")))
         stubContactorPresence(present = emptySet())
 
         reconciler.reconcile("test")

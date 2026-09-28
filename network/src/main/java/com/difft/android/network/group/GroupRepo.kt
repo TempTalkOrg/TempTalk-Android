@@ -3,6 +3,8 @@ package com.difft.android.network.group
 import android.content.Context
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.auth.Auth
+import com.difft.android.network.auth.AuthStyle
 import com.difft.android.network.di.ChativeHttpClientModule
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.difft.app.database.models.GroupModel
@@ -15,6 +17,7 @@ import retrofit2.http.PUT
 import retrofit2.http.Path
 import javax.inject.Inject
 
+@Auth(AuthStyle.BASIC)
 interface GroupService {
     @PUT("v1/groups")
     suspend fun createGroup(@Body req: CreateGroupReq): BaseResponse<CreateGroupResp>

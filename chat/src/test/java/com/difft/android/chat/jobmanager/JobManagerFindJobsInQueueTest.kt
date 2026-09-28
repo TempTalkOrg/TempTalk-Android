@@ -58,6 +58,7 @@ class JobManagerFindJobsInQueueTest {
     private val dataSerializer = mockk<Data.Serializer>(relaxed = true)
     private val jobTracker = mockk<JobTracker>(relaxed = true)
     private val scheduler = mockk<Scheduler>(relaxed = true)
+    private val persistentScheduler = mockk<Scheduler>(relaxed = true)
     private val debouncer = mockk<Debouncer>(relaxed = true)
     private val callback = mockk<JobController.Callback>(relaxed = true)
 
@@ -72,7 +73,7 @@ class JobManagerFindJobsInQueueTest {
     fun tearDown() {
         clearMocks(
             jobStorage, jobInstantiator, constraintInstantiator,
-            dataSerializer, jobTracker, scheduler, debouncer, callback
+            dataSerializer, jobTracker, scheduler, persistentScheduler, debouncer, callback
         )
     }
 
@@ -194,7 +195,7 @@ class JobManagerFindJobsInQueueTest {
 
         val controller = JobController(
             application, jobStorage, jobInstantiator, constraintInstantiator,
-            dataSerializer, jobTracker, scheduler, debouncer, callback
+            dataSerializer, jobTracker, scheduler, persistentScheduler, debouncer, callback
         )
 
         val result = controller.findJobsInQueue("QC")
@@ -211,7 +212,7 @@ class JobManagerFindJobsInQueueTest {
 
         val controller = JobController(
             application, jobStorage, jobInstantiator, constraintInstantiator,
-            dataSerializer, jobTracker, scheduler, debouncer, callback
+            dataSerializer, jobTracker, scheduler, persistentScheduler, debouncer, callback
         )
 
         val result = controller.findJobsInQueue("EMPTY")

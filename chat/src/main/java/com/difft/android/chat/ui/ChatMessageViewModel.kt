@@ -29,21 +29,28 @@ import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.data.ChatMessageListUIState
 import com.difft.android.chat.group.ChatUIData
+import com.difft.android.chat.attachment.AttachmentPathResolver
+import com.difft.android.chat.attachment.deepCopyWithNewAttachmentIdentities
+import com.difft.android.chat.attachment.forwardSourceContext
+import com.difft.android.chat.attachment.toForwardCopy
 import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.ConfidentialPlaceholderChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.generateMessageTwo
+import com.difft.android.chat.message.getRelevantAttachment
 import com.difft.android.chat.message.isNotifyStyleMessage
 import com.difft.android.chat.speech2text.SpeechToTextManager
-import com.difft.android.chat.translate.TranslateManager
+import com.difft.android.chat.translate.AutoTranslateCoordinator
+import com.difft.android.chat.translate.AutoTranslateCoordinatorFactory
+import com.difft.android.chat.translate.VisibleReason
+import com.difft.android.chat.translate.applyTranslateOverlay
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.BaseResponse
-import com.google.mlkit.nl.translate.TranslateLanguage
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -58,7 +65,6 @@ import difft.android.messageserialization.model.SpeechToTextData
 import difft.android.messageserialization.model.SpeechToTextStatus
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.TranslateData
-import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.TranslateTargetLanguage
 import difft.android.messageserialization.model.isAttachmentMessage
 import difft.android.messageserialization.unreadmessage.UnreadMessageInfo
@@ -79,6 +85,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -156,7 +163,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     private val dbRoomStore: DBRoomStore,
     private val chatPaginationControllerFactory: ChatPaginationControllerFactory,
     private val callManager: dagger.Lazy<LChatToCallController>,
-    private val translateManager: dagger.Lazy<TranslateManager>,
+    private val autoTranslateCoordinatorFactory: AutoTranslateCoordinatorFactory,
     private val speechToTextManager: dagger.Lazy<SpeechToTextManager>,
     private val pushReadReceiptSendJobFactory: PushReadReceiptSendJobFactory,
     private val activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher,
@@ -368,11 +375,28 @@ class ChatMessageViewModel @AssistedInject constructor(
     @Inject
     lateinit var userManager: UserManager
 
+    /** Auto-translate for this conversation page; torn down with the ViewModel. */
+    private val autoTranslate: AutoTranslateCoordinator =
+        autoTranslateCoordinatorFactory.create(forWhat, viewModelScope)
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Inject
     fun initialize() {
         bindCoroutineScope(viewModelScope)
+        autoTranslate.start()
+
+        // The <=400ms new-message budget hangs on the message source ALONE. Putting it in the
+        // combine below would delay every read-receipt emission by the same amount; mapLatest also
+        // means a newer window supersedes a wait in progress instead of queueing behind it.
+        val behaviorWithTranslateBudget = chatMessagesStateFlow
+            .filterNotNull() // 过滤初始 null 状态
+            .mapLatest { behavior ->
+                autoTranslate.awaitNewIncoming(behavior)
+                behavior
+            }
+
         combine(
-            chatMessagesStateFlow.filterNotNull(), // 过滤初始 null 状态
+            behaviorWithTranslateBudget,
             _readInfoList,
             // Third source is intentionally unused in the lambda below (`_`) — assembleMessagesUIData
             // still reads isNonFriendOneToOne.value internally. This combine addition exists ONLY to
@@ -380,8 +404,9 @@ class ChatMessageViewModel @AssistedInject constructor(
             // window: without it, a friendStatusUpdate/contactsUpdate flip that resolves after the
             // last chatMessagesStateFlow emission would never re-render the header's variant.
             isNonFriendOneToOne,
-        ) { chatMessageListBehavior, readInfoList, _ ->
-            assembleMessagesUIData(chatMessageListBehavior, readInfoList)
+            autoTranslate.overlay,
+        ) { chatMessageListBehavior, readInfoList, _, translateOverlay ->
+            assembleMessagesUIData(chatMessageListBehavior, readInfoList, translateOverlay)
         }
             .distinctUntilChanged()
             .flowOn(Dispatchers.Default)
@@ -545,8 +570,6 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     val confidentialViewReceipt: MutableSharedFlow<ChatMessage> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    val translateEvent: MutableSharedFlow<Pair<String, TranslateData>> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-
     val speechToTextEvent: MutableSharedFlow<Pair<String, SpeechToTextData>> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun sendConfidentialViewReceipt(message: ChatMessage) {
@@ -674,10 +697,6 @@ class ChatMessageViewModel @AssistedInject constructor(
         messageEmojiReaction.tryEmit(emojiEvent)
     }
 
-    private fun updateTranslateStatus(id: String, translateData: TranslateData) {
-        translateEvent.tryEmit(id to translateData)
-    }
-
     private fun updateSpeechToTextStatus(id: String, speechToTextData: SpeechToTextData) {
         speechToTextEvent.tryEmit(id to speechToTextData)
     }
@@ -689,12 +708,20 @@ class ChatMessageViewModel @AssistedInject constructor(
                 return@launch
             }
 
-            data.attachment?.let { attachment ->
-                attachment.id
+            // Forward-aware: a forwarded voice message carries its attachment in the forward tree, and
+            // its file is addressed per copy — resolve both here instead of trusting the persisted
+            // `path` column, which the resolver supersedes.
+            data.getRelevantAttachment()?.let { attachment ->
                 // 检查 key和digest 是否存在
                 if (attachment.key == null || attachment.digest == null) {
-                    L.w { "[speechToTextManager] Attachment key is null or empty for message: ${data.attachment?.id}" }
+                    L.w { "[speechToTextManager] Attachment key is null or empty for message: ${data.id}" }
                     return@launch
+                }
+                // Migrating read, off the main thread: speech-to-text is not a download gate — a
+                // voice file still at its pre-per-copy owner-message address would fail the
+                // conversion with a generic toast and never be rescued.
+                val attachmentPath = withContext(Dispatchers.IO) {
+                    AttachmentPathResolver.materializedFileFor(attachment, data.id)
                 }
 
                 val speechToTextData = data.speechToTextData ?: SpeechToTextData(SpeechToTextStatus.Invisible, null)
@@ -704,6 +731,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                     viewModelScope,
                     context,
                     attachment,
+                    attachmentPath,
                     onSuccess = {
                         if (it.isNotEmpty()) {
                             speechToTextData.convertStatus = SpeechToTextStatus.Show
@@ -744,85 +772,35 @@ class ChatMessageViewModel @AssistedInject constructor(
         }
     }
 
+    /** Long-press "translate": the coordinator owns the placeholder, the result and the write. */
     fun translate(data: TextChatMessage, targetLanguage: TranslateTargetLanguage) {
-        val translateData = data.translateData ?: TranslateData(TranslateStatus.Invisible, null, null)
-//        if (targetLanguage == TranslateTargetLanguage.EN && !TextUtils.isEmpty(translateData.translatedContentEN)) {
-//            translateData.translateStatus = TranslateStatus.ShowEN
-//            updateTranslateStatus(data.id, translateData)
-//
-//            updateTranslateDataOfDB(data, translateData)
-//
-//            return
-//        } else if (targetLanguage == TranslateTargetLanguage.ZH && !TextUtils.isEmpty(translateData.translatedContentCN)) {
-//            translateData.translateStatus = TranslateStatus.ShowCN
-//            updateTranslateStatus(data.id, translateData)
-//
-//            updateTranslateDataOfDB(data, translateData)
-//
-//            return
-//        }
-
-        translateData.translateStatus = TranslateStatus.Translating
-        updateTranslateStatus(data.id, translateData)
-
-        val content = if (data.forwardContext?.forwards?.size == 1) {
-            data.forwardContext?.forwards?.firstOrNull()?.text.takeUnless { it.isNullOrEmpty() }
-        } else data.message.takeUnless { it.isNullOrEmpty() }
-            ?: ""
-
-        val targetLang = if (targetLanguage == TranslateTargetLanguage.ZH) TranslateLanguage.CHINESE else TranslateLanguage.ENGLISH
-
-        translateManager.get().translateText(
-            scope = viewModelScope,
-            text = content.toString(),
-            targetLang = targetLang,
-            onSuccess = {
-                L.i { "[translateManager] Translate success" }
-                if (targetLanguage == TranslateTargetLanguage.EN) {
-                    translateData.translateStatus = TranslateStatus.ShowEN
-                    translateData.translatedContentEN = it
-                    updateTranslateStatus(data.id, translateData)
-
-                    updateTranslateDataOfDB(data, translateData)
-
-                } else if (targetLanguage == TranslateTargetLanguage.ZH) {
-                    translateData.translateStatus = TranslateStatus.ShowCN
-                    translateData.translatedContentCN = it
-                    updateTranslateStatus(data.id, translateData)
-
-                    updateTranslateDataOfDB(data, translateData)
-                }
-            },
-            onFailure = {
-                L.e { "[translateManager] Translate failed:" + it.stackTraceToString() }
-                translateData.translateStatus = TranslateStatus.Invisible
-                updateTranslateStatus(data.id, translateData)
-                ToastUtil.show(R.string.chat_translate_fail)
-            }
-        )
+        autoTranslate.translateManually(data, targetLanguage)
     }
 
+    /** Long-press "turn translation off". */
     fun translateOff(data: TextChatMessage) {
-        val translateData = data.translateData ?: return
-        translateData.translateStatus = TranslateStatus.Invisible
-        updateTranslateStatus(data.id, translateData)
-
-        updateTranslateDataOfDB(data, translateData)
+        autoTranslate.translateOff(data)
     }
 
-    private fun updateTranslateDataOfDB(data: TextChatMessage, translateData: TranslateData) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                dbMessageStore.updateMessageTranslateData(forWhat.id, data.id, translateData)
-            } catch (e: Exception) {
-                L.e { "[ChatMessageViewModel] updateTranslateDataOfDB error: ${e.stackTraceToString()}" }
-            }
-        }
+    /** Inline retry tap on a failed translation block. */
+    fun onTranslateRetry(messageId: String) {
+        autoTranslate.retry(messageId)
+    }
+
+    /** Reported by the list whenever the set of messages the user can see changes. */
+    fun onVisibleMessages(messageIds: List<String>, reason: VisibleReason) {
+        autoTranslate.onVisibleRange(messageIds, reason)
+    }
+
+    override fun onCleared() {
+        autoTranslate.close()
+        super.onCleared()
     }
 
     private suspend fun assembleMessagesUIData(
         chatMessageListBehavior: ChatMessageListBehavior,
-        readInfoList: List<ReadInfoModel>
+        readInfoList: List<ReadInfoModel>,
+        translateOverlay: Map<String, TranslateData>
     ): ChatMessageListUIState {
         // 1. Window + both anchors — the single owner of "which messages need child-table data".
         val toConvert = chatMessageListBehavior.messagesToConvert()
@@ -860,6 +838,12 @@ class ChatMessageViewModel @AssistedInject constructor(
         val chatMessages = chatMessageListBehavior.messageList.mapNotNull { msg ->
             generateMessageTwo(forWhat, msg, members, readInfoList, isLargeGroup, groupMemberCount, db.hydration[msg.id])
         }
+
+        // 3b. The overlay is authoritative over hydration for the whole page session — a translate
+        //     write is fire-and-forget, so a window re-query in flight would otherwise hand back
+        //     the pre-write value and blink the block away.
+        applyTranslateOverlay(chatMessages, translateOverlay)
+        autoTranslate.onWindowAssembled(chatMessages)
 
         // 4. 从已生成的 ChatMessage 中收集所有联系人ID（不触发新查询）
         val allMessagesToCollect = listOfNotNull(anchorChatMessageBefore, anchorChatMessageAfter) + chatMessages
@@ -1233,13 +1217,18 @@ class ChatMessageViewModel @AssistedInject constructor(
                 val sharedContactName = message.sharedContact?.getOrNull(0)?.name?.displayName
                 ForwardContext(null, false, sharedContactId, sharedContactName)
             } else if (nestedForward != null) {
-                nestedForward.apply {
-                    this.forwards?.forEach { forward ->
-                        if (!forward.attachments.isNullOrEmpty()) {
-                            forward.attachments = forward.attachments?.subList(0, 1)
+                // Deep copy first, then trim: mutating `nestedForward` would edit the ORIGINAL
+                // message's live object (dropping its extra attachments from the open conversation)
+                // and would hand the new message the source's attachment identities.
+                nestedForward
+                    .deepCopyWithNewAttachmentIdentities(message.forwardSourceContext())
+                    .apply {
+                        forwards?.forEach { forward ->
+                            forward.attachments?.takeIf { it.isNotEmpty() }?.let {
+                                forward.attachments = listOf(it.first())
+                            }
                         }
                     }
-                }
             } else {
                 ForwardContext(mutableListOf<Forward>().apply {
                     this.add(
@@ -1249,7 +1238,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                             message.forWhat is For.Group,
                             message.fromWho.id,
                             message.text,
-                            message.attachments,
+                            message.attachments?.map { it.toForwardCopy(message.forwardSourceContext()) },
                             null,
                             message.mentions,
                             message.systemShowTimestamp
@@ -1267,8 +1256,8 @@ class ChatMessageViewModel @AssistedInject constructor(
                     message.forWhat is For.Group,
                     message.fromWho.id,
                     if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
-                    message.attachments,
-                    message.forwardContext?.forwards,
+                    message.attachments?.map { it.toForwardCopy(message.forwardSourceContext()) },
+                    message.forwardContext?.forwards?.map { it.deepCopyWithNewAttachmentIdentities(message.forwardSourceContext()) },
                     message.mentions,
                     message.systemShowTimestamp
                 )
@@ -1431,8 +1420,8 @@ class ChatMessageViewModel @AssistedInject constructor(
                     it.forWhat is For.Group,
                     it.fromWho.id,
                     if (!message.sharedContact.isNullOrEmpty()) ResUtils.getString(R.string.chat_message_contact_card_content) else message.text,
-                    message.attachments,
-                    message.forwardContext?.forwards,
+                    message.attachments?.map { attach -> attach.toForwardCopy(message.forwardSourceContext()) },
+                    message.forwardContext?.forwards?.map { fwd -> fwd.deepCopyWithNewAttachmentIdentities(message.forwardSourceContext()) },
                     message.mentions,
                     it.systemShowTimestamp
                 )

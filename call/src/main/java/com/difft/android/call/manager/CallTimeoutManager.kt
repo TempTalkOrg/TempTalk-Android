@@ -158,15 +158,15 @@ class CallTimeoutManager @Inject constructor(
      */
     private suspend fun checkCallStatus(roomId: String, callBack: (Boolean) -> Unit) {
         try {
-            val token = (globalServices.userManager.getUserData()?.microToken ?: "")
-            if (token.isNullOrEmpty()) {
+            // Login-state gate: with no persisted session token there is no call to check.
+            if (globalServices.userManager.getUserData()?.microToken.isNullOrEmpty()) {
                 L.e { "[Call] CallTimeoutManager checkCallStatus failed: missing authentication token" }
                 callBack(false)
                 return
             }
             
             val response = withContext(Dispatchers.IO) {
-                callService.checkCall(token, roomId)
+                callService.checkCall(roomId)
             }
             
             if (response == null) {

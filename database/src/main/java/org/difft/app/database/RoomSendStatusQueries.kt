@@ -37,9 +37,22 @@ import org.difft.app.database.models.MessageModel
  *
  * Mirrors the type exclusion used by `updateRoomUnreadState` (WCDBExtensions.kt) and
  * `DBRoomStore.getUnreadMessageInfo`.
+ *
+ * Screenshot rows are excluded for the same reason as the tombstone: they render as a centered
+ * notice with no status icon and no resend, so a failed one is invisible in the conversation yet
+ * would still earn the room a tag the user cannot clear (issue #1265). `PushScreenShotSendJob`
+ * persists its row only as Sent — a state neither aggregate's predicate matches — so this exclusion
+ * is load-bearing only for the FAILED / SENDING screenshot rows existing installs already hold.
+ *
+ * The exclusion deliberately applies to the SENDING aggregate ([sendingOutgoingCondition],
+ * [WCDB.hasSendingOutgoingMessage]) and the cold-start sweep's tag side
+ * ([WCDB.roomIdsWithStaleSendingOutgoing]) as well, not just FAILED: a legacy screenshot row stuck
+ * at Sending has no job left to settle it and no resend path the user could take, so counting it
+ * would pin that room's sending indicator on forever.
  */
 private fun realOutgoingMessageScope(): Expression =
     DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER)
+        .and(DBMessageModel.screenShotJson.isNull().or(DBMessageModel.screenShotJson.eq("")))
 
 private fun failedOutgoingCondition(roomId: String): Expression =
     DBMessageModel.roomId.eq(roomId)
@@ -165,9 +178,10 @@ fun WCDB.writeRoomSendStatus(roomId: String, status: Int) {
  * `sendStatus != NONE` is in the WHERE for idempotence (no pointless write when a concurrent batch
  * already cleared), not for correctness.
  *
- * The subquery's `roomId` / `sendType` / `type` columns are unqualified, so SQLite resolves them
- * against the innermost FROM (`message`) even though the outer UPDATE targets `room`, which also
- * has a `roomId`. If that resolution ever changes, qualify them with `Field.table("message")`.
+ * The subquery's `roomId` / `sendType` / `type` / `screenShotJson` columns are unqualified, so
+ * SQLite resolves them against the innermost FROM (`message`) even though the outer UPDATE targets
+ * `room`, which also has a `roomId`. If that resolution ever changes, qualify them with
+ * `Field.table("message")`.
  */
 @WorkerThread
 fun WCDB.clearRoomSendStatusIfNoFailure(roomId: String) {
@@ -228,8 +242,8 @@ fun WCDB.roomIdsWithFailedOutgoingMessage(): Set<String> =
     ).filter { !it.isNullOrEmpty() }.toSet()
 
 /**
- * All roomIds whose stored aggregate is not NONE.
- * No production caller yet — reserved for a future backfill (see `roomSendStatusBackfillPlan`).
+ * All roomIds whose stored aggregate is not NONE — the input set of the startup reconcile
+ * (`WcdbJobStorage.reconcileFailedRoomTags`), which then runs the guarded clear per room.
  */
 @WorkerThread
 fun WCDB.roomIdsWithNonNoneSendStatus(): Set<String> =

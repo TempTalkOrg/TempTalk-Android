@@ -5,7 +5,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.chat.invite.ScanActivity
 import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.test.TestDispatcherRule
@@ -37,13 +36,12 @@ class LinkedDevicesScanNavTest {
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     private val repo: DeviceRepository = mockk()
-    private val logoutManager: LogoutManager = mockk(relaxed = true)
     private val countStore: LinkedDevicesCountStore = mockk(relaxed = true)
 
     @Test
     fun `link new device row launches ScanActivity`() {
         coEvery { repo.getDevices() } returns emptyList()
-        val vm = LinkedDevicesViewModel(repo, logoutManager, countStore)
+        val vm = LinkedDevicesViewModel(repo, countStore)
         composeTestRule.setContent {
             DifftTheme { LinkedDevicesScreen(vm, showBackButton = true, onBack = {}) }
         }

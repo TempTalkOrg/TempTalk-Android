@@ -12,8 +12,11 @@ import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareResponse
 import com.difft.android.network.requests.GrayCheckRequestBody
 import com.difft.android.network.requests.ProfileRequestBody
+import com.difft.android.network.requests.SetPriorConversationRequestBody
 import com.difft.android.network.requests.SpeechToTextRequestBody
 import com.difft.android.base.user.NewGlobalConfig
+import com.difft.android.network.auth.Auth
+import com.difft.android.network.auth.AuthStyle
 import com.difft.android.network.responses.AddContactorResponse
 import com.difft.android.network.responses.EncryptedGlobalConfigResponse
 import com.difft.android.network.responses.AppVersionResponse
@@ -54,9 +57,11 @@ interface HttpService {
      * the response is a BaseResponse envelope whose outer serverTimestamp is captured by the
      * ServerTimeCaptureConverterFactory hook. The body payload itself is unused here.
      */
+    @Auth(AuthStyle.NONE)
     @GET("v1/health")
     suspend fun health(): BaseResponse<Any>
 
+    @Auth(AuthStyle.NONE)
     @GET
     suspend fun getResponseBody(
         @Url url: String,
@@ -69,6 +74,7 @@ interface HttpService {
      * so contentLength() reflects the response header and byteStream() reads incrementally.
      * Required for real download progress and to avoid OOM on large files (e.g. APK upgrades).
      */
+    @Auth(AuthStyle.NONE)
     @Streaming
     @GET
     suspend fun getResponseBodyStreaming(
@@ -77,34 +83,39 @@ interface HttpService {
         @QueryMap params: Map<String, String>
     ): ResponseBody
 
+    @Auth(AuthStyle.BASIC)
     @POST("v1/directory/contacts")
     suspend fun fetchContactors(
         @Query("properties") properties: String = "all",
-        @Header("Authorization") baseAuth: String,
         @Body body: ContactsRequestBody,
     ): BaseResponse<ContactsDataResponse>
 
+    @Auth(AuthStyle.BASIC)
     @POST("v1/directory/contacts")
     suspend fun fetchAllContactors(
         @Query("properties") properties: String = "all",
-        @Header("Authorization") baseAuth: String,
     ): BaseResponse<ContactsDataResponse>
 
+    /**
+     * The refresh itself. Runs before `baseAuth` is persisted during login, so the caller supplies
+     * the credential and the interceptor must not touch it.
+     */
+    @Auth(AuthStyle.EXPLICIT)
     @PUT("v1/authorize/token")
     suspend fun fetchAuthToken(
         @Header("Authorization") baseAuth: String
     ): BaseResponse<AuthToken>
 
+    @Auth(AuthStyle.JWT)
     @POST("v3/friend/ask")
     suspend fun fetchAddContactor(
-        @Header("Authorization") token: String,
         @Body body: AddContactorRequestBody
     ): BaseResponse<AddContactorResponse>
 
+    @Auth(AuthStyle.JWT)
     @DELETE("v3/friend/{uid}")
     suspend fun fetchDeleteContact(
-        @Path("uid") uid: String,
-        @Header("Authorization") token: String
+        @Path("uid") uid: String
     ): BaseResponse<Any>
 
     /**
@@ -112,156 +123,163 @@ interface HttpService {
      * serverTimestamp comes from the outer BaseResponse.
      * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
      */
+    @Auth(AuthStyle.JWT)
     @GET("v3/friend/deletedRecords")
-    suspend fun fetchDeletedRecords(
-        @Header("Authorization") token: String
-    ): BaseResponse<List<DeletedRecordDto>>
+    suspend fun fetchDeletedRecords(): BaseResponse<List<DeletedRecordDto>>
 
     /**
      * Remove a weak contact immediately. Idempotent; on success the server pushes changeType=1 to sync other devices.
      * Note: different path from fetchDeleteContact above (v3/friend/{uid}, which unfriends).
      */
+    @Auth(AuthStyle.JWT)
     @DELETE("v3/friend/deletedRecords/{uid}")
     suspend fun deleteDeletedRecord(
-        @Path("uid") uid: String,
-        @Header("Authorization") token: String
+        @Path("uid") uid: String
     ): BaseResponse<Any>
 
+    @Auth(AuthStyle.BASIC)
     @GET("v1/profile/avatar/attachment")
-    suspend fun fetchAvatarAttachmentInfo(
-        @Header("Authorization") baseAuth: String
-    ): BaseResponse<Any>
+    suspend fun fetchAvatarAttachmentInfo(): BaseResponse<Any>
 
+    @Auth(AuthStyle.NONE)
     @PUT
     suspend fun fetchUploadAvatar(
         @Url url: String,
         @Body file: RequestBody
     ): ResponseBody
 
+    @Auth(AuthStyle.BASIC)
     @PUT("v1/profile")
     suspend fun fetchSetProfile(
-        @Header("Authorization") baseAuth: String,
         @Body profileRequestBody: ProfileRequestBody
     ): BaseResponse<Any>
 
+    @Auth(AuthStyle.BASIC)
     @PUT("v1/accounts/androidnotify")
     suspend fun fetchBindPushToken(
-        @Header("Authorization") baseAuth: String,
         @Query("type") type: String,
         @Body bindPushTokenRequestBody: BindPushTokenRequestBody
     ): BaseResponse<String>
 
+    @Auth(AuthStyle.BASIC)
     @POST("v1/conversation/set")
     suspend fun fetchConversationSet(
-        @Header("Authorization") baseAuth: String,
         @Body conversationSetRequestBody: ConversationSetRequestBody
     ): BaseResponse<ConversationSetResponseBody>
 
+    @Auth(AuthStyle.BASIC)
     @POST("v1/conversation/get")
     suspend fun fetchGetConversationSet(
-        @Header("Authorization") baseAuth: String,
         @Body getConversationSetRequestBody: GetConversationSetRequestBody
     ): BaseResponse<GetConversationSetResponseBody>
 
+    @Auth(AuthStyle.JWT)
     @POST("v1/conversationconfig/share")
     suspend fun fetchShareConversationConfig(
-        @Header("Authorization")
-        authorization: String,
         @Body
         req: GetConversationShareRequestBody
     ): BaseResponse<GetConversationShareResponse>
 
+    @Auth(AuthStyle.JWT)
     @PUT("v1/conversationconfig/share/{conversation}")
     suspend fun updateConversationConfig(
-        @Header("Authorization")
-        authorization: String,
         @Path(value = "conversation", encoded = false)
         conversations: String,
         @Body
         conversationShareRequestBody: ConversationShareRequestBody
     ): BaseResponse<ConversationShareResponse>
 
+    @Auth(AuthStyle.BASIC)
     @PUT("v1/accounts/logout")
-    suspend fun fetchLogout(
-        @Header("Authorization") baseAuth: String
-    ): BaseResponse<Any>
+    suspend fun fetchLogout(): BaseResponse<Any>
 
+    @Auth(AuthStyle.BASIC)
     @DELETE("v1/accounts")
-    suspend fun fetchDeleteAccount(
-        @Header("Authorization") baseAuth: String
-    ): BaseResponse<Any>
+    suspend fun fetchDeleteAccount(): BaseResponse<Any>
 
+    @Auth(AuthStyle.NONE)
     @GET
     suspend fun getEncryptedGlobalConfig(
         @Url url: String
     ): EncryptedGlobalConfigResponse
 
+    @Auth(AuthStyle.NONE)
     @GET
     suspend fun getGlobalConfig(
         @Url url: String
     ): NewGlobalConfig
 
+    @Auth(AuthStyle.NONE)
     @GET
     suspend fun getAppVersionConfigs(
         @Url url: String
     ): AppVersionResponse
 
+    @Auth(AuthStyle.BASIC)
     @GET("/v1/attachments/{attachmentId}")
     suspend fun getDownloadUrl(
-        @Header("Authorization") baseAuth: String,
         @Path(value = "attachmentId")
         conversations: String,
     ): BaseResponse<Any>
 
+    @Auth(AuthStyle.BASIC)
     @GET("/v1/attachments")
-    suspend fun fetchAttachmentInfo(
-        @Header("Authorization") baseAuth: String
-    ): BaseResponse<Any>
+    suspend fun fetchAttachmentInfo(): BaseResponse<Any>
 
+    @Auth(AuthStyle.BASIC)
     @PUT("/v1/accounts/activate")
-    suspend fun activateDevice(
-        @Header("Authorization") baseAuth: String
+    suspend fun activateDevice(): BaseResponse<Any>
+
+    @Auth(AuthStyle.BASIC)
+    @DELETE("/v1/messages/{source}/{timestamp}")
+    suspend fun removePendingMessage(@Path("source") source: String, @Path("timestamp") timestamp: String): BaseResponse<Any>
+
+    @Auth(AuthStyle.BASIC)
+    @GET("/v1/messages")
+    suspend fun getPendingMessage(): PendingMessageResponse
+
+    /**
+     * Reports the conversation the user is currently viewing so its backlog is delivered first.
+     * Root path like the other `/v1/messages` endpoints above (the Chat client's base carries `/chat/`).
+     */
+    @Auth(AuthStyle.BASIC)
+    @POST("/v1/messages/setPriorConversation")
+    suspend fun setPriorConversation(
+        @Body body: SetPriorConversationRequestBody
     ): BaseResponse<Any>
 
-    @DELETE("/v1/messages/{source}/{timestamp}")
-    suspend fun removePendingMessage(@Header("Authorization") baseAuth: String, @Path("source") source: String, @Path("timestamp") timestamp: String): BaseResponse<Any>
-
-    @GET("/v1/messages")
-    suspend fun getPendingMessage(@Header("Authorization") baseAuth: String): PendingMessageResponse
-
+    @Auth(AuthStyle.JWT)
     @POST("/speech2text/whisperX/transcribe")
     suspend fun voiceToText(
-        @Header("Authorization") token: String,
         @Body body: SpeechToTextRequestBody
     ): BaseResponse<SpeechToTextResponse>
 
+    @Auth(AuthStyle.JWT)
     @POST("v3/keys/identity/bulk")
     suspend fun getPublicKeys(
-        @Header("Authorization") authorization: String,
         @Body req: GetPublicKeysReq
     ): BaseResponse<GetPublicKeysResp>
 
+    /** A `v3` route that authenticates on Basic, not on the account JWT the other `v3` routes use. */
+    @Auth(AuthStyle.BASIC)
     @POST("/chat/v3/messages/criticalAlertNew")
     suspend fun sendCriticalAlertNew(
-        @Header("Authorization") baseAuth: String,
         @Body req: CriticalAlertRequestBodyNew
     ): BaseResponse<CriticalAlertResponse>
 
+    @Auth(AuthStyle.JWT)
     @POST("/grayCheck/v1/grayCheck")
     suspend fun grayCheck(
-        @Header("Authorization") token: String,
         @Body req: GrayCheckRequestBody
     ): BaseResponse<List<GrayConfigData>?>
 
     /**
      * GIF trending list. Full URL is supplied via [url] (built from UrlManager.gifs +
-     * "v1/gifs/trending") so the request rides the `/gifs/` proxy host. The `/gifs/` route
-     * requires token auth, so the JWT (microToken) is passed explicitly via [token]; the
-     * HeaderInterceptor's baseAuth fallback (Basic) is rejected by this route (401).
+     * "v1/gifs/trending") so the request rides the `/gifs/` proxy host.
      */
+    @Auth(AuthStyle.JWT)
     @GET
     suspend fun getGifsTrending(
-        @Header("Authorization") token: String,
         @Url url: String,
         @Query("limit") limit: Int,
         @Query("offset") offset: Int,
@@ -269,10 +287,10 @@ interface HttpService {
         @Query("rating") rating: String? = null
     ): BaseResponse<GifListResponse>
 
-    /** GIF search list. Full URL via [url] (UrlManager.gifs + "v1/gifs/search"). Token auth like trending. */
+    /** GIF search list. Full URL via [url] (UrlManager.gifs + "v1/gifs/search"). */
+    @Auth(AuthStyle.JWT)
     @GET
     suspend fun getGifsSearch(
-        @Header("Authorization") token: String,
         @Url url: String,
         @Query("q") q: String?,
         @Query("limit") limit: Int,
@@ -283,19 +301,18 @@ interface HttpService {
 
     /**
      * GIF favorites (zero-knowledge). Full URL via [url] (UrlManager.gifs + "v1/gifs/favorites")
-     * so it rides the `/gifs/` proxy host. Token auth (JWT/microToken) via [token]: this route
-     * rejects the Basic baseAuth fallback with 401.
+     * so it rides the `/gifs/` proxy host.
      */
+    @Auth(AuthStyle.JWT)
     @GET
     suspend fun getFavorites(
-        @Header("Authorization") token: String,
         @Url url: String
     ): BaseResponse<FavoritesResponse>
 
-    /** Optimistic-lock PUT of the whole favorites list. URL via UrlManager.gifs + "v1/gifs/favorites". Token auth. */
+    /** Optimistic-lock PUT of the whole favorites list. URL via UrlManager.gifs + "v1/gifs/favorites". */
+    @Auth(AuthStyle.JWT)
     @PUT
     suspend fun putFavorites(
-        @Header("Authorization") token: String,
         @Url url: String,
         @Body body: FavoritesPutRequest
     ): BaseResponse<FavoritesResponse>

@@ -20,6 +20,8 @@ import javax.inject.Singleton
  * 1. Tink `Aead` primitives are constructed (encrypted namespaces).
  * 2. Backing files are opened and any pending migrations run.
  * 3. Decoded values are cached in each DataStore's actor StateFlow.
+ * 4. [KeyboardHeightCache] is seeded from the `app_state` snapshot, so its main-thread readers never
+ *    touch the store.
  *
  * Subsequent reads return from the in-memory cache. Called from `TempTalkApplication.initStorageLayer()`
  * under a 2 s `withTimeoutOrNull` budget.
@@ -35,7 +37,7 @@ class StoragePreloader @Inject constructor(
         val start = System.currentTimeMillis()
         val userJob = async { secureUserStore.data.first() }
         val configJob = async { secureConfigStore.data.first() }
-        val appStateJob = async { appStateStore.data.first() }
+        val appStateJob = async { appStateStore.data.first().also(KeyboardHeightCache::seed) }
         userJob.await()
         configJob.await()
         appStateJob.await()

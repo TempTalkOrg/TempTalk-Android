@@ -45,11 +45,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
@@ -423,13 +419,8 @@ fun VideoRenderer(
 
                     Text(
                         text = ResUtils.getString(R.string.call_screen_sharing_placeholder),
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight(400),
-                            color = DifftTheme.colors.textTertiary,
-                        )
+                        style = DifftTheme.typography.p3,
+                        color = DifftTheme.colors.textTertiary,
                     )
                 }
             }

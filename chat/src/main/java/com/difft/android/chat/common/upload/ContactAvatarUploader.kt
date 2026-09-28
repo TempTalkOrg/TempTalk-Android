@@ -1,6 +1,5 @@
 package com.difft.android.chat.common.upload
 
-import com.difft.android.base.utils.globalServices
 
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
@@ -42,7 +41,7 @@ class ContactAvatarUploader @Inject constructor(
 ) {
     suspend fun uploadAvatar(filePath: String): UploadedAvatarMeta = withContext(Dispatchers.IO) {
         val response = httpClient.httpService
-            .fetchAvatarAttachmentInfo((globalServices.userManager.getUserData()?.baseAuth ?: ""))
+            .fetchAvatarAttachmentInfo()
         if (response.status != 0) {
             L.w { "[ContactAvatarUploader] fetchAvatarAttachmentInfo failed: status=${response.status}, reason=${response.reason}" }
             throw NetworkException(response.status, response.reason ?: "")

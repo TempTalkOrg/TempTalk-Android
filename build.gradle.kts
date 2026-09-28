@@ -296,6 +296,8 @@ tasks.register("testAll") {
         // Flavored modules
         ":app:testTTDevOfficialDebugUnitTest",
         ":login:testTTDevDebugUnitTest",
+        // Pure JVM: the custom lint detectors
+        ":lintchecks:test",
     )
 }
 

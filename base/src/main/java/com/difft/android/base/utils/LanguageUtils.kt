@@ -3,6 +3,7 @@ package com.difft.android.base.utils
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.icu.util.ULocale
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import androidx.annotation.VisibleForTesting
@@ -115,7 +116,7 @@ object LanguageUtils {
      * Persists the user's locale choice. Updates the in-memory cache so subsequent
      * `getLanguage(...)` calls return the new value without re-reading disk.
      *
-     * Uses `commit = true` because the typical caller (`LanguageFragment.onItemClick`)
+     * Uses `commit = true` because the typical caller (`LanguageFragment.onLanguageSelected`)
      * immediately restarts the activity / process to apply the change — we cannot lose
      * the write to an async flush.
      */
@@ -128,6 +129,30 @@ object LanguageUtils {
             putString(KEY_LANGUAGE, locale.toLanguageTag())
         }
         localeCache.set(locale)
+    }
+
+    /**
+     * The app language [locale] renders as. The APK ships English and Simplified Chinese only, so a
+     * Chinese locale whose script is (or is likely) Hans reads as [Locale.CHINA]; Hant variants such
+     * as zh-TW / zh-HK fall back to English resources and therefore read as [Locale.US], like every
+     * other language. Used only by [isCurrentChoice]; the checkmark, the Me-page summary and every
+     * other feature keep branching on the raw `getLanguage(...)` language code.
+     */
+    fun appLocaleFor(locale: Locale): Locale {
+        if (locale.language != Locale.CHINA.language) return Locale.US
+        val script = locale.script.ifEmpty { ULocale.addLikelySubtags(ULocale.forLocale(locale)).script }
+        return if (script == "Hans") Locale.CHINA else Locale.US
+    }
+
+    /**
+     * Whether tapping [locale] on the language page would change nothing: the row is the checked one
+     * (same language code as the stored/system locale) AND the app already renders in it. A
+     * zh-Hans-CN system locale needs no restart for zh-CN; zh-TW shows zh-CN checked but renders in
+     * English, so that tap still offers the restart that switches the UI to Simplified Chinese.
+     */
+    fun isCurrentChoice(context: Context, locale: Locale): Boolean {
+        val current = getLanguage(context)
+        return current.language == locale.language && appLocaleFor(current) == locale
     }
 
     fun getLanguageList(context: Context): List<LanguageData> {
@@ -273,5 +298,5 @@ object LanguageUtils {
 data class LanguageData(
     val name: String,
     val locale: Locale,
-    var selected: Boolean = false
+    val selected: Boolean = false
 )

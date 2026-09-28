@@ -14,7 +14,7 @@
         android:id="@+id/iv_search_more"
         android:layout_width="18dp"
         android:layout_height="18dp"
-        android:src="@drawable/search_input_ic_search_input"
+        android:src="@drawable/base_ic_search"
         android:tint="@color/t.info"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -35,12 +35,11 @@
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/iv_search_more_arrow"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:src="@drawable/chat_ic_arrow_right"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:src="@drawable/base_ic_chevron_right"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/t.secondary" />
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

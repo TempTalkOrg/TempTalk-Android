@@ -19,7 +19,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/t.primary" />
+        app:tint="@color/icon" />
 
     <!-- Nickname - same font size as normal ChatActivity header (20sp) -->
     <TextView

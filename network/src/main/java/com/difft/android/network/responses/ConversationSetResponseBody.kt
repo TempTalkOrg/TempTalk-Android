@@ -26,7 +26,14 @@ data class ConversationSetResponseBody(
      * 0: Disabled (never save)
      * 1: Enabled (always save)
      */
-    val saveToPhotos: Int? = null
+    val saveToPhotos: Int? = null,
+    /**
+     * Conversation-level auto-translate target (local only, not synced to server)
+     * 0: Off (default)
+     * 1: Chinese
+     * 2: English
+     */
+    val translateSetting: Int = 0
 ) {
     val isMuted: Boolean
         get() = muteStatus == MuteStatus.MUTED.value

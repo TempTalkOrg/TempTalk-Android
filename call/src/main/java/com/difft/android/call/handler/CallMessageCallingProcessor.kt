@@ -1,6 +1,5 @@
 package com.difft.android.call.handler
 
-import com.difft.android.base.utils.globalServices
 
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
@@ -67,7 +66,7 @@ internal fun CallMessageHandler.handleCallingMessage(
                 handleCallTextMessage(envelope, content, callInfo)
             }
 
-            val response = callService.checkCall((globalServices.userManager.getUserData()?.microToken ?: ""), roomId)
+            val response = callService.checkCall(roomId)
             if (response.status != CallMessageHandler.RESPONSE_STATUS_SUCCESS ||
                 response.data?.userStopped == true
             ) {

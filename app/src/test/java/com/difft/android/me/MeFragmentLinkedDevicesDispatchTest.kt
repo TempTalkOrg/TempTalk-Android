@@ -5,6 +5,8 @@ import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.linkeddevices.LinkedDevicesActivity
 import com.difft.android.linkeddevices.LinkedDevicesFragment
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -24,6 +26,8 @@ class FakeDualPaneHostActivity : FragmentActivity(), DualPaneHost {
     var showDetailCalls = 0
     var shownFragment: Fragment? = null
     override val isDualPaneMode: Boolean get() = dualPane
+    override val navigationRailCollapsed: StateFlow<Boolean> = MutableStateFlow(false)
+    override fun toggleNavigationRail() = Unit
     override fun showDetailFragment(fragment: Fragment, tag: String?) {
         showDetailCalls++
         shownFragment = fragment

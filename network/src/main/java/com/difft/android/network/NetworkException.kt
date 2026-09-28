@@ -3,7 +3,8 @@ package com.difft.android.network
 import com.difft.android.base.utils.globalServices
 import java.io.IOException
 
-class NetworkException(val errorCode: Int? = -1, override val message: String = "") : IOException(message) {
+/** Open so auth can add a typed subclass for a token the server rejected (issue #1231). */
+open class NetworkException(val errorCode: Int? = -1, override val message: String = "") : IOException(message) {
     val errorMsg: String
         get() =
             try {

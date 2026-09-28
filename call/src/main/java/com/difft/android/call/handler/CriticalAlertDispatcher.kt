@@ -1,6 +1,5 @@
 package com.difft.android.call.handler
 
-import com.difft.android.base.utils.globalServices
 
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
@@ -46,7 +45,6 @@ class CriticalAlertDispatcher(
 
     suspend fun send(gid: String? = null): Boolean {
         val chatHttpClient = httpClientProvider()
-        val auth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
         var baseTimestamp = System.currentTimeMillis()
 
         val awaitingJoinInvitees = participantManager.awaitingJoinInvitees.value
@@ -70,7 +68,7 @@ class CriticalAlertDispatcher(
 
         return try {
             val response = withContext(Dispatchers.IO) {
-                chatHttpClient.httpService.sendCriticalAlertNew(auth, requestBody)
+                chatHttpClient.httpService.sendCriticalAlertNew(requestBody)
             }
             if (response.status == 0) {
                 showBarrage(

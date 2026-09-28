@@ -11,16 +11,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
@@ -57,11 +55,7 @@ internal fun BannerRow(
         Text(
             text = speakerUiState.displayName.orEmpty(),
             modifier = Modifier.weight(1f),
-            style = TextStyle(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.Normal,
-            ),
+            style = DifftTheme.typography.p4,
             color = DifftTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -88,23 +82,27 @@ private fun InlineWaitingAvatars(speakers: List<WaitingSpeakerDisplay>) {
     }
     Box(modifier = Modifier.size(width = totalWidth, height = AVATAR_SIZE)) {
         if (speakers.size >= 2) {
+            key(speakers[1].sid) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = INLINE_AVATAR_OVERLAP_OFFSET)
+                        .size(AVATAR_SIZE)
+                        .clip(CircleShape),
+                ) {
+                    AvatarContent(speakers[1].avatarData)
+                }
+            }
+        }
+        key(speakers[0].sid) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .offset(x = INLINE_AVATAR_OVERLAP_OFFSET)
                     .size(AVATAR_SIZE)
                     .clip(CircleShape),
             ) {
-                AvatarContent(speakers[1].avatarModel)
+                AvatarContent(speakers[0].avatarData)
             }
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(AVATAR_SIZE)
-                .clip(CircleShape),
-        ) {
-            AvatarContent(speakers[0].avatarModel)
         }
     }
 }

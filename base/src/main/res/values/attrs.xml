@@ -3,4 +3,93 @@
     <declare-styleable name="InsetAwareConstraintLayout">
         <attr name="animateKeyboardChanges" format="boolean" />
     </declare-styleable>
+
+    <!-- Shared by every XML shell around a Difft composable (DifftComposeView). -->
+    <declare-styleable name="DifftComposeView">
+        <attr name="difft_forceDark" format="boolean" />
+        <attr name="android:enabled" />
+    </declare-styleable>
+
+    <!-- Two-state controls (DifftCheckBoxView, DifftSwitchView). -->
+    <declare-styleable name="DifftToggleView">
+        <attr name="android:checked" />
+        <attr name="android:clickable" />
+        <attr name="android:focusable" />
+    </declare-styleable>
+
+    <!-- Switch shell: the row form is driven by android:text (SwitchCompat is a TextView). -->
+    <declare-styleable name="DifftSwitchView">
+        <attr name="android:text" />
+    </declare-styleable>
+
+    <!-- Floating detail close button shell. -->
+    <declare-styleable name="DetailCloseButtonView">
+        <attr name="android:clickable" />
+        <attr name="android:focusable" />
+    </declare-styleable>
+
+    <!-- Button shell. No textSize/textColor: difft_buttonSize owns the type scale. -->
+    <declare-styleable name="DifftButtonView">
+        <attr name="android:text" />
+        <attr name="android:clickable" />
+        <attr name="android:focusable" />
+        <!-- Library scale: small 24, medium 32, large 40, xl 48 (the default page CTA). -->
+        <attr name="difft_buttonSize" format="enum">
+            <enum name="small" value="0" />
+            <enum name="medium" value="1" />
+            <enum name="large" value="2" />
+            <enum name="xl" value="3" />
+        </attr>
+        <!-- Filled CTA (default); secondary is the only outlined form. -->
+        <attr name="difft_buttonVariant" format="enum">
+            <enum name="primary" value="0" />
+            <enum name="secondary" value="1" />
+            <enum name="danger" value="2" />
+            <enum name="success" value="3" />
+            <enum name="text" value="4" />
+        </attr>
+    </declare-styleable>
+
+    <declare-styleable name="DifftClearableInputView">
+        <!-- Library skin: filled search box, or outlined form field (the default). -->
+        <attr name="difft_inputStyle" format="enum">
+            <enum name="search" value="0" />
+            <enum name="form" value="1" />
+        </attr>
+        <!-- Library scale: medium 32, large 40. Pins the box height unless dsi_height is set. -->
+        <attr name="difft_inputSize" format="enum">
+            <enum name="medium" value="0" />
+            <enum name="large" value="1" />
+        </attr>
+        <attr name="dsi_hint" format="reference|string" />
+        <attr name="dsi_autoFocus" format="boolean" />
+        <attr name="dsi_containerColor" format="color" />
+        <attr name="dsi_surface" format="enum">
+            <enum name="page" value="0" />
+            <enum name="popup" value="1" />
+        </attr>
+        <attr name="dsi_height" format="dimension" />
+        <attr name="dsi_minHeight" format="dimension" />
+        <attr name="dsi_maxLength" format="integer" />
+        <attr name="dsi_contentPaddingStart" format="dimension" />
+        <attr name="dsi_clearMode" format="enum">
+            <enum name="whenNotEmpty" value="0" />
+            <enum name="whileEditing" value="1" />
+        </attr>
+        <attr name="dsi_imeAction" format="enum">
+            <enum name="unspecified" value="0" />
+            <enum name="search" value="1" />
+            <enum name="done" value="2" />
+            <enum name="next" value="3" />
+            <enum name="send" value="4" />
+        </attr>
+        <attr name="dsi_keyboardType" format="enum">
+            <enum name="text" value="0" />
+            <enum name="email" value="1" />
+            <enum name="phone" value="2" />
+            <enum name="number" value="3" />
+            <enum name="password" value="4" />
+        </attr>
+        <attr name="android:textSize" />
+    </declare-styleable>
 </resources>

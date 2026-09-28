@@ -9,7 +9,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.FullScreenBottomDialog
 import com.difft.android.base.widget.BottomDialog
@@ -35,6 +35,10 @@ import dagger.hilt.android.AndroidEntryPoint
  * Demonstrates two ways to call ComposeDialogManager:
  * 1. Direct API Call - Works with all Activities
  * 2. Composable Functions - Compose environment only
+ *
+ * The screen hosts DifftTheme because the dialog composables it calls inline read
+ * `DifftTheme.colors`. Its own chrome stays on `colorResource` / raw literals — the same
+ * night-qualified values, kept as-is on this dev-only screen.
  */
 @AndroidEntryPoint
 class DialogTestActivity : BaseActivity() {
@@ -50,7 +54,9 @@ class DialogTestActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            DialogTestScreen()
+            DifftTheme {
+                DialogTestScreen()
+            }
         }
     }
 
@@ -240,7 +246,7 @@ fun DialogTestScreen() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = DifftTheme.radius.largeShape
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -339,7 +345,7 @@ fun DialogTestScreen() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = DifftTheme.radius.largeShape
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -438,7 +444,7 @@ fun DialogTestScreen() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = DifftTheme.radius.largeShape
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -713,7 +719,7 @@ fun DialogTestPreview() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = DifftTheme.radius.largeShape
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)
@@ -757,7 +763,7 @@ fun DialogTestPreview() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp)
+                shape = DifftTheme.radius.largeShape
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp)

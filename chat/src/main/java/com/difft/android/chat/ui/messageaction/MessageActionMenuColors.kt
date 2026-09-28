@@ -23,6 +23,9 @@ object MessageActionMenuColors {
     /** Destructive content tint: terror #F84135. */
     val danger: Color = ColorTokens.Error
 
+    /** Pressed-row pill on this panel: bg4 #474D57 (bg3 would vanish into the panel). */
+    val pressedPill: Color = ColorTokens.Dark.BackgroundQuaternary
+
     /** Add-reaction icon tint: tthird #848E9C. */
     val reactionAddIcon: Color = ColorTokens.Dark.TextTertiary
 

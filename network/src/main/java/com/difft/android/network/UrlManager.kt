@@ -23,7 +23,7 @@ private class ChativeOnlineUrlProtocol : UrlProtocol {
     override val defaultHost = "chat.chative.im"
     override val avatarStorage: String = "https://d272r1ud4wbyy4.cloudfront.net/"
     override val installationGuideUrl: String = "https://quicall.app"
-    override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/prod-buildversion/insider-version.json"
+    override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/tt-prod-buildversion/insider-version.json"
     override val e2eeLearnMoreUrl: String = "https://quicall.app/security"
 }
 
@@ -31,7 +31,7 @@ private class ChativeDevelopmentUrlProtocol : UrlProtocol {
     override val defaultHost = "chat.test.chative.im"
     override val avatarStorage: String = "https://dtsgla5wj1qp2.cloudfront.net/"
     override val installationGuideUrl: String = "https://quicall.app"
-    override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/test-buildversion/insider-version.json"
+    override val appVersionConfigUrl: String = "https://d1u2vyihp77eo1.cloudfront.net/tt-test-buildversion/insider-version.json"
     override val e2eeLearnMoreUrl: String = "https://quicall.app/security"
 }
 

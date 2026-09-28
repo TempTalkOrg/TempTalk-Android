@@ -191,7 +191,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    ContactorUtil.fetchAddFriendRequest(requireContext(), (globalServices.userManager.getUserData()?.microToken ?: ""), chatViewModel.forWhat.id, sourceType, source)
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), chatViewModel.forWhat.id, sourceType, source)
                 }
                 if (!isAdded || view == null) return@launch
                 ComposeDialogManager.dismissWait()

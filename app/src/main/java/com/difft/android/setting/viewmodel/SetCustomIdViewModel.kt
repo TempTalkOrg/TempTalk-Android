@@ -1,6 +1,5 @@
 package com.difft.android.setting.viewmodel
 
-import com.difft.android.base.utils.globalServices
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,8 +35,7 @@ class SetCustomIdViewModel@Inject constructor() : ViewModel() {
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val token = (globalServices.userManager.getUserData()?.microToken ?: "")
-                val response = settingRepo.setProfile(token = token, customUid = customUid)
+                val response = settingRepo.setProfile(customUid = customUid)
                 if (response.status != 0) {
                     L.e {"[Settings] submitCustomUid status:${response.status}, reason:${response.reason} "}
                     when (response.status) {

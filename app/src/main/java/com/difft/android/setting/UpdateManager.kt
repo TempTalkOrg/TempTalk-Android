@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.text.TextUtils
 import androidx.core.content.FileProvider
+import com.difft.android.BuildConfig
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.R
@@ -73,7 +74,7 @@ class UpdateManager @Inject constructor(
                     }
                 } else {
                     val result = withContext(Dispatchers.IO) {
-                        settingRepo.checkUpdate((userManager.getUserData()?.microToken ?: ""), PackageUtil.getAppVersionName() ?: "")
+                        settingRepo.checkUpdate(PackageUtil.getAppVersionName() ?: "", BuildConfig.APP_CHANNEL)
                     }
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()

@@ -123,6 +123,8 @@ class UnsafeWcdbConflictInsert(config: Config) : Rule(
             "pendingMessageNew",     // pending_message_new — PK messageId (isPrimary = true)
             "resetIdentityKey",      // reset_identity_key — PK uid (isPrimary = true)
             "readInfo",              // read_info — multiPrimaries(roomId, uid)
+            "readInfoTable",         // read_info staging accessor — same ReadInfoModel, multiPrimaries(roomId, uid)
+            "groupCryptoKeysTable",  // group_crypto_keys staging accessor — same GroupCryptoKeysModel, PK gid (isPrimary)
             "notificationCache",     // notification_cache — multiPrimaries(conversationId, timestamp)
             "pendingRemovalContact", // pending_removal_contact — PK uid (isPrimary = true, #917)
             "jobSpec",               // job_spec — PK id (isPrimary = true)

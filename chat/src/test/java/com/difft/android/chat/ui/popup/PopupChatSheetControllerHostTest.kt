@@ -92,6 +92,7 @@ class PopupChatSheetControllerHostTest {
         every { activity.isDestroyed } returns false
 
         val host = Robolectric.buildActivity(Activity::class.java).setup().get()
+        every { activity.resources } returns host.resources
         root = CoordinatorLayout(host)
         sheet = View(host)
         root.addView(
@@ -130,6 +131,13 @@ class PopupChatSheetControllerHostTest {
     fun tearDown() {
         clearMocks(activity)
         unmockkObject(WindowSizeClassUtil)
+    }
+
+    @Test
+    fun `setup caps the sheet at the shared bottom sheet max width`() {
+        val expectedPx = sheet.resources.getDimensionPixelSize(com.difft.android.base.R.dimen.bottom_sheet_max_width)
+
+        assertEquals(expectedPx, BottomSheetBehavior.from(sheet).maxWidth)
     }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()

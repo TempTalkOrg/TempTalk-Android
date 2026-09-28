@@ -1,40 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Context-menu row, design library "App" variant: 44 tall (24 content + 10 top/bottom),
+     16dp horizontal padding, 20dp leading icon, 8dp gap, 16sp label. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:paddingVertical="12dp"
-    android:paddingStart="12dp"
-    android:paddingEnd="16dp">
+    android:layout_height="44dp"
+    android:paddingHorizontal="16dp">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/imageview_icon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:minWidth="30dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:src="@android:drawable/ic_delete" />
 
+    <!-- goneMarginStart 0: with no icon the label sits flush against the 16dp padding. -->
     <androidx.appcompat.widget.AppCompatTextView
         android:id="@+id/textview_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="5dp"
+        android:layout_marginStart="8dp"
+        android:ellipsize="end"
         android:gravity="center_vertical"
-        android:textColor="@color/icon"
+        android:maxLines="1"
+        android:textColor="@color/t.primary"
         android:textSize="16sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toEndOf="@+id/imageview_icon"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_goneMarginStart="0dp"
         tools:text="HUAWEI Freebuds 4E" />
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/imageview_right"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
         android:layout_marginStart="8dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"

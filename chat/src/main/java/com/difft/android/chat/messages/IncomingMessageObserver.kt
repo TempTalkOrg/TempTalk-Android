@@ -25,7 +25,8 @@ import kotlinx.coroutines.Job
 class IncomingMessageObserver @Inject constructor(
     private val incomingEnvelopMessageProcessor: IncomingEnvelopMessageProcessor,
     private val incomingConversationMessageProcessor: IncomingConversationMessageProcessor,
-    private val appWebSocketHelper: AppWebSocketHelper
+    private val appWebSocketHelper: AppWebSocketHelper,
+    private val priorConversationReporter: PriorConversationReporter
 ) {
     private var started = false
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("IncomingMessageObserver") + dbKeyFailSoftExceptionHandler)
@@ -34,6 +35,7 @@ class IncomingMessageObserver @Inject constructor(
     fun start() {
         if (started) return
         started = true
+        priorConversationReporter.start(coroutineScope)
         messageReceivingJob = coroutineScope.launch {
             startReceivingMessage()
         }
@@ -44,6 +46,8 @@ class IncomingMessageObserver @Inject constructor(
         started = false
         messageReceivingJob?.cancel()
         messageReceivingJob = null
+        // The connection is going away; its replay window must not outlive it.
+        priorConversationReporter.onQueueEmpty()
     }
 
     private suspend fun startReceivingMessage() {
@@ -58,6 +62,8 @@ class IncomingMessageObserver @Inject constructor(
                         incomingConversationMessageProcessor.income(message, result.first)
                     } else if (message == ChatDataMessageFlag.END_CONVERSATION_PREVIEW_MGS) {
                         incomingConversationMessageProcessor.endReceive(result.first)
+                    } else if (message == ChatDataMessageFlag.END_QUEUE) {
+                        priorConversationReporter.onQueueEmpty()
                     } else {
                         L.w { "Unknown message type: $message" }
                     }

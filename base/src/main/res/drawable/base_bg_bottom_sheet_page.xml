@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sheet container for content that is also shown as a full page and paints the page colour
+     itself (e.g. contact detail). Same shape as base_bg_bottom_sheet, page colour instead of
+     the bg.popup surface, so there is no seam at the drag handle. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/bg" />
+    <corners
+        android:topLeftRadius="16dp"
+        android:topRightRadius="16dp" />
+</shape>

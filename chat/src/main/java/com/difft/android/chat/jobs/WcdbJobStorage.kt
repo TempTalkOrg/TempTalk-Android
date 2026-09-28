@@ -13,7 +13,9 @@ import com.tencent.wcdb.winq.Order
 import com.tencent.wcdb.winq.OrderingTerm
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import org.difft.app.database.WCDB
+import org.difft.app.database.clearRoomSendStatusIfNoFailure
 import org.difft.app.database.clearRoomSendingStatusIfNoSending
+import org.difft.app.database.roomIdsWithNonNoneSendStatus
 import org.difft.app.database.roomIdsWithSendingStatusFlagged
 import org.difft.app.database.roomIdsWithStaleSendingOutgoing
 import org.difft.app.database.writeRoomSendStatusFor
@@ -344,6 +346,29 @@ class WcdbJobStorage @Inject constructor(
         before
     } catch (e: Exception) {
         L.e { "[JobStorage] sweepStaleSendingMessages failed: ${e.stackTraceToString()}" }
+        0
+    }
+
+    /**
+     * One guarded clear per room currently flagged FAILED. Cheap (flagged rooms are few) and
+     * race-safe by construction: [org.difft.app.database.clearRoomSendStatusIfNoFailure] re-reads
+     * the message table inside its own UPDATE, so a send that fails concurrently is never wiped.
+     *
+     * Heals rooms flagged by rows the aggregate no longer counts (issue #1265: failed screenshot
+     * rows written before the dedicated send job existed) — without this they would clear only on
+     * the room's next unrelated message change.
+     */
+    @WorkerThread
+    fun reconcileFailedRoomTags(): Int = try {
+        val flagged = wcdb.roomIdsWithNonNoneSendStatus()
+        flagged.forEach { wcdb.clearRoomSendStatusIfNoFailure(it) }
+        // Best-effort nudge for an already-open conversation list, same caveat as the sweep above:
+        // RoomChangeTracker.roomChanges is replay = 0, so the room rows are what carry correctness.
+        flagged.forEach { RoomChangeTracker.trackRoom(it, RoomChangeType.MESSAGE) }
+        L.i { "[JobStorage] reconcileFailedRoomTags flagged=${flagged.size}" }
+        flagged.size
+    } catch (e: Exception) {
+        L.e { "[JobStorage] reconcileFailedRoomTags failed: ${e.stackTraceToString()}" }
         0
     }
 

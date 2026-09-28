@@ -1,9 +1,8 @@
 package com.difft.android.call
 
 import androidx.compose.ui.unit.dp
-import com.difft.android.call.ui.PORTRAIT_BARRAGE_ENTRY_RESERVED
-import com.difft.android.call.ui.PORTRAIT_BOTTOM_RESERVED
-import com.difft.android.call.ui.barrage.barrageStackBottomPadding
+import com.difft.android.call.ui.actionbar.CallActionBarPlanner
+import com.difft.android.call.ui.portraitBottomReserved
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -32,27 +31,20 @@ class LCallUiConstantsChromeTest {
         assertEquals(0, LCallUiConstants.TOP_BAR_MARGIN_TOP_DP)
         assertEquals(4, LCallUiConstants.TOP_BAR_MARGIN_BOTTOM_DP)
 
-        // MainPageWithBottomControlView: control diameter and the portrait bottom margin.
+        // Action bar: the full-size control diameter the planner derives everything else from.
         assertEquals(48, LCallUiConstants.BOTTOM_BAR_CONTROL_SIZE_DP)
-        assertEquals(32, LCallUiConstants.BOTTOM_BAR_MARGIN_BOTTOM_DP)
-
-        // BarrageMessageView entry button: icon size and its four-sided padding.
-        assertEquals(20, LCallUiConstants.BARRAGE_ENTRY_ICON_SIZE_DP)
-        assertEquals(12, LCallUiConstants.BARRAGE_ENTRY_PADDING_DP)
+        assertEquals(LCallUiConstants.BOTTOM_BAR_CONTROL_SIZE_DP, CallActionBarPlanner.BUTTON_DP)
 
         // The breathing gap shared by grid content and the chrome bars.
         assertEquals(8, LCallUiConstants.CHROME_CONTENT_GAP_DP)
     }
 
     // -----------------------------------------------------------------------------------
-    // TC21 — the derived totals that replaced hand-copied 56 / 80 literals, plus the
-    // barrage entry's intrinsic height (previously implicit inside the 52dp reserve).
+    // TC21 — the derived top total that replaced the hand-copied 56 literal.
     // -----------------------------------------------------------------------------------
     @Test
     fun `derived chrome totals equal the literals they replaced`() {
         assertEquals(56, LCallUiConstants.TOP_BAR_TOTAL_HEIGHT_DP)
-        assertEquals(80, LCallUiConstants.BOTTOM_BAR_TOTAL_HEIGHT_DP)
-        assertEquals(44, LCallUiConstants.BARRAGE_ENTRY_TOTAL_HEIGHT_DP)
     }
 
     // -----------------------------------------------------------------------------------
@@ -70,19 +62,21 @@ class LCallUiConstantsChromeTest {
     }
 
     // -----------------------------------------------------------------------------------
-    // TC23 — the consumer composites, read from PRODUCTION's own vals.
+    // TC23 — the grid's bottom reserve, read from PRODUCTION's own function per bar plan.
     //
-    // These assertions deliberately read `PORTRAIT_BOTTOM_RESERVED`,
-    // `PORTRAIT_BARRAGE_ENTRY_RESERVED` and `barrageStackBottomPadding` instead of
-    // recomputing them from `LCallUiConstants`. A test-side re-derivation such as
-    // `BOTTOM_BAR_TOTAL_HEIGHT_DP + CHROME_CONTENT_GAP_DP == 88` would stay green if
-    // production later dropped the gap from its own expression — while the grid and the
-    // barrage stack silently moved 8dp.
+    // Reading `portraitBottomReserved` rather than re-deriving `chromeBottomReserveDp + 8`
+    // keeps the row sensitive to production dropping the gap from its own expression.
     // -----------------------------------------------------------------------------------
     @Test
-    fun `consumer composites hold their pinned values`() {
-        assertEquals(140.dp, PORTRAIT_BOTTOM_RESERVED)
-        assertEquals(52.dp, PORTRAIT_BARRAGE_ENTRY_RESERVED)
-        assertEquals(88.dp, barrageStackBottomPadding)
+    fun `portrait grid reserve follows the bar plan`() {
+        // Phone-width group grid: 48 margin + 48 bar + 56 outside Emoji + 8 gap.
+        val phone = CallActionBarPlanner.resolve(375, 812, isGroup = true, isLandscape = false)
+        assertEquals(160.dp, portraitBottomReserved(phone))
+        // Wide portrait window (split layout): 48 margin + 48 bar + 8 gap.
+        val wide = CallActionBarPlanner.resolve(704, 932, isGroup = true, isLandscape = false)
+        assertEquals(104.dp, portraitBottomReserved(wide))
+        // Compact: 48 margin + 40 bar + 56 outside Emoji + 8 gap.
+        val compact = CallActionBarPlanner.resolve(300, 310, isGroup = true, isLandscape = false)
+        assertEquals(152.dp, portraitBottomReserved(compact))
     }
 }

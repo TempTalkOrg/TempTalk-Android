@@ -139,6 +139,24 @@ internal object UserDataFieldRouter {
             if (prev.dualPaneRatio != new.dualPaneRatio) {
                 add(AppStateChange.FloatChange(AppStateKeys.DUAL_PANE_RATIO, new.dualPaneRatio))
             }
+            if (prev.dualPaneListCollapsed != new.dualPaneListCollapsed) {
+                add(AppStateChange.BooleanChange(AppStateKeys.DUAL_PANE_LIST_COLLAPSED, new.dualPaneListCollapsed))
+            }
+            if (prev.legacyMigrationGuideShown != new.legacyMigrationGuideShown) {
+                add(AppStateChange.BooleanChange(AppStateKeys.LEGACY_MIGRATION_GUIDE_SHOWN, new.legacyMigrationGuideShown))
+            }
+            if (prev.migrationHandoffId != new.migrationHandoffId) {
+                add(AppStateChange.StringChange(AppStateKeys.MIGRATION_HANDOFF_ID, new.migrationHandoffId))
+            }
+            if (prev.migrationHandoffCompletedId != new.migrationHandoffCompletedId) {
+                add(AppStateChange.StringChange(AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID, new.migrationHandoffCompletedId))
+            }
+            if (prev.migrationHandoffDoneAt != new.migrationHandoffDoneAt) {
+                add(AppStateChange.LongChange(AppStateKeys.MIGRATION_HANDOFF_DONE_AT, new.migrationHandoffDoneAt))
+            }
+            if (prev.dualPaneRailCollapsed != new.dualPaneRailCollapsed) {
+                add(AppStateChange.BooleanChange(AppStateKeys.DUAL_PANE_RAIL_COLLAPSED, new.dualPaneRailCollapsed))
+            }
             if (prev.callVoiceChangerPreset != new.callVoiceChangerPreset) {
                 add(AppStateChange.StringChange(AppStateKeys.CALL_VOICE_CHANGER_PRESET, new.callVoiceChangerPreset))
             }
@@ -252,6 +270,12 @@ internal object UserDataFieldRouter {
             AppStateKeys.SAVE_TO_PHOTOS -> base.copy(saveToPhotos = value as Boolean)
             AppStateKeys.VOICE_PLAYBACK_SPEED -> base.copy(voicePlaybackSpeed = value as Float)
             AppStateKeys.DUAL_PANE_RATIO -> base.copy(dualPaneRatio = value as Float)
+            AppStateKeys.DUAL_PANE_LIST_COLLAPSED -> base.copy(dualPaneListCollapsed = value as Boolean)
+            AppStateKeys.LEGACY_MIGRATION_GUIDE_SHOWN -> base.copy(legacyMigrationGuideShown = value as Boolean)
+            AppStateKeys.MIGRATION_HANDOFF_ID -> base.copy(migrationHandoffId = value as String)
+            AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID -> base.copy(migrationHandoffCompletedId = value as String)
+            AppStateKeys.MIGRATION_HANDOFF_DONE_AT -> base.copy(migrationHandoffDoneAt = value as Long)
+            AppStateKeys.DUAL_PANE_RAIL_COLLAPSED -> base.copy(dualPaneRailCollapsed = value as Boolean)
             AppStateKeys.CALL_VOICE_CHANGER_PRESET -> base.copy(callVoiceChangerPreset = value as String)
             AppStateKeys.KEEP_ALIVE_ENABLED -> base.copy(keepAliveEnabled = value as Boolean)
             AppStateKeys.AUTO_START_MESSAGE_SERVICE -> base.copy(autoStartMessageService = value as Boolean)
@@ -314,6 +338,12 @@ internal object UserDataFieldRouter {
             saveToPhotos = appState[AppStateKeys.SAVE_TO_PHOTOS] ?: base.saveToPhotos,
             voicePlaybackSpeed = appState[AppStateKeys.VOICE_PLAYBACK_SPEED] ?: base.voicePlaybackSpeed,
             dualPaneRatio = appState[AppStateKeys.DUAL_PANE_RATIO] ?: base.dualPaneRatio,
+            dualPaneListCollapsed = appState[AppStateKeys.DUAL_PANE_LIST_COLLAPSED] ?: base.dualPaneListCollapsed,
+            legacyMigrationGuideShown = appState[AppStateKeys.LEGACY_MIGRATION_GUIDE_SHOWN] ?: base.legacyMigrationGuideShown,
+            migrationHandoffId = appState[AppStateKeys.MIGRATION_HANDOFF_ID] ?: base.migrationHandoffId,
+            migrationHandoffCompletedId = appState[AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID] ?: base.migrationHandoffCompletedId,
+            migrationHandoffDoneAt = appState[AppStateKeys.MIGRATION_HANDOFF_DONE_AT] ?: base.migrationHandoffDoneAt,
+            dualPaneRailCollapsed = appState[AppStateKeys.DUAL_PANE_RAIL_COLLAPSED] ?: base.dualPaneRailCollapsed,
             callVoiceChangerPreset = appState[AppStateKeys.CALL_VOICE_CHANGER_PRESET] ?: base.callVoiceChangerPreset,
             keepAliveEnabled = appState[AppStateKeys.KEEP_ALIVE_ENABLED] ?: base.keepAliveEnabled,
             autoStartMessageService = appState[AppStateKeys.AUTO_START_MESSAGE_SERVICE] ?: base.autoStartMessageService,

@@ -26,6 +26,7 @@ class JobControllerTest {
     private val dataSerializer = mockk<Data.Serializer>(relaxed = true)
     private val jobTracker = mockk<JobTracker>(relaxed = true)
     private val scheduler = mockk<Scheduler>(relaxed = true)
+    private val persistentScheduler = mockk<Scheduler>(relaxed = true)
     private val debouncer = mockk<Debouncer>(relaxed = true)
     private val callback = mockk<JobController.Callback>(relaxed = true)
 
@@ -37,7 +38,7 @@ class JobControllerTest {
         every { dataSerializer.deserialize(any()) } returns Data.EMPTY
         controller = JobController(
             application, jobStorage, jobInstantiator, constraintInstantiator,
-            dataSerializer, jobTracker, scheduler, debouncer, callback
+            dataSerializer, jobTracker, scheduler, persistentScheduler, debouncer, callback
         )
     }
 
@@ -45,7 +46,7 @@ class JobControllerTest {
     fun tearDown() {
         clearMocks(
             jobStorage, jobInstantiator, constraintInstantiator,
-            dataSerializer, jobTracker, scheduler, debouncer, callback
+            dataSerializer, jobTracker, scheduler, persistentScheduler, debouncer, callback
         )
     }
 
@@ -383,6 +384,37 @@ class JobControllerTest {
         val info = controller.getDebugInfo()
 
         assertTrue(info.contains("None"))
+    }
+
+    // -- submit / retry keep using the composite scheduler --
+
+    @Test
+    fun `submitJob schedules on the composite scheduler and not the persistent one`() {
+        val job = createTestJob("route-submit")
+        every { jobStorage.getJobCountForFactory(any()) } returns 0
+
+        controller.submitJob(job)
+
+        verify(exactly = 1) { scheduler.schedule(0, emptyList()) }
+        verify(exactly = 0) { persistentScheduler.schedule(any(), any()) }
+    }
+
+    @Test
+    fun `onRetry schedules the backoff on the composite scheduler and not the persistent one`() {
+        val job = createTestJob("route-retry")
+        every { job.runAttempt } returns 0
+        every { job.serialize() } returns Data.EMPTY
+        every { jobStorage.getConstraintSpecs("route-retry") } returns emptyList()
+
+        controller.onRetry(job, 45_000L)
+
+        val delay = slot<Long>()
+        verify(exactly = 1) { scheduler.schedule(capture(delay), emptyList()) }
+        assertTrue(
+            delay.captured in 40_000L..45_000L,
+            "expected the backoff delay to reach the scheduler, was ${delay.captured}"
+        )
+        verify(exactly = 0) { persistentScheduler.schedule(any(), any()) }
     }
 
     // -- Helpers --

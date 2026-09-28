@@ -35,12 +35,15 @@ class JobManager(
     private val jobController: JobController
     private val jobTracker: JobTracker = configuration.jobTracker
 
-    // All mutations run on the single-threaded managementDispatcher — no additional synchronization needed
-    private val emptyQueueListeners: MutableSet<EmptyQueueListener> = mutableSetOf()
-
     private val initDeferred = CompletableDeferred<Unit>()
 
     init {
+        // The scheduler that survives process death, kept separately so the drained-queue cancel
+        // can target it without fanning out to the in-process timer the composite also carries.
+        val persistentScheduler: Scheduler =
+            if (Build.VERSION.SDK_INT < 26) AlarmManagerScheduler(application)
+            else JobSchedulerScheduler(application)
+
         jobController = JobController(
             application,
             configuration.jobStorage,
@@ -48,8 +51,9 @@ class JobManager(
             configuration.constraintFactories,
             configuration.dataSerializer,
             configuration.jobTracker,
-            if (Build.VERSION.SDK_INT < 26) AlarmManagerScheduler(application)
-            else CompositeScheduler(InAppScheduler(this), JobSchedulerScheduler(application)),
+            if (Build.VERSION.SDK_INT < 26) persistentScheduler
+            else CompositeScheduler(InAppScheduler(this), persistentScheduler),
+            persistentScheduler,
             Debouncer(500),
             this::onEmptyQueue
         )
@@ -184,26 +188,6 @@ class JobManager(
         }
     }
 
-    /**
-     * Adds a listener that will be notified when the job queue has been drained.
-     */
-    internal fun addOnEmptyQueueListener(listener: EmptyQueueListener) {
-        scope.launch(managementDispatcher) {
-            initDeferred.await()
-            emptyQueueListeners.add(listener)
-        }
-    }
-
-    /**
-     * Removes a listener that was added via [addOnEmptyQueueListener].
-     */
-    internal fun removeOnEmptyQueueListener(listener: EmptyQueueListener) {
-        scope.launch(managementDispatcher) {
-            initDeferred.await()
-            emptyQueueListeners.remove(listener)
-        }
-    }
-
     override fun onConstraintMet(reason: String) {
         L.i { "onConstraintMet($reason)" }
         wakeUp()
@@ -242,15 +226,23 @@ class JobManager(
         }
     }
 
+    /**
+     * Signals the job runners on behalf of a persisted wake-up the system started.
+     *
+     * Suspends until the signal has been delivered, so the caller finishes its system job only
+     * once the queue has been poked. Nothing here decides the wake-up's fate: the runners' next
+     * idle transition is what cancels the groups that no longer have work.
+     */
+    internal suspend fun wakeUpFromSystem() = withContext(managementDispatcher) {
+        initDeferred.await()
+        jobController.wakeUp()
+    }
+
     private fun onEmptyQueue() {
         scope.launch(managementDispatcher) {
             initDeferred.await()
-            emptyQueueListeners.forEach { it.onQueueEmpty() }
+            jobController.cancelIdleWakeUps()
         }
-    }
-
-    fun interface EmptyQueueListener {
-        fun onQueueEmpty()
     }
 
     class JobIdFilter(private val id: String) : JobTracker.JobFilter {

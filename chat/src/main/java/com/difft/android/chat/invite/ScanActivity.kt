@@ -23,6 +23,8 @@ import com.hi.dhl.binding.viewbind
 import com.difft.android.selector.utils.ToastUtils
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import com.difft.android.base.migration.LinkMigrationInfo
+import com.difft.android.base.migration.PeerApps
 
 @AndroidEntryPoint
 class ScanActivity : BaseActivity() {
@@ -31,6 +33,11 @@ class ScanActivity : BaseActivity() {
         /** When true, the raw scanned string is returned via setResult instead of being handled in-place. */
         const val EXTRA_RETURN_RESULT = "extra_return_result"
         const val EXTRA_SCAN_RESULT = "extra_scan_result"
+
+        /** Optional page title and one or two lines of guidance under the frame (the migration pairing page's scan state). */
+        const val EXTRA_TITLE = "extra_title"
+        const val EXTRA_HINT = "extra_hint"
+        const val EXTRA_HINT_SECONDARY = "extra_hint_secondary"
 
         fun startActivity(activity: Activity) {
             val intent = Intent(activity, ScanActivity::class.java)
@@ -52,8 +59,6 @@ class ScanActivity : BaseActivity() {
     @Inject
     lateinit var urlManager: UrlManager
 
-    @Inject
-    lateinit var linkDeviceUtils: LinkDeviceUtils
 
     private var cameraController: ScanCameraController? = null
     private var orientationListener: OrientationEventListener? = null
@@ -69,6 +74,18 @@ class ScanActivity : BaseActivity() {
         onCameraPermissionForScan.launchSinglePermission(Manifest.permission.CAMERA)
 
         mBinding.ibBack.setOnClickListener { finish() }
+        applyCallerGuidance()
+    }
+
+    /** A caller may dress the scanner for its own step; without extras the page is the plain home scanner. */
+    private fun applyCallerGuidance() {
+        intent.getStringExtra(EXTRA_TITLE)?.let { mBinding.tvTitle.text = it }
+        val hint = intent.getStringExtra(EXTRA_HINT) ?: return
+        mBinding.llHint.visibility = android.view.View.VISIBLE
+        mBinding.tvHint.text = hint
+        val secondary = intent.getStringExtra(EXTRA_HINT_SECONDARY)
+        mBinding.tvHintSecondary.visibility = if (secondary.isNullOrEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+        mBinding.tvHintSecondary.text = secondary
     }
 
     private fun startScan() {
@@ -142,6 +159,18 @@ class ScanActivity : BaseActivity() {
             return
         }
 
+        // A migration pairing code from another device's receive screen: hand it to the send screen
+        // exactly as its own scanner would, so the general "scan" entry works for migration too.
+        if (PeerApps.looksLikeMigrationQr(result)) {
+            startActivity(
+                Intent()
+                    .setClassName(packageName, PeerApps.SEND_ACTIVITY)
+                    .putExtra(PeerApps.EXTRA_QR_PAYLOAD, result),
+            )
+            finish()
+            return
+        }
+
         val uri = result.toUri()
         if (uri.scheme?.startsWith("http") == true) {
             //域名白名单检测
@@ -159,7 +188,21 @@ class ScanActivity : BaseActivity() {
             val resultStr = result.replace("tsdevice:/", "tsdevice://").toUri()
             val ephemeralId = resultStr.getQueryParameter("uuid")
             val publicKeyEncoded = resultStr.getQueryParameter("pub_key")
-            linkDeviceUtils.linkDevice(this, ephemeralId, publicKeyEncoded, true)
+            if (ephemeralId.isNullOrEmpty() || publicKeyEncoded.isNullOrEmpty()) {
+                showResultContent(result)
+                return
+            }
+            // The sign-in confirmation page owns the decision about syncing history; it gets the raw
+            // migration query values and decides what the code means.
+            startActivity(
+                Intent()
+                    .setClassName(packageName, PeerApps.LINK_LOGIN_ACTIVITY)
+                    .putExtra(PeerApps.EXTRA_LINK_EPHEMERAL_ID, ephemeralId)
+                    .putExtra(PeerApps.EXTRA_LINK_PUBLIC_KEY, publicKeyEncoded)
+                    .putExtra(PeerApps.EXTRA_QR_PAYLOAD, resultStr.getQueryParameter(LinkMigrationInfo.QUERY_KEY))
+                    .putExtra(PeerApps.EXTRA_LINK_MIGRATION_STATE, resultStr.getQueryParameter(LinkMigrationInfo.STATE_QUERY_KEY)),
+            )
+            finish()
         } else {
             showResultContent(result)
         }

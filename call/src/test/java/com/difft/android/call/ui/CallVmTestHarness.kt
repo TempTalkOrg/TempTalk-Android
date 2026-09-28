@@ -144,6 +144,7 @@ internal object CallVmTestHarness {
             userManager = mockk(relaxed = true),
             proxyConfigProvider = mockk(relaxed = true),
             urlManager = urlManager,
+            authTokenProvider = mockk(relaxed = true),
         )
     }
 }

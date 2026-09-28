@@ -24,6 +24,19 @@ interface MessageStore {
 
     suspend fun updateMessageTranslateData(conversationId: String, messageId: String, translateData: TranslateData)
 
+    /**
+     * Batch variant of [updateMessageTranslateData]: one round of queries for the whole batch
+     * instead of two per entry.
+     *
+     * Entries whose status is not persistable (Translating / SameLanguage / Failed /
+     * FailedTooLong) are dropped with a warning, and so are entries whose message no longer
+     * exists in [conversationId].
+     */
+    suspend fun updateMessageTranslateDataBatch(
+        conversationId: String,
+        dataByMessageId: Map<String, TranslateData>
+    )
+
     suspend fun updateMessageSpeechToTextData(conversationId: String, messageId: String, speechToTextData: SpeechToTextData)
 
     fun deleteDatabase()

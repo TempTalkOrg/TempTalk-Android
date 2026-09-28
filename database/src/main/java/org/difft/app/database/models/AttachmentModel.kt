@@ -22,6 +22,25 @@ class AttachmentModel {
     @WCDBField
     var messageId: String? = null
 
+    /**
+     * Local identity of this attachment copy: assigned when the domain object is created and never
+     * rewritten from a server response (unlike [id] / [authorityId], which carry server identity).
+     *
+     * Nullable: rows written before the column existed carry NULL, and readers synthesize a
+     * transient id for those instead of failing.
+     *
+     * The index is deliberately NOT unique yet. A domain `Attachment` copy inherits the localId of
+     * its source (data-class `copy()`), so every site that creates a NEW copy must mint a fresh id
+     * before uniqueness can be enforced — otherwise forwarding an attachment inserts a duplicate
+     * and aborts the send.
+     *
+     * Excluded from [equals] / [hashCode]: it is row identity, not row content, and a synthesized
+     * id differs per read for a NULL row.
+     */
+    @WCDBIndex
+    @WCDBField
+    var localId: String? = null
+
     // boxed Long -> Long?: lets KSP emit a NULL guard on read. #901 bug fix
     @WCDBField
     @WCDBIndex
@@ -33,6 +52,9 @@ class AttachmentModel {
     var quoteModelDatabaseId: Long? = null // this attachment belongs to which quoteModel
 
     // boxed Long -> Long?: lets KSP emit a NULL guard on read. #901 bug fix
+    // Indexed: the migration sweep, legacy row targeting, and EncryptedAttachmentProvider's
+    // legacy-URI fallback all locate rows by this server id — unindexed, each was a table scan.
+    @WCDBIndex
     @WCDBField
     var authorityId: Long? = null // authorityId
 
@@ -63,8 +85,10 @@ class AttachmentModel {
     @WCDBField
     var height: Int = 0
 
-    @WCDBField
-    var path: String? = null
+    // `path` is deliberately NOT persisted. The domain field is a transient send-time byte source
+    // (draft blob for the upload job, carried through the job's own gson serialization); a stored
+    // value only ever went stale and misled readers. The legacy column stays in existing databases
+    // as an ignored dead column.
 
     @WCDBField
     var status: Int = 0
@@ -89,13 +113,13 @@ class AttachmentModel {
                 Objects.deepEquals(key, other.key) &&
                 Objects.deepEquals(thumbnail, other.thumbnail) &&
                 Objects.deepEquals(digest, other.digest) &&
-                fileName == other.fileName && path == other.path
+                fileName == other.fileName
     }
 
     override fun hashCode(): Int =
         Objects.hash(
             id, messageId, forwardModelDatabaseId, quoteModelDatabaseId, authorityId,
             contentType, Arrays.hashCode(key), size, Arrays.hashCode(thumbnail),
-            Arrays.hashCode(digest), fileName, flags, width, height, path, status
+            Arrays.hashCode(digest), fileName, flags, width, height, status
         )
 }

@@ -3,7 +3,6 @@ package com.difft.android.login.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.login.databinding.ActivityCountryPickerBinding
@@ -39,16 +38,8 @@ class CountryPickerActivity : BaseActivity() {
 
         mBinding.ibBack.setOnClickListener { finish() }
 
-        mBinding.edittextSearchInput.addTextChangedListener {
-            resetButtonClear()
-            updateResult()
-        }
-
-        mBinding.buttonClear.setOnClickListener {
-            mBinding.edittextSearchInput.text = null
-        }
-
-        resetButtonClear()
+        mBinding.searchInput.onQueryChanged = { updateResult() }
+        mBinding.searchInput.onClear = { updateResult() }
 
         mBinding.rvCountry.apply {
             layoutManager = LinearLayoutManager(this@CountryPickerActivity)
@@ -71,7 +62,7 @@ class CountryPickerActivity : BaseActivity() {
     }
 
     private fun updateResult() {
-        val key = mBinding.edittextSearchInput.text.toString().trim()
+        val key = mBinding.searchInput.query.trim()
 
         val searchList = if (key.isEmpty()) {
             countryList
@@ -83,12 +74,4 @@ class CountryPickerActivity : BaseActivity() {
         }
     }
 
-    private fun resetButtonClear() {
-        val content = mBinding.edittextSearchInput.text.toString().trim()
-        mBinding.buttonClear.animate().apply {
-            cancel()
-            val toAlpha = if (content.isNotEmpty()) 1.0f else 0f
-            alpha(toAlpha)
-        }
-    }
 }

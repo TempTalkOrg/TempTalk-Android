@@ -91,6 +91,28 @@ object EdgeToEdgeUtils {
     }
 
     /**
+     * Add the bottom system bars / cutout inset on top of the view's own bottom padding, so
+     * the view paints behind the navigation bar and owns that strip (e.g. a bottom tab bar).
+     * Additive on purpose, unlike [applySystemBarsPadding], which replaces padding: a bar that
+     * carries its own bottom padding composes with the inset instead of losing it. The base
+     * padding is captured once, so repeated dispatches do not accumulate. Left, right and top
+     * padding stay untouched and the insets are passed on to siblings.
+     *
+     * @param view The view that consumes the bottom inset as extra padding
+     */
+    fun applyBottomInsetAsPadding(view: View) {
+        val basePaddingBottom = view.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(view) { target, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            target.updatePadding(bottom = basePaddingBottom + insets.bottom)
+            windowInsets
+        }
+        view.requestApplyInsets()
+    }
+
+    /**
      * Get system bars insets (status bar + navigation bar heights)
      *
      * @param view Any view that's attached to the window

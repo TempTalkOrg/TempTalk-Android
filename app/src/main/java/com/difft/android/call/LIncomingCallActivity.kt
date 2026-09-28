@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
@@ -25,7 +24,6 @@ import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
-import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
@@ -51,10 +49,6 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class LIncomingCallActivity : BaseActivity() {
 
-    // Owns its own orientation logic in onCreate (locks portrait unless dual-pane);
-    // opt out of BaseActivity policy to avoid double-assignment on sw=600-839dp.
-    override fun shouldApplyOrientationPolicy(): Boolean = false
-
     @Inject lateinit var callToChatController: LCallToChatController
     @Inject lateinit var onGoingCallStateManager: OnGoingCallStateManager
     @Inject lateinit var inComingCallStateManager: InComingCallStateManager
@@ -79,15 +73,11 @@ class LIncomingCallActivity : BaseActivity() {
         IncomingCallPipController(this, binding) { hangUpTheCall("renderPipMode") }
     }
 
-    @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Orientation comes from BaseActivity's sw600dp policy (portrait on phones, free
+        // rotation on tablets / unfolded foldables) — the same gate the rest of the app uses.
         super.onCreate(savedInstanceState)
         L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
-
-        // Incoming call UI: lock to portrait on phones; tablets/foldables use unspecified.
-        if (!WindowSizeClassUtil.shouldUseDualPaneLayout(this)) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        }
 
         initializeActivityState()
         registerIncomingCallReceiver()

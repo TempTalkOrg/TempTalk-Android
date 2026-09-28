@@ -10,12 +10,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,11 +26,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.difft.android.R
 import com.difft.android.base.R as BaseR
+import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.DifftThemePreview
-
-/** Minimum accessible touch target for the action button (Material accessibility guideline). */
-private val MIN_TOUCH_TARGET = 48.dp
 
 /**
  * Full-screen fail-soft UI shown by [com.difft.android.MainActivity] when the WCDB cipher key is
@@ -99,21 +94,11 @@ fun KeyUnavailableScreen(
 
         Spacer(modifier = Modifier.height(DifftTheme.spacing.stackXLarge))
 
-        Button(
+        DifftButton(
+            text = stringResource(R.string.db_key_unavailable_retry),
             onClick = onRetry,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = DifftTheme.colors.primary,
-                contentColor = DifftTheme.colors.onPrimary
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = MIN_TOUCH_TARGET)
-        ) {
-            Text(
-                text = stringResource(R.string.db_key_unavailable_retry),
-                style = DifftTheme.typography.labelLarge
-            )
-        }
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

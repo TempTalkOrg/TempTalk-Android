@@ -16,10 +16,7 @@ import com.difft.android.base.ui.theme.tokens.ColorTokens
 data class DifftExtendedColors(
     // Functional colors
     val success: Color,
-    val successDark: Color,
     val warning: Color,
-    val warningDark: Color,
-    val info: Color,
 
     // Text hierarchy
     val textPrimary: Color,
@@ -31,6 +28,7 @@ data class DifftExtendedColors(
     val textWarning: Color,
     val textSuccess: Color,
     val textInfo: Color,
+    val textCaution: Color,
 
     // Background hierarchy
     val background: Color,
@@ -38,32 +36,25 @@ data class DifftExtendedColors(
     val backgroundSecondary: Color,  // bg2 (true second elevation, e.g. cards floating above bg1)
     val backgroundTertiary: Color,
     val backgroundQuaternary: Color,  // bg4
-    val backgroundActionPopup: Color,  // Message action popup background
-    val backgroundBottomSheet: Color,  // Bottom sheet background (same as bg.popup)
     val backgroundDisabled: Color,
-    val backgroundModal: Color,
-    val backgroundPopup: Color,
+    val backgroundPopup: Color,  // bgpopup — popups, bottom sheets, elevated cards
+    val backgroundModal: Color,  // bgmodal — dialogs, dropdown menus, notifications
     val backgroundTooltip: Color,
     val backgroundBlue: Color,
-    val bgElevated: Color,  // bg.elevated — default elevated/card background
-    val backgroundElevate: Color,
+    val backgroundSpace: Color,  // bgspace — workspace/brand surface
+    val backgroundPagePrimary: Color,  // bgpage-primary
+    val backgroundPageSecondary: Color,  // bgpage-secondary
+    val bg5: Color,  // bg5 — permanently dark surface (call UI)
 
     // UI elements
-    val divider: Color,
     val line: Color,
-    val border: Color,
+    val divider: Color,
     val icon: Color,
     val iconOnPrimary: Color,
 
     // Special effects
     val ripple: Color,
-    val overlay: Color,
     val scrim: Color,
-
-    // Component specific
-    val buttonPrimary: Color,
-    val buttonSecondary: Color,
-    val buttonDisabled: Color,
 
     // System UI
     val statusBarColor: Color,
@@ -88,7 +79,7 @@ fun createLightColorScheme(): ColorScheme = lightColorScheme(
     secondaryContainer = ColorTokens.Light.Bg,
     onSecondaryContainer = ColorTokens.Light.TextSecondary,
 
-    tertiary = ColorTokens.Light.Surface,
+    tertiary = ColorTokens.Light.BackgroundTertiary,
     onTertiary = ColorTokens.Light.TextPrimary,
     tertiaryContainer = ColorTokens.Light.BackgroundTertiary,
     onTertiaryContainer = ColorTokens.Light.TextTertiary,
@@ -101,17 +92,17 @@ fun createLightColorScheme(): ColorScheme = lightColorScheme(
     background = ColorTokens.Light.Background,
     onBackground = ColorTokens.Light.TextPrimary,
 
-    surface = ColorTokens.Light.Surface,
+    surface = ColorTokens.Light.BackgroundTertiary,
     onSurface = ColorTokens.Light.TextPrimary,
-    surfaceVariant = ColorTokens.Light.SurfaceVariant,
+    surfaceVariant = ColorTokens.Light.BackgroundTertiary,
     onSurfaceVariant = ColorTokens.Light.TextSecondary,
 
-    outline = ColorTokens.Light.Border,
-    outlineVariant = ColorTokens.Light.Divider,
+    outline = ColorTokens.Light.Line,
+    outlineVariant = ColorTokens.Light.Line,
 
     scrim = ColorTokens.Light.Scrim,
 
-    inverseSurface = ColorTokens.Dark.Surface,
+    inverseSurface = ColorTokens.Dark.BackgroundTertiary,
     inverseOnSurface = ColorTokens.Dark.TextPrimary,
     inversePrimary = ColorTokens.Primary,
 
@@ -133,7 +124,7 @@ fun createDarkColorScheme(): ColorScheme = darkColorScheme(
     secondaryContainer = ColorTokens.Dark.Bg,
     onSecondaryContainer = ColorTokens.Dark.TextSecondary,
 
-    tertiary = ColorTokens.Dark.Surface,
+    tertiary = ColorTokens.Dark.BackgroundTertiary,
     onTertiary = ColorTokens.Dark.TextPrimary,
     tertiaryContainer = ColorTokens.Dark.BackgroundTertiary,
     onTertiaryContainer = ColorTokens.Dark.TextTertiary,
@@ -146,17 +137,17 @@ fun createDarkColorScheme(): ColorScheme = darkColorScheme(
     background = ColorTokens.Dark.Background,
     onBackground = ColorTokens.Dark.TextPrimary,
 
-    surface = ColorTokens.Dark.Surface,
+    surface = ColorTokens.Dark.BackgroundTertiary,
     onSurface = ColorTokens.Dark.TextPrimary,
-    surfaceVariant = ColorTokens.Dark.SurfaceVariant,
+    surfaceVariant = ColorTokens.Dark.BackgroundTertiary,
     onSurfaceVariant = ColorTokens.Dark.TextSecondary,
 
-    outline = ColorTokens.Dark.Border,
-    outlineVariant = ColorTokens.Dark.Divider,
+    outline = ColorTokens.Dark.Line,
+    outlineVariant = ColorTokens.Dark.Line,
 
     scrim = ColorTokens.Dark.Scrim,
 
-    inverseSurface = ColorTokens.Light.Surface,
+    inverseSurface = ColorTokens.Light.BackgroundTertiary,
     inverseOnSurface = ColorTokens.Light.TextPrimary,
     inversePrimary = ColorTokens.Primary,
 
@@ -168,10 +159,7 @@ fun createDarkColorScheme(): ColorScheme = darkColorScheme(
  */
 fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     success = ColorTokens.Success,
-    successDark = ColorTokens.SuccessDark,
     warning = ColorTokens.Warning,
-    warningDark = ColorTokens.WarningDark,
-    info = ColorTokens.Info,
 
     textPrimary = ColorTokens.Light.TextPrimary,
     textSecondary = ColorTokens.Light.TextSecondary,
@@ -182,35 +170,30 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     textWarning = ColorTokens.WarningDark,
     textSuccess = ColorTokens.SuccessDark,
     textInfo = ColorTokens.Info,
+    textCaution = ColorTokens.CautionDark,
 
     background = ColorTokens.Light.Background,
     bg = ColorTokens.Light.Bg,
     backgroundSecondary = ColorTokens.Light.BackgroundSecondary,
     backgroundTertiary = ColorTokens.Light.BackgroundTertiary,
     backgroundQuaternary = ColorTokens.Light.BackgroundQuaternary,
-    backgroundActionPopup = ColorTokens.Light.BackgroundActionPopup,
-    backgroundBottomSheet = ColorTokens.Light.BackgroundBottomSheet,
     backgroundDisabled = ColorTokens.Light.BackgroundDisabled,
-    backgroundModal = ColorTokens.Light.BackgroundModal,
     backgroundPopup = ColorTokens.Light.BackgroundPopup,
+    backgroundModal = ColorTokens.Light.BackgroundModal,
     backgroundTooltip = ColorTokens.Light.Tooltip,
     backgroundBlue = ColorTokens.Light.BackgroundBlue,
-    bgElevated = ColorTokens.Light.BgElevated,
-    backgroundElevate = ColorTokens.Light.BackgroundElevate,
+    backgroundSpace = ColorTokens.Light.BackgroundSpace,
+    backgroundPagePrimary = ColorTokens.Light.BackgroundPagePrimary,
+    backgroundPageSecondary = ColorTokens.Light.BackgroundPageSecondary,
+    bg5 = ColorTokens.Light.Bg5,
 
-    divider = ColorTokens.Light.Divider,
     line = ColorTokens.Light.Line,
-    border = ColorTokens.Light.Border,
+    divider = ColorTokens.Light.Divider,
     icon = ColorTokens.Light.Icon,
     iconOnPrimary = ColorTokens.Light.IconOnPrimary,
 
     ripple = ColorTokens.Light.Ripple,
-    overlay = ColorTokens.Light.Overlay,
     scrim = ColorTokens.Light.Scrim,
-
-    buttonPrimary = ColorTokens.Primary,
-    buttonSecondary = ColorTokens.Light.Background,
-    buttonDisabled = ColorTokens.Light.BackgroundDisabled,
 
     statusBarColor = ColorTokens.Light.Background,
     navigationBarColor = ColorTokens.Light.Background,
@@ -223,10 +206,7 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
  */
 fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     success = ColorTokens.Success,
-    successDark = ColorTokens.Success,
     warning = ColorTokens.Warning,
-    warningDark = ColorTokens.Warning,
-    info = ColorTokens.InfoLight,
 
     textPrimary = ColorTokens.Dark.TextPrimary,
     textSecondary = ColorTokens.Dark.TextSecondary,
@@ -237,35 +217,30 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     textWarning = ColorTokens.Warning,
     textSuccess = ColorTokens.Success,
     textInfo = ColorTokens.InfoLight,
+    textCaution = ColorTokens.Caution,
 
     background = ColorTokens.Dark.Background,
     bg = ColorTokens.Dark.Bg,
     backgroundSecondary = ColorTokens.Dark.BackgroundSecondary,
     backgroundTertiary = ColorTokens.Dark.BackgroundTertiary,
     backgroundQuaternary = ColorTokens.Dark.BackgroundQuaternary,
-    backgroundActionPopup = ColorTokens.Dark.BackgroundActionPopup,
-    backgroundBottomSheet = ColorTokens.Dark.BackgroundBottomSheet,
     backgroundDisabled = ColorTokens.Dark.BackgroundDisabled,
-    backgroundModal = ColorTokens.Dark.BackgroundModal,
     backgroundPopup = ColorTokens.Dark.BackgroundPopup,
+    backgroundModal = ColorTokens.Dark.BackgroundModal,
     backgroundTooltip = ColorTokens.Dark.Tooltip,
     backgroundBlue = ColorTokens.Dark.BackgroundBlue,
-    bgElevated = ColorTokens.Dark.BgElevated,
-    backgroundElevate = ColorTokens.Dark.BackgroundElevate,
+    backgroundSpace = ColorTokens.Dark.BackgroundSpace,
+    backgroundPagePrimary = ColorTokens.Dark.BackgroundPagePrimary,
+    backgroundPageSecondary = ColorTokens.Dark.BackgroundPageSecondary,
+    bg5 = ColorTokens.Dark.Bg5,
 
-    divider = ColorTokens.Dark.Divider,
     line = ColorTokens.Dark.Line,
-    border = ColorTokens.Dark.Border,
+    divider = ColorTokens.Dark.Divider,
     icon = ColorTokens.Dark.Icon,
     iconOnPrimary = ColorTokens.Dark.IconOnPrimary,
 
     ripple = ColorTokens.Dark.Ripple,
-    overlay = ColorTokens.Dark.Overlay,
     scrim = ColorTokens.Dark.Scrim,
-
-    buttonPrimary = ColorTokens.Primary,
-    buttonSecondary = ColorTokens.Dark.BackgroundTertiary,
-    buttonDisabled = ColorTokens.Dark.BackgroundDisabled,
 
     statusBarColor = ColorTokens.Dark.Background,
     navigationBarColor = ColorTokens.Dark.Background,

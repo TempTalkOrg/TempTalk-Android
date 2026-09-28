@@ -6,18 +6,12 @@ import android.view.View
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import androidx.core.view.updateLayoutParams
-import androidx.datastore.preferences.core.edit
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.storage.AppStateDataStoreEntryPoint
-import com.difft.android.base.storage.AppStateKeys
-import com.difft.android.base.utils.appScope
+import com.difft.android.base.storage.KeyboardHeightCache
 import com.difft.android.base.widget.InsetAwareConstraintLayout
 import com.difft.android.chat.ui.CHAT_PANEL_ANIM_DURATION_MS
 import com.google.android.material.bottomsheet.BottomSheetBehavior
-import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
  * Owns the popup chat sheet's keyboard/action-panel coordination: it holds the lift inputs, is the
@@ -68,8 +62,10 @@ class PopupKeyboardPanelController(
     private var isKeyboardShown = false
     private var lastImeHeightPx = 0
 
-    /** Last value handed to [saveKeyboardHeight]; mirrors InsetAwareConstraintLayout's guard. */
-    private var lastSavedKeyboardHeight = 0
+    /** Largest keyboard height stored during the current visible stretch; reset on the hidden edge and on rotation. See [persistKeyboardHeight]. */
+    private var visibleStretchPeakPx = 0
+    private var visibleStretchOrientation = Configuration.ORIENTATION_UNDEFINED
+
     private var pendingAnimationEnd: Runnable? = null
     private val keyboardStateListeners =
         mutableListOf<InsetAwareConstraintLayout.KeyboardStateListener>()
@@ -291,7 +287,7 @@ class PopupKeyboardPanelController(
     private fun dispatchImeEdges(imeVisible: Boolean, imeHeightPx: Int) {
         val edge = when {
             imeVisible && !isKeyboardShown -> { isKeyboardShown = true; Edge.SHOWN }
-            !imeVisible && isKeyboardShown -> { isKeyboardShown = false; Edge.HIDDEN }
+            !imeVisible && isKeyboardShown -> { isKeyboardShown = false; visibleStretchPeakPx = 0; Edge.HIDDEN }
             imeHeightPx != lastImeHeightPx -> Edge.HEIGHT_ONLY
             else -> Edge.NONE // nav-bar / status-bar only dispatch
         }
@@ -362,35 +358,26 @@ class PopupKeyboardPanelController(
      *
      * The height must be the IME inset minus the navigation bar, matching the full-screen
      * computation exactly — the two paths write the same key and must agree.
+     *
+     * Within one visible stretch only a height at or above the stretch's peak is stored: devices
+     * that deliver interpolated insets report the hide animation as shrinking frames while the IME
+     * is still flagged visible, and storing those would size the next panel open to a sliver. A
+     * keyboard that genuinely gets shorter is picked up by its next show, which starts a new stretch.
+     * A rotation also starts a new stretch: this controller survives it with the IME still visible,
+     * and the other orientation's keyboard is a different, usually shorter, height in its own slot.
      */
     private fun persistKeyboardHeight() {
         if (!imeVisible) return
+        val orientation = root.context.resources.configuration.orientation
+        if (orientation != visibleStretchOrientation) {
+            visibleStretchOrientation = orientation
+            visibleStretchPeakPx = 0
+        }
         val keyboardHeight = imeHeightPx - navigationBarHeightPx
-        if (keyboardHeight <= 0 || keyboardHeight == lastSavedKeyboardHeight) return
-        lastSavedKeyboardHeight = keyboardHeight
-        saveKeyboardHeight(keyboardHeight)
-    }
-
-    private fun saveKeyboardHeight(height: Int) {
-        val key = if (root.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            AppStateKeys.KEY_KEYBOARD_HEIGHT_LANDSCAPE
-        } else {
-            AppStateKeys.KEY_KEYBOARD_HEIGHT_PORTRAIT
-        }
-        val appContext = root.context.applicationContext
-        // The entry-point lookup is resolved off the main thread, inside the same runCatching as the
-        // write: this runs from an onApplyWindowInsets pass, so neither the Hilt lookup nor a graph
-        // that is unavailable (tests, teardown) may block or break the insets callback.
-        appScope.launch(Dispatchers.IO) {
-            runCatching {
-                EntryPointAccessors.fromApplication(
-                    appContext,
-                    AppStateDataStoreEntryPoint::class.java,
-                ).appStateDataStore().edit { it[key] = height }
-            }.onFailure {
-                L.w { "[ChatPopupKeyboard] save kb height failed: ${it.stackTraceToString()}" }
-            }
-        }
+        if (keyboardHeight < visibleStretchPeakPx) return
+        visibleStretchPeakPx = keyboardHeight
+        // Shared with the full-screen path; the cache dedupes process-wide and ignores <= 0.
+        KeyboardHeightCache.save(root.context, keyboardHeight)
     }
 
     // endregion

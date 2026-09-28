@@ -5,13 +5,12 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
-    <androidx.appcompat.widget.AppCompatCheckBox
+    <com.difft.android.base.widget.DifftCheckBoxView
         android:id="@+id/selectMark"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="24dp"
-        android:buttonTint="@color/event_checkbox_color_selector"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"

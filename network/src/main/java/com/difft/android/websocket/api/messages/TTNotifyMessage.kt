@@ -34,6 +34,7 @@ data class TTNotifyMessage(
         const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT = 20 // critical alert
 
         const val NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2 = 22 // new critical alert
+        const val NOTIFY_MESSAGE_TYPE_SECONDARY_DEVICE_KEPT = 23 // secondary devices kept through an identity-continuation sign-in
 
         const val NOTIFY_MESSAGE_TYPE_WEAK_CONTACT = 25 // weak contact (delayed removal)
         // reuses Data.changeType: 0=enter weak / 1=remove
@@ -63,6 +64,7 @@ data class TTNotifyMessage(
         const val NOTIFY_ACTION_TYPE_MESSAGES_EXPIRED = 10012 //Earlier messages expired（本地创建）
         const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020 // System notice emitted after a forward completes (Android-local convention, not cross-platform)
         const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021 // System notice emitted after a copy completes (Android-local convention, not cross-platform)
+        const val NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED = 10022 // System notice emitted when the conversation auto-translate setting changes (locally created)
     }
 }
 
@@ -121,6 +123,12 @@ data class Data(
     @SerializedName("expireTime") var expireTime: Long = 0,    // absolute expiry, ms UTC (valid when changeType=0)
     @SerializedName("reason") var reason: Int = 0,             // 0=deleted / 1=deregistered (client does not distinguish)
     @SerializedName("deleteTime") var deleteTime: Long = 0,    // entered-weak time, ms UTC (matches DeletedRecordDto.deleteTime)
+    // notifyType=23 (SECONDARY_DEVICE_KEPT): a new primary signed in with the account's identity carried
+    // over, and the server kept these secondary devices signed in.
+    @SerializedName("keptDeviceIds") val keptDeviceIds: List<String>? = null,
+    @SerializedName("keptDeviceNames") val keptDeviceNames: List<String>? = null,
+    @SerializedName("newDeviceName") val newDeviceName: String? = null,
+    @SerializedName("keptTime") val keptTime: Long = 0,
     )
 
 data class Group(

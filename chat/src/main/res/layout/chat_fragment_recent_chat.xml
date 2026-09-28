@@ -10,18 +10,32 @@
         android:layout_width="match_parent"
         android:layout_height="52dp">
 
+        <!-- Dual-pane only (self-hides on phones): collapses / expands the navigation rail. -->
+        <com.difft.android.base.widget.DualPaneRailToggleView
+            android:id="@+id/rail_toggle"
+            android:layout_width="44dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@string/dual_pane_rail_collapse_hint"
+            android:padding="10dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/chat_title"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="4dp"
             android:gravity="center_vertical"
             android:text="@string/chat_chats"
             android:textColor="@color/t.primary"
             android:textSize="20sp"
             android:textStyle="bold"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintStart_toEndOf="@id/rail_toggle"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_goneMarginStart="16dp" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/add_options"
@@ -35,13 +49,19 @@
             app:layout_constraintTop_toTopOf="parent"
             app:tint="@color/t.primary" />
 
+        <!--
+          Status indicator, so it sits with the other title-bar icons next to the add button; the
+          migration pill is an ACTION and takes the outer slot. Horizontal padding matches
+          add_options' 10dp, so the gap to every neighbour is set by padding alone rather than by
+          per-view margins.
+        -->
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/iv_proxy_status"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:contentDescription="@string/chat_proxy_status"
-            android:paddingStart="16dp"
-            android:paddingEnd="0dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
             android:scaleType="centerInside"
             android:src="@drawable/chat_ic_proxy_shield_checking"
             android:visibility="gone"
@@ -50,43 +70,23 @@
             app:layout_constraintTop_toTopOf="parent"
             tools:visibility="visible" />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_register"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/yellow_50"
-        android:padding="16dp"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/chat_title"
-        tools:visibility="visible">
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_auth_failed"
-            android:layout_width="0dp"
+        <!--
+          Retiring package only (org.difft.chative): the always-present "move to the new app" pill;
+          content is composed by the fragment. The gap to its right comes from the proxy icon's start
+          padding — and from goneMarginEnd when the proxy indicator is hidden, which is its default.
+        -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/migrate_entry"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/chat_state_auth_failed_tips"
-            android:textColor="@color/t.black"
-            android:textSize="14sp"
-            app:layout_constraintEnd_toStartOf="@+id/iv_auth_failed_arrow"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/iv_auth_failed_arrow"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/chat_ic_arrow_right"
-            android:tint="@color/icon"
-            app:layout_constraintBottom_toBottomOf="@+id/tv_auth_failed"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@+id/tv_auth_failed"
-            app:tint="@color/t.black" />
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/iv_proxy_status"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_goneMarginEnd="10dp" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/cl_permission_tip"

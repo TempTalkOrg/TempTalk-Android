@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,11 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,13 +36,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
@@ -53,6 +48,9 @@ import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.base.ui.compose.input.ClearMode
+import com.difft.android.base.ui.compose.input.DifftClearableTextField
+import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
@@ -171,7 +169,6 @@ class FilePreSendActivity : BaseActivity() {
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         ConversationSetRequestBody(conversationId, confidentialMode = mode)
                     )
                 }
@@ -230,7 +227,7 @@ private fun FilePreSendScreen(
         Image(
             painter = painterResource(id = com.difft.android.base.R.drawable.chative_ic_back),
             contentDescription = null,
-            colorFilter = ColorFilter.tint(DifftTheme.colors.onSurface),
+            colorFilter = ColorFilter.tint(DifftTheme.colors.textPrimary),
             modifier = Modifier
                 .size(48.dp)
                 .clickable { onBack() }
@@ -252,16 +249,16 @@ private fun FilePreSendScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = fileName,
-                color = DifftTheme.colors.onSurface,
-                fontSize = 16.sp,
+                color = DifftTheme.colors.textPrimary,
+                style = DifftTheme.typography.p2,
                 maxLines = 1,
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = FileUtil.readableFileSize(fileSize),
-                color = DifftTheme.colors.onSurfaceVariant,
-                fontSize = 14.sp
+                color = DifftTheme.colors.textSecondary,
+                style = DifftTheme.typography.p3
             )
         }
 
@@ -292,6 +289,8 @@ private fun FilePreSendScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
+                    // Not a library colour: bg_confidential_area (#F7FCFF / #131F2E) is a
+                    // confidential-mode tint with no semantic token and no palette step.
                     if (isConfidential) colorResource(id = com.difft.android.base.R.color.bg_confidential_area)
                     else Color.Transparent
                 )
@@ -305,52 +304,42 @@ private fun FilePreSendScreen(
                     .heightIn(min = 44.dp)
                     .border(
                         width = 0.5.dp,
-                        color = colorResource(id = com.difft.android.base.R.color.line),
-                        shape = RoundedCornerShape(8.dp)
+                        color = DifftTheme.colors.line,
+                        shape = DifftTheme.radius.largeShape
                     )
                     .background(
-                        color = colorResource(
-                            id = if (isConfidential) com.difft.android.base.R.color.bg1
-                            else com.difft.android.base.R.color.bg2
-                        ),
-                        shape = RoundedCornerShape(8.dp)
+                        color = if (isConfidential) DifftTheme.colors.background
+                        else DifftTheme.colors.backgroundSecondary,
+                        shape = DifftTheme.radius.largeShape
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Text input
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (messageBody.isEmpty()) {
-                        Text(
-                            text = stringResource(id = R.string.MediaReviewFragment__add_a_message),
-                            color = DifftTheme.colors.textDisabled,
-                            fontSize = 16.sp
-                        )
-                    }
-                    BasicTextField(
-                        value = messageBody,
-                        onValueChange = { newValue ->
-                            val utf8Size = newValue.toByteArray(Charsets.UTF_8).size
-                            messageBody = if (utf8Size > MAX_TEXT_FILE_SIZE) {
-                                ToastUtil.show(R.string.text_file_exceeds_10mb_limit)
-                                newValue.utf8Substring(MAX_TEXT_FILE_SIZE)
-                            } else {
-                                newValue
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = TextStyle(
-                            color = DifftTheme.colors.textPrimary,
-                            fontSize = 16.sp
-                        ),
-                        maxLines = MESSAGE_INPUT_MAX_LINES,
-                        cursorBrush = SolidColor(DifftTheme.colors.primary)
-                    )
-                }
+                // The row draws the box (it also hosts the confidential toggle), so the field
+                // itself stays transparent and borderless.
+                DifftClearableTextField(
+                    value = messageBody,
+                    onValueChange = { newValue ->
+                        val utf8Size = newValue.toByteArray(Charsets.UTF_8).size
+                        messageBody = if (utf8Size > MAX_TEXT_FILE_SIZE) {
+                            ToastUtil.show(R.string.text_file_exceeds_10mb_limit)
+                            newValue.utf8Substring(MAX_TEXT_FILE_SIZE)
+                        } else {
+                            newValue
+                        }
+                    },
+                    onClear = {},
+                    hint = stringResource(id = R.string.MediaReviewFragment__add_a_message),
+                    style = DifftTextFieldStyle.Form,
+                    clearMode = ClearMode.Never,
+                    maxLines = MESSAGE_INPUT_MAX_LINES,
+                    containerColor = Color.Transparent,
+                    // Composer text, one step above the library field size.
+                    textStyle = DifftTheme.typography.p2,
+                    height = null,
+                    minHeight = 0.dp,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.weight(1f),
+                )
 
                 // Confidential toggle inside input field
                 if (showConfidentialToggle) {
@@ -362,7 +351,7 @@ private fun FilePreSendScreen(
                         ),
                         contentDescription = null,
                         colorFilter = if (isEnabled) null
-                            else ColorFilter.tint(colorResource(id = com.difft.android.base.R.color.icon)),
+                            else ColorFilter.tint(DifftTheme.colors.icon),
                         modifier = Modifier
                             .size(44.dp)
                             .clickable { onConfidentialToggle() }

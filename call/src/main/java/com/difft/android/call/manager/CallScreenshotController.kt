@@ -16,14 +16,19 @@ import kotlinx.coroutines.CoroutineScope
  * the detector based on the current call type, foreground/background state and
  * PIP mode, and notifying the peer when a screenshot is captured.
  *
- * Suppression rules:
- * - Instant calls never trigger a notification.
- * - PIP mode never triggers a notification.
- * - Activity not in the foreground never triggers a notification.
- * - Window focus lost longer than the threshold (treated as the notification
- *   shade being pulled down) never triggers a notification.
+ * It is also where the call flow asks *when* the last capture happened
+ * ([millisSinceLastScreenshot]). That reads the detector's capture clock, not the notification
+ * path, so a capture that was detected but deliberately not announced to the peer still counts.
+ *
+ * Suppression rules, and what each costs a caller of the capture clock:
+ * - Instant calls, PIP mode and a backgrounded Activity stop the detector, or never start it, so
+ *   no new capture is observed while one of them holds. A reading already taken survives that:
+ *   [millisSinceLastScreenshot] falls back to [Long.MAX_VALUE] only while no detector was ever
+ *   started, which is the whole call when it is instant from the outset.
+ * - Window focus lost longer than the threshold (treated as the notification shade being pulled
+ *   down) drops the notification only; the capture is still observed and timed.
  */
-class CallScreenshotController(
+internal class CallScreenshotController(
     private val activity: AppCompatActivity,
     private val coroutineScope: CoroutineScope,
     private val onGoingCallStateManager: OnGoingCallStateManager,
@@ -34,6 +39,19 @@ class CallScreenshotController(
     private val focusLostAtProvider: () -> Long,
 ) {
     private var screenshotDetector: ScreenshotDetector? = null
+
+    /**
+     * Time elapsed since the detector last observed a capture, or [Long.MAX_VALUE] when there is
+     * no detector (never started for this call, or released) or it has observed none. Stopping a
+     * detector does not clear its clock — a capture seen before it stopped keeps being reported.
+     *
+     * Reads the detector's own capture clock rather than anything recorded here, so it reports
+     * every capture the detector saw — including ones whose notification was dropped, whether by
+     * the detector's debounce or by the suppression rules in [handleScreenshotDetected]. A caller
+     * asking "did a capture just happen?" would get the wrong answer from the notification path.
+     */
+    fun millisSinceLastScreenshot(): Long =
+        screenshotDetector?.millisSinceLastCapture() ?: Long.MAX_VALUE
 
     fun updateListeningState() {
         val conversationId = conversationIdProvider()

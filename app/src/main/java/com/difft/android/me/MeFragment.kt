@@ -22,16 +22,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.BuildConfig
 import com.difft.android.R
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.base.utils.EnvironmentHelper
@@ -141,8 +140,18 @@ class MeFragment : Fragment() {
         }
     }
 
+    /**
+     * The list-pane header (rail toggle · Me) exists only in dual-pane mode, where every tab
+     * header carries the rail toggle in the same place; phones keep the header-less layout.
+     */
+    private fun applyDualPaneHeaderVisibility() {
+        binding.dualPaneHeader.visibility =
+            if ((activity as? DualPaneHost)?.isDualPaneMode == true) View.VISIBLE else View.GONE
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        applyDualPaneHeaderVisibility()
         binding.avatar.setOnClickListener {
             openAvatarPreview()
         }
@@ -408,8 +417,8 @@ fun TextSizeSelectionDialog(
     currentSelection: Int,
     onItemSelected: (Int) -> Unit
 ) {
-    val textColor = colorResource(com.difft.android.base.R.color.t_primary)
-    val selectedColor = colorResource(com.difft.android.base.R.color.t_info)
+    val textColor = DifftTheme.colors.textPrimary
+    val selectedColor = DifftTheme.colors.textInfo
 
     Column(
         modifier = Modifier
@@ -461,7 +470,7 @@ fun TextSizeOptionItem(
         // 文字
         Text(
             text = text,
-            fontSize = 16.sp,
+            style = DifftTheme.typography.p2,
             color = if (isSelected) selectedColor else textColor,
             modifier = Modifier.weight(1f)
         )

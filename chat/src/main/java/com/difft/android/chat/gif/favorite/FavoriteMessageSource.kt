@@ -10,6 +10,8 @@ import com.difft.android.chat.util.FileDecryptionUtil
 import difft.android.messageserialization.model.Attachment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.difft.app.database.models.DBAttachmentModel
+import org.difft.app.database.wcdb
 import java.io.File
 
 /** A decrypted send-staging temp older than this is definitely abandoned (in-use ones live <1s). */
@@ -53,10 +55,61 @@ fun resolveMessageGifPlaintext(context: Context, basePath: String, key: ByteArra
  */
 suspend fun resolveMessageUri(src: PendingSource.Message): Uri? =
     withContext(Dispatchers.IO) {
-        val basePath = FileUtil.getMessageAttachmentFilePath(src.messageId) + src.fileName
-        EncryptedAttachmentAccess.exportContentUriIfEncrypted(src.messageId, basePath)
-            ?: if (EncryptedAttachmentAccess.hasPlaintext(basePath)) File(basePath).toUri() else null
+        val basePath = pendingMessageBasePath(src.messageId, src.fileName)
+        // Segment derived from the RESOLVED path, never from the captured key: after the attachment
+        // migration the two differ, and a uri naming the old directory serves nothing.
+        if (EncryptedAttachmentAccess.hasEncrypted(basePath)) {
+            EncryptedAttachmentAccess.contentUriFromBasePath(basePath)
+        } else if (EncryptedAttachmentAccess.hasPlaintext(basePath)) {
+            File(basePath).toUri()
+        } else {
+            null
+        }
     }
+
+/**
+ * On-disk base path for a pending message ref. The persisted [PendingSource.Message.messageId] is
+ * the directory key AT CAPTURE TIME: a ref captured before per-copy addressing carries the owner
+ * message id (or, for a single-forward bubble, the attachment's authorityId as text), whose directory
+ * the attachment migration may since have renamed onto the row's own localId. When the captured key
+ * no longer resolves, [currentDirectoryKeyFor] names the row it addressed and supplies the CURRENT
+ * key, so a pre-migration pending favorite still finds its local bytes instead of depending on a
+ * (possibly expired) remote copy.
+ *
+ * Shared by every pending-message read — grid render, pending send, and the optimistic writer's
+ * local/plaintext lookups — so none of them can be left resolving a stale address. Runs on IO
+ * (DB read).
+ */
+internal fun pendingMessageBasePath(messageId: String, fileName: String): String {
+    val captured = FileUtil.getMessageAttachmentFilePath(messageId) + fileName
+    if (EncryptedAttachmentAccess.isReadable(captured)) return captured
+    val currentKey = runCatching { currentDirectoryKeyFor(messageId, fileName) }
+        .getOrNull() ?: return captured
+    return FileUtil.getMessageAttachmentFilePath(currentKey) + fileName
+}
+
+/**
+ * The row a legacy pending ref's [capturedKey] addressed, resolved to that row's CURRENT directory
+ * key. Null when no row can be named.
+ *
+ * Both legacy key shapes must be tried. A message-owned attachment was keyed by its owner message id,
+ * which the row carries in `messageId`. A single-forward bubble was keyed by the attachment's
+ * authorityId as text, and a forward-tree row carries NO `messageId` at all (it hangs off a
+ * ForwardModel), so the authorityId arm is the only one that can ever name it. Only a numeric key can
+ * be an authorityId, so the second lookup cannot misfire on a message id or a localId (both
+ * non-numeric).
+ */
+private fun currentDirectoryKeyFor(capturedKey: String, fileName: String): String? {
+    wcdb.attachment.getFirstObject(
+        DBAttachmentModel.messageId.eq(capturedKey)
+            .and(DBAttachmentModel.fileName.eq(fileName))
+    )?.localId?.takeIf { it.isNotEmpty() }?.let { return it }
+    val authorityId = capturedKey.toLongOrNull()?.takeIf { it != 0L } ?: return null
+    return wcdb.attachment.getFirstObject(
+        DBAttachmentModel.authorityId.eq(authorityId)
+            .and(DBAttachmentModel.fileName.eq(fileName))
+    )?.localId?.takeIf { it.isNotEmpty() }
+}
 
 /**
  * Build a [FavoriteSource.FromMessageRef] from a message gif [attachment] (favorite-without-download).
@@ -72,7 +125,10 @@ fun buildMessageRef(attachment: Attachment, messageId: String): FavoriteSource.F
     return FavoriteSource.FromMessageRef(
         messageId = messageId,
         fileName = fileName,
-        attachmentId = attachment.id,
+        // The copy's own local id, not the server-side attachment id: this value is internal to the
+        // favorites domain (see FavoriteSource.FromMessageRef) and never reaches the wire — the
+        // confirmed favorite's outbound id comes from isExist/uploadInfo, under the account.
+        attachmentId = attachment.localId,
         authorizeId = attachment.authorityId,
         key = key,
         digest = attachment.digest ?: ByteArray(0),

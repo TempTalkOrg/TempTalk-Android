@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -20,6 +21,8 @@ import com.difft.android.base.application.ScopeApplication
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.difft.android.base.log.LogHelper
+import com.difft.android.base.migration.PeerApps
+import com.difft.android.migration.v2.handoff.MigrationHandoffReconciler
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.base.widget.ComposeDialogManager
@@ -36,6 +39,7 @@ import org.difft.app.database.probeHealthy
 import org.difft.app.database.wcdb
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.EnvironmentHelper
+import com.difft.android.base.utils.GmsHealth
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallEngine
@@ -54,6 +58,7 @@ import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import com.difft.android.security.SecurityLib
+import com.difft.android.setting.LoggedOutNotifier
 import com.github.anrwatchdog.ANRWatchDog
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.difft.android.base.utils.appScope
@@ -86,6 +91,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
+// App-init orchestrator: already past the LargeClass threshold as a pre-existing god class.
+@Suppress("LargeClass")
 @HiltAndroidApp
 class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")).plus(dbKeyFailSoftExceptionHandler), AppForegroundObserver.Listener, androidx.work.Configuration.Provider {
     // On-demand WorkManager init: WorkManagerInitializer is disabled in the manifest, so this lets
@@ -138,13 +145,44 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
 
     @Inject
+    lateinit var restoreColdStartRecovery: dagger.Lazy<com.difft.android.migration.v2.restore.RestoreColdStartRecovery>
+
+    @Inject
     lateinit var conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>
+
+    @Inject
+    lateinit var translateModelStore: dagger.Lazy<com.difft.android.chat.translate.model.TranslateModelStore>
+
+    @Inject
+    lateinit var translateEngine: dagger.Lazy<com.difft.android.chat.translate.TranslateEngine>
 
     @Inject
     lateinit var processExitProbe: com.difft.android.base.monitor.ProcessExitProbe
 
+    @Inject
+    lateinit var inactiveDeviceDialogPresenter: dagger.Lazy<InactiveDeviceDialogPresenter>
+
+    @Inject
+    lateinit var loggedOutNotifier: dagger.Lazy<LoggedOutNotifier>
+
+    /**
+     * Resolves a same-device handoff whose receipt never arrived here (the process died between the
+     * transfer and the receipt). Lazy — only the retiring app family ever reconciles.
+     */
+    @Inject
+    lateinit var migrationHandoffReconciler: dagger.Lazy<MigrationHandoffReconciler>
+
     // 追踪当前 resumed 的 Activity
+    // @Volatile: hasResumedActivity() is read from the logout coroutine (IO) while this is only
+    // ever written on the main thread.
+    @Volatile
     private var currentResumedActivity: WeakReference<FragmentActivity>? = null
+
+    /**
+     * Backs the `AppVisibility` seam consumed by the logout exit path — "is a host on screen that
+     * startActivity can land on", with none of ProcessLifecycleOwner's ~700 ms ON_STOP debounce.
+     */
+    fun hasResumedActivity(): Boolean = currentResumedActivity?.get() != null
 
     private var lockCheckJob: Job? = null
 
@@ -172,13 +210,19 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init Storage", this::initStorageLayer)
             .addBlocking("init UserData", this::initUserData)
+            // Must run before any WCDB table access, so an interrupted promote is finished or
+            // discarded before the WCDB lazy singleton opens with a possibly-mismatched key; the
+            // WCDB-touching startup work is non-blocking and therefore runs after every blocking
+            // task. Not gated on login: the promote runs during login, before signIn, so a
+            // mid-promote crash can leave the user not logged in with a half-promote to finish.
+            .addBlocking("restore cold-start resume", this::resumeRestoreColdStart)
             .addBlocking("init theme", this::initAppTheme)
             .addBlocking("lifecycle-observer") {
                 AppForegroundObserver.addListener(this)
             }
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
-            .addBlocking("installCrashFilter", this::installCrashFilter)
+            .addBlocking("installCrashFilter") { CrashFilter.install(this) }
             .addNonBlocking("reapply locale") {
                 // Refresh the Application's Configuration with the user locale so legacy
                 // callers that read `application.resources` directly see the right locale.
@@ -203,12 +247,26 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addNonBlocking("begin job loop") { ApplicationDependencies.getJobManager().beginJobLoop() }
             .addNonBlocking("init call engine") { initCallEngine() }
             .addNonBlocking("cleanup stale call notification") { cleanupStaleCallNotification() }
+            // Warm the per-process verdict off the main thread so later main-thread readers
+            // (SmsRetrieverHelper on the verify-code screen) hit the cache, not PackageManager.
+            .addNonBlocking("warm GmsHealth") { GmsHealth.isGmsBroken(this) }
             .addNonBlocking("monitor main thread blocking") { monitorMainThreadBlocking() }
             .addNonBlocking("init contactor") { ContactorUtil.init() }
             .addNonBlocking("init global configs") { initGlobalConfigs() }
             .addNonBlocking("observe network risk") { observeNetworkRiskWarning() }
+            .addNonBlocking("observe inactive device") {
+                inactiveDeviceDialogPresenter.get().observe { currentResumedActivity?.get() }
+            }
             .addNonBlocking("init coordinator") { coordinator.get().initialize() }
             // Already on Dispatchers.IO per AppStartup; single runBlocking bridge, no re-dispatch.
+            // Retiring family only: if this process died after handing its session over, the receipt
+            // was never seen — ask the new app whether it completed before acting as a live session.
+            .addNonBlocking("migration handoff reconcile") {
+                if (PeerApps.isLegacy(this)) {
+                    @Suppress("BanRunBlockingOutsideTests")
+                    runBlocking { migrationHandoffReconciler.get().onColdStart() }
+                }
+            }
             .addNonBlocking("probe process exit reasons") {
                 @Suppress("BanRunBlockingOutsideTests")
                 runBlocking { processExitProbe.probe() }
@@ -234,6 +292,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             appScope.launch {
                 pendingLastUseTime.flush(appStateDataStore)
             }
+        }
+        // Off the main thread: the first Lazy<>.get() resolves a Hilt graph, and this callback can
+        // arrive while ANRWatchDog is sampling.
+        appScope.launch {
+            translateEngine.get().onTrimMemory(level)
         }
     }
 
@@ -364,6 +427,47 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         if (ok == null) L.w { "[Startup] initUserData timed out at 2s — snapshot may be empty until next access" }
     }
 
+    /**
+     * Finishes or safely discards a promote interrupted mid-critical-section, before the WCDB lazy
+     * singleton is first opened. On a normal launch `resumeIfNeeded()` is a single `File.exists()`
+     * returning `Outcome.Nothing` with no side effects, so this blocking task costs nothing on the
+     * hot path.
+     *
+     * With a marker present the launch waits for the promote to be finished or discarded, however
+     * long that takes: a timeout would cancel only the wait, and startup would go on to open the
+     * WCDB singleton on a database still being swapped underneath it. The promote is rename-based,
+     * so the wait is sub-second in practice, and the marker only exists after a crash mid-promote.
+     *
+     * Outcomes are logged rather than routed — sign-in continuation and the restore re-prompt happen
+     * in MainActivity.
+     */
+    private fun resumeRestoreColdStart() {
+        val started = SystemClock.elapsedRealtime()
+        @Suppress("BanRunBlockingOutsideTests")
+        val outcome = runCatching {
+            runBlocking { restoreColdStartRecovery.get().resumeIfNeeded() }
+        }.getOrElse { e ->
+            // A resume failure must never break launch.
+            L.e { "[Startup] restore cold-start resume error: ${e.stackTraceToString()}" }
+            null
+        }
+        val elapsed = SystemClock.elapsedRealtime() - started
+        when (outcome) {
+            null -> L.w { "[Startup] restore cold-start resume errored (launch continues)" }
+            is com.difft.android.migration.v2.restore.RestoreColdStartRecovery.Outcome.Nothing ->
+                Unit // Normal launch (no marker) — the common case; nothing to log.
+            is com.difft.android.migration.v2.restore.RestoreColdStartRecovery.Outcome.PromoteResumed ->
+                L.i { "[Startup] restore cold-start: promote resumed → SIGNING_IN elapsedMs=$elapsed" }
+            is com.difft.android.migration.v2.restore.RestoreColdStartRecovery.Outcome.AbortedToCleanState ->
+                L.i { "[Startup] restore cold-start: aborted to clean net-install elapsedMs=$elapsed" }
+            is com.difft.android.migration.v2.restore.RestoreColdStartRecovery.Outcome.RetryableFailure ->
+                L.w {
+                    "[Startup] restore cold-start: retryable failure code=${outcome.error::class.simpleName} " +
+                        "elapsedMs=$elapsed (next launch retries)"
+                }
+        }
+    }
+
     private fun initAppTheme() {
         val theme = userManager.getUserData()?.theme
         L.i { "[TempTalkApplication] loadUserTheme theme: $theme" }
@@ -422,6 +526,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     private fun initNotification() {
         messageNotificationUtil.get().checkAndCreateNotificationChannels()
+        loggedOutNotifier.get().ensureChannel()
     }
 
     private fun initGlobalConfigs() {
@@ -450,6 +555,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 coordinator.get().startPeriodicTest(isForeground = true)
                 // Full conversation-config refetch on foreground (covers background drift); throttled internally.
                 conversationSettingsManager.get().syncConversationSettings()
+                // Reconcile auto-translate models. No-op (one SQL query, no ML Kit call) when no
+                // conversation has the setting on, so users of the feature pay and nobody else does.
+                translateModelStore.get().onForeground()
             }
         }
     }
@@ -462,6 +570,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 globalConfigsManager.get().onAppStateChanged(isForeground = false)
                 messageArchiveManager.get().onAppStateChanged(isForeground = false)
                 coordinator.get().startPeriodicTest(isForeground = false)
+                translateModelStore.get().onBackground()
             }
         }
     }
@@ -526,6 +635,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                     // 网络层在后台线程检测到证书失败时只置位标志；待前台 Activity 可用再弹窗
                     showNetworkRiskWarningIfNeeded(activity)
+
+                    // 451 停用提示同理：socket 线程置位，前台 Activity 可用时再弹窗
+                    inactiveDeviceDialogPresenter.get().onActivityResumed(activity)
                 }
 
                 // 原有的 Call 反馈逻辑
@@ -801,85 +913,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         return isTimeout
-    }
-
-    /**
-     * Intercept crashes triggered by Hook frameworks on abnormal devices (rooted emulators,
-     * automation tools) to prevent them from polluting Firebase Crashlytics metrics.
-     *
-     * Filtered crashes:
-     * 1. [android.util.SuperNotCalledException] — Hook frameworks intercept Activity.onCreate()
-     *    without calling through to the original implementation.
-     * 2. UCropMultipleActivity "Missing required parameters" — Hook frameworks on virtual devices
-     *    (ladroid/redroid emulators) launch UCropMultipleActivity directly via Intent without
-     *    the required CropTotalDataSource parameter. Normal users cannot trigger this because
-     *    ImageFileCropEngine and PictureCommonFragment already validate parameters before
-     *    launching UCrop (see PR #363). The library throws in onCreate() → initCropFragments()
-     *    before any ActivityLifecycleCallbacks can intercept it, so UncaughtExceptionHandler
-     *    is the only viable interception point.
-     *
-     * Crashlytics initializes via ContentProvider (before Application.onCreate()),
-     * so calling this in Application.onCreate() guarantees our handler wraps theirs.
-     */
-    private fun installCrashFilter() {
-        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            if (throwable.javaClass.name == "android.util.SuperNotCalledException") {
-                L.w { "[CrashFilter] Suppressed SuperNotCalledException: ${throwable.message}" }
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } else if (isUCropMissingParametersCrash(throwable)) {
-                L.w { "[CrashFilter] Suppressed UCrop missing parameters crash from abnormal device" }
-                android.os.Process.killProcess(android.os.Process.myPid())
-            } else if (isFinalizerWatchdogTimeout(thread, throwable)) {
-                // Daemon-thread timeout, not a main-thread crash: swallow it. The watchdog thread
-                // dies but the process keeps running, so don't report and don't kill the process.
-                L.w { "[CrashFilter] Suppressed FinalizerWatchdogDaemon timeout: ${throwable.message}" }
-            } else {
-                previousHandler?.uncaughtException(thread, throwable)
-            }
-        }
-    }
-
-    /**
-     * Matches the exact crash: Hook framework launches UCropMultipleActivity directly without
-     * the required CropTotalDataSource parameter, causing `initCropFragments()` to throw.
-     *
-     * Three-layer matching to avoid false positives:
-     * 1. Cause type: `IllegalArgumentException`
-     * 2. Cause message: exact match of UCrop library's error string
-     * 3. Cause stacktrace: must originate from `UCropMultipleActivity.initCropFragments`
-     *
-     * Note: `UCrop.of()` throws the same message but from a different call site — the stacktrace
-     * check distinguishes the two. Our code already guards `UCrop.of()` with null checks (PR #363),
-     * so that path cannot reach here under normal usage.
-     */
-    private fun isUCropMissingParametersCrash(throwable: Throwable): Boolean {
-        // IllegalArgumentException may be the top-level throwable or wrapped as cause
-        // (Android framework wraps Activity.onCreate() exceptions in RuntimeException)
-        val cause = when {
-            throwable is IllegalArgumentException -> throwable
-            throwable.cause is IllegalArgumentException -> throwable.cause as IllegalArgumentException
-            else -> return false
-        }
-        if (cause.message != "Missing required parameters, count cannot be less than 1") return false
-        return cause.stackTrace.any {
-            it.className == "com.yalantis.ucrop.UCropMultipleActivity" &&
-                it.methodName == "initCropFragments"
-        }
-    }
-
-    /**
-     * Android's FinalizerWatchdogDaemon throws TimeoutException when a finalize() takes >10s.
-     * Triggered by OEM background-freeze: wall-clock keeps advancing while the frozen process
-     * can't schedule the finalizer thread, so the watchdog misfires on resume. The blamed object
-     * (e.g. WCDB winq Expression, which only releases native memory via finalize() — no close API)
-     * is just the queue head, not the real cause. Normal foreground devices never hit this.
-     * Equivalent to disabling the watchdog, but without hidden-API reflection (blocked on API 28+).
-     */
-    private fun isFinalizerWatchdogTimeout(thread: Thread, throwable: Throwable): Boolean {
-        if (thread.name != "FinalizerWatchdogDaemon") return false
-        if (throwable !is java.util.concurrent.TimeoutException) return false
-        return throwable.message?.contains("finalize() timed out") == true
     }
 
     private fun initCallEngine() {

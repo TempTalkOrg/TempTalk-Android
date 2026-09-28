@@ -24,6 +24,7 @@ internal class JobController(
     private val dataSerializer: Data.Serializer,
     private val jobTracker: JobTracker,
     private val scheduler: Scheduler,
+    private val persistentScheduler: Scheduler,
     private val debouncer: Debouncer,
     private val callback: Callback
 ) {
@@ -57,6 +58,62 @@ internal class JobController(
 
     fun wakeUp() {
         signalJobAvailable()
+    }
+
+    /**
+     * The ids of the persisted wake-ups that still have work to keep them alive for: the group id
+     * derived from each durable spec's stored constraints, which is exactly the id
+     * [JobSchedulerScheduler] registers that group's job under.
+     *
+     * The answer is per constraint group, not storage-wide: a constraint-less wake must not keep
+     * re-running for specs that only wait on a network constraint. Those specs are owned by their
+     * own NETWORK job, whose framework constraint already gates it, so claiming them here would
+     * re-run the constraint-less job at every backoff for as long as the network stays down.
+     *
+     * Memory-only specs are excluded: nothing about them survives the process, so a wake-up the
+     * framework brought back would find no trace of them and would have been re-run purely to
+     * observe that.
+     *
+     * Within a group this reads [JobStorage.getAllJobSpecs] rather than the pending-jobs query:
+     * running, pending and backoff-waiting specs all count, since the wake-up is exactly what has
+     * to survive a process death mid-run or a long backoff.
+     *
+     * [cancelIdleWakeUps] is the single consumer: what this returns is exactly what stays
+     * registered.
+     */
+    @WorkerThread
+    internal fun pendingWakeUpIds(): Set<Int> = jobStorage.getAllJobSpecs()
+        .filterNot { it.isMemoryOnly }
+        .mapNotNullTo(mutableSetOf()) { spec ->
+            runCatching {
+                persistentJobId(
+                    jobStorage.getConstraintSpecs(spec.id).map { constraintInstantiator.instantiate(it.factoryKey) }
+                )
+            }.onFailure {
+                // An unknown or stale constraint key leaves the owning group unidentifiable;
+                // treating it as no group's work is what keeps a wake-up from living on forever.
+                L.w { "[JobScheduler] spec with unknown constraint key skipped id=${spec.id}: ${it.stackTraceToString()}" }
+            }.getOrNull()
+        }
+
+    /**
+     * Cancels the persisted wake-ups of every group that no longer has work, so the system stops
+     * contacting the process while there is nothing for a wake-up to bring back. The only place a
+     * persisted wake-up is removed.
+     *
+     * Called on every idle transition, which is what makes a per-wake reschedule decision
+     * unnecessary: a group keeps its job exactly while it still has non-memory-only specs, and a
+     * job is never retired in the window where a registration could dedup against it and be lost.
+     *
+     * The condition is [pendingWakeUpIds], not the weaker "no eligible job": that signal also
+     * fires while jobs sit waiting for an unmet NetworkConstraint, and cancelling then would
+     * destroy the very wake-up that brings them back when the network returns.
+     */
+    @WorkerThread
+    internal fun cancelIdleWakeUps() {
+        val keep = pendingWakeUpIds()
+        L.i { "[JobScheduler] idle, keeping wake-ups ids=$keep" }
+        persistentScheduler.cancelAllExcept(keep)
     }
 
     @WorkerThread

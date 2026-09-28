@@ -4,45 +4,19 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import com.difft.android.base.ui.TitleBar
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.setting.archive.MessageArchiveManager
-import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.base.widget.ComposeDialogManager
@@ -100,14 +74,17 @@ class ChatArchiveSettingsActivity : BaseActivity() {
         setContentView(composeView)
     }
 
-    @Preview
     @Composable
     private fun MainContent() {
         val target = chatSettingViewModel.conversation // 直接使用构造方法传递的conversation
 
-        // 从 ViewModel 暴露的 messageExpiry StateFlow 收集，避免在 composition 中调用
-        // flow 操作符（lint: FlowOperatorInvokedInComposition）
         val selectedOption = chatSettingViewModel.messageExpiry.collectAsState()
+
+        val timeList = if (target is For.Group) {
+            messageArchiveManager.getGroupDefaultArchiveTimeList()
+        } else {
+            messageArchiveManager.getDefaultArchiveTimeList()
+        }
 
         Column(
             Modifier.fillMaxSize().systemBarsPadding()
@@ -117,135 +94,18 @@ class ChatArchiveSettingsActivity : BaseActivity() {
                 onBackClick = { finish() }
             )
 
-            ItemViews(target, selectedOption) { newOption ->
-                // 如果选择的时间没有发生变化，不触发任何操作
-                if (selectedOption.value != newOption) {
-                    showTimeChangeDialog(selectedOption.value, newOption) {
-                        chatSettingViewModel.updateSelectedOption(this@ChatArchiveSettingsActivity, newOption)
+            ChatArchiveSettingsContent(
+                options = timeList,
+                selected = selectedOption.value,
+                onSelect = { newOption ->
+                    // Re-selecting the current value is a no-op.
+                    if (selectedOption.value != newOption) {
+                        showTimeChangeDialog(selectedOption.value, newOption) {
+                            chatSettingViewModel.updateSelectedOption(this@ChatArchiveSettingsActivity, newOption)
+                        }
                     }
-                }
-            }
-
-            ExplainView()
-        }
-    }
-
-    @Preview
-    @Composable
-    private fun ExplainView() {
-        Text(
-            text = getString(R.string.disappearing_messages_tips),
-            modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
-            fontSize = 12.sp,
-            color = Color(
-                ContextCompat.getColor(
-                    LocalContext.current, com.difft.android.base.R.color.t_secondary
-                )
+                },
             )
-        )
-    }
-
-    @Preview
-    @Composable
-    private fun ItemViews(
-        target: For? = null,
-        selectedOption: State<Long> = mutableLongStateOf(messageArchiveManager.getDefaultMessageArchiveTime()),
-        onNewOptionSelected: ((Long) -> Unit)? = null
-    ) {
-        val timeList = if (target is For.Group) messageArchiveManager.getGroupDefaultArchiveTimeList() else messageArchiveManager.getDefaultArchiveTimeList()
-        LazyColumn(modifier = Modifier.padding(16.dp)) {
-            val (options, count) = if (selectedOption.value in timeList) {
-                timeList to timeList.size
-            } else {
-                (timeList + selectedOption.value) to (timeList.size + 1)
-            }
-
-            items(count, key = { index -> options[index] }) { index ->
-                val option = options[index]
-                val backgroundShape = remember(option) {
-                    when (option) {
-                        options.firstOrNull() -> RoundedCornerShape(
-                            topStart = 8.dp, topEnd = 8.dp
-                        )
-
-                        options.last() -> RoundedCornerShape(
-                            bottomStart = 8.dp, bottomEnd = 8.dp
-                        )
-
-                        else -> RectangleShape
-                    }
-                }
-
-                val context = LocalContext.current
-                val bgItem = remember {
-                    Color(
-                        ContextCompat.getColor(
-                            context, com.difft.android.base.R.color.bg_elevated
-                        )
-                    )
-                }
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(bgItem, backgroundShape)
-                            .clickable {
-                                onNewOptionSelected?.invoke(option)
-                            }
-                            .padding(start = 16.dp, end = 16.dp),
-                    ) {
-                        val isItemSelected = selectedOption.value == option
-                        val labelTextColor = remember {
-                            Color(
-                                ContextCompat.getColor(
-                                    context, com.difft.android.base.R.color.t_primary
-                                )
-                            )
-                        }
-
-                        Text(
-                            text = option.toArchiveTimeDisplayText(),
-                            modifier = Modifier.weight(1f),
-                            color = labelTextColor
-                        )
-
-                        if (isItemSelected) {
-                            val tint: Color = remember {
-                                Color(
-                                    ContextCompat.getColor(
-                                        context, com.difft.android.base.R.color.t_secondary
-                                    )
-                                )
-                            }
-                            Image(
-                                imageVector = ImageVector.vectorResource(id = R.drawable.chat_ic_selected),
-                                colorFilter = ColorFilter.tint(tint),
-                                contentDescription = "Checked",
-                                modifier = Modifier.padding(start = 16.dp)
-                            )
-                        }
-                    }
-
-                    // 添加分割线，除了最后一个item
-                    if (index < count - 1) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    Color(
-                                        ContextCompat.getColor(
-                                            context,
-                                            com.difft.android.base.R.color.bg
-                                        )
-                                    )
-                                )
-                        )
-                    }
-                }
-            }
         }
     }
 

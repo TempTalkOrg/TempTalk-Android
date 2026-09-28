@@ -1,7 +1,6 @@
 package com.difft.android.chat.contacts
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.network.HttpService
 import com.difft.android.network.responses.DeletedRecordDto
@@ -41,14 +40,10 @@ class WeakContactReconciler @Inject constructor(
     private val dbMessageStore: DBMessageStore,
     private val httpService: HttpService,                       // injected interface (eases @TestInstallIn)
     private val contactorCacheManager: ContactorCacheManager,   // precise invalidation (:chat already depends on :call)
-    private val userManager: UserManager,
     private val wcdb: WCDB,
     private val gson: Gson,
 ) {
     private val mutex = Mutex()   // serializes reconcile / notify entries
-
-    /** Token resolution matches the existing add-friend/contacts APIs (microToken). */
-    private fun token(): String = userManager.getUserData()?.microToken ?: ""
 
     /** Enter weak state (ct=0 / backfill): write placeholder, delete contactor + room. See [enterWeakLocked]. */
     suspend fun enterWeak(uid: String, expireAt: Long, reason: Int, deleteTime: Long, snapshot: ContactorModel) =
@@ -65,7 +60,7 @@ class WeakContactReconciler @Inject constructor(
      * the placeholder before server confirmation would let the next reconcile resurrect it (visible flicker).
      */
     suspend fun removeNow(uid: String): Result<Unit> = runCatching {
-        httpService.deleteDeletedRecord(uid, token())   // idempotent; on success server pushes changeType=1 to other devices
+        httpService.deleteDeletedRecord(uid)   // idempotent; on success server pushes changeType=1 to other devices
         removeWeak(uid)                                  // local delete only after success
         Unit
     }.onFailure { L.w { "[WeakContact] removeNow uid=$uid failed (offline?): ${it.stackTraceToString()}" } }
@@ -80,7 +75,7 @@ class WeakContactReconciler @Inject constructor(
      * when this returns false, or stale/empty weak data would cause false room deletions.
      */
     suspend fun reconcile(trigger: String): Boolean = mutex.withLock {
-        val resp = runCatching { httpService.fetchDeletedRecords(token()) }
+        val resp = runCatching { httpService.fetchDeletedRecords() }
             .onFailure { L.w { "[WeakContact] reconcile($trigger) fetch error: ${it.stackTraceToString()}" } }
             .getOrNull()
         // Gate: data==null (server error / undeployed field) → skip to avoid wiping the weak table;

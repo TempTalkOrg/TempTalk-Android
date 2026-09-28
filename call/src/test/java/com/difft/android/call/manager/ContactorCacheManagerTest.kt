@@ -15,7 +15,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
-import org.difft.app.database.models.ContactorModel
+import org.difft.app.database.test.builders.buildContactor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,8 +34,8 @@ import java.util.Optional
  *
  * Test coverage:
  *  - Branch coverage: FromContactor (DB hit), FromNameOrUid (DB miss).
- *  - Regression assertion: the IO-only path must NOT call `getAvatarByContactor`
- *    or `createAvatarByNameOrUid` from inside the manager.
+ *  - Regression assertion: the IO-only path must NOT call `createAvatarViewBinder`
+ *    from inside the manager.
  *  - Dispatcher proof: the body must execute off the Main dispatcher.
  *  - Path B regression: repeat invocations must not invoke avatar-construction APIs.
  *
@@ -72,17 +72,10 @@ class ContactorCacheManagerTest {
         Dispatchers.resetMain()
     }
 
-    private fun buildContactor(id: String, name: String? = null): ContactorModel {
-        val c = ContactorModel()
-        c.id = id
-        c.name = name
-        return c
-    }
-
     // --- Regression assertions ---------------------------------------------------------
 
     @Test
-    fun `getParticipantDisplayInfo does NOT call getAvatarByContactor`() = runTest(testDispatcher) {
+    fun `getParticipantDisplayInfo does NOT build an avatar View`() = runTest(testDispatcher) {
         val contactor = buildContactor(id = "+12312345678", name = "Alice")
         coEvery {
             callToChatController.getContactorById(any(), "+12312345678")
@@ -90,10 +83,9 @@ class ContactorCacheManagerTest {
 
         subject.getParticipantDisplayInfo("+12312345678.1")
 
-        // Regression assertion: the OLD path called getAvatarByContactor on Main; the NEW
-        // IO-only path must NOT — UI construction is moved to the AndroidView factory.
-        verify(exactly = 0) { callToChatController.getAvatarByContactor(any(), any()) }
-        verify(exactly = 0) { callToChatController.createAvatarByNameOrUid(any(), any(), any()) }
+        // Regression assertion: the OLD path built an avatar View on Main; the NEW IO-only
+        // path must NOT — UI construction belongs to the render sites.
+        verify(exactly = 0) { callToChatController.createAvatarViewBinder(any(), any()) }
     }
 
     // --- Branch coverage ---------------------------------------------------------------
@@ -180,8 +172,7 @@ class ContactorCacheManagerTest {
             subject.getParticipantDisplayInfo("+12312345678.1")
         }
 
-        verify(exactly = 0) { callToChatController.getAvatarByContactor(any(), any()) }
-        verify(exactly = 0) { callToChatController.createAvatarByNameOrUid(any(), any(), any()) }
+        verify(exactly = 0) { callToChatController.createAvatarViewBinder(any(), any()) }
     }
 
     // --- Sanity: id/name are propagated unchanged --------------------------------------

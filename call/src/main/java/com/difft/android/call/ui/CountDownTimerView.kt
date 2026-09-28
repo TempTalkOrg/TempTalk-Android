@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,11 +28,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.Palette
 import com.difft.android.base.user.CallConfig
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.ui.screenshare.getActivity
@@ -53,8 +51,8 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
     val countDownShakeAnim = remember { Animatable(0f) }
     val speakerCountDownDurationStr by viewModel.callUiController.countDownDurationStr.collectAsState("00:00")
 
-    val countDownEndColor = Color(0xFFF84135)
-    val countDownStartColor = Color(0xFF82C1FC)
+    val countDownEndColor = Palette.Red400
+    val countDownStartColor = Palette.Blue200
 
     var preCountDownDurationStr by remember { mutableStateOf("00:00") }
     val shakingThreshold = (callConfig.countdownTimer?.shakingThreshold ?: 3000L) / 1000L
@@ -92,7 +90,9 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
     Row(
         modifier = modifier
             .wrapContentSize()
-            .background(color = Color(0xCC181A20), shape = RoundedCornerShape(size = 4.dp))
+            // Not a library colour: 80 % veil over the call ground (Gray900), so the timer stays
+            // readable over video. No semantic token carries the alpha.
+            .background(color = Color(0xCC181A20), shape = DifftTheme.radius.mediumShape)
             .padding(start = 4.dp, top = 2.dp, end = 4.dp, bottom = 2.dp)
             .graphicsLayer { rotationZ = countDownShakeAnim.value },
         horizontalArrangement = Arrangement.Start,
@@ -106,9 +106,7 @@ fun CountDownTimerView(modifier: Modifier, viewModel: LCallViewModel, callConfig
 
         Text(
             text = speakerCountDownDurationStr,
-            style = TextStyle(
-                fontSize = 12.sp,
-                fontWeight = FontWeight(400),
+            style = DifftTheme.typography.p4.copy(
                 color = if (countDownTimeInLastThreeSeconds(countDownEnabled, countDownSeconds, callConfig.countdownTimer?.warningThreshold ?: 3000L) || countDownShakeAnim.isRunning) countDownEndColor else countDownStartColor,
             ),
             maxLines = 1,

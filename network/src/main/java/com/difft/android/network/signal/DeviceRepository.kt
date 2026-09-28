@@ -1,6 +1,8 @@
 package com.difft.android.network.signal
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.session.AuthFailureSink
+import com.difft.android.base.session.AuthFailureSource
 import com.difft.android.base.utils.Base64
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.websocket.api.messages.multidevice.DeviceInfo
@@ -31,7 +33,10 @@ import javax.inject.Singleton
 @Singleton
 class DeviceRepository @Inject constructor(
     @param:ChativeHttpClientModule.SignalApi
-    private val httpClient: ChativeHttpClient
+    private val httpClient: ChativeHttpClient,
+    // Lazy breaks the Dagger cycle: the sink implementation itself injects this repository to
+    // confirm a rejection. Same shape as ProxyConfigProvider's Lazy<IConnectionRefresher>.
+    private val authFailureSink: dagger.Lazy<AuthFailureSink>,
 ) {
     private val deviceApiService: DeviceApiService =
         httpClient.getService(DeviceApiService::class.java)
@@ -98,9 +103,12 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Auth probe against the devices endpoint (used by RecentChatFragment.checkDevices()).
+     * Auth probe against the devices endpoint. This is the tie-breaker `SessionAuthGuard.confirm()`
+     * uses to decide whether a reported 401/403 is a real kick-out: only an
+     * [AuthorizationFailedException] here means the credential is gone; a 2xx is a false alarm and
+     * any other failure is inconclusive.
      *
-     * @throws AuthorizationFailedException on 401/403 (triggers logout at caller)
+     * @throws AuthorizationFailedException on 401/403
      * @throws AccountOfflineException on 404 with status 10105/10110
      * @throws NotFoundException on other 404
      * @throws PushNetworkException on network failure
@@ -184,6 +192,9 @@ class DeviceRepository @Inject constructor(
             401, 403 -> {
                 L.w { "[DeviceRepository] validateDeviceResponse: auth failed ($code)" }
                 response.errorBody()?.close()
+                // Signal only: the sink confirms against /v1/devices/ before any logout, so a
+                // transient edge rejection here costs one extra probe, never a session.
+                authFailureSink.get().onAuthRejected(AuthFailureSource.DEVICE_API)
                 throw AuthorizationFailedException(code, "Authorization failed!")
             }
             404 -> throw parseOfflineOrNotFound(response)
@@ -210,4 +221,5 @@ class DeviceRepository @Inject constructor(
             NotFoundException("Not found")
         }
     }
+
 }

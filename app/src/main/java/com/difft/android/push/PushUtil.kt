@@ -5,6 +5,7 @@ import com.difft.android.base.utils.globalServices
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.GmsHealth
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -89,6 +90,15 @@ class PushUtil @Inject constructor(
         }
 
         appScope.launch(Dispatchers.IO) {
+            // A GMS install with no gservices provider passes the availability check below but
+            // cannot serve FCM registration; skip the IPC and the 15s wait entirely.
+            if (GmsHealth.isGmsBroken(context)) {
+                L.w { "[Push][fcm] GMS installed but gservices provider missing, treating Play Services as unavailable" }
+                reportPushTelemetry(gmsAvailable = false, fcmTokenAvailable = false)
+                _fcmInitResult.value = FcmInitResult.PlayServicesUnavailable(ConnectionResult.SERVICE_INVALID)
+                return@launch
+            }
+
             // 检查 Google Play Services 是否可用
             val playServiceStatus = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
             val gmsAvailable = playServiceStatus == ConnectionResult.SUCCESS
@@ -184,7 +194,7 @@ class PushUtil @Inject constructor(
                 }
 
                 val result = chatHttpClient.httpService.fetchBindPushToken(
-                    basicAuth, "fcm_v2", BindPushTokenRequestBody(fcmID)
+                    "fcm_v2", BindPushTokenRequestBody(fcmID)
                 )
 
                 if (result.status == 0) {

@@ -26,19 +26,19 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <!-- 49 dp of indicator content + 8 dp bottom padding = the 57 dp floor; the padding lives
+         on the bar because layout_index_indicator.xml is shared with the dual-pane rail. The
+         bar also pads itself by the navigation-bar inset (IndexActivity), so its bg1 covers
+         that strip and stays bg1 on every tab. Floor, not a fixed height: the large-text tab
+         (35 dp icon / 21 sp label) has no library counterpart and must still grow. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/cl_tab"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@color/bg1"
+        android:minHeight="57dp"
+        android:paddingBottom="8dp"
         app:layout_constraintBottom_toBottomOf="parent">
-
-        <!--        <View-->
-        <!--            android:id="@+id/iv_tab_bg"-->
-        <!--            android:layout_width="match_parent"-->
-        <!--            android:layout_height="0dp"-->
-        <!--            android:background="@color/bottom_tab_blur_bg"-->
-        <!--            app:layout_constraintBottom_toBottomOf="parent"-->
-        <!--            app:layout_constraintTop_toTopOf="parent" />-->
 
         <com.difft.android.views.IndexIndicator
             android:id="@+id/indicatorview_chats"

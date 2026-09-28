@@ -270,15 +270,15 @@ class CallServiceUrlManager @Inject constructor(
     }
 
     private suspend fun doFetchAndCache(): List<String> {
-        val token = (globalServices.userManager.getUserData()?.microToken ?: "")
-        if (token.isEmpty()) {
+        // Login-state gate: with no persisted session token, serve the disk cache instead.
+        if (globalServices.userManager.getUserData()?.microToken.isNullOrEmpty()) {
             return synchronized(lock) {
                 loadFromDiskLocked()
                 connectionEndpointsFromState(memState)
             }
         }
         try {
-            val response = callHttpService.getServiceUrlV2(token)
+            val response = callHttpService.getServiceUrlV2()
             if (response.status != 0 || response.data == null) {
                 L.e { "[Call] CallServiceUrlManager getServiceUrlV2 failed status=${response.status}" }
                 statisticsLogManager.get().report(
