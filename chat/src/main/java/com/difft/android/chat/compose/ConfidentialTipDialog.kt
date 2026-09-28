@@ -8,20 +8,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.compose.DifftButton
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
 /**
@@ -52,9 +49,8 @@ fun ConfidentialTipDialogContent(
         // Title
         Text(
             text = title,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = colorResource(id = com.difft.android.base.R.color.t_primary),
+            style = DifftTheme.typography.h5,
+            color = DifftTheme.colors.textPrimary,
             textAlign = TextAlign.Center
         )
 
@@ -63,30 +59,18 @@ fun ConfidentialTipDialogContent(
         // Content
         Text(
             text = content,
-            fontSize = 14.sp,
-            color = colorResource(id = com.difft.android.base.R.color.t_secondary),
+            style = DifftTheme.typography.p3,
+            color = DifftTheme.colors.textSecondary,
             textAlign = TextAlign.Center
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // OK Button with primary color
-        Button(
+        DifftButton(
+            text = stringResource(id = R.string.chat_dialog_ok),
             onClick = onConfirm,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = colorResource(id = com.difft.android.base.R.color.primary)
-            )
-        ) {
-            Text(
-                text = "OK",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

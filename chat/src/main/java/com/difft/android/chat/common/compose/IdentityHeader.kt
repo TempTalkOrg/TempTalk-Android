@@ -28,13 +28,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.compose.input.ClearMode
 import com.difft.android.base.ui.compose.input.DifftClearableTextField
 import com.difft.android.base.ui.theme.DifftTheme
@@ -89,7 +86,8 @@ fun IdentityHeader(
         modifier = modifier
             .fillMaxWidth()
             .then(if (onHeaderClick != null) Modifier.clickable { onHeaderClick() } else Modifier)
-            .animateContentSize(),
+            .animateContentSize()
+            .padding(top = TOP_INSET),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -110,7 +108,7 @@ fun IdentityHeader(
             Spacer(modifier = Modifier.height(NAME_TOP_GAP))
             Text(
                 text = name,
-                style = nameStyle,
+                style = DifftTheme.typography.h5,
                 color = DifftTheme.colors.textPrimary,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -144,8 +142,8 @@ private fun MetaRow(meta: IdentityMeta) {
     val color = if (meta.caution) DifftTheme.colors.textCaution else DifftTheme.colors.textTertiary
     Row(
         modifier = Modifier
-            .padding(top = META_TOP_GAP)
-            .clickable { meta.onClick() },
+            .clickable { meta.onClick() }
+            .padding(top = META_TOP_GAP),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -157,14 +155,14 @@ private fun MetaRow(meta: IdentityMeta) {
         Spacer(modifier = Modifier.width(META_GAP))
         Text(
             text = meta.text,
-            style = metaStyle,
+            style = DifftTheme.typography.p4,
             color = color,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         Spacer(modifier = Modifier.width(META_GAP))
         Icon(
-            painter = painterResource(R.drawable.chat_ic_arrow_right),
+            painter = painterResource(com.difft.android.base.R.drawable.base_ic_chevron_right),
             contentDescription = null,
             modifier = Modifier.size(META_CHEVRON_SIZE),
             tint = color
@@ -188,15 +186,15 @@ private fun NameEditCard(
             .fillMaxWidth()
             .padding(horizontal = DifftTheme.spacing.insetLarge)
             .clip(RoundedCornerShape(CARD_RADIUS))
-            .background(DifftTheme.colors.bgElevated)
+            .background(DifftTheme.colors.background)
     ) {
         DifftClearableTextField(
             value = value,
             onValueChange = onValueChange,
             onClear = {},
             clearMode = ClearMode.Never,
-            containerColor = DifftTheme.colors.bgElevated,
-            textStyle = cardInputStyle,
+            containerColor = DifftTheme.colors.background,
+            textStyle = DifftTheme.typography.p2,
             height = CARD_HEIGHT,
             contentPadding = PaddingValues(horizontal = CARD_INSET),
             maxLength = maxLength,
@@ -208,18 +206,15 @@ private fun NameEditCard(
     }
 }
 
-private val nameStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium)
-private val metaStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal)
-private val cardInputStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal)
-
-private val HORIZONTAL_INSET = 20.dp
-private val BOTTOM_INSET = 18.dp
+private val HORIZONTAL_INSET = 24.dp
+private val TOP_INSET = 12.dp
+private val BOTTOM_INSET = 24.dp
 private val NAME_TOP_GAP = 10.dp
 private val NAME_MAX_WIDTH = 300.dp
-private val META_TOP_GAP = 4.dp
-private val META_GAP = 5.dp
+private val META_TOP_GAP = 10.dp
+private val META_GAP = 4.dp
 private val META_ICON_SIZE = 14.dp
-private val META_CHEVRON_SIZE = 13.dp
+private val META_CHEVRON_SIZE = 14.dp
 private val CARD_TOP_GAP = 18.dp
 private val CARD_HEIGHT = 52.dp
 private val CARD_RADIUS = 12.dp

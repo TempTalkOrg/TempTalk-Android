@@ -14,7 +14,6 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnPreDraw
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.attachment.AttachmentPathResolver
@@ -27,12 +26,12 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isConfidential
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.chat.widget.ConfidentialAttachmentStatusView
 import com.difft.android.chat.widget.ImageAndVideoMessageView
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.widget.VoiceMessageView
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
-import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isLongText
 
 /** High blur for image/video (rich content needs stronger blur), low blur for others (preserve content outline) */
@@ -72,7 +71,6 @@ private fun View.setupConfidentialCover(isBlurred: Boolean) {
         setBackgroundResource(R.drawable.chat_message_confidential_bg)
     }
 }
-
 
 /**
  * 文本内容绑定器
@@ -212,6 +210,7 @@ object ImageContentBinder : ContentBinder {
             coverView.visibility = View.GONE
 
         }
+        contentFrame.findViewById<ConfidentialAttachmentStatusView>(R.id.confidential_status_scrim)?.bind(textMessage, stacked = true)
     }
 }
 
@@ -279,6 +278,7 @@ object AudioContentBinder : ContentBinder {
             coverView.setOnClickListener(null)
             coverView.setOnLongClickListener(null)
         }
+        contentFrame.findViewById<ConfidentialAttachmentStatusView>(R.id.confidential_status_scrim)?.bind(textMessage, stacked = false)
     }
 }
 
@@ -400,21 +400,22 @@ object AttachContentBinder : ContentBinder {
             coverView.setOnClickListener(null)
             coverView.setOnLongClickListener(null)
         }
+        // Long text renders as body text and opens through the text dialog, so its attachment
+        // status is not surfaced on the cover; every other file type gets the shared status layer.
+        val statusLayer = contentFrame.findViewById<ConfidentialAttachmentStatusView>(R.id.confidential_status_scrim)
+        if (isLongText) statusLayer?.hide() else statusLayer?.bind(textMessage, stacked = false)
     }
 
     /**
-     * Long-text "fully downloaded" gate. A complete, MAC-verified ".encrypt" alone counts as ready
-     * (see [EncryptedAttachmentAccess.isLongTextReady]); the status/progress/own-send signal only
-     * guards LEGACY PLAINTEXT files, since forwarded long text keeps its attachment inside the
-     * serialized forwardContext and never flips its status to SUCCESS.
+     * Long-text "fully downloaded" gate: the file decides (see [EncryptedAttachmentAccess.isLongTextReady]).
+     * Neither the row's status nor the message's direction is consulted — forwarded long text keeps
+     * its attachment inside the serialized forwardContext and never flips its status to SUCCESS, and
+     * a forward copy's message id says nothing about who wrote the bytes here.
      */
     private fun longTextReady(message: TextChatMessage, longTextPath: String?): Boolean {
         if (longTextPath == null) return false
-        val progress = message.getAttachmentProgress()
-        val ownDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
-        val plaintextStatusReady = message.attachment?.status == AttachmentStatus.SUCCESS.code ||
-            progress == 100 || ownDeviceSend
-        return EncryptedAttachmentAccess.isLongTextReady(longTextPath, plaintextStatusReady)
+        val attachment = message.attachment ?: return false
+        return EncryptedAttachmentAccess.isLongTextReady(longTextPath, attachment.size)
     }
 
 }

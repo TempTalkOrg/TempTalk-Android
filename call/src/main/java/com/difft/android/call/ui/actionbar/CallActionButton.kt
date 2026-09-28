@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -26,14 +25,10 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 
@@ -125,7 +120,7 @@ fun CallActionButton(
     }
 }
 
-/** Caption under a labelled control: 14sp / 20 line height, primary text. */
+/** Caption under a labelled control: the type scale's P3 (14/20), primary text. */
 @Composable
 fun ActionButtonLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -133,13 +128,8 @@ fun ActionButtonLabel(text: String, modifier: Modifier = Modifier) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
-        style = TextStyle(
-            fontSize = 14.sp,
-            lineHeight = CallActionBarPlanner.LABEL_LINE_HEIGHT_DP.sp,
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight(400),
-            color = DifftTheme.colors.textPrimary,
-        ),
+        style = DifftTheme.typography.p3,
+        color = DifftTheme.colors.textPrimary,
         modifier = modifier.height(CallActionBarPlanner.LABEL_LINE_HEIGHT_DP.dp),
     )
 }
@@ -173,17 +163,14 @@ fun BoxScope.ActionCountBadge(count: Int) {
             .offset(x = 4.dp, y = 2.dp)
             .defaultMinSize(minWidth = 20.dp)
             .height(16.dp)
-            .background(color = DifftTheme.colors.textError, shape = RoundedCornerShape(8.dp))
+            .background(color = DifftTheme.colors.textError, shape = DifftTheme.radius.largeShape)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = count.toString(),
-            color = Color.White,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontFamily = FontFamily.Default,
-            fontWeight = FontWeight(400),
+            style = DifftTheme.typography.p4,
+            color = DifftTheme.colors.textOnPrimary,
             textAlign = TextAlign.Center,
         )
     }

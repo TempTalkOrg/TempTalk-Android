@@ -25,6 +25,7 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.chat.common.SendMessageUtils
+import com.difft.android.chat.messages.PriorConversationReporter
 import com.difft.android.chat.databinding.ChatActivityGroupChatPopupBinding
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
@@ -111,6 +112,9 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
 
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
+
+    @Inject
+    lateinit var priorConversationReporter: PriorConversationReporter
 
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
@@ -425,6 +429,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
         super.onResume()
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
+        priorConversationReporter.onConversationOpened(chatViewModel.forWhat)
         messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 

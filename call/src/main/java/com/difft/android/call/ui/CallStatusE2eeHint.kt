@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,7 +25,6 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
@@ -51,7 +49,7 @@ internal fun AlternatingCallStatusText(
     shouldAnimate: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, color = DifftTheme.colors.textPrimary)
+    val textStyle = DifftTheme.typography.p3.copy(color = DifftTheme.colors.textPrimary)
     if (!shouldAnimate) {
         EncryptedStatusRow(modifier = modifier, textStyle = textStyle, testTag = "call_topbar_status_text")
         return

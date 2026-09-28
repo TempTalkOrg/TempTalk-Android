@@ -1,6 +1,5 @@
 package com.difft.android.login
 
-import com.difft.android.base.utils.globalServices
 
 import android.app.Activity
 import com.difft.android.base.log.lumberjack.L
@@ -12,20 +11,20 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.utils.ResUtils
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import com.difft.android.base.utils.dp
 import com.difft.android.login.databinding.ActivityBindAccountBinding
 import com.difft.android.login.repo.BindRepo
 import com.difft.android.login.ui.CountryPickerActivity
 import com.difft.android.base.widget.setTopMargin
+import com.difft.android.base.widget.withWait
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.hi.dhl.binding.viewbind
 import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ComposeDialog
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
 import javax.inject.Inject
@@ -120,12 +119,12 @@ class BindAccountActivity : BaseActivity() {
             countryPickerActivityLauncher.launch(intent)
         }
 
-        disableHandleZone()
+        mBinding.btnNext.isEnabled = false
         mBinding.account.onQueryChanged = { text ->
-            if (text.trim().isEmpty()) disableHandleZone() else enableHandleZone()
+            mBinding.btnNext.isEnabled = text.trim().isNotEmpty()
         }
-        mBinding.account.onClear = { disableHandleZone() }
-        mBinding.handleZone.setOnClickListener {
+        mBinding.account.onClear = { mBinding.btnNext.isEnabled = false }
+        mBinding.btnNext.setOnClickListener {
             verifyAccount(null)
         }
     }
@@ -137,40 +136,13 @@ class BindAccountActivity : BaseActivity() {
         return "+$countryCode"
     }
 
-    private fun disableHandleZone() =
-        mBinding.apply {
-            handleZone.isEnabled = false
-            animationView.visibility = View.GONE
-            nextText.visibility = View.VISIBLE
-            nextText.setTextColor(ContextCompat.getColor(this@BindAccountActivity, com.difft.android.base.R.color.t_disable))
-        }
-
-    private fun enableHandleZone() =
-        mBinding.apply {
-            handleZone.isEnabled = true
-            animationView.visibility = View.GONE
-            nextText.visibility = View.VISIBLE
-            nextText.setTextColor(ContextCompat.getColor(this@BindAccountActivity, com.difft.android.base.R.color.t_white))
-        }
-
-    private fun loadingHandleZone() =
-        mBinding.apply {
-            handleZone.isEnabled = true
-            animationView.visibility = View.VISIBLE
-            nextText.visibility = View.GONE
-        }
-
     private fun verifyAccount(nonce: String?) {
         val account = mBinding.account.query.trim()
-        val basicAuth = (globalServices.userManager.getUserData()?.baseAuth ?: "")
-
-        loadingHandleZone()
 
         lifecycleScope.launch {
             try {
                 if (type == TYPE_BIND_EMAIL || type == TYPE_CHANGE_EMAIL) {
-                    val result = bindRepo.verifyEmail(basicAuth, account, nonce)
-                    enableHandleZone()
+                    val result = withWait { bindRepo.verifyEmail(account, nonce) }
                     if (result.status == 0) {
                         val bundle = VerifyCodeActivity.createBundle(false, type, account, nonce)
                         activityLauncher.launch(Intent(this@BindAccountActivity, VerifyCodeActivity::class.java).putExtras(bundle))
@@ -188,8 +160,7 @@ class BindAccountActivity : BaseActivity() {
                 } else {
                     val countryCode = mBinding.tvPhoneCode.text.toString().trim()
                     val fullAccount = countryCode + account
-                    val result = bindRepo.verifyPhone(basicAuth, fullAccount, nonce)
-                    enableHandleZone()
+                    val result = withWait { bindRepo.verifyPhone(fullAccount, nonce) }
                     if (result.status == 0) {
                         val bundle = VerifyCodeActivity.createBundle(false, type, fullAccount, nonce)
                         activityLauncher.launch(Intent(this@BindAccountActivity, VerifyCodeActivity::class.java).putExtras(bundle))
@@ -205,9 +176,10 @@ class BindAccountActivity : BaseActivity() {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.w { "[BindAccountActivity] error: ${e.stackTraceToString()}" }
-                enableHandleZone()
                 showInvalidView(e.message)
             }
         }
@@ -218,10 +190,10 @@ class BindAccountActivity : BaseActivity() {
         if (!errorMessage.isNullOrEmpty()) {
             mBinding.errorHint.text = errorMessage
             mBinding.errorHint.visibility = View.VISIBLE
-            mBinding.handleZone.setTopMargin(20.dp)
+            mBinding.btnNext.setTopMargin(20.dp)
         } else {
             mBinding.errorHint.visibility = View.GONE
-            mBinding.handleZone.setTopMargin(16.dp)
+            mBinding.btnNext.setTopMargin(16.dp)
         }
     }
 

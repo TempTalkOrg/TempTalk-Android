@@ -206,7 +206,7 @@ class UserMeetingAttendeeAdapter(
                     val displayName = getDisplayName(
                         attendee.name, attendee.email, attendee.uid
                     )
-                    val firstLetter = getFirstLetter(displayName)
+                    val firstLetter = ContactorUtil.getFirstLetter(displayName)
                     nameTextView.text = displayName
                     avatarView.setAvatar(
                         null, null, firstLetter, attendee.uid ?: ""
@@ -242,7 +242,7 @@ class UserMeetingAttendeeAdapter(
                     attendee.uid
                 )
                 avatarView.setAvatar(
-                    null, null, getFirstLetter(displayName), attendee.uid ?: ""
+                    null, null, ContactorUtil.getFirstLetter(displayName), attendee.uid ?: ""
                 )
                 labelExt.isVisible = true
 
@@ -264,11 +264,6 @@ class UserMeetingAttendeeAdapter(
             }
         }
         return displayName ?: ""
-    }
-
-    private fun getFirstLetter(name: String?): String {
-        return name?.firstOrNull()?.toString()?.uppercase()?.replace("+", "#")
-            ?: "#"
     }
 }
 

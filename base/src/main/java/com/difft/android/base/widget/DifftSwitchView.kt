@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.withStyledAttributes
 import com.difft.android.base.R
 import com.difft.android.base.ui.compose.DifftSwitch
-import com.difft.android.base.ui.compose.DifftSwitchRow
+import com.difft.android.base.ui.compose.settings.DifftSwitchRow
 
 /**
  * XML-hostable shell around [DifftSwitch]. Drop-in for `SwitchCompat`: same `isChecked` /
@@ -23,7 +23,7 @@ import com.difft.android.base.ui.compose.DifftSwitchRow
  * the callback rule).
  *
  * Two forms, chosen by `android:text`:
- * - no text  → the bare 51×31 control (wrap_content footprint = the design box)
+ * - no text  → the bare 52×32 control (wrap_content footprint = the design box)
  * - text     → a [DifftSwitchRow]: label start, switch end. `SwitchCompat` is a TextView, so the
  *   migrated label rows keep their layout untouched; `android:background` and
  *   `android:paddingStart/End` stay on the View, which `AbstractComposeView` honours (it subtracts
@@ -34,10 +34,11 @@ import com.difft.android.base.ui.compose.DifftSwitchRow
  *     android:layout_width="match_parent"
  *     android:layout_height="52dp"
  *     android:paddingStart="16dp"
- *     android:paddingEnd="8dp"
- *     android:background="@color/bg.elevated"
+ *     android:paddingEnd="16dp"
  *     android:text="@string/chat_stick" />
  * ```
+ * Leave `android:background` unset inside a rounded settings card: the card paints the surface,
+ * and a solid fill on the row would square off the card's corners.
  *
  * `android:textSize` / `android:textColor` are deliberately not read: every migrated row is the
  * theme's 16sp `textPrimary`, and two fewer attrs is two fewer ways to bypass the theme.

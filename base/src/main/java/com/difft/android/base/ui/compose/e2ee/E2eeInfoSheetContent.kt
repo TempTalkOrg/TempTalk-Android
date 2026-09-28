@@ -11,10 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,12 +26,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.R
 import com.difft.android.base.ui.compose.DifftBottomSheetDefaults
+import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.openExternalBrowser
 
@@ -82,16 +78,13 @@ fun E2eeInfoSheetContent(
                 )
                 Text(
                     stringResource(R.string.e2ee_sheet_title),
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    fontWeight = FontWeight.Medium,
+                    style = DifftTheme.typography.h5,
                     color = DifftTheme.colors.textPrimary,
                     textAlign = TextAlign.Center,
                 )
                 Text(
                     stringResource(R.string.e2ee_sheet_body),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
+                    style = DifftTheme.typography.p3,
                     color = DifftTheme.colors.textSecondary,
                     textAlign = TextAlign.Center,
                 )
@@ -99,7 +92,7 @@ fun E2eeInfoSheetContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(DifftTheme.colors.backgroundTertiary, RoundedCornerShape(8.dp))
+                    .background(DifftTheme.colors.backgroundTertiary, DifftTheme.radius.largeShape)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -108,12 +101,11 @@ fun E2eeInfoSheetContent(
                 ProtectedItemRow(R.drawable.base_tabler_paperclip, stringResource(R.string.e2ee_sheet_item_file))
                 Text(
                     stringResource(R.string.e2ee_sheet_caveat),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
+                    style = DifftTheme.typography.p4,
                     color = DifftTheme.colors.textSecondary,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .drawTopBorder(DifftTheme.colors.border)
+                        .drawTopBorder(DifftTheme.colors.line)
                         .padding(top = 16.dp),
                 )
             }
@@ -122,29 +114,20 @@ fun E2eeInfoSheetContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Button(
+            DifftButton(
+                text = stringResource(R.string.e2ee_sheet_got_it),
                 onClick = onDismissRequest,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DifftTheme.colors.primary),
-            ) {
-                Text(
-                    stringResource(R.string.e2ee_sheet_got_it),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = DifftTheme.colors.textOnPrimary,
-                )
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
             TextButton(
                 onClick = openLearnMore,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
             ) {
                 Text(
                     stringResource(R.string.e2ee_learn_more),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
+                    // h6, not p3: TextButton's slot style is labelLarge, so this label already
+                    // rendered Medium before the type scale.
+                    style = DifftTheme.typography.h6,
                     color = DifftTheme.colors.textInfo,
                 )
             }
@@ -164,7 +147,7 @@ private fun ProtectedItemRow(@DrawableRes icon: Int, label: String) {
             tint = DifftTheme.colors.icon,
             modifier = Modifier.size(20.dp),
         )
-        Text(label, fontSize = 14.sp, lineHeight = 20.sp, color = DifftTheme.colors.textPrimary)
+        Text(label, style = DifftTheme.typography.p3, color = DifftTheme.colors.textPrimary)
     }
 }
 

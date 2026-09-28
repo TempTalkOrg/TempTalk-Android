@@ -13,7 +13,7 @@ import com.difft.android.base.ui.compose.DifftCheckBoxDefaults
  * XML-hostable shell around [DifftCheckBox]. Drop-in for `AppCompatCheckBox` in list rows and
  * forms: same `isChecked` / `isEnabled` / `setOnCheckedChangeListener` / `setOnClickListener`
  * surface (see [DifftToggleView] for the callback rule), and the same 32dp wrap size, so existing
- * layouts keep their spacing while the glyph itself is the design's 16dp box.
+ * layouts keep their spacing while the glyph itself is the design's 20dp box.
  *
  * ```xml
  * <com.difft.android.base.widget.DifftCheckBoxView

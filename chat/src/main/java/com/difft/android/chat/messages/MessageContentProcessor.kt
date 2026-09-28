@@ -932,6 +932,15 @@ class MessageContentProcessor @Inject constructor(
                     else -> L.w { "[Message][${tag}] weakContact unknown changeType=${data.changeType} uid=$uid" }
                 }
 
+            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_SECONDARY_DEVICE_KEPT) {
+                // The account signed in on a new primary with its identity carried over, and the server kept
+                // its secondary devices signed in — the signal a kicked device would otherwise have been.
+                // Parsed and logged; the user-facing notice waits on its copy.
+                val data = message.data
+                L.i {
+                    "[Message][${tag}] secondary devices kept newDeviceNamed=${!data?.newDeviceName.isNullOrEmpty()} " +
+                        "kept=${data?.keptDeviceIds?.size ?: 0} keptTime=${data?.keptTime}"
+                }
             } else {
                 L.w { "[Message][${tag}] Unknown notifyType: ${message.notifyType}, timestamp: ${envelop.timestamp}" }
             }

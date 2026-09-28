@@ -102,8 +102,9 @@ object WindowSizeClassUtil {
     // shouldUseDualPaneLayout() was deleted deliberately: the resource qualifier
     // (layout-w673dp-h480dp/) is the single dual-pane enforcement mechanism, and a runtime
     // WindowMetrics-based check disagrees with it near the boundary (bounds include system
-    // decoration). Former call-module callers use the sw600dp orientation policy
-    // (R.bool.force_portrait_orientation) instead. Do not reintroduce a second gate.
+    // decoration). Former call-module callers use the display-level OrientationPolicy
+    // (LCallActivity applies + replays it itself, including the OrientationDisplayWatcher).
+    // Do not reintroduce a second gate.
 
     /**
      * Get the current window width in pixels

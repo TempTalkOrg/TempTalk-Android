@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,12 +38,8 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.difft.android.base.ui.theme.DifftTheme
@@ -111,7 +106,7 @@ fun CallCriticalAlertBanner(onClicked: () -> Unit) {
                     }
                     .background(
                         color = DifftTheme.colors.backgroundTertiary,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = DifftTheme.radius.largeShape
                     )
                     .shadow(elevation = 6.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
                     .shadow(elevation = 14.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
@@ -133,13 +128,8 @@ fun CallCriticalAlertBanner(onClicked: () -> Unit) {
                 ) {
                     Text(
                         text = ResUtils.getString(R.string.call_topbar_critical_alert_entrance_text1),
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight(400),
-                            color = Color.White,
-                        )
+                        style = DifftTheme.typography.p3,
+                        color = Color.White,
                     )
 
                     Text(
@@ -147,13 +137,8 @@ fun CallCriticalAlertBanner(onClicked: () -> Unit) {
                             onClicked()
                         },
                         text = ResUtils.getString(R.string.call_topbar_critical_alert_entrance_text2),
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight(400),
-                            color = ColorTokens.InfoLight,
-                        )
+                        style = DifftTheme.typography.p3,
+                        color = ColorTokens.InfoLight,
                     )
                 }
 
@@ -182,17 +167,12 @@ fun CallCriticalAlertBanner(onClicked: () -> Unit) {
                         }
                         .background(
                             color = DifftTheme.colors.backgroundTooltip,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = DifftTheme.radius.largeShape
                         )
                         .padding(start = 10.dp, top = 5.dp, end = 10.dp, bottom = 5.dp),
                     text = ResUtils.getString(R.string.call_critical_alert_tooltip),
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = Color.White
-                    )
+                    style = DifftTheme.typography.p3,
+                    color = Color.White,
                 )
             }
         }

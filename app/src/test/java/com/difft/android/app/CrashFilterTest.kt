@@ -51,6 +51,43 @@ class CrashFilterTest {
         assertFalse(CrashFilter.isGmsClientSecurityException(e))
     }
 
+    // ---- missing native library on a base-only install (Crashlytics issue 71770801) ----
+
+    @Test
+    fun `matches UnsatisfiedLinkError for a missing library on a base-only install`() {
+        val e = UnsatisfiedLinkError(DLOPEN_NOT_FOUND)
+
+        assertTrue(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = true))
+    }
+
+    @Test
+    fun `matches NoClassDefFoundError wrapping the UnsatisfiedLinkError`() {
+        val e = NoClassDefFoundError("com.tencent.wcdb.core.Database").initCause(UnsatisfiedLinkError(DLOPEN_NOT_FOUND))
+
+        assertTrue(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = true))
+    }
+
+    @Test
+    fun `does not match when the install has its splits`() {
+        val e = UnsatisfiedLinkError(DLOPEN_NOT_FOUND)
+
+        assertFalse(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = false))
+    }
+
+    @Test
+    fun `does not match an UnsatisfiedLinkError that is not a missing library`() {
+        val e = UnsatisfiedLinkError("No implementation found for long com.tencent.wcdb.core.Database.open(java.lang.String)")
+
+        assertFalse(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = true))
+    }
+
+    @Test
+    fun `does not match unrelated errors on a base-only install`() {
+        val e = NoClassDefFoundError("com.example.Missing").initCause(ClassNotFoundException("com.example.Missing"))
+
+        assertFalse(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = true))
+    }
+
     private fun <T : Throwable> T.withStack(vararg frames: StackTraceElement): T = apply { stackTrace = arrayOf(*frames) }
 
     private companion object {
@@ -62,5 +99,6 @@ class CrashFilterTest {
         val ENFORCE_PERMISSION_FRAME = StackTraceElement("android.app.ContextImpl", "enforce", "ContextImpl.java", 2400)
         val HANDLER_FRAME = StackTraceElement("android.os.Handler", "dispatchMessage", "Handler.java", 117)
         val LOOPER_FRAME = StackTraceElement("android.os.Looper", "loop", "Looper.java", 293)
+        const val DLOPEN_NOT_FOUND = "dlopen failed: library \"libWCDB.so\" not found"
     }
 }

@@ -3,18 +3,6 @@
 
     <!-- Base application theme (Theme.Chative) is defined in themes.xml (light) and values-night/themes.xml (dark). -->
 
-    <declare-styleable name="ChativeButton" tools:ignore="ResourceName">
-        <attr name="android:text" />
-        <attr name="type" format="enum">
-            <enum name="primary" value="0" />
-            <enum name="secondary" value="1" />
-        </attr>
-        <attr name="isLoading" format="boolean" />
-        <attr name="lottie_fileName" />
-        <attr name="android:textSize" />
-        <attr name="android:enabled" />
-    </declare-styleable>
-
     <style name="CustomBottomSheetDialogTheme" parent="Theme.Design.Light.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
     </style>

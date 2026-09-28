@@ -32,7 +32,7 @@ class SignUpFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        mBinding.handleZone.setOnClickListener {
+        mBinding.btnNext.setOnClickListener {
             RegisterIntroActivity.startActivity(requireActivity())
         }
 

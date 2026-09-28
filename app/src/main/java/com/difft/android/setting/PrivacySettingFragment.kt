@@ -153,7 +153,7 @@ class PrivacySettingFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    loginRepo.renewIdentityKey((userManager.getUserData()?.baseAuth ?: ""), JsonUtil.toJson(requestBody))
+                    loginRepo.renewIdentityKey(JsonUtil.toJson(requestBody))
                 }
                 ComposeDialogManager.dismissWait()
                 if (!isAdded || view == null) return@launch

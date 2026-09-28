@@ -3,39 +3,26 @@ package com.difft.android.setting
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
+import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
+import com.difft.android.base.ui.compose.settings.DifftSettingsOptionRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.chat.R
@@ -102,7 +89,7 @@ class VoicePlaybackSpeedSettingsActivity : BaseActivity() {
                 onBackClick = { finish() }
             )
 
-            ItemViews(selectedSpeed) { newSpeed ->
+            OptionList(selectedSpeed) { newSpeed ->
                 if (selectedSpeed != newSpeed) {
                     selectedSpeed = newSpeed
                     userManager.update { voicePlaybackSpeed = newSpeed }
@@ -112,91 +99,24 @@ class VoicePlaybackSpeedSettingsActivity : BaseActivity() {
     }
 
     @Composable
-    private fun ItemViews(
-        selectedSpeed: Float,
-        onNewOptionSelected: ((Float) -> Unit)? = null
-    ) {
-        val context = LocalContext.current
-        val bgItem = remember {
-            Color(
-                ContextCompat.getColor(
-                    context, com.difft.android.base.R.color.bg_elevated
-                )
-            )
-        }
-
-        LazyColumn(modifier = Modifier.padding(16.dp)) {
-            itemsIndexed(options, key = { _, option -> option.value }) { index, option ->
-                val backgroundShape = remember(option) {
-                    when (index) {
-                        0 -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                        options.size - 1 -> RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
-                        else -> RectangleShape
-                    }
-                }
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(bgItem, backgroundShape)
-                            .clickable {
-                                onNewOptionSelected?.invoke(option.value)
-                            }
-                            .padding(start = 16.dp, end = 16.dp),
-                    ) {
-                        val isItemSelected = selectedSpeed == option.value
-                        val labelTextColor = remember {
-                            Color(
-                                ContextCompat.getColor(
-                                    context, com.difft.android.base.R.color.t_primary
-                                )
-                            )
-                        }
-
-                        Text(
-                            text = getString(option.labelResId),
-                            modifier = Modifier.weight(1f),
-                            color = labelTextColor
-                        )
-
-                        if (isItemSelected) {
-                            val tint: Color = remember {
-                                Color(
-                                    ContextCompat.getColor(
-                                        context, com.difft.android.base.R.color.t_secondary
-                                    )
-                                )
-                            }
-                            Image(
-                                imageVector = ImageVector.vectorResource(id = R.drawable.chat_ic_selected),
-                                colorFilter = ColorFilter.tint(tint),
-                                contentDescription = "Checked",
-                                modifier = Modifier.padding(start = 16.dp)
-                            )
-                        }
-                    }
-
-                    // Add divider between items
-                    if (index < options.size - 1) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    Color(
-                                        ContextCompat.getColor(
-                                            context,
-                                            com.difft.android.base.R.color.bg
-                                        )
-                                    )
-                                )
-                        )
-                    }
+    private fun OptionList(selectedSpeed: Float, onSelect: (Float) -> Unit) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = DifftSettingsDefaults.PageInset),
+        ) {
+            Spacer(Modifier.height(DifftSettingsDefaults.FirstGroupSpacing))
+            DifftSettingsGroup {
+                options.forEach { option ->
+                    DifftSettingsOptionRow(
+                        label = getString(option.labelResId),
+                        selected = selectedSpeed == option.value,
+                        onClick = { onSelect(option.value) },
+                    )
                 }
             }
+            Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
         }
     }
 }

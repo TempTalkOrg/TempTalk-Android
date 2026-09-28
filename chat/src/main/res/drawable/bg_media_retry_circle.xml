@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 40dp circle behind the retry glyph on image/video bubbles -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/transparent_black_40" />
+    <size
+        android:width="40dp"
+        android:height="40dp" />
+</shape>

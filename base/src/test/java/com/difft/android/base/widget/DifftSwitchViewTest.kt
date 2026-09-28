@@ -44,21 +44,21 @@ class DifftSwitchViewTest : DifftToggleViewContractTest() {
     // ---------- Measurement ----------
 
     @Test
-    fun `the bare control is the 51 by 31 design box and an explicit size wins`() {
+    fun `the bare control is the 52 by 32 design box and an explicit size wins`() {
         val activity = host()
         val view = create(activity)
         mount(view, activity)
 
         val unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
         view.measure(unspecified, unspecified)
-        assertEquals(activity.px(51), view.measuredWidth)
-        assertEquals(activity.px(31), view.measuredHeight)
+        assertEquals(activity.px(52), view.measuredWidth)
+        assertEquals(activity.px(32), view.measuredHeight)
 
         // wrap_content inside a real parent arrives as AT_MOST: must never fill the parent.
         val atMost = MeasureSpec.makeMeasureSpec(activity.px(1000), MeasureSpec.AT_MOST)
         view.measure(atMost, atMost)
-        assertEquals(activity.px(51), view.measuredWidth)
-        assertEquals(activity.px(31), view.measuredHeight)
+        assertEquals(activity.px(52), view.measuredWidth)
+        assertEquals(activity.px(32), view.measuredHeight)
 
         view.measure(
             MeasureSpec.makeMeasureSpec(activity.px(60), MeasureSpec.EXACTLY),
@@ -104,7 +104,7 @@ class DifftSwitchViewTest : DifftToggleViewContractTest() {
             MeasureSpec.makeMeasureSpec(activity.px(52), MeasureSpec.AT_MOST),
         )
 
-        assertTrue(view.measuredHeight >= activity.px(31))
+        assertTrue(view.measuredHeight >= activity.px(32))
         assertTrue(view.measuredHeight <= activity.px(52))
     }
 

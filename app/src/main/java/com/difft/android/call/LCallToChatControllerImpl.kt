@@ -2,7 +2,9 @@ package com.difft.android.call
 
 import android.content.Context
 import android.content.Intent
-import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallActionType
@@ -23,6 +25,7 @@ import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
+import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.handler.InviteRequestState
 import com.difft.android.call.manager.CallDataManager
@@ -32,9 +35,7 @@ import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.CallWaitDialogUtil
-import com.difft.android.call.util.IdUtil
 import com.difft.android.call.util.ScreenDeviceUtil
-import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -51,7 +52,6 @@ import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.config.GlobalConfigsManager
-import com.difft.android.network.config.WsTokenManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.websocket.api.ConversationManager
 import com.difft.android.websocket.api.messages.PublicKeyInfo
@@ -84,7 +84,6 @@ class LCallToChatControllerImpl @Inject constructor(
     private val pushTextJobFactory: PushTextSendJobFactory,
     private val conversationManager: ConversationManager,
     private val encryptionDataManager: EncryptionDataManager,
-    private val wsTokenManager: WsTokenManager,
     private val localMessageCreator: LocalMessageCreator,
     private val dbRoomStore: DBRoomStore,
     private val inComingCallStateManager: InComingCallStateManager,
@@ -148,7 +147,6 @@ class LCallToChatControllerImpl @Inject constructor(
                     CallRole.CALLER else CallRole.CALLEE
 
                 val startCallParams = createStartCallParams(body)
-                wsTokenManager.refreshTokenIfNeeded()
                 LCallManager.checkQuicFeatureGrayStatus()
 
                 val intent = CallIntent.Builder(application, LCallActivity::class.java)
@@ -197,31 +195,12 @@ class LCallToChatControllerImpl @Inject constructor(
     override suspend fun getContactorById(context: Context, id: String): Optional<ContactorModel> =
         ContactorUtil.getContactWithID(context, id)
 
-    override fun getAvatarByContactor(context: Context, contactor: ContactorModel, avatarSizeDp: Int?): ConstraintLayout =
-        AvatarView(context).apply {
-            setAvatar(contactor, letterTextSizeDp = letterTextSizeDpFor(avatarSizeDp))
-        }
+    @Composable
+    override fun Avatar(data: AvatarData, size: Dp, modifier: Modifier, letterTextSizeDp: Int) =
+        CallAvatar(data, size, modifier, letterTextSizeDp)
 
-    override fun createAvatarByNameOrUid(context: Context, name: String?, uid: String, avatarSizeDp: Int?): ConstraintLayout {
-        val userId = if (uid.contains(".")) uid.split(".")[0] else uid
-        val firstLetter = if (!name.isNullOrEmpty()) {
-            name.take(1)
-        } else {
-            IdUtil.convertToBase58UserName(userId)?.takeIf { it.isNotEmpty() }?.take(1) ?: userId
-        }
-        return AvatarView(context).apply {
-            setAvatar(
-                null,
-                null,
-                firstLetter,
-                userId.replace("+", ""),
-                letterTextSizeDp = letterTextSizeDpFor(avatarSizeDp),
-            )
-        }
-    }
-
-    private fun letterTextSizeDpFor(avatarSizeDp: Int?): Int =
-        AvatarView.letterTextSizeDpFor(avatarSizeDp ?: AvatarView.DEFAULT_AVATAR_SIZE_DP)
+    override fun createAvatarViewBinder(context: Context, avatarSizeDp: Int): AvatarViewBinder =
+        buildCallAvatarViewBinder(context, avatarSizeDp)
 
     override fun getMySelfUid(): String = mySelfId
 

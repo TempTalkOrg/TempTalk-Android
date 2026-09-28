@@ -105,6 +105,11 @@
             android:exported="false"
             android:launchMode="singleTop" />
         <activity
+            android:name=".setting.translate.TranslateSettingsActivity"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:launchMode="singleTop" />
+        <activity
             android:name=".ui.SingleChatSettingActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"

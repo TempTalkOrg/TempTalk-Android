@@ -35,7 +35,11 @@ import com.difft.android.chat.ui.messageaction.computeMaxPanelWidth
  * Shows copy, forward, translate, and optionally select all actions.
  * Positions itself to avoid covering the selected text.
  */
-class TextPreviewSelectionPopup(private val activity: Activity) {
+class TextPreviewSelectionPopup(
+    private val activity: Activity,
+    /** False on a build that ships no translate backend; the translate action is then omitted. */
+    private val translateSupported: Boolean,
+) {
     
     interface Callbacks {
         fun onCopy()
@@ -96,6 +100,7 @@ class TextPreviewSelectionPopup(private val activity: Activity) {
         val actions = buildList {
             add(MessageAction.copy())
             add(MessageAction.forward())
+            if (translateSupported) add(MessageAction.translateAction())
             if (!isFullSelection) {
                 add(MessageAction.selectAll())
             }

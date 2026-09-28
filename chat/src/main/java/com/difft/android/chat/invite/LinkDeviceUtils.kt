@@ -1,23 +1,20 @@
 package com.difft.android.chat.invite
 
-import com.difft.android.base.log.lumberjack.L
-import android.text.TextUtils
 import android.util.Base64
-import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.lifecycleScope
-
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.chat.R
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.launch
-import org.signal.libsignal.protocol.ecc.ECPublicKey
 import com.difft.android.chat.cryptonew.EncryptionDataManager
 import com.difft.android.network.signal.DeviceRepository
+import kotlin.coroutines.cancellation.CancellationException
+import org.signal.libsignal.protocol.ecc.ECPublicKey
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.difft.android.base.widget.ToastUtil
 
+/**
+ * Links a Desktop that showed a `tsdevice:` provisioning QR to this account. The confirmation UI
+ * lives on the sign-in page that reads the QR (it decides about syncing history at the same time);
+ * this class only performs the link itself.
+ */
 @Singleton
 class LinkDeviceUtils @Inject constructor(
     private val encryptionDataManager: EncryptionDataManager,
@@ -25,51 +22,27 @@ class LinkDeviceUtils @Inject constructor(
 ) {
 
     /**
-     * mac扫码登录
+     * Registers the scanned Desktop as a linked device. Returns the failure so the caller can show
+     * its message; a coroutine cancellation is rethrown, never swallowed.
      */
-    fun linkDevice(activity: FragmentActivity, ephemeralId: String?, publicKeyEncoded: String?, needFinish: Boolean = false) {
-        if (!TextUtils.isEmpty(ephemeralId) && !TextUtils.isEmpty(publicKeyEncoded)) {
-            ComposeDialogManager.showMessageDialog(
-                context = activity,
-                title = activity.getString(R.string.link_device),
-                message = activity.getString(R.string.link_device_tips),
-                confirmText = activity.getString(R.string.link_new_device),
-                cancelText = activity.getString(R.string.link_device_cancel),
-                onConfirm = {
-                    activity.lifecycleScope.launch {
-                        try {
-                            // Retrofit suspend funs handle threading; no withContext(IO) needed
-                            val verificationCode = deviceRepository.getNewDeviceVerificationCode()
-                            val publicKey = ECPublicKey(Base64.decode(publicKeyEncoded!!, Base64.DEFAULT), 0)
-                            val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
-                            val id = globalServices.myId
-                            deviceRepository.addDevice(
-                                ephemeralId!!,
-                                publicKey,
-                                aciIdentityKeyPair,
-                                verificationCode,
-                                id
-                            )
-                            if (needFinish) {
-                                activity.finish()
-                            }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            L.w { "[LinkDeviceUtils] addDevice error: ${e.stackTraceToString()}" }
-                            e.message?.let { ToastUtil.showLong(it) }
-                            if (needFinish) {
-                                activity.finish()
-                            }
-                        }
-                    }
-                },
-                onCancel = {
-                    if (needFinish) {
-                        activity.finish()
-                    }
-                })
-        }
+    suspend fun linkDevice(ephemeralId: String, publicKeyEncoded: String): Result<Unit> = try {
+        // Retrofit suspend funs handle threading; no withContext(IO) needed
+        val verificationCode = deviceRepository.getNewDeviceVerificationCode()
+        val publicKey = ECPublicKey(Base64.decode(publicKeyEncoded, Base64.DEFAULT), 0)
+        val aciIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
+        deviceRepository.addDevice(
+            ephemeralId,
+            publicKey,
+            aciIdentityKeyPair,
+            verificationCode,
+            globalServices.myId,
+        )
+        L.i { "[LinkDeviceUtils] linked device via provisioning id" }
+        Result.success(Unit)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        L.w { "[LinkDeviceUtils] addDevice error: ${e.stackTraceToString()}" }
+        Result.failure(e)
     }
-
 }

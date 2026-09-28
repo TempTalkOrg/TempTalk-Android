@@ -83,8 +83,9 @@ private const val MAX_CAUSE_DEPTH = 8
  *
  * Observation only, deliberately not acted on: iOS force-refreshes the app token once and re-enters
  * failover for an in-band 401, while this client has no such handling. Whether that code ever
- * reaches this point is unknown — the pre-call `WsTokenManager.refreshTokenIfNeeded()` check
- * already covers plain expiry, leaving only server-side revocation, key rotation, or a token
- * expiring mid-failover. Log first, then decide whether the retry is worth its complexity.
+ * reaches this point is unknown — both connect paths read the token through
+ * `AuthTokenProvider.current()`, which refreshes an expiring token before every connect and
+ * reconnect attempt (issue #1231), leaving only server-side revocation or key rotation. Log first,
+ * then decide whether the retry is worth its complexity.
  */
 internal fun serverVerdictStatus(t: Throwable): Int? = (t as? RoomException.StartCallException)?.statusCode

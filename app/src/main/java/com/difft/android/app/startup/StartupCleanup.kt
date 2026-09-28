@@ -57,7 +57,10 @@ fun cleanupLegacySqlCipherArtifacts(ctx: Context) {
 
 /**
  * Flips any `message.sendType == Sending` rows to `SentFailed` via
- * [WcdbJobStorage.sweepStaleSendingMessages][com.difft.android.chat.jobs.WcdbJobStorage.sweepStaleSendingMessages].
+ * [WcdbJobStorage.sweepStaleSendingMessages][com.difft.android.chat.jobs.WcdbJobStorage.sweepStaleSendingMessages],
+ * then reconciles the room-level failed tags via
+ * [WcdbJobStorage.reconcileFailedRoomTags][com.difft.android.chat.jobs.WcdbJobStorage.reconcileFailedRoomTags]
+ * so a room flagged by a row the aggregate no longer counts clears on this launch.
  *
  * Called from `AppStartup.addNonBlocking`, which already launches each task on
  * `Dispatchers.IO` (see `AppStartup.executeNonBlockingTasks`). No extra
@@ -82,6 +85,7 @@ fun sweepStaleSendingMessages(app: Application) {
         .fromApplication(app, ApplicationDependencyProvider.DepsEntryPoint::class.java)
         .wcdbJobStorage()
     wcdbJobStorage.sweepStaleSendingMessages()
+    wcdbJobStorage.reconcileFailedRoomTags()
 }
 
 /**

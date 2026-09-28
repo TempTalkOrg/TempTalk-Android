@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1dp divider hairline between rows of an XML settings group. Fed to a vertical
+     LinearLayout via android:divider + android:showDividers="middle", which draws it only between
+     VISIBLE children, so a GONE row leaves no orphan line. Matches the Compose kit's
+     DifftSettingsDefaults.SeparatorThickness gap. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <size android:height="1dp" />
+    <solid android:color="@color/divider" />
+</shape>

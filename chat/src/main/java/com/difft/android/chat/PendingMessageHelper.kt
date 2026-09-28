@@ -98,7 +98,7 @@ class PendingMessageHelper @Inject constructor(
         var more = true
         while (more) {
             val pendingMessageResponse = try {
-                httpClient.httpService.getPendingMessage((globalServices.userManager.getUserData()?.baseAuth ?: ""))
+                httpClient.httpService.getPendingMessage()
             } catch (e: Exception) {
                 L.e { "[Message][PendingMessageHelper] obtainPendingMessage failed -> ${e.stackTraceToString()}" }
                 return false
@@ -166,7 +166,6 @@ class PendingMessageHelper @Inject constructor(
                 async(Dispatchers.IO) {
                     try {
                         val result = httpClient.httpService.removePendingMessage(
-                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             msg.source.toString(),
                             msg.timestamp.toString()
                         )

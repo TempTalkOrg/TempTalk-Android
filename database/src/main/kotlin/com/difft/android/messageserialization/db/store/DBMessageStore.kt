@@ -15,6 +15,8 @@ import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.mapToMessageId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.difft.app.database.delete
 import org.difft.app.database.deleteMessagesPaged
 import org.difft.app.database.maxMessageDatabaseId
@@ -42,6 +44,15 @@ class DBMessageStore
 constructor(
     private val dbRoomStore: DBRoomStore,
 ) : MessageStore {
+
+    /**
+     * Serialises the two translate write paths. Both read the `translate` row for a messageId and
+     * then insert when it is missing; the batch flush and a single user action can run that
+     * read-then-insert concurrently for the same message, and the second insert would hit the
+     * unique `messageId` index. One in-process lock is enough — the `translate` table is only ever
+     * written from here.
+     */
+    private val translateWriteMutex = Mutex()
 
     override fun putWhenNonExist(vararg messages: Message) {
         L.d { "[Message] putWhenNonExist size:${messages.size}" }
@@ -266,11 +277,22 @@ constructor(
         messageId: String,
         translateData: TranslateData
     ) {
-        val models = wcdb.message.getAllObjects(
-            DBMessageModel.roomId.eq(conversationId)
-                .and(DBMessageModel.id.eq(messageId))
-        )
-        if (models.isNotEmpty()) {
+        if (!translateData.translateStatus.isPersistable) {
+            L.w { "[Translate] skip non-persistable status=${translateData.translateStatus} messageId=$messageId" }
+            return
+        }
+        // Fail-soft: a translation finished on a global scope can land after logout deleted the
+        // database, and the cipher key is gone with it.
+        if (wcdb.isDbInaccessible) {
+            L.w { "[Translate] skip single write, DB inaccessible messageId=$messageId" }
+            return
+        }
+        translateWriteMutex.withLock {
+            val models = wcdb.message.getAllObjects(
+                DBMessageModel.roomId.eq(conversationId)
+                    .and(DBMessageModel.id.eq(messageId))
+            )
+            if (models.isEmpty()) return
             val oldMessage = models[0]
             val oldTranslateData = wcdb.translate.getFirstObject(
                 DBTranslateModel.messageId.eq(oldMessage.id)
@@ -298,6 +320,76 @@ constructor(
                     wcdb.translate.insertObject(it)
                 }
             }
+        }
+    }
+
+    override suspend fun updateMessageTranslateDataBatch(
+        conversationId: String,
+        dataByMessageId: Map<String, TranslateData>
+    ) {
+        if (dataByMessageId.isEmpty()) return
+        val persistable = dataByMessageId.filterValues { it.translateStatus.isPersistable }
+        val skipped = dataByMessageId.size - persistable.size
+        if (skipped > 0) {
+            L.w { "[Translate] batch dropped $skipped non-persistable entries of ${dataByMessageId.size}" }
+        }
+        if (persistable.isEmpty()) return
+        // Fail-soft, same reason as the single-message path above.
+        if (wcdb.isDbInaccessible) {
+            L.w { "[Translate] skip batch write of ${persistable.size}, DB inaccessible" }
+            return
+        }
+
+        translateWriteMutex.withLock {
+            // One query for the messages: a revoked or deleted message is filtered out here, so no
+            // orphan translate row is ever written.
+            val existingIds = wcdb.message.getOneColumnString(
+                DBMessageModel.id,
+                DBMessageModel.roomId.eq(conversationId)
+                    .and(DBMessageModel.id.`in`(*persistable.keys.toTypedArray()))
+            ).filterNotNull().toSet()
+            if (existingIds.isEmpty()) {
+                L.w { "[Translate] batch found no live messages of ${persistable.size} in conversation" }
+                return
+            }
+
+            // One query for the existing translate rows; whatever is missing is inserted below.
+            val existingRows = wcdb.translate.getAllObjects(
+                DBTranslateModel.messageId.`in`(*existingIds.toTypedArray())
+            ).associateBy { it.messageId }
+
+            var updated = 0
+            var inserted = 0
+            // Deliberately no transaction: each row write is atomic on its own, and a partial batch
+            // only means those messages get re-translated the next time the conversation is opened.
+            persistable.forEach { (messageId, translateData) ->
+                if (messageId !in existingIds) return@forEach
+                val existing = existingRows[messageId]
+                if (existing != null) {
+                    existing.translateStatus = translateData.translateStatus.status
+                    existing.translatedContentCN = translateData.translatedContentCN
+                    existing.translatedContentEN = translateData.translatedContentEN
+                    wcdb.translate.updateObject(
+                        existing,
+                        arrayOf(
+                            DBTranslateModel.translateStatus,
+                            DBTranslateModel.translatedContentCN,
+                            DBTranslateModel.translatedContentEN
+                        ),
+                        DBTranslateModel.databaseId.eq(existing.databaseId)
+                    )
+                    updated++
+                } else {
+                    TranslateModel().apply {
+                        this.messageId = messageId
+                        this.translateStatus = translateData.translateStatus.status
+                        this.translatedContentCN = translateData.translatedContentCN
+                        this.translatedContentEN = translateData.translatedContentEN
+                    }.also { wcdb.translate.insertObject(it) }
+                    inserted++
+                }
+            }
+            L.i { "[Translate] batch wrote updated=$updated inserted=$inserted requested=${dataByMessageId.size}" }
         }
     }
 
@@ -355,12 +447,13 @@ constructor(
 
     override suspend fun updateMessageReadTime(conversationId: String, readMaxTimestamp: Long, readAt: Long) {
         val expression = DBMessageModel.roomId.eq(conversationId)
-            .and(DBMessageModel.readTime.eq(0L).or(DBMessageModel.readTime.isNull()))
+            .and(DBMessageModel.readTime.le(0L).or(DBMessageModel.readTime.isNull()))
             .and(DBMessageModel.systemShowTimestamp.le(readMaxTimestamp).or(DBMessageModel.systemShowTimestamp.eq(readMaxTimestamp)))
         // #909 #4: drop the unbounded getAllObjects load — updateValue is a no-op on an
         // empty match set, so the isNotEmpty() guard was pure overhead. No load needed.
         // #1020 Phase 2: SET readTime = readAt (actual read moment); readMaxTimestamp only bounds
-        // row selection. The readTime==0 guard above keeps it write-once.
+        // row selection. The readTime<=0 guard above keeps it write-once and also releases a migrated
+        // row's "not started" sentinel on the first real read event.
         wcdb.message.updateValue(
             readAt,
             DBMessageModel.readTime,

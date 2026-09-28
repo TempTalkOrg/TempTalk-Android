@@ -7,7 +7,6 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.test.TestDispatcherRule
 import io.mockk.coEvery
@@ -23,10 +22,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Refresh-on-resume contract and the no-persistence boundary. Degrade: the real hosts are
- * `@AndroidEntryPoint` and the repo ships no Hilt test harness, so non-Hilt host doubles (onResume
- * bodies identical to the production hosts) drive the real Robolectric lifecycle with a directly-
- * constructed VM.
+ * Refresh-on-resume contract and the no-persistence boundary. Degrade: the real host
+ * ([LinkedDevicesFragment], the only production host on both form factors) is `@AndroidEntryPoint`
+ * and the repo ships no Hilt test harness, so a non-Hilt fragment double (onResume body identical
+ * to the production host) drives the real Robolectric lifecycle with a directly-constructed VM.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -36,19 +35,9 @@ class LinkedDevicesResumeRefreshTest {
     val dispatcherRule = TestDispatcherRule()
 
     private val repo: DeviceRepository = mockk()
-    private val logoutManager: LogoutManager = mockk(relaxed = true)
     private val countStore: LinkedDevicesCountStore = mockk(relaxed = true)
 
-    private fun buildViewModel() = LinkedDevicesViewModel(repo, logoutManager, countStore)
-
-    /** Activity host double — onResume body identical to [LinkedDevicesActivity]. */
-    class ResumeHostActivity : FragmentActivity() {
-        lateinit var viewModel: LinkedDevicesViewModel
-        override fun onResume() {
-            super.onResume()
-            viewModel.refresh()
-        }
-    }
+    private fun buildViewModel() = LinkedDevicesViewModel(repo, countStore)
 
     /** Fragment host double — onResume body identical to [LinkedDevicesFragment]. */
     class ResumeHostFragment(private val vm: LinkedDevicesViewModel) : Fragment() {
@@ -61,24 +50,6 @@ class LinkedDevicesResumeRefreshTest {
         override fun onResume() {
             super.onResume()
             vm.refresh()
-        }
-    }
-
-    // Resuming the (phone) host twice re-invokes getDevices on each resume.
-    @Test
-    fun `I7 activity host refreshes on every resume`() {
-        coEvery { repo.getDevices() } returns emptyList()
-        val vm = buildViewModel()
-        val controller = Robolectric.buildActivity(ResumeHostActivity::class.java).also {
-            it.get().setTheme(androidx.appcompat.R.style.Theme_AppCompat_Light)
-        }.create()
-        try {
-            controller.get().viewModel = vm
-            controller.start().resume() // onResume #1 -> refresh #1
-            controller.pause().resume() // onResume #2 -> refresh #2
-            coVerify(atLeast = 2) { repo.getDevices() }
-        } finally {
-            runCatching { controller.destroy() }
         }
     }
 

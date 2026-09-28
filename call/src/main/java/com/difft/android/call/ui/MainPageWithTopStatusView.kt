@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,7 +39,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.CallConfig
@@ -342,7 +340,7 @@ private fun CallStatusContent(
         } else {
             // 连接类状态在悬浮条,title 静态显示 E2EE 提示。
             EncryptedStatusRow(
-                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, color = DifftTheme.colors.textPrimary),
+                textStyle = DifftTheme.typography.p3.copy(color = DifftTheme.colors.textPrimary),
                 testTag = "call_topbar_status_text",
             )
         }
@@ -374,7 +372,7 @@ private fun ConnectedStatusContent(
             Text(
                 modifier = Modifier.testTag("call_topbar_call_duration"),
                 text = if (callTimerRunning) "$shareTitle $callDuration" else shareTitle,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                style = DifftTheme.typography.p3,
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -391,7 +389,7 @@ private fun ConnectedStatusContent(
             Text(
                 modifier = Modifier.testTag("call_topbar_room_name"),
                 text = headerTitle,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                style = DifftTheme.typography.p3,
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -414,7 +412,7 @@ private fun ConnectedStatusContent(
             Text(
                 modifier = Modifier.testTag("call_topbar_call_duration"),
                 text = if (callTimerRunning) callDuration else ResUtils.getString(R.string.call_status_encrypted),
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                style = DifftTheme.typography.p4,
                 color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -426,7 +424,7 @@ private fun ConnectedStatusContent(
                         .padding(horizontal = 8.dp)
                         .width(1.dp)
                         .height(10.dp)
-                        .background(color = Color(0xFF474D57))
+                        .background(color = DifftTheme.colors.line)
                 )
 
                 CountDownTimerView(

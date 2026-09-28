@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,9 +36,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -48,19 +44,18 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import coil3.compose.rememberAsyncImagePainter
+import com.difft.android.base.ui.avatar.AvatarLetterSize
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.Palette
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
-import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
@@ -188,7 +183,7 @@ fun ShowParticipantsListView(
                                         centerVerticallyTo(parent)
                                     },
                                 text = "${getString(R.string.call_attendees)} (${participants.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                style = DifftTheme.typography.p3,
                                 color = Color.White,
                                 maxLines = 1
                             )
@@ -324,29 +319,13 @@ fun SmallParticipantViewItem(
                 ){
                     val (avatarView, userNameView, shareStatusView, speakStatusView) = createRefs()
                     userDisplayInfo.avatarData?.let { avatarData ->
-                        AndroidView(
-                            factory = { ctx ->
-                                when (avatarData) {
-                                    is AvatarData.FromContactor ->
-                                        callToChatController.getAvatarByContactor(
-                                            ctx,
-                                            avatarData.contactor,
-                                            avatarSizeDp = avatarSize.value.roundToInt(),
-                                        )
-                                    is AvatarData.FromNameOrUid ->
-                                        callToChatController.createAvatarByNameOrUid(
-                                            ctx,
-                                            avatarData.name,
-                                            avatarData.userId,
-                                            avatarSizeDp = avatarSize.value.roundToInt(),
-                                        )
-                                }
+                        callToChatController.Avatar(
+                            data = avatarData,
+                            size = avatarSize,
+                            modifier = Modifier.constrainAs(avatarView) {
+                                start.linkTo(parent.start)
                             },
-                            modifier = Modifier
-                                .constrainAs(avatarView){
-                                    start.linkTo(parent.start)
-                                }
-                                .size(avatarSize)
+                            letterTextSizeDp = AvatarLetterSize.forDiameterDp(avatarSize.value.roundToInt()),
                         )
                     }
 
@@ -359,13 +338,8 @@ fun SmallParticipantViewItem(
                         text = StringUtil.truncateWithEllipsis(displayName, PARTICIPANT_NAME_MAX_LENGTH),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            fontFamily = FontFamily.Default,
-                            fontWeight = FontWeight(400),
-                            color = Color.White,
-                        )
+                        style = DifftTheme.typography.p3,
+                        color = Color.White,
                     )
 
                     if(isScreenSharing){
@@ -393,7 +367,7 @@ fun SmallParticipantViewItem(
 
                     val tintColor = when {
                         audioMuted -> Color.Unspecified // 不设置颜色，或者根据需要设置
-                        else -> Color(0xFF82C1FC)
+                        else -> Palette.Blue200
                     }
 
                     Icon(

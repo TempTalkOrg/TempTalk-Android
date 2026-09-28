@@ -35,8 +35,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
@@ -219,7 +217,7 @@ fun ContactDetailScreen(
                         // Popup mode: wrap content height
                         Modifier.wrapContentHeight()
                     } else {
-                        // Full screen mode: fill remaining space, gray background extends to bottom
+                        // Full screen mode: fill remaining space, card surface extends to the bottom
                         Modifier.weight(1f)
                     }
                 )
@@ -267,7 +265,10 @@ private fun TopBar(
         if (isEditing) {
             BasicText(
                 text = stringResource(R.string.contact_remark_private_hint),
-                style = privacyHintStyle.copy(color = DifftTheme.colors.textTertiary),
+                style = DifftTheme.typography.p3.copy(
+                    color = DifftTheme.colors.textTertiary,
+                    textAlign = TextAlign.Center,
+                ),
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(
                     minFontSize = PRIVACY_HINT_MIN_SIZE,
@@ -285,7 +286,7 @@ private fun TopBar(
         when {
             isEditing -> Text(
                 text = stringResource(R.string.group_edit_name_done),
-                style = doneStyle,
+                style = DifftTheme.typography.p2,
                 color = DifftTheme.colors.textInfo,
                 modifier = Modifier
                     .clickable { onDoneClick() }
@@ -311,13 +312,6 @@ private val TOP_BAR_HEIGHT = 52.dp
 private val TOP_BAR_ICON_PADDING = 12.dp
 private val PRIVACY_HINT_MIN_SIZE = 11.sp
 private val PRIVACY_HINT_MAX_SIZE = 14.sp
-private val privacyHintStyle = TextStyle(
-    fontWeight = FontWeight.Normal,
-    fontSize = 14.sp,
-    lineHeight = 20.sp,
-    textAlign = TextAlign.Center,
-)
-private val doneStyle = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp)
 
 @Composable
 private fun ActionButtonsSection(
@@ -414,7 +408,7 @@ private fun ActionButton(
         modifier = modifier
             .height(72.dp)
             .clip(RoundedCornerShape(DifftTheme.spacing.inlineSmall))
-            .background(DifftTheme.colors.bgElevated)
+            .background(DifftTheme.colors.background)
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -452,7 +446,7 @@ private fun ContactInfoSection(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-            .background(DifftTheme.colors.bgElevated)
+            .background(DifftTheme.colors.background)
             .padding(DifftTheme.spacing.insetLarge)
     ) {
         Text(
@@ -530,7 +524,7 @@ private fun ContactInfoRow(
     ) {
         Text(
             text = label,
-            style = DifftTheme.typography.infoLabel,
+            style = DifftTheme.typography.p3,
             color = DifftTheme.colors.textPrimary,
             modifier = Modifier.width(112.dp)
         )
@@ -539,7 +533,7 @@ private fun ContactInfoRow(
 
         Text(
             text = value,
-            style = DifftTheme.typography.infoLabel,
+            style = DifftTheme.typography.p3,
             color = if (isLink) DifftTheme.colors.primary else DifftTheme.colors.textSecondary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -560,10 +554,10 @@ private fun ContactInfoRow(
         if (showArrow) {
             Spacer(modifier = Modifier.width(DifftTheme.spacing.inlineXSmall))
             Icon(
-                painter = painterResource(id = R.drawable.chat_ic_arrow_right),
+                painter = painterResource(id = com.difft.android.base.R.drawable.base_ic_chevron_right),
                 contentDescription = null,
                 modifier = Modifier.size(DifftTheme.spacing.iconXSmall),
-                tint = DifftTheme.colors.textSecondary
+                tint = DifftTheme.colors.icon
             )
         }
     }

@@ -21,7 +21,7 @@
             android:padding="12dp"
             android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
-            app:tint="@color/t.primary" />
+            app:tint="@color/icon" />
 
         <com.difft.android.base.widget.DifftSearchInputView
             android:id="@+id/search_input"
@@ -51,20 +51,34 @@
         android:layout_height="match_parent"
         android:layout_marginTop="12dp">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_tips"
+        <!-- Empty state: illustration + tip, centred in the result area. -->
+        <LinearLayout
+            android:id="@+id/ll_tips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="80dp"
-            android:gravity="center"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
             android:paddingLeft="16dp"
-            android:paddingRight="16dp"
-            android:text="@string/search_messages_default_tips"
-            android:textColor="@color/t.primary"
-            android:textSize="14sp"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/edittext_search_input" />
+            android:paddingRight="16dp">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/base_ic_search"
+                app:tint="@color/t.disable" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_tips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:text="@string/search_messages_default_tips"
+                android:textColor="@color/t.third"
+                android:textSize="14sp" />
+
+        </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerview_chat_history"

@@ -85,6 +85,8 @@ class SelectorConfig {
     @JvmField var isHidePreviewDownload: Boolean = false
     @JvmField var isHidePreviewShare: Boolean = false
     @JvmField var isShowConfidentialTip: Boolean = false
+    /** External preview: hide the shared bottom-centre close button (keeps the title-bar back only). */
+    @JvmField var isHideBottomClose: Boolean = false
     @JvmField var isWithVideoImage: Boolean = false
     @JvmField var queryOnlyImageList: MutableList<String> = ArrayList()
     @JvmField var queryOnlyVideoList: MutableList<String> = ArrayList()
@@ -178,6 +180,7 @@ class SelectorConfig {
         isEnablePreviewAudio = true
         isHidePreviewDownload = false
         isShowConfidentialTip = false
+        isHideBottomClose = false
         isOpenClickSound = false
         isEmptyResultReturn = false
         cameraImageFormat = PictureMimeType.JPEG

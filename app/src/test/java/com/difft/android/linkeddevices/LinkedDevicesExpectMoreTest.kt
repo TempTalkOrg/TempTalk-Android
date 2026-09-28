@@ -1,7 +1,6 @@
 package com.difft.android.linkeddevices
 
 import androidx.lifecycle.viewModelScope
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.test.TestDispatcherRule
 import com.difft.android.websocket.api.messages.multidevice.DeviceInfo
@@ -32,7 +31,6 @@ class LinkedDevicesExpectMoreTest {
     val dispatcherRule = TestDispatcherRule(StandardTestDispatcher())
 
     private lateinit var repo: DeviceRepository
-    private lateinit var logoutManager: LogoutManager
     private lateinit var countStore: LinkedDevicesCountStore
 
     private val builtViewModels = mutableListOf<LinkedDevicesViewModel>()
@@ -40,7 +38,6 @@ class LinkedDevicesExpectMoreTest {
     @Before
     fun setup() {
         repo = mockk()
-        logoutManager = mockk(relaxed = true)
         countStore = mockk(relaxed = true)
     }
 
@@ -48,11 +45,11 @@ class LinkedDevicesExpectMoreTest {
     fun tearDown() {
         builtViewModels.forEach { it.viewModelScope.cancel() }
         builtViewModels.clear()
-        clearMocks(repo, logoutManager, countStore)
+        clearMocks(repo, countStore)
     }
 
     private fun buildViewModel() =
-        LinkedDevicesViewModel(repo, logoutManager, countStore).also { builtViewModels += it }
+        LinkedDevicesViewModel(repo, countStore).also { builtViewModels += it }
 
     private fun device(id: Int) = DeviceInfo(id = id, name = "dev$id", created = 1000L, lastSeen = 2000L)
 
@@ -95,7 +92,7 @@ class LinkedDevicesExpectMoreTest {
     }
 
     // Auth failure during any refresh clears the expectation: the session is gone, so the silent
-    // poll must not keep hitting the endpoint (and re-triggering logout) for up to 3 minutes.
+    // poll must not keep hitting the endpoint (and re-signalling the guard) for up to 3 minutes.
     @Test
     fun `auth failure stops the poll`() = runTest(dispatcherRule.testDispatcher) {
         var call = 0
@@ -110,10 +107,9 @@ class LinkedDevicesExpectMoreTest {
         vm.onLinkNewDeviceClicked()          // baseline = 1
         vm.refresh(); runCurrent()           // resume -> poll armed
 
-        advanceTimeBy(10_000); runCurrent()  // tick -> 401 -> logout + poll cleared
+        advanceTimeBy(10_000); runCurrent()  // tick -> 401 -> poll cleared
         advanceTimeBy(60_000); runCurrent()  // no further ticks
         coVerify(exactly = 3) { repo.getDevices() }
-        coVerify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
     // stopExpecting() (host onPause) cancels the timer: no further fetches while paused.

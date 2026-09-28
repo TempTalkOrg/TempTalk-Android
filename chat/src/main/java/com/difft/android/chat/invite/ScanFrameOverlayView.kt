@@ -34,7 +34,17 @@ class ScanFrameOverlayView @JvmOverloads constructor(
     defStyleAttr: Int = 0,
 ) : View(context, attrs, defStyleAttr) {
 
-    private val rectSizePx = 200.dp.toFloat() // qrcv_rectWidth = 200dp
+    // The frame is guidance, not a decode boundary, but its size decides how large the user holds the
+    // code in view, and a dense code (the pairing code runs past 100 modules) needs the pixels per
+    // module that gives. Sized from the view and clamped, so it never shrinks below 200dp, never grows
+    // past what a tablet's centre holds, and never exceeds a narrow split-screen window.
+    private val rectMinPx = 200.dp.toFloat()
+    private val rectMaxPx = 320.dp.toFloat()
+    private val rectSizePx: Float
+        get() {
+            val shortSide = minOf(width, height).toFloat()
+            return (shortSide * RECT_FRACTION_OF_SHORT_SIDE).coerceIn(rectMinPx, rectMaxPx).coerceAtMost(shortSide * RECT_MAX_FRACTION_OF_VIEW)
+        }
     private val cornerLenPx = 20.dp.toFloat() // qrcv_cornerLength = 20dp
     private val cornerThickPx = 3.dp.toFloat() // qrcv_cornerSize = 3dp
     private val borderPx = 1.dp.toFloat()
@@ -150,5 +160,13 @@ class ScanFrameOverlayView @JvmOverloads constructor(
         // bottom-right
         canvas.drawRect(r.right - cornerLenPx, r.bottom - cornerThickPx, r.right, r.bottom, cornerPaint)
         canvas.drawRect(r.right - cornerThickPx, r.bottom - cornerLenPx, r.right, r.bottom, cornerPaint)
+    }
+
+    private companion object {
+        /** Share of the view's shorter side the frame takes; on a phone that is most of the width. */
+        const val RECT_FRACTION_OF_SHORT_SIDE = 0.72f
+
+        /** Hard ceiling against the view, so a tiny window still shows a frame inside its bounds. */
+        const val RECT_MAX_FRACTION_OF_VIEW = 0.9f
     }
 }

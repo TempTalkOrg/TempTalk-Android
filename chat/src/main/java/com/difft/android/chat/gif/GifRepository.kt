@@ -1,6 +1,5 @@
 package com.difft.android.chat.gif
 
-import com.difft.android.base.user.UserManager
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -24,18 +23,14 @@ class GifException(message: String?) : RuntimeException(message)
 /**
  * GIF network + pagination layer. Ports difft-android's GifViewModel network logic
  * (RxJava Single -> suspend) and keeps the dual-cursor (offset + next) hasMore algorithm.
- * The `/gifs/` route requires token auth, so the JWT (microToken) is passed explicitly;
- * the HeaderInterceptor's Basic baseAuth fallback is rejected by this route (401).
+ * The `/gifs/` routes use token auth, declared by `@Auth` on the endpoints themselves.
  * Endpoints take a full URL built from [UrlManager.gifs] so requests ride the `/gifs/` proxy.
  */
 @Singleton
 class GifRepository @Inject constructor(
     @param:ChativeHttpClientModule.Chat private val httpClient: ChativeHttpClient,
-    private val urlManager: UrlManager,
-    private val userManager: UserManager
+    private val urlManager: UrlManager
 ) {
-    private fun token(): String = userManager.getUserData()?.microToken ?: ""
-
     companion object {
         const val PAGE_LIMIT = 20
     }
@@ -48,9 +43,9 @@ class GifRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val base = urlManager.gifs
             val resp = if (query.isNullOrEmpty()) {
-                httpClient.httpService.getGifsTrending(token(), base + "v1/gifs/trending", limit, offset, next)
+                httpClient.httpService.getGifsTrending(base + "v1/gifs/trending", limit, offset, next)
             } else {
-                httpClient.httpService.getGifsSearch(token(), base + "v1/gifs/search", query, limit, offset, next)
+                httpClient.httpService.getGifsSearch(base + "v1/gifs/search", query, limit, offset, next)
             }
             if (!resp.isSuccess()) throw GifException(resp.reason)
             val data = resp.data

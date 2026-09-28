@@ -95,6 +95,12 @@ class PictureSelectionPreviewModel(private val selector: PictureSelector) {
         return this
     }
 
+    /** Hide the bottom-centre close button of the external preview (default: shown). */
+    fun isHideBottomClose(isHideBottomClose: Boolean): PictureSelectionPreviewModel {
+        selectionConfig.isHideBottomClose = isHideBottomClose
+        return this
+    }
+
     /**
      * preview LocalMedia
      *

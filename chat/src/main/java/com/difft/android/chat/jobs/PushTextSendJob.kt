@@ -1,12 +1,9 @@
 package com.difft.android.chat.jobs
 
 import android.text.TextUtils
-import android.util.Base64
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
-import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
@@ -19,9 +16,7 @@ import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
-import com.difft.android.websocket.internal.push.NotificationType
 import com.difft.android.websocket.internal.push.OutgoingPushMessage
-import com.difft.android.websocket.internal.push.OutgoingPushMessage.PassThrough
 import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
 import com.google.gson.Gson
 import com.tencent.wcdb.base.Value
@@ -33,7 +28,6 @@ import dagger.hilt.components.SingletonComponent
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.ForwardContext
-import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.ROOM_SENDING_STATUS_ACTIVE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.TextMessage
@@ -224,54 +218,7 @@ class PushTextSendJob @AssistedInject constructor(
         reportSendCostTime()
     }
 
-    private fun createNotification(): OutgoingPushMessage.Notification {
-        val collapseId = MD5Utils.md5AndHexStr(textMessage.timeStamp.toString() + textMessage.fromWho.id + DEFAULT_DEVICE_ID)
-        val conversationId = if (textMessage.forWhat is For.Group) {
-            Base64.encodeToString(textMessage.forWhat.id.toByteArray(), Base64.NO_WRAP)
-        } else {
-            textMessage.fromWho.id
-        }
-        val passThrough = PassThrough(conversationId)
-        var mentionedPersons: Array<String>? = null
-        val type: Int = if (textMessage.forWhat is For.Group) {
-            if (textMessage.recall != null) {
-                NotificationType.RECALL_MSG.code
-            } else if (!textMessage.mentions.isNullOrEmpty()) {
-                if (textMessage.mentions?.firstOrNull()?.uid == MENTIONS_ALL_ID) {
-                    NotificationType.GROUP_MENTIONS_ALL.code
-                } else {
-                    mentionedPersons = textMessage.mentions?.mapNotNull { it.uid }?.toTypedArray()
-                    NotificationType.GROUP_MENTIONS_DESTINATION.code
-                }
-            } else {
-                if (textMessage.isAttachmentMessage()) {
-                    NotificationType.GROUP_FILE.code
-                } else {
-                    NotificationType.GROUP_NORMAL.code
-                }
-            }
-        } else {
-            if (textMessage.recall != null) {
-                NotificationType.RECALL_MSG.code
-            } else {
-                if (textMessage.isAttachmentMessage()) {
-                    NotificationType.PERSONAL_FILE.code
-                } else {
-                    NotificationType.PERSONAL_NORMAL.code
-                }
-            }
-        }
-
-        return OutgoingPushMessage.Notification(
-            OutgoingPushMessage.Args(
-                if (textMessage.forWhat is For.Group) textMessage.forWhat.id else "",
-                collapseId,
-                gson.toJson(passThrough),
-                mentionedPersons
-            ),
-            type
-        )
-    }
+    private fun createNotification(): OutgoingPushMessage.Notification = buildTextMessageNotification(textMessage, gson)
 
     /**
      * Update message with server timestamps and send status.

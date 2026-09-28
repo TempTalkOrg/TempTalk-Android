@@ -107,12 +107,21 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp">
 
-                <!-- 圆形背景 - 过期状态时隐藏 -->
+                <!-- 圆形背景 - 下载中 / 手动下载 -->
                 <View
                     android:id="@+id/downloadCircleBg"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:background="@drawable/bg_media_status_circle" />
+
+                <!-- 重试圆 40 · 40% 黑 - 仅下载失败显示 -->
+                <View
+                    android:id="@+id/retryCircleBg"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_media_retry_circle"
+                    android:visibility="gone" />
 
                 <!-- 下载进度环 - 仅下载中显示 -->
                 <com.difft.android.chat.common.CircleProgressBar
@@ -142,7 +151,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/t.disable"
+                android:textColor="@color/t.third"
                 android:textSize="12sp"
                 android:visibility="gone"
                 tools:text="12.6 KB"
@@ -173,7 +182,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/file_expired"
-                android:textColor="@color/t.disable"
+                android:textColor="@color/t.third"
                 android:textSize="12sp" />
         </LinearLayout>
 

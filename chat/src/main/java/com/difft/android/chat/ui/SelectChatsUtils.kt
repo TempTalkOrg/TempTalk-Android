@@ -22,6 +22,9 @@ import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
+import com.difft.android.network.NetworkException
+import com.difft.android.network.auth.AuthTokenProvider
+import com.difft.android.network.auth.withInvalidTokenRetry
 import com.difft.android.network.config.GlobalConfigsManager
 import org.difft.app.database.getGroupMemberCount
 import org.difft.app.database.members
@@ -92,6 +95,7 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.gif.favorite.attachmentFileHashOf
 import com.difft.android.chat.util.MediaUtil
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -116,6 +120,9 @@ class SelectChatsUtils @Inject constructor(
 
     @Inject
     lateinit var fileShareRepo: FileShareRepo
+
+    @Inject
+    lateinit var authTokenProvider: AuthTokenProvider
 
     @Inject
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
@@ -846,8 +853,23 @@ class SelectChatsUtils @Inject constructor(
                 // One derivation with the repair's isExist/uploadInfo keying (attachmentFileHashOf):
                 // the miss this marks and the re-upload that repairs it must name the same file.
                 val fileHash = attachmentFileHashOf(it)
-                val response = fileShareRepo.isExist(FileExistReq((globalServices.userManager.getUserData()?.microToken ?: ""), fileHash, recipientIds))
-                val fileExistResp = response.execute().body()?.data
+                // withContext(Dispatchers.IO) rather than relying on the callers' dispatcher: the
+                // Call.execute() below blocks, so the safety must not be the caller's to provide.
+                // Failures stay non-fatal (see the null-body reasoning below), so they degrade to
+                // "no answer about the file" exactly as an unparsable body always has.
+                val fileExistResp = withContext(Dispatchers.IO) {
+                    runCatching {
+                        authTokenProvider.withInvalidTokenRetry("forwardRepairIsExist") { token ->
+                            val resp = fileShareRepo.isExist(FileExistReq(token, fileHash, recipientIds)).execute()
+                            if (!resp.isSuccessful) {
+                                throw NetworkException(resp.code(), "isExist fail: ${resp.message()}")
+                            }
+                            resp.body() ?: throw IOException("isExist response body is null")
+                        }
+                    }.onFailure {
+                        L.w { "[SelectChatsUtils] isExist failed, forward keeps its existing pointer: ${it.stackTraceToString()}" }
+                    }.getOrNull()?.data
+                }
                 if (fileExistResp?.exists == true) {
                     forwardContext?.forwards?.forEach { forward ->
                         changeAttachmentDigest(forward, attachment.localId, fileExistResp, fileHash)
@@ -1088,7 +1110,7 @@ class SelectChatsUtils @Inject constructor(
     ): BaseResponse<GetConversationSetResponseBody> {
         return try {
             activity.getEntryPoint().getHttpClient().httpService
-                .fetchGetConversationSet((globalServices.userManager.getUserData()?.baseAuth ?: ""), GetConversationSetRequestBody(conversations))
+                .fetchGetConversationSet(GetConversationSetRequestBody(conversations))
         } catch (e: Exception) {
             L.e { "[SelectChatsUtils] getConversationConfigs error: ${e.stackTraceToString()}" }
             throw e

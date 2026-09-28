@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,6 +59,20 @@ class SecureConfigStore @Inject constructor(
 
     suspend fun saveCallServiceUrlStateV3(state: String) {
         dataStore.updateData { it.copy(callServiceUrlStateV3 = state) }
+    }
+
+    /** The held sign-in's JSON, or empty. Read once at a time, not observed — see `PendingLoginStore`. */
+    suspend fun readPendingLogin(): String = dataStore.data
+        .catch { e -> handleReadError(e, "readPendingLogin") }
+        .map { it.pendingLogin }
+        .first()
+
+    suspend fun savePendingLogin(json: String) {
+        dataStore.updateData { it.copy(pendingLogin = json) }
+    }
+
+    suspend fun clearPendingLogin() {
+        dataStore.updateData { if (it.pendingLogin.isEmpty()) it else it.copy(pendingLogin = "") }
     }
 
     private suspend fun FlowCollector<GlobalConfigData>.handleReadError(

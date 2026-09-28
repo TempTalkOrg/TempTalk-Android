@@ -697,7 +697,7 @@
         <LinearLayout
             android:id="@+id/ll_friends"
             android:layout_width="match_parent"
-            android:layout_height="40dp"
+            android:layout_height="wrap_content"
             android:layout_marginHorizontal="16dp"
             android:layout_marginTop="16dp"
             android:layout_marginBottom="16dp"
@@ -705,42 +705,24 @@
             app:layout_constraintTop_toBottomOf="@+id/tv_found_you"
             app:layout_constraintBottom_toBottomOf="parent">
 
-            <!--            <androidx.appcompat.widget.AppCompatTextView-->
-            <!--                android:id="@+id/tv_block"-->
-            <!--                android:layout_width="0dp"-->
-            <!--                android:layout_height="match_parent"-->
-            <!--                android:layout_weight="1"-->
-            <!--                android:background="@drawable/chat_shape_edit_group_bg"-->
-            <!--                android:gravity="center"-->
-            <!--                android:text="@string/contact_block"-->
-            <!--                android:textColor="@color/t.error"-->
-            <!--                android:textSize="14sp"-->
-            <!--                app:layout_constraintTop_toTopOf="parent" />-->
-
-            <androidx.appcompat.widget.AppCompatTextView
+            <com.difft.android.base.widget.DifftButtonView
                 android:id="@+id/tv_ignore"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_marginStart="16dp"
+                android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
                 android:layout_weight="1"
-                android:background="@drawable/chat_shape_edit_group_bg"
-                android:gravity="center"
                 android:text="@string/contact_ignore"
-                android:textColor="@color/t.primary"
-                android:textSize="14sp"
+                app:difft_buttonSize="large"
+                app:difft_buttonVariant="secondary"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <androidx.appcompat.widget.AppCompatTextView
+            <com.difft.android.base.widget.DifftButtonView
                 android:id="@+id/tv_accept"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:background="@drawable/base_bg_chative_button_primary"
-                android:gravity="center"
                 android:text="@string/contact_request_accept"
-                android:textColor="@color/t.white"
-                android:textSize="14sp"
+                app:difft_buttonSize="large"
                 app:layout_constraintTop_toTopOf="parent" />
 
         </LinearLayout>

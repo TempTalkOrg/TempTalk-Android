@@ -1,7 +1,6 @@
 package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sanitizeUrl
 import com.difft.android.chat.attachment.decodeCipherHashOrNull
 import com.difft.android.chat.attachment.resolveUploadIdentity
@@ -9,6 +8,9 @@ import com.difft.android.chat.fileshare.AttachmentUploadType
 import com.difft.android.chat.fileshare.FileExistReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.fileshare.UploadInfoReq
+import com.difft.android.network.NetworkException
+import com.difft.android.network.auth.AuthTokenProvider
+import com.difft.android.network.auth.withInvalidTokenRetry
 import com.difft.android.network.requests.ProgressListener
 import com.difft.android.network.requests.ProgressRequestBody
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +71,8 @@ data class UploadedAttachment(
  */
 @Singleton
 class AttachmentUploadHelper @Inject constructor(
-    private val fileShareRepo: FileShareRepo
+    private val fileShareRepo: FileShareRepo,
+    private val authTokenProvider: AuthTokenProvider,
 ) {
     /**
      * Encrypt [file] and ensure it is stored server-side for [recipients] (account-level = [myId]
@@ -162,10 +165,12 @@ class AttachmentUploadHelper @Inject constructor(
      */
     suspend fun existingByFileHash(fileHash: String, recipients: List<String>): UploadedAttachment? =
         withContext(Dispatchers.IO) {
-            val microToken = globalServices.userManager.getUserData()?.microToken ?: ""
-            val resp = fileShareRepo.isExist(FileExistReq(microToken, fileHash, recipients)).execute()
-            if (!resp.isSuccessful) throw IOException("isExist fail: ${resp.message()}")
-            val res = resp.body()?.data ?: throw IOException("isExist response data is null")
+            val envelope = authTokenProvider.withInvalidTokenRetry("isExist") { token ->
+                val resp = fileShareRepo.isExist(FileExistReq(token, fileHash, recipients)).execute()
+                if (!resp.isSuccessful) throw NetworkException(resp.code(), "isExist fail: ${resp.message()}")
+                resp.body() ?: throw IOException("isExist response body is null")
+            }
+            val res = envelope.data ?: throw IOException("isExist response data is null")
             if (!res.exists) return@withContext null
             if (res.authorizeId == 0L) throw IOException("isExist returned invalid authorizeId for existing file")
             UploadedAttachment(
@@ -210,7 +215,7 @@ class AttachmentUploadHelper @Inject constructor(
      * encrypt-then-upload path and the stored-ciphertext re-authorization path so both speak to the
      * server through one sequence. Blocking — callers are on IO.
      */
-    private fun publish(
+    private suspend fun publish(
         ciphertext: File,
         key: ByteArray,
         fileHash: String,
@@ -219,13 +224,14 @@ class AttachmentUploadHelper @Inject constructor(
         attachmentType: Int,
         onProgress: ((Int) -> Unit)?
     ): UploadedAttachment {
-        val microToken = globalServices.userManager.getUserData()?.microToken ?: ""
-
-        val existResp = fileShareRepo.isExist(FileExistReq(microToken, fileHash, recipients)).execute()
-        if (!existResp.isSuccessful) {
-            throw IOException("check attachment exist fail: ${existResp.message()}")
+        val existEnvelope = authTokenProvider.withInvalidTokenRetry("publish.isExist") { token ->
+            val resp = fileShareRepo.isExist(FileExistReq(token, fileHash, recipients)).execute()
+            if (!resp.isSuccessful) {
+                throw NetworkException(resp.code(), "check attachment exist fail: ${resp.message()}")
+            }
+            resp.body() ?: throw IOException("isExist response body is null")
         }
-        val res = existResp.body()?.data ?: throw IOException("isExist response data is null")
+        val res = existEnvelope.data ?: throw IOException("isExist response data is null")
 
         if (res.exists) {
             if (res.authorizeId == 0L) throw IOException("isExist returned invalid authorizeId for existing file")
@@ -244,25 +250,30 @@ class AttachmentUploadHelper @Inject constructor(
 
         val cipherDigest = md5Of(ciphertext)
         val sentCipherHash = FileSystemUtils.bytesToHex(cipherDigest)
-        val uploadInfoResp = fileShareRepo.uploadInfo(
-            UploadInfoReq(
-                token = microToken,
-                numbers = recipients,
-                attachmentId = res.attachmentId,
-                fileHash = fileHash,
-                cipherHash = sentCipherHash,
-                cipherHashType = "MD5",
-                hashAlg = "SHA-256",
-                keyAlg = "SHA-512",
-                encAlg = "AES-CBC-256",
-                fileSize = plainSize,
-                attachmentType = attachmentType
-            )
-        ).execute()
-        if (!uploadInfoResp.isSuccessful) {
-            throw IOException("uploadInfo fail: ${uploadInfoResp.message()}")
+        // A SEPARATE retry scope from the isExist above: the OSS upload happens in between, so one
+        // wrapper spanning both would re-upload the whole file to refresh a token.
+        val uploadInfoEnvelope = authTokenProvider.withInvalidTokenRetry("publish.uploadInfo") { token ->
+            val resp = fileShareRepo.uploadInfo(
+                UploadInfoReq(
+                    token = token,
+                    numbers = recipients,
+                    attachmentId = res.attachmentId,
+                    fileHash = fileHash,
+                    cipherHash = sentCipherHash,
+                    cipherHashType = "MD5",
+                    hashAlg = "SHA-256",
+                    keyAlg = "SHA-512",
+                    encAlg = "AES-CBC-256",
+                    fileSize = plainSize,
+                    attachmentType = attachmentType
+                )
+            ).execute()
+            if (!resp.isSuccessful) {
+                throw NetworkException(resp.code(), "uploadInfo fail: ${resp.message()}")
+            }
+            resp.body() ?: throw IOException("uploadInfo response body is null")
         }
-        val info = uploadInfoResp.body()?.data ?: throw IOException("uploadInfo response data is null")
+        val info = uploadInfoEnvelope.data ?: throw IOException("uploadInfo response data is null")
         val authorizeId = info.authorizeId.takeIf { it != 0L }
             ?: throw IOException("uploadInfo response has invalid authorizeId")
 

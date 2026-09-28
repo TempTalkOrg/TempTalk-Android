@@ -33,8 +33,8 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:background="@color/bg.elevated"
+                android:layout_marginHorizontal="16dp"
+                android:background="@drawable/base_bg_settings_group"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -122,9 +122,12 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.elevated"
-                android:orientation="vertical">
+                android:background="@drawable/base_bg_settings_group"
+                android:divider="@drawable/base_divider_settings_row"
+                android:orientation="vertical"
+                android:showDividers="middle">
 
                 <LinearLayout
                     android:id="@+id/ll_search_chat_history"
@@ -133,7 +136,7 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
+                    android:paddingEnd="16dp">
 
                     <androidx.appcompat.widget.AppCompatTextView
                         android:layout_width="0dp"
@@ -145,10 +148,9 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_chat_history_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right" />
 
                 </LinearLayout>
 
@@ -157,7 +159,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp"
+                    android:paddingEnd="16dp"
                     android:visibility="gone"
                     tools:visibility="visible">
 
@@ -172,12 +174,11 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/arrow_group_management"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
+                        android:src="@drawable/base_ic_chevron_right" />
 
                 </RelativeLayout>
 
@@ -187,15 +188,18 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.elevated"
-                android:orientation="vertical">
+                android:background="@drawable/base_bg_settings_group"
+                android:divider="@drawable/base_divider_settings_row"
+                android:orientation="vertical"
+                android:showDividers="middle">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
+                    android:paddingEnd="16dp">
 
                     <com.difft.android.base.widget.DifftSwitchView
                         android:id="@+id/switch_stick"
@@ -214,7 +218,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
+                    android:paddingEnd="16dp">
 
                     <com.difft.android.base.widget.DifftSwitchView
                         android:id="@+id/switch2mute"
@@ -234,7 +238,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
+                    android:paddingEnd="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -250,7 +254,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
-                        android:layout_marginEnd="10dp"
+                        android:layout_marginEnd="8dp"
                         android:layout_toStartOf="@id/arrow_save_to_photos"
                         android:gravity="end"
                         android:lineSpacingExtra="5sp"
@@ -260,12 +264,49 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/arrow_save_to_photos"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
+                        android:src="@drawable/base_ic_chevron_right" />
+                </RelativeLayout>
+
+                <RelativeLayout
+                    android:id="@+id/translate_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:text="@string/chat_translate_setting_title"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/translate_text"
+                        tools:ignore="RelativeOverlap"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerVertical="true"
+                        android:layout_marginEnd="8dp"
+                        android:layout_toStartOf="@id/arrow_translate"
+                        android:gravity="end"
+                        android:lineSpacingExtra="5sp"
+                        android:textColor="@color/t.third"
+                        android:textSize="16sp"
+                        tools:text="Off" />
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/arrow_translate"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/base_ic_chevron_right" />
                 </RelativeLayout>
 
                 <RelativeLayout
@@ -273,7 +314,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
+                    android:paddingEnd="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -289,7 +330,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
-                        android:layout_marginEnd="10dp"
+                        android:layout_marginEnd="8dp"
                         android:layout_toStartOf="@id/arrow3"
                         android:gravity="end"
                         android:lineSpacingExtra="5sp"
@@ -299,12 +340,11 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/arrow3"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
+                        android:src="@drawable/base_ic_chevron_right" />
                 </RelativeLayout>
 
                 <RelativeLayout
@@ -312,7 +352,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp"
+                    android:paddingEnd="16dp"
                     android:visibility="gone"
                     tools:visibility="visible">
 
@@ -327,12 +367,11 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/arrow4"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
+                        android:src="@drawable/base_ic_chevron_right" />
                 </RelativeLayout>
 
                 <RelativeLayout
@@ -340,7 +379,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
                     android:paddingStart="16dp"
-                    android:paddingEnd="8dp">
+                    android:paddingEnd="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -356,7 +395,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_centerVertical="true"
-                        android:layout_marginEnd="10dp"
+                        android:layout_marginEnd="8dp"
                         android:layout_toStartOf="@id/arrow5"
                         android:gravity="end"
                         android:lineSpacingExtra="5sp"
@@ -366,12 +405,11 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/arrow5"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:src="@drawable/chat_ic_arrow_right"
-                        android:tint="@color/t.primary" />
+                        android:src="@drawable/base_ic_chevron_right" />
                 </RelativeLayout>
             </LinearLayout>
 
@@ -380,8 +418,9 @@
                 android:id="@+id/leave_container"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
+                android:layout_marginHorizontal="16dp"
                 android:layout_marginTop="16dp"
-                android:background="@color/bg.elevated">
+                android:background="@drawable/base_bg_settings_group">
 
 
                 <TextView
@@ -392,7 +431,7 @@
                     android:paddingStart="16dp"
                     android:paddingEnd="16dp"
                     android:text="@string/group_leave"
-                    android:textColor="@color/error"
+                    android:textColor="@color/t.error"
                     android:textSize="16sp"
                     app:layout_constraintBottom_toBottomOf="parent" />
             </FrameLayout>

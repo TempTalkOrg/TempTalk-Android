@@ -73,11 +73,11 @@ class AttachmentDownloadDecisionTest {
     }
 
     @Test
-    fun `an outgoing transfer in flight is reported as uploading, which READY alone cannot express`() {
+    fun `a readable file with progress running is an upload, which READY alone cannot express`() {
         for (progress in listOf(0, 1, 50, 99)) {
             assertTrue(
                 "progress=$progress",
-                AttachmentDownloadDecision.isUploadInFlight(isCurrentDeviceSend = true, progress = progress)
+                AttachmentDownloadDecision.isUploadInFlight(isFileValid = true, progress = progress)
             )
             // The download rule sees the staged file and correctly calls it READY — which is exactly
             // why the upload needs its own question.
@@ -89,23 +89,115 @@ class AttachmentDownloadDecisionTest {
     }
 
     @Test
-    fun `a finished, failed, expired or unstarted outgoing transfer is not in flight`() {
+    fun `a finished, failed, expired or unstarted transfer is not an upload in flight`() {
         for (progress in listOf(null, 100, -1, -2)) {
             assertFalse(
                 "progress=$progress",
-                AttachmentDownloadDecision.isUploadInFlight(isCurrentDeviceSend = true, progress = progress)
+                AttachmentDownloadDecision.isUploadInFlight(isFileValid = true, progress = progress)
             )
         }
     }
 
     @Test
-    fun `an incoming attachment is never an upload in flight`() {
+    fun `progress without a readable file is a download, never an upload, whoever sent the message`() {
+        // This is the case the old message-id heuristic got wrong: an own message synced from another
+        // device (or restored by a migration) being fetched showed as "uploading" and swallowed its
+        // expired / failed states. Direction is not an input any more; the missing file decides.
         for (progress in allProgresses) {
             assertFalse(
                 "progress=$progress",
-                AttachmentDownloadDecision.isUploadInFlight(isCurrentDeviceSend = false, progress = progress)
+                AttachmentDownloadDecision.isUploadInFlight(isFileValid = false, progress = progress)
             )
         }
+    }
+
+    @Test
+    fun `the download-side states apply exactly when no readable file is here`() {
+        assertTrue(AttachmentDownloadDecision.needsFetch(isFileValid = false))
+        // A FAILED row with its staged file still present is a failed upload, reported by the
+        // message's send state — not a download waiting for a retry.
+        assertFalse(AttachmentDownloadDecision.needsFetch(isFileValid = true))
+    }
+
+    @Test
+    fun `a transfer is in flight only while progress is between 0 and 99`() {
+        for (progress in listOf(0, 1, 50, 99)) {
+            assertTrue("progress=$progress", AttachmentDownloadDecision.isTransferInFlight(progress))
+        }
+        for (progress in listOf(null, 100, -1, -2)) {
+            assertFalse("progress=$progress", AttachmentDownloadDecision.isTransferInFlight(progress))
+        }
+    }
+
+    @Test
+    fun `a live progress entry decides expired and failed, whatever the persisted status says`() {
+        for (status in allStatuses) {
+            assertTrue("status=$status", AttachmentDownloadDecision.isExpired(status, progress = -2))
+            assertFalse("status=$status", AttachmentDownloadDecision.isExpired(status, progress = -1))
+            assertTrue("status=$status", AttachmentDownloadDecision.isFailed(status, progress = -1))
+            assertFalse("status=$status", AttachmentDownloadDecision.isFailed(status, progress = -2))
+            for (progress in listOf(0, 50, 100)) {
+                assertFalse("status=$status progress=$progress", AttachmentDownloadDecision.isExpired(status, progress))
+                assertFalse("status=$status progress=$progress", AttachmentDownloadDecision.isFailed(status, progress))
+            }
+        }
+    }
+
+    @Test
+    fun `without a progress entry the persisted status decides, and expired and failed never overlap`() {
+        for (status in allStatuses) {
+            val expired = AttachmentDownloadDecision.isExpired(status, progress = null)
+            val failed = AttachmentDownloadDecision.isFailed(status, progress = null)
+            assertEquals("status=$status", status == AttachmentStatus.EXPIRED.code, expired)
+            assertEquals("status=$status", status == AttachmentStatus.FAILED.code, failed)
+            assertFalse("status=$status", expired && failed)
+        }
+    }
+
+    @Test
+    fun `tap policy - expired is a dead end before anything else`() {
+        val expired = AttachmentTapAction.Blocked(AttachmentTapBlockedReason.EXPIRED)
+        for (isFileValid in listOf(true, false)) {
+            for (size in listOf(1024, FileUtil.LARGE_FILE_THRESHOLD + 1)) {
+                assertEquals(expired, AttachmentDownloadDecision.tapAction(AttachmentStatus.EXPIRED.code, progress = null, isFileValid, size))
+                // A live expired sentinel wins over a lagging status and even over a running transfer's status.
+                assertEquals(expired, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = -2, isFileValid, size))
+            }
+        }
+    }
+
+    @Test
+    fun `tap policy - a transfer in flight is a dead end, a failed one retries`() {
+        val downloading = AttachmentTapAction.Blocked(AttachmentTapBlockedReason.DOWNLOADING)
+        for (progress in listOf(0, 1, 50, 99)) {
+            assertEquals("progress=$progress", downloading, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress, isFileValid = false, sizeBytes = 1024))
+        }
+        assertEquals(AttachmentTapAction.Download, AttachmentDownloadDecision.tapAction(AttachmentStatus.FAILED.code, progress = null, isFileValid = false, sizeBytes = 1024))
+        assertEquals(AttachmentTapAction.Download, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = -1, isFileValid = false, sizeBytes = 1024))
+    }
+
+    @Test
+    fun `tap policy - a readable file opens, whatever the status says`() {
+        for (status in listOf(AttachmentStatus.SUCCESS.code, AttachmentStatus.LOADING.code)) {
+            for (progress in listOf(null, 100)) {
+                assertEquals(
+                    "status=$status progress=$progress",
+                    AttachmentTapAction.Open,
+                    AttachmentDownloadDecision.tapAction(status, progress, isFileValid = true, sizeBytes = FileUtil.LARGE_FILE_THRESHOLD + 1)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `tap policy - without a readable file a large file downloads on request and anything else is rescued`() {
+        val large = FileUtil.LARGE_FILE_THRESHOLD + 1
+        assertEquals(AttachmentTapAction.Download, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = null, isFileValid = false, sizeBytes = large))
+        // The cases the confidential-forward gate used to let through: a row still LOADING with no live
+        // progress (download died with the process) and a SUCCESS row whose file is gone.
+        assertEquals(AttachmentTapAction.Rescue, AttachmentDownloadDecision.tapAction(AttachmentStatus.LOADING.code, progress = null, isFileValid = false, sizeBytes = 1024))
+        assertEquals(AttachmentTapAction.Rescue, AttachmentDownloadDecision.tapAction(AttachmentStatus.SUCCESS.code, progress = null, isFileValid = false, sizeBytes = 1024))
+        assertEquals(AttachmentTapAction.Rescue, AttachmentDownloadDecision.tapAction(AttachmentStatus.SUCCESS.code, progress = 100, isFileValid = false, sizeBytes = large))
     }
 
     // region rescuing a file the row says we have

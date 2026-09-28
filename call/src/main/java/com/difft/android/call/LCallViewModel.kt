@@ -64,6 +64,7 @@ import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStateHold
 import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStatePort
 import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import com.difft.android.network.ChativeHttpClient
+import com.difft.android.network.auth.AuthTokenProvider
 import com.difft.android.network.UrlManager
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
@@ -116,6 +117,7 @@ class LCallViewModel @AssistedInject constructor(
     private val userManager: UserManager,
     private val proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider,
     private val urlManager: UrlManager,
+    private val authTokenProvider: AuthTokenProvider,
 ) : AndroidViewModel(application) {
 
     // coerceInputValues so an explicit `null` for a non-null field falls back to its default rather
@@ -222,6 +224,7 @@ class LCallViewModel @AssistedInject constructor(
         roomCtl = roomCtl,
         callTlsProvider = callTlsProvider,
         statisticsLogManager = callStatisticsLogManager,
+        authTokenProvider = authTokenProvider,
     )
 
     private val screenSharePreWarmer = ScreenSharePreWarmer(viewModelScope)
@@ -265,7 +268,6 @@ class LCallViewModel @AssistedInject constructor(
             scope = viewModelScope,
             participantManager = participantManager,
             speakingEnabled = callUiController.speakingEnabled,
-            context = ApplicationHelper.instance,
             contactorCacheManager = contactorCacheManager,
             explicitFallback = screenShareFallback.flow,
         )

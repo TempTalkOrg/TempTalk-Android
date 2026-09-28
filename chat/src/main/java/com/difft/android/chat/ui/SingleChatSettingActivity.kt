@@ -39,7 +39,9 @@ import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
 import com.difft.android.chat.setting.SaveToPhotosSettingsActivity
+import com.difft.android.chat.setting.translate.TranslateSettingsActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
+import com.difft.android.chat.translate.translateEntryValue
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
@@ -133,6 +135,10 @@ class SingleChatSettingActivity : BaseActivity() {
             SaveToPhotosSettingsActivity.start(this, For.Account(contactId))
         }
 
+        mBinding.translateContainer.setOnClickListener {
+            TranslateSettingsActivity.start(this, For.Account(contactId))
+        }
+
         mBinding.disappearingTimeContainer.setOnClickListener {
             ChatArchiveSettingsActivity.start(this, For.Account(contactId))
         }
@@ -196,6 +202,15 @@ class SingleChatSettingActivity : BaseActivity() {
             }
             .launchIn(lifecycleScope)
 
+        // The translate value lives outside conversationSet: the stored target is local-only.
+        if (chatSettingViewModel.translateSupported) {
+            chatSettingViewModel.translateSetting
+                .onEach { mBinding.translateText.text = translateEntryValue(this, it) }
+                .launchIn(lifecycleScope)
+        } else {
+            mBinding.translateContainer.visibility = View.GONE
+        }
+
         mBinding.tvUnblock.setOnClickListener {
             chatSettingViewModel.setConversationConfigs(this, contactId, null, null, 0, null, false, getString(R.string.contact_unblocked))
         }
@@ -207,6 +222,8 @@ class SingleChatSettingActivity : BaseActivity() {
             mBinding.clMute.visibility = View.GONE
             mBinding.relRemove.visibility = View.GONE
             mBinding.disappearingTimeContainer.visibility = View.GONE
+            // Note to self receives no incoming messages, so there is nothing to auto-translate.
+            mBinding.translateContainer.visibility = View.GONE
         } else if (contactId.isOfficialAccount()) {
             mBinding.clMute.visibility = View.VISIBLE
             mBinding.relRemove.visibility = View.GONE
@@ -367,10 +384,6 @@ class SingleChatSettingActivity : BaseActivity() {
         }
     }
 
-    val token: String by lazy {
-        (userManager.getUserData()?.microToken ?: "")
-    }
-
     private fun showRemoveDialog() {
         ComposeDialogManager.showMessageDialog(
             context = this,
@@ -382,7 +395,7 @@ class SingleChatSettingActivity : BaseActivity() {
                 lifecycleScope.launch {
                     try {
                         val result = withContext(Dispatchers.IO) {
-                            ContactorUtil.fetchRemoveFriend(this@SingleChatSettingActivity, token, contactId)
+                            ContactorUtil.fetchRemoveFriend(this@SingleChatSettingActivity, contactId)
                         }
                         if (result.status == 0) {
                             withContext(Dispatchers.IO) {

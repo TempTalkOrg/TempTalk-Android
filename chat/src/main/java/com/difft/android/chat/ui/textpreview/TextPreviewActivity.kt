@@ -18,6 +18,7 @@ import com.difft.android.chat.R
 import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.common.LinkTextUtils
 import com.difft.android.chat.databinding.ActivityTextPreviewBinding
+import com.difft.android.chat.translate.backend.TranslateBackend
 import com.difft.android.chat.ui.SelectChatsUtils
 import com.difft.android.chat.ui.messageaction.TextSelectionManager
 import com.hi.dhl.binding.viewbind
@@ -38,6 +39,9 @@ class TextPreviewActivity : BaseActivity() {
 
     @Inject
     lateinit var selectChatsUtils: SelectChatsUtils
+
+    @Inject
+    lateinit var translateBackend: TranslateBackend
 
     @Inject
     lateinit var activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
@@ -115,7 +119,7 @@ class TextPreviewActivity : BaseActivity() {
 
         // Floating close button: dispatchTouchEvent routes gestures starting on it straight to
         // super (see touchStartedOnCloseButton), so this click fires without disturbing selection.
-        binding.cvClose.setOnClickListener { finish() }
+        binding.btnClose.setOnClickListener { finish() }
     }
 
     private fun setupTextView() {
@@ -152,7 +156,7 @@ class TextPreviewActivity : BaseActivity() {
         // including the button — hiding the button during selection.) Selection geometry uses
         // screen coordinates, so re-parenting here does not affect handle/highlight positioning.
         val root = binding.root as ViewGroup
-        root.addView(overlayContainer, root.indexOfChild(binding.cvClose))
+        root.addView(overlayContainer, root.indexOfChild(binding.btnClose))
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -289,7 +293,7 @@ class TextPreviewActivity : BaseActivity() {
     }
     
     private fun isTouchOnCloseButton(ev: MotionEvent): Boolean {
-        val button = binding.cvClose
+        val button = binding.btnClose
         if (button.visibility != View.VISIBLE) return false
         val location = IntArray(2)
         button.getLocationOnScreen(location)
@@ -512,7 +516,7 @@ class TextPreviewActivity : BaseActivity() {
         // Always dismiss and recreate for simplicity
         dismissSelectionPopup()
         
-        selectionPopup = TextPreviewSelectionPopup(this).apply {
+        selectionPopup = TextPreviewSelectionPopup(this, translateBackend.isSupported).apply {
             show(
                 selectionBounds = selectionBounds,
                 isFullSelection = isFullSelection,

@@ -95,6 +95,9 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
 
     protected lateinit var bottomNarBar: PreviewBottomNavBar
 
+    /** Bottom-centre exit for the external (message) preview; GONE (absent) for the picker's own preview. */
+    private lateinit var bottomCloseButton: View
+
     protected lateinit var titleBar: PreviewTitleBar
 
     /**
@@ -240,6 +243,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         magicalView = view.findViewById(R.id.magical)
         viewPager = ViewPager2(requireContext())
         bottomNarBar = view.findViewById(R.id.bottom_nar_bar)
+        bottomCloseButton = view.findViewById(R.id.ps_bottom_close)
         magicalView.setMagicalContent(viewPager)
         setMagicalViewBackgroundColor()
         setMagicalViewAction()
@@ -649,19 +653,7 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         titleBar.setTitleBarStyle()
         titleBar.setOnTitleBarListener(object : TitleBar.OnTitleBarListener() {
             override fun onBackPressed() {
-                if (isExternalPreview) {
-                    if (selectorConfig.isPreviewZoomEffect) {
-                        magicalView.backToMin()
-                    } else {
-                        handleExternalPreviewBack()
-                    }
-                } else {
-                    if (!isInternalBottomPreview && selectorConfig.isPreviewZoomEffect) {
-                        magicalView.backToMin()
-                    } else {
-                        onBackCurrentFragment()
-                    }
-                }
+                closePreview()
             }
         })
         titleBar.setTitle((curPosition + 1).toString() + "/" + totalNum)
@@ -1038,6 +1030,23 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         })
     }
 
+    /** Shared exit path of the title-bar back arrow and the bottom close button. */
+    private fun closePreview() {
+        if (isExternalPreview) {
+            if (selectorConfig.isPreviewZoomEffect) {
+                magicalView.backToMin()
+            } else {
+                handleExternalPreviewBack()
+            }
+        } else {
+            if (!isInternalBottomPreview && selectorConfig.isPreviewZoomEffect) {
+                magicalView.backToMin()
+            } else {
+                onBackCurrentFragment()
+            }
+        }
+    }
+
     /**
      * 外部预览的样式
      */
@@ -1047,6 +1056,10 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         bottomNarBar.visibility = View.GONE
         completeSelectView.visibility = View.GONE
         ivShare.visibility = if (selectorConfig.isHidePreviewShare) View.GONE else View.VISIBLE
+
+        // GONE doubles as "this page has no bottom close button" for setBottomCloseYieldingToControls.
+        bottomCloseButton.visibility = if (selectorConfig.isHideBottomClose) View.GONE else View.VISIBLE
+        bottomCloseButton.setOnClickListener { closePreview() }
 
         if (selectorConfig.isShowConfidentialTip) {
             addConfidentialTipView()
@@ -1076,6 +1089,16 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
         params.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
         params.bottomMargin = bottomMargin
         parent.addView(tipView, params)
+    }
+
+    /**
+     * Video pages: the media3 control bar shares the bottom edge with the close button, so the
+     * button yields while the bar is up and returns when the bar hides (auto-hide or the next tap,
+     * which also toggles the title bar). GONE means the page has no bottom close button at all.
+     */
+    private fun setBottomCloseYieldingToControls(controlsVisible: Boolean) {
+        if (bottomCloseButton.visibility == View.GONE) return
+        bottomCloseButton.visibility = if (controlsVisible) View.INVISIBLE else View.VISIBLE
     }
 
     /**
@@ -1208,6 +1231,10 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
             if (isExternalPreview) {
                 onExternalLongPressDownload(media)
             }
+        }
+
+        override fun onPreviewVideoControllerVisibility(visible: Boolean) {
+            setBottomCloseYieldingToControls(visible)
         }
     }
 
@@ -1357,6 +1384,8 @@ open class PictureSelectorPreviewFragment : PictureCommonFragment() {
             if (mData.size > position) {
                 val currentMedia = mData[position]
                 notifySelectNumberStyle(currentMedia)
+                // A newly selected video page (re)starts with its control bar hidden; images have none.
+                setBottomCloseYieldingToControls(false)
                 if (isHasMagicalEffect()) {
                     changeMagicalViewParams(position)
                 }

@@ -9,5 +9,18 @@ data class SignInRequestBody(
     val signalingKey: String,
     val name: String,
     val fetchesMessages: Boolean,
-    val registrationId: Int
+    val registrationId: Int,
+    /** Null on a plain sign-in and then left out of the JSON: the server treats absence as the old flow. */
+    val transferProof: TransferProof? = null,
+)
+
+/**
+ * Sent with `PUT /v1/accounts/code/{code}` when the account's identity travelled with its data: the
+ * server keeps the account's secondary devices signed in when [identityKey] equals the one it stores
+ * and [signature] verifies against that stored key. Both are Base64 in the standard alphabet;
+ * [identityKey] is the serialized public key exactly as `PUT /v2/keys` uploads it.
+ */
+data class TransferProof(
+    val identityKey: String,
+    val signature: String,
 )

@@ -1,6 +1,5 @@
 package com.difft.android.chat.message
 
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.chat.R
@@ -56,9 +55,13 @@ open class TextChatMessage : ChatMessage() {
     var playStatus: Int = AudioMessageManager.PLAY_STATUS_PLAYED
     var criticalAlertType: Int = CRITICAL_ALERT_TYPE_NONE
     var isScreenShotMessage: Boolean = false
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is TextChatMessage) return false
+    /**
+     * Every comparison [equals] makes except [translateData].
+     *
+     * Exists so the list adapter can ask "did ONLY the translation change?" and refresh the
+     * translate block alone, without duplicating the field list here and drifting from it.
+     */
+    fun contentEqualsIgnoringTranslate(other: TextChatMessage): Boolean {
         if (!super.equals(other)) return false
 
         if (readStatus != other.readStatus) return false
@@ -71,12 +74,17 @@ open class TextChatMessage : ChatMessage() {
         if (mentions != other.mentions) return false
         if (reactions != other.reactions) return false
         if (sharedContacts != other.sharedContacts) return false
-        if (translateData != other.translateData) return false
         if (speechToTextData != other.speechToTextData) return false
         if (criticalAlertType != other.criticalAlertType) return false
         if (isScreenShotMessage != other.isScreenShotMessage) return false
 
         return true
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is TextChatMessage) return false
+        return contentEqualsIgnoringTranslate(other) && translateData == other.translateData
     }
 
     override fun hashCode(): Int {
@@ -148,25 +156,6 @@ internal fun TextChatMessage.singleForwardWrappedAttachment(): Attachment? =
  */
 fun TextChatMessage.getAttachmentIdForProgress(): String =
     getRelevantAttachment()?.localId?.takeIf { it.isNotEmpty() } ?: this.id
-
-fun TextChatMessage.shouldShowFail(): Boolean {
-    // Only show fail for non-mine messages or messages from different device
-    if (this.isMine && this.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID) {
-        return false
-    }
-
-    // Check if progress indicates failure or expired
-    val progress = getAttachmentProgress()
-    if (progress == -1 || progress == -2) return true
-
-    // If no progress info, check attachment status
-    if (progress == null) {
-        val attachment = getRelevantAttachment()
-        return attachment?.status == AttachmentStatus.FAILED.code || attachment?.status == AttachmentStatus.EXPIRED.code
-    }
-
-    return false
-}
 
 /**
  * RENDER-coupled selector: the attachment whose transfer state (progress key, status, fail display)

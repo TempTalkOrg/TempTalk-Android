@@ -16,7 +16,6 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -87,9 +86,6 @@ class ContactDetailFragment : Fragment() {
 
     @Inject
     lateinit var contactorCacheManager: ContactorCacheManager
-
-    @Inject
-    lateinit var userManager: UserManager
 
     @Inject
     lateinit var callManager: LChatToCallController
@@ -477,21 +473,26 @@ class ContactDetailFragment : Fragment() {
 
     private fun navigateToChat() {
         val navigationCallback = activity as? ConversationNavigationCallback
+        // A sheet over the single-pane conversation list (contacts tab) has no chat underneath to
+        // pop a chat over, so the conversation opens as a full page, like a list tap would.
+        val sheetOverList = isPopupMode && navigationCallback != null && !navigationCallback.isDualPaneMode
         if (isPopupMode) {
             (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
-            val focusable = activity as? ChatInputFocusable
-            if (focusable?.focusCurrentChatInputIfMatches(contactId) != true) {
-                ChatPopupActivity.startActivity(
-                    requireContext(),
-                    contactId,
-                    sourceType = sourceType,
-                    source = source
-                )
+        }
+        when {
+            isPopupMode && !sheetOverList -> {
+                val focusable = activity as? ChatInputFocusable
+                if (focusable?.focusCurrentChatInputIfMatches(contactId) != true) {
+                    ChatPopupActivity.startActivity(
+                        requireContext(),
+                        contactId,
+                        sourceType = sourceType,
+                        source = source
+                    )
+                }
             }
-        } else if (navigationCallback?.isDualPaneMode == true) {
-            navigationCallback.onOneOnOneConversationSelected(contactId)
-        } else {
-            ChatActivity.startActivity(
+            navigationCallback?.isDualPaneMode == true -> navigationCallback.onOneOnOneConversationSelected(contactId)
+            else -> ChatActivity.startActivity(
                 requireContext(),
                 contactId,
                 sourceType = sourceType,
@@ -595,7 +596,6 @@ class ContactDetailFragment : Fragment() {
             try {
                 val response = ContactorUtil.fetchAddFriendRequest(
                     requireContext(),
-                    (userManager.getUserData()?.microToken ?: ""),
                     contactId,
                     sourceType,
                     source

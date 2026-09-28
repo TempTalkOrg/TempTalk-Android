@@ -85,10 +85,10 @@
                 android:textSize="17sp" />
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
                 android:importantForAccessibility="no"
-                android:src="@drawable/call_ic_arrow_right"
+                android:src="@drawable/base_ic_chevron_right"
                 app:tint="@color/t.secondary.night" />
         </LinearLayout>
 

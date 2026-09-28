@@ -70,6 +70,9 @@ dependencies {
     // OfflineAudioPipeline / PipelineTapConfig types in `voice/`.
     implementation(libs.denoise.filter)
 
+    // Lottie: image-editor HUD / text entry and the message-list loading animation.
+    implementation(libs.lottie)
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -123,7 +126,4 @@ dependencies {
     implementation(libs.media3.common)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
-    implementation(libs.language.detector) {
-        exclude(group = "com.intellij", module = "annotations")
-    }
 }

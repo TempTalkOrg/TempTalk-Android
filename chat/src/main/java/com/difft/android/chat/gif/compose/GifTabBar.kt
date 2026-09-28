@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -88,7 +87,7 @@ private fun GifTabItem(
     Box(
         modifier = Modifier
             .size(38.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(DifftTheme.radius.largeShape)
             .background(containerBg)
             .clickable(
                 interactionSource = interaction,

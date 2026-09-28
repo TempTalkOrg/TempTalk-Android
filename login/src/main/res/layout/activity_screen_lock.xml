@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg1"
     tools:ignore="Overdraw">
 
     <androidx.appcompat.widget.AppCompatImageView
@@ -67,20 +66,14 @@
         tools:text="123"
         tools:visibility="visible" />
 
-    <androidx.appcompat.widget.AppCompatButton
+    <com.difft.android.base.widget.DifftButtonView
         android:id="@+id/btn_submit"
         android:layout_width="0dp"
         android:layout_height="48dp"
         android:layout_marginHorizontal="16dp"
         android:layout_marginTop="48dp"
-        android:background="@drawable/login_handle_zone_bg"
-        android:clickable="false"
         android:enabled="false"
-        android:gravity="center"
         android:text="@string/settings_passcode_submit"
-        android:textAllCaps="false"
-        android:textColor="@color/white"
-        android:textSize="@dimen/login_next_size"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -160,7 +153,7 @@
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/t.primary"
+        app:tint="@color/icon"
         tools:visibility="visible" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

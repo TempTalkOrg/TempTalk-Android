@@ -1,41 +1,34 @@
 package com.difft.android.base.ui.compose.input
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -49,11 +42,9 @@ import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
 
@@ -85,29 +76,13 @@ enum class DifftInputSurface {
     Popup,
 }
 
-@Composable
-private fun inputSurfaceColor(surface: DifftInputSurface, containerColor: Color?): Color =
-    containerColor ?: when (surface) {
-        DifftInputSurface.Page -> DifftTheme.colors.backgroundSecondary
-        DifftInputSurface.Popup -> DifftTheme.colors.backgroundTertiary
-    }
-
-/** Shared geometry defaults — values mirror the legacy XML search-input declarations. */
-object DifftInputDefaults {
-    val Height: Dp = 36.dp                 // iOS OWSSearchBar baseline
-    val CornerRadius: Dp = 8.dp
-    val ContentPaddingStart: Dp = 10.dp
-    val LeadingIconGap: Dp = 6.dp
-    val LeadingIconWidth: Dp = 15.dp
-    val LeadingIconHeight: Dp = 14.dp
-    val ClearSlotWidth: Dp = 40.dp         // reserved trailing slot (== legacy paddingEnd)
-    val ClearIconSize: Dp = 16.dp          // small refined glyph (iOS parity); tap target stays the 40dp slot
-    val ClearIconEndInset: Dp = 10.dp      // == ContentPaddingStart, so both sides read identically
-}
-
 /**
- * Single-line clearable text input — the one implementation behind every search box and
- * short-form text field in the app.
+ * Clearable text input — the one implementation behind every search box and short-form text
+ * field in the app. Single line by default; [maxLines] > 1 is supported only together with
+ * [ClearMode.Never], because the clear slot pins the row to its content's intrinsic height.
+ *
+ * [style] picks the design-library skin ([DifftTextFieldStyle.Search] filled box,
+ * [DifftTextFieldStyle.Form] outlined box with helper text and counter) and [size] its height.
  *
  * Fully stateless: [value] is owned by the host; this composable never caches, trims,
  * debounces, or derives from it.
@@ -133,23 +108,46 @@ fun DifftClearableTextField(
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
     hint: String? = null,
+    style: DifftTextFieldStyle = DifftTextFieldStyle.Form,
+    size: DifftTextFieldSize = DifftTextFieldSize.Large,
     clearMode: ClearMode = ClearMode.WhenNotEmpty,
     leadingIcon: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
+    /** Form style only: paints the border `error` and turns [supportingText] red. */
+    isError: Boolean = false,
+    /** Helper / error line rendered below the field, left-aligned to it. */
+    supportingText: String? = null,
+    /** Renders `n/max` (requires [maxLength]) instead of the clear icon. */
+    showCounter: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     onImeAction: (() -> Unit)? = null,
     contentType: ContentType? = null,
     onFocusChanged: ((Boolean) -> Unit)? = null,
+    /** Masking (e.g. `PasswordVisualTransformation()`); passed straight to the text field. */
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    /** Focusable and selectable but not editable — the "view-only" state that keeps copy working. */
+    readOnly: Boolean = false,
+    /** > 1 requires [ClearMode.Never]; see the class doc. */
+    maxLines: Int = 1,
+    /** Fill of the [DifftTextFieldStyle.Search] skin; forms always sit on `bg1`. */
     surface: DifftInputSurface = DifftInputSurface.Page,
-    /** Explicit fill; null uses the [surface] default. */
+    /**
+     * Explicit fill. Setting it means the host owns the box: the component paints this colour
+     * and draws no border of its own.
+     */
     containerColor: Color? = null,
     contentColor: Color = DifftTheme.colors.textPrimary,
-    hintColor: Color = DifftTheme.colors.textDisabled,
-    clearIconTint: Color = DifftTheme.colors.textSecondary,
-    textStyle: TextStyle = DifftTheme.typography.bodyMedium,
-    height: Dp? = DifftInputDefaults.Height,
-    minHeight: Dp = 0.dp,
-    contentPadding: PaddingValues = PaddingValues(start = DifftInputDefaults.ContentPaddingStart),
+    /** Placeholder colour; null follows [style]. */
+    hintColor: Color? = null,
+    /** Clear-glyph colour; null follows [style]. */
+    clearIconTint: Color? = null,
+    textStyle: TextStyle = DifftTheme.typography.p3,
+    /** Fixed box height; null lets the field wrap its content (text areas). */
+    height: Dp? = size.height,
+    /** Null uses 0, or the library's 78dp text-area minimum for a multi-line form. */
+    minHeight: Dp? = null,
+    /** Null uses the library insets: 12 horizontal, plus 10 vertical when multi-line. */
+    contentPadding: PaddingValues? = null,
     clearIconEndInset: Dp = DifftInputDefaults.ClearIconEndInset,
     maxLength: Int? = null,
     autoFocus: Boolean = false,
@@ -157,152 +155,194 @@ fun DifftClearableTextField(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val isFocused by interactionSource.collectIsFocusedAsState()
-    if (onFocusChanged != null) {
-        LaunchedEffect(isFocused) { onFocusChanged(isFocused) }
-    }
+    InputFocusEffects(
+        isFocused = isFocused,
+        onFocusChanged = onFocusChanged,
+        autoFocus = autoFocus,
+        focusRequester = focusRequester,
+    )
+    val field = rememberInputFieldValue(value, maxLength, onValueChange)
+    val chrome = inputChrome(
+        style = style, size = size, surface = surface, clearMode = clearMode,
+        enabled = enabled, readOnly = readOnly, focused = isFocused, hasText = value.isNotEmpty(),
+        isError = isError, maxLines = maxLines, showCounter = showCounter, maxLength = maxLength,
+        containerColor = containerColor, hintColor = hintColor, clearIconTint = clearIconTint,
+        height = height, minHeight = minHeight, contentPadding = contentPadding,
+        clearIconEndInset = clearIconEndInset,
+    )
+    val editor = InputEditorSpec(
+        textStyle = textStyle, contentColor = contentColor, enabled = enabled, readOnly = readOnly,
+        maxLines = maxLines, visualTransformation = visualTransformation,
+        keyboardOptions = keyboardOptions, onImeAction = onImeAction, contentType = contentType,
+    )
 
-    // TextFieldValue internally so a programmatic [value] change places the cursor at the end —
-    // the legacy setText(x) + setSelection(x.length) idiom every edit/prefill flow relied on.
-    // User edits flow through unchanged. lastEmitted distinguishes a genuine external set from
-    // an async host echoing our own edit back one frame late (a ViewModel-fed value): resetting
-    // on the echo would drop in-flight keystrokes and snap the caret to the end.
-    var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
-    var lastEmitted by remember { mutableStateOf<String?>(null) }
-    if (fieldValue.text != value && value != lastEmitted) {
-        fieldValue = TextFieldValue(value, TextRange(value.length))
-    }
-
-    val showClear = enabled && when (clearMode) {
-        ClearMode.WhenNotEmpty -> value.isNotEmpty()
-        ClearMode.WhileEditing -> value.isNotEmpty() && isFocused
-        ClearMode.Never -> false
-    }
-    // Slot reservation and icon rendering are deliberately separate rules: search boxes keep the
-    // 40dp trailing slot permanently (legacy paddingEnd was unconditional — avoids a 40dp text
-    // reflow on the first keystroke); form fields reserve it only while focused so the read-only
-    // display state stays pixel-identical to the pre-migration EditText.
-    val reserveSlot = when (clearMode) {
-        ClearMode.WhenNotEmpty -> true
-        ClearMode.WhileEditing -> isFocused
-        ClearMode.Never -> false
-    }
-
-    val cursorColor = DifftTheme.colors.primary
-
-    if (autoFocus) {
-        LaunchedEffect(Unit) {
-            // Wait one frame so the field is placed before focus: focus-driven autofill/IME
-            // callbacks report the node's bounds, and requesting focus during the first
-            // composition (pre-placement) anchored the system autofill popup at the screen
-            // origin instead of on the field.
-            withFrameNanos {}
-            focusRequester.requestFocus()
-        }
-    }
-
-    Row(
-        modifier = modifier
-            // With no fixed height, bound the row to its content's intrinsic height — otherwise
-            // the trailing slot's fillMaxHeight would expand the whole field to the incoming max
-            // constraint (a focused form field grew to full screen).
-            .let { if (height != null) it.height(height) else it.heightIn(min = minHeight).height(IntrinsicSize.Min) }
-            .clip(RoundedCornerShape(DifftInputDefaults.CornerRadius))
-            .background(inputSurfaceColor(surface, containerColor)),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .padding(contentPadding),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (leadingIcon != null) {
-                leadingIcon()
-                Spacer(Modifier.width(DifftInputDefaults.LeadingIconGap))
-            }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (hint != null) {
-                    HintText(hint = hint, visible = value.isEmpty(), textStyle = textStyle, hintColor = hintColor)
-                }
-                BasicTextField(
-                    value = fieldValue,
-                    // Truncate (never reject) on overflow — matches XML InputFilter.LengthFilter
-                    // paste semantics.
-                    onValueChange = { raw ->
-                        val capped = capToMaxLength(raw, maxLength, fieldValue)
-                        fieldValue = capped
-                        if (capped.text != value) {
-                            lastEmitted = capped.text
-                            onValueChange(capped.text)
-                        }
-                    },
-                    enabled = enabled,
-                    singleLine = true,
-                    textStyle = textStyle.copy(color = contentColor),
-                    cursorBrush = SolidColor(cursorColor),
-                    keyboardOptions = keyboardOptions,
-                    // Run the handler, then the platform default (legacy editor-action listeners
-                    // returned false, so Done still hid the keyboard).
-                    keyboardActions = onImeAction?.let { action ->
-                        KeyboardActions {
-                            action()
-                            defaultKeyboardAction(keyboardOptions.imeAction)
-                        }
-                    } ?: KeyboardActions.Default,
-                    interactionSource = interactionSource,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        // Autofill content type: without it the platform's suggestion/autofill
-                        // popup has no virtual-node bounds to anchor to and shows at the screen
-                        // origin instead of on the field.
-                        .let { m ->
-                            contentType?.let { ct -> m.semantics { this.contentType = ct } } ?: m
-                        },
-                )
-            }
-        }
-
-        if (reserveSlot) {
-            Box(
-                Modifier
-                    .width(DifftInputDefaults.ClearSlotWidth)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                // Conditional rendering: when absent the node does not exist, so the legacy
-                // "alpha=0 but still clickable" phantom tap target cannot recur.
-                if (showClear) {
-                    ClearSlot(
-                        clearIconTint = clearIconTint,
-                        clearIconEndInset = clearIconEndInset,
-                        onClick = {
-                            onClear()
-                            // Clear-and-refocus: keep the user in typing flow.
-                            runCatching { focusRequester.requestFocus() }
-                        },
-                    )
-                }
-            }
-        }
+    // Column so the helper line and the text-area counter can sit under the box; with neither
+    // present it wraps the box exactly, so a caller's modifier still measures the field itself.
+    Column(modifier = modifier) {
+        FieldBox(
+            field = field,
+            chrome = chrome,
+            editor = editor,
+            hint = hint,
+            leadingIcon = leadingIcon,
+            focusRequester = focusRequester,
+            interactionSource = interactionSource,
+            onClear = onClear,
+        )
+        InputBelowBox(
+            trailing = chrome.trailing,
+            length = value.length,
+            supportingText = supportingText,
+            isError = isError,
+        )
     }
 }
 
 /**
- * InputFilter.LengthFilter parity: on overflow, trim the tail of the INSERTED run (which ends at
- * the new selection) instead of the end of the whole string — an insert at the start of a full
- * field must not silently delete trailing characters.
+ * The box itself: chrome, leading icon, hint, editor and the trailing slot (clear ✕ or counter).
  */
-private fun capToMaxLength(raw: TextFieldValue, maxLength: Int?, previous: TextFieldValue): TextFieldValue {
-    if (maxLength == null || raw.text.length <= maxLength) return raw
-    val overflow = raw.text.length - maxLength
-    val insertEnd = raw.selection.end.coerceIn(0, raw.text.length)
-    val trimStart = (insertEnd - overflow).coerceAtLeast(0)
-    // If the edit shape is unexpected (selection not at the insert end), fall back to
-    // rejecting the edit outright — still never corrupts existing text.
-    if (insertEnd - trimStart != overflow) return previous
-    val text = raw.text.removeRange(trimStart, insertEnd)
-    return TextFieldValue(text, TextRange(trimStart.coerceAtMost(text.length)))
+@Composable
+private fun FieldBox(
+    field: InputFieldValue,
+    chrome: InputChrome,
+    editor: InputEditorSpec,
+    hint: String?,
+    leadingIcon: (@Composable () -> Unit)?,
+    focusRequester: FocusRequester,
+    interactionSource: MutableInteractionSource,
+    onClear: () -> Unit,
+) {
+    val layout = chrome.layout
+    Row(
+        modifier = chrome.boxModifier
+            .then(
+                if (layout.multiLine && editor.enabled) Modifier.focusOnTap(focusRequester) else Modifier
+            ),
+        verticalAlignment = layout.rowAlignment,
+    ) {
+        Row(
+            Modifier.weight(1f).padding(chrome.contentPadding),
+            verticalAlignment = layout.rowAlignment,
+        ) {
+            if (leadingIcon != null) {
+                CompositionLocalProvider(LocalContentColor provides chrome.leadingIconColor) {
+                    leadingIcon()
+                }
+                Spacer(Modifier.width(DifftInputDefaults.LeadingIconGap))
+            }
+            Box(Modifier.weight(1f), contentAlignment = layout.boxAlignment) {
+                if (hint != null) {
+                    HintText(
+                        hint = hint,
+                        visible = field.text.isEmpty(),
+                        textStyle = editor.textStyle,
+                        hintColor = chrome.hintColor,
+                    )
+                }
+                FieldEditor(
+                    field = field,
+                    editor = editor,
+                    focusRequester = focusRequester,
+                    interactionSource = interactionSource,
+                )
+            }
+        }
+
+        val counterInField = chrome.trailing.counterInField
+        if (counterInField != null) {
+            InputCounter(
+                length = field.text.length,
+                maxLength = counterInField,
+                textStyle = DifftTheme.typography.p3,
+                modifier = Modifier.padding(end = DifftInputDefaults.HorizontalPadding),
+            )
+        } else if (chrome.trailing.reserveSlot) {
+            ClearSlotBox(
+                showClear = chrome.trailing.showClear,
+                clearIconTint = chrome.clearIconTint,
+                clearIconEndInset = chrome.clearIconEndInset,
+                onClick = {
+                    onClear()
+                    // Clear-and-refocus: keep the user in typing flow.
+                    runCatching { focusRequester.requestFocus() }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun FieldEditor(
+    field: InputFieldValue,
+    editor: InputEditorSpec,
+    focusRequester: FocusRequester,
+    interactionSource: MutableInteractionSource,
+) {
+    val cursorColor = DifftTheme.colors.primary
+    BasicTextField(
+        value = field.fieldValue,
+        onValueChange = field.onEdit,
+        enabled = editor.enabled,
+        readOnly = editor.readOnly,
+        singleLine = editor.maxLines == 1,
+        maxLines = editor.maxLines,
+        visualTransformation = editor.visualTransformation,
+        textStyle = editor.textStyle.copy(color = editor.contentColor),
+        cursorBrush = SolidColor(cursorColor),
+        keyboardOptions = editor.keyboardOptions,
+        // Run the handler, then the platform default (legacy editor-action listeners
+        // returned false, so Done still hid the keyboard).
+        keyboardActions = editor.onImeAction?.let { action ->
+            KeyboardActions {
+                action()
+                defaultKeyboardAction(editor.keyboardOptions.imeAction)
+            }
+        } ?: KeyboardActions.Default,
+        interactionSource = interactionSource,
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+            // Autofill content type: without it the platform's suggestion/autofill popup has no
+            // virtual-node bounds to anchor to and shows at the screen origin instead of on the
+            // field.
+            .let { m ->
+                editor.contentType?.let { ct -> m.semantics { this.contentType = ct } } ?: m
+            },
+    )
+}
+
+/**
+ * A multi-line field is taller than its text, so the editor alone would leave the lower part of
+ * the visible box dead to taps. The box itself hands taps on that blank area to the editor; taps on
+ * the editor never reach here, so the caret still lands where the finger is.
+ */
+private fun Modifier.focusOnTap(focusRequester: FocusRequester): Modifier =
+    this.clickable(interactionSource = null, indication = null) { focusRequester.requestFocus() }
+
+/** The reserved trailing slot; the glyph inside it renders only while [showClear]. */
+@Composable
+private fun ClearSlotBox(
+    showClear: Boolean,
+    clearIconTint: Color,
+    clearIconEndInset: Dp,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .width(DifftInputDefaults.ClearSlotWidth)
+            .fillMaxHeight(),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        // Conditional rendering: when absent the node does not exist, so the legacy
+        // "alpha=0 but still clickable" phantom tap target cannot recur.
+        if (showClear) {
+            ClearSlot(
+                clearIconTint = clearIconTint,
+                clearIconEndInset = clearIconEndInset,
+                onClick = onClick,
+            )
+        }
+    }
 }
 
 /**

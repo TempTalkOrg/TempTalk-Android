@@ -1,6 +1,5 @@
 package com.difft.android.chat.common
 
-import com.difft.android.base.utils.globalServices
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -99,7 +98,7 @@ object GroupAvatarUtil {
             val downloadUrlResponse = EntryPointAccessors.fromApplication<EntryPoint>(context)
                 .chatHttpClient()
                 .httpService
-                .getDownloadUrl((globalServices.userManager.getUserData()?.baseAuth ?: ""), groupAvatarData.serverId ?: "")
+                .getDownloadUrl(groupAvatarData.serverId ?: "")
 
             val location = downloadUrlResponse.location
             if (location.isNullOrEmpty()) {

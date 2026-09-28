@@ -40,6 +40,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
@@ -110,6 +113,15 @@ object ContactorUtil {
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("ContactorUtil") + dbKeyFailSoftExceptionHandler)
     private val fetchAndSaveFlow = MutableSharedFlow<Boolean>(replay = 1) // replay=1 缓存最后一个事件，Boolean表示是否强制刷新
     private var isCoroutineInitialized = false
+
+    /** The first full sync when a caller wants it now, ahead of the debounce (see [awaitFirstSync]). */
+    private val firstSyncFlow = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+
+    /**
+     * A first full sync is running. Keeps the chat list's own trigger from re-emitting into the
+     * pipeline, whose `collectLatest` would cancel that run and start over.
+     */
+    private val firstSyncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
 
 
     fun Context.getEntryPoint() = EntryPointAccessors.fromApplication<EntryPoint>(this)
@@ -190,16 +202,13 @@ object ContactorUtil {
     }
 
 
-    suspend fun fetchContactors(ids: List<String>, context: Context): List<ContactorModel> =
-        fetchContactors(context, ids, (globalServices.userManager.getUserData()?.baseAuth ?: ""))
-
-    private suspend fun fetchContactors(context: Context, ids: List<String>, basicAuth: String): List<ContactorModel> = withContext(Dispatchers.IO) {
+    suspend fun fetchContactors(ids: List<String>, context: Context): List<ContactorModel> = withContext(Dispatchers.IO) {
         try {
             val rawContacts = context
                 .getEntryPoint()
                 .getHttpClient()
                 .httpService
-                .fetchContactors(baseAuth = basicAuth, body = ContactsRequestBody(ids.filter { !TextUtils.isEmpty(it) && it != "server" }))
+                .fetchContactors(body = ContactsRequestBody(ids.filter { !TextUtils.isEmpty(it) && it != "server" }))
                 .data?.contacts ?: emptyList()
             val contacts = rawContacts.mapNotNull { from(it) }
 
@@ -255,18 +264,18 @@ object ContactorUtil {
         }
     }
 
-    suspend fun fetchAddFriendRequest(context: Context, token: String, contactID: String, sourceType: String? = null, source: String? = null, action: String? = null): BaseResponse<AddContactorResponse> =
+    suspend fun fetchAddFriendRequest(context: Context, contactID: String, sourceType: String? = null, source: String? = null, action: String? = null): BaseResponse<AddContactorResponse> =
         context
             .getEntryPoint()
             .getHttpClient()
             .httpService
-            .fetchAddContactor(token, if (!TextUtils.isEmpty(sourceType)) AddContactorRequestBody(contactID, AddContactorSource(sourceType, source), action) else AddContactorRequestBody(contactID, null, action))
+            .fetchAddContactor(if (!TextUtils.isEmpty(sourceType)) AddContactorRequestBody(contactID, AddContactorSource(sourceType, source), action) else AddContactorRequestBody(contactID, null, action))
 
-    suspend fun fetchRemoveFriend(context: Context, token: String, contactID: String): BaseResponse<Any> = context
+    suspend fun fetchRemoveFriend(context: Context, contactID: String): BaseResponse<Any> = context
         .getEntryPoint()
         .getHttpClient()
         .httpService
-        .fetchDeleteContact(contactID, token)
+        .fetchDeleteContact(contactID)
 
     fun getSortLetter(name: String): String {
         if (TextUtils.isEmpty(name)) return "#"
@@ -298,7 +307,7 @@ object ContactorUtil {
                 fetchAndSaveFlow.emit(true)
             }
         } else {
-            if (globalServices.userManager.getUserData()?.syncedContactsV5 == false) {
+            if (globalServices.userManager.getUserData()?.syncedContactsV5 == false && !firstSyncInFlight.get()) {
                 coroutineScope.launch {
                     fetchAndSaveFlow.emit(false)
                 }
@@ -306,6 +315,20 @@ object ContactorUtil {
         }
     }
 
+    /**
+     * Runs the first full sync now, without the debounce, and waits for it, so a screen can open with
+     * the contactor table populated. Idempotent: an install that has already synced returns at once,
+     * and a running sync is joined rather than restarted. Returns whether that sync succeeded.
+     */
+    suspend fun awaitFirstSync(): Boolean {
+        if (globalServices.userManager.getUserData()?.syncedContactsV5 == true) return true
+        init()
+        return getContactsStatusUpdate
+            .onSubscription { if (firstSyncInFlight.compareAndSet(false, true)) firstSyncFlow.emit(true) }
+            .first()
+    }
+
+    @Synchronized
     fun init() {
         if (isCoroutineInitialized) {
             L.d { "[ContactorUtil] Already initialized with coroutines, skipping" }
@@ -326,12 +349,14 @@ object ContactorUtil {
     @OptIn(FlowPreview::class)
     private fun setupFetchAndSaveContactorsWithCoroutines() {
         coroutineScope.launch {
-            fetchAndSaveFlow
-                .debounce(2000) // 频率控制：2秒内只处理最后一次请求
+            merge(
+                fetchAndSaveFlow.debounce(2000), // 频率控制：2秒内只处理最后一次请求
+                firstSyncFlow,
+            )
                 .collectLatest { forceRefresh ->
                     try {
                         val httpService = application.getEntryPoint().getHttpClient().httpService
-                        val contactsResponse = httpService.fetchAllContactors(baseAuth = (globalServices.userManager.getUserData()?.baseAuth ?: ""))
+                        val contactsResponse = httpService.fetchAllContactors()
 
                         val contacts = contactsResponse.data?.contacts?.toMutableList() ?: mutableListOf()
                         val directoryVersion = contactsResponse.data?.directoryVersion ?: 0
@@ -435,6 +460,8 @@ object ContactorUtil {
                     } catch (e: Exception) {
                         L.e(e) { "[ContactorUtil] fetchAndSaveContactors fail:" }
                         emitGetContactsStatusUpdate(false)
+                    } finally {
+                        firstSyncInFlight.set(false)
                     }
                 }
         }

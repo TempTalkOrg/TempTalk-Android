@@ -1,6 +1,5 @@
 package com.difft.android.call
 
-import com.difft.android.base.utils.globalServices
 
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallEncryptOutcome
@@ -146,7 +145,7 @@ internal class CallControlMessageSender(
                     clientCallId = onGoingCallStateManager.getClientCallId(),
                 )
                 val result = withContext(Dispatchers.IO) {
-                    callService.controlMessages((globalServices.userManager.getUserData()?.microToken ?: ""), body)
+                    callService.controlMessages(body)
                 }
                 if (result.status == 0) {
                     result.data?.let { data -> L.d { "[Call] syncJoinedMessage, request success, response data:$data" } }
@@ -195,7 +194,7 @@ internal class CallControlMessageSender(
                     detailMessageType = detailType,
                     clientCallId = onGoingCallStateManager.getClientCallId(),
                 )
-                val result = callService.controlMessages((globalServices.userManager.getUserData()?.microToken ?: ""), body)
+                val result = callService.controlMessages(body)
                 if (result.status == 0) {
                     result.data?.let { data -> L.d { "[Call] $tag, request success, response data:$data" } }
                 } else {

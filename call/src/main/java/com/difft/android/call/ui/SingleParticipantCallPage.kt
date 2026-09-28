@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,7 +22,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,10 +43,10 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.call.CallRole
+import com.difft.android.base.ui.theme.tokens.Palette
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
@@ -60,7 +57,6 @@ import com.difft.android.call.ui.screenshare.ScreenSharingView
 import com.difft.android.call.ui.video.ScaleType
 import com.difft.android.call.ui.video.VideoItemTrackSelector
 import com.difft.android.call.ui.video.ViewType
-import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.util.IdUtil
@@ -265,7 +261,7 @@ fun OneVOneSelfVideoView(
                         )
                     }
                     .size(videoViewWidth, videoViewHeight)
-                    .clip(shape = RoundedCornerShape(8.dp))
+                    .clip(shape = DifftTheme.radius.largeShape)
                     .background(DifftTheme.colors.backgroundSecondary)
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
@@ -301,7 +297,7 @@ fun LocalParticipantVideoView(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Transparent)
-            .clip(shape = RoundedCornerShape(8.dp))
+            .clip(shape = DifftTheme.radius.largeShape)
     ) {
         VideoItemTrackSelector(
             coroutineScope = coroutineScope,
@@ -401,7 +397,7 @@ fun SingleParticipantItem(
     Box(
         modifier = modifier.fillMaxSize()
             .testTag("call_render_single")
-            .clip(shape = RoundedCornerShape(8.dp))
+            .clip(shape = DifftTheme.radius.largeShape)
             .background(Color.Transparent),
         contentAlignment = Alignment.Center
     ) {
@@ -457,25 +453,7 @@ private fun ParticipantAvatarInfo(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         userDisplayInfo.avatarData?.let { avatarData ->
-            key(avatarData) {
-                AndroidView(
-                    factory = { ctx ->
-                        when (avatarData) {
-                            is AvatarData.FromContactor ->
-                                callToChatController.getAvatarByContactor(ctx, avatarData.contactor)
-                            is AvatarData.FromNameOrUid ->
-                                callToChatController.createAvatarByNameOrUid(
-                                    ctx,
-                                    avatarData.name,
-                                    avatarData.userId
-                                )
-                        }
-                    },
-                    modifier = Modifier
-                        .height(avatarSize)
-                        .width(avatarSize)
-                )
-            }
+            callToChatController.Avatar(data = avatarData, size = avatarSize)
         }
 
         Spacer(modifier = Modifier.height(spacerHeight))
@@ -494,7 +472,7 @@ private fun ParticipantAvatarInfo(
 
                 val tintColor = when {
                     audioMuted -> Color.Unspecified
-                    else -> Color(0xFF82C1FC)
+                    else -> Palette.Blue200
                 }
 
                 Icon(

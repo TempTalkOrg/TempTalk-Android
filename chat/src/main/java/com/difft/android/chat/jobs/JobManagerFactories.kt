@@ -17,7 +17,8 @@ object JobManagerFactories {
         PushReadReceiptSendJob.KEY to PushReadReceiptSendJob.Factory(),
         PushGroupKeySendJob.KEY to PushGroupKeySendJob.Factory(),
         PushForwardNoticeSendJob.KEY to PushForwardNoticeSendJob.Factory(),
-        PushActivityNoticeSendJob.KEY to PushActivityNoticeSendJob.Factory()
+        PushActivityNoticeSendJob.KEY to PushActivityNoticeSendJob.Factory(),
+        PushScreenShotSendJob.KEY to PushScreenShotSendJob.Factory()
     )
 
     @JvmStatic

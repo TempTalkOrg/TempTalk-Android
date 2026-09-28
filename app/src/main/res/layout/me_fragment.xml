@@ -6,26 +6,51 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!--    <androidx.appcompat.widget.AppCompatTextView-->
-    <!--        android:id="@+id/tv_title"-->
-    <!--        android:layout_width="wrap_content"-->
-    <!--        android:layout_height="wrap_content"-->
-    <!--        android:layout_marginStart="16dp"-->
-    <!--        android:layout_marginTop="18dp"-->
-    <!--        android:text="@string/chat_me"-->
-    <!--        android:textColor="@color/t.primary"-->
-    <!--        android:textSize="20sp"-->
-    <!--        android:textStyle="bold"-->
-    <!--        app:layout_constraintStart_toStartOf="parent"-->
-    <!--        app:layout_constraintTop_toTopOf="parent" />-->
+    <!-- Dual-pane only header (MeFragment shows it when hosted in the list pane): the same
+         "rail toggle · title" structure as the Chats and Contacts headers, so the way back from
+         a collapsed navigation rail sits in the same place on every tab. Phones keep no header. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/dual_pane_header"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.difft.android.base.widget.DualPaneRailToggleView
+            android:id="@+id/rail_toggle"
+            android:layout_width="44dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="6dp"
+            android:contentDescription="@string/dual_pane_rail_collapse_hint"
+            android:padding="10dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_title"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="4dp"
+            android:gravity="center_vertical"
+            android:text="@string/chat_me"
+            android:textColor="@color/t.primary"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toEndOf="@id/rail_toggle"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_goneMarginStart="16dp" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
         android:id="@+id/scrollView2"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="25dp"
+        android:layout_marginTop="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/dual_pane_header"
+        app:layout_goneMarginTop="25dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -39,7 +64,7 @@
                 android:id="@+id/ll_profile"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/chat_group_info_bg"
+                android:background="@drawable/base_bg_settings_group"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -86,20 +111,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_profile_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_invite"
@@ -132,20 +156,14 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_invite_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/bg" />
 
                 <androidx.appcompat.widget.AppCompatTextView
                     android:id="@+id/user_signature"
@@ -165,8 +183,8 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="25dp"
-                android:background="@drawable/chat_group_info_bg"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/base_bg_settings_group"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -188,20 +206,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_account_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_privacy"
@@ -222,20 +239,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_privacy_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_chat"
@@ -256,20 +272,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_chat_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_linked_devices"
@@ -304,13 +319,12 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_linked_devices_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </LinearLayout>
@@ -318,8 +332,8 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="25dp"
-                android:background="@drawable/chat_group_info_bg"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/base_bg_settings_group"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -341,20 +355,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_notification_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_theme"
@@ -387,20 +400,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_theme_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_language"
@@ -433,20 +445,19 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_language_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_text_size"
@@ -479,13 +490,12 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_text_size_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </LinearLayout>
@@ -493,9 +503,9 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="25dp"
+                android:layout_marginTop="16dp"
                 android:layout_marginBottom="25dp"
-                android:background="@drawable/chat_group_info_bg"
+                android:background="@drawable/base_bg_settings_group"
                 android:orientation="vertical">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -517,13 +527,12 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_help_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -536,7 +545,7 @@
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:background="@color/bg" />
+                        android:background="@color/divider" />
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:layout_width="match_parent"
@@ -558,13 +567,12 @@
 
                         <androidx.appcompat.widget.AppCompatImageView
                             android:id="@+id/iv_advanced_arrow"
-                            android:layout_width="20dp"
-                            android:layout_height="20dp"
-                            android:src="@drawable/chat_ic_arrow_right"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@drawable/base_ic_chevron_right"
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintTop_toTopOf="parent"
-                            app:tint="@color/t.primary" />
+                            app:layout_constraintTop_toTopOf="parent" />
                     </androidx.constraintlayout.widget.ConstraintLayout>
 
                 </LinearLayout>
@@ -572,7 +580,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/bg" />
+                    android:background="@color/divider" />
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/cl_about"
@@ -593,13 +601,12 @@
 
                     <androidx.appcompat.widget.AppCompatImageView
                         android:id="@+id/iv_about_arrow"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:src="@drawable/chat_ic_arrow_right"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/base_ic_chevron_right"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:tint="@color/t.primary" />
+                        app:layout_constraintTop_toTopOf="parent" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -610,7 +617,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="25dp"
-                android:background="@drawable/chat_group_info_bg"
+                android:background="@drawable/base_bg_settings_group"
                 android:padding="16dp"
                 android:visibility="gone">
 
@@ -627,13 +634,12 @@
 
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/iv_test_arrow"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/chat_ic_arrow_right"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/base_ic_chevron_right"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:tint="@color/t.primary" />
+                    app:layout_constraintTop_toTopOf="parent" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>
         </LinearLayout>

@@ -4,36 +4,13 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import com.difft.android.base.ui.TitleBar
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.BaseActivity
@@ -84,22 +61,6 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
         }
     })
 
-    /**
-     * Save to photos option data class
-     * @param value The value to store in database (null: follow global, 0: never, 1: always)
-     * @param labelResId The string resource ID for the option label
-     */
-    private data class SaveToPhotosOption(
-        val value: Int?,
-        val labelResId: Int
-    )
-
-    private val options = listOf(
-        SaveToPhotosOption(null, R.string.save_to_photos_default),
-        SaveToPhotosOption(1, R.string.save_to_photos_always),
-        SaveToPhotosOption(0, R.string.save_to_photos_never)
-    )
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -121,8 +82,6 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
 
     @Composable
     private fun MainContent() {
-        // Collect from ViewModel-exposed saveToPhotos StateFlow; avoids invoking flow
-        // operators inside composition (lint: FlowOperatorInvokedInComposition).
         val selectedValue = chatSettingViewModel.saveToPhotos.collectAsState()
 
         Column(
@@ -133,135 +92,26 @@ class SaveToPhotosSettingsActivity : BaseActivity() {
                 onBackClick = { finish() }
             )
 
-            ItemViews(selectedValue.value) { newValue ->
-                if (selectedValue.value != newValue) {
-                    chatSettingViewModel.setSaveToPhotos(newValue)
-                }
-            }
-
-            ExplainView()
-        }
-    }
-
-    @Composable
-    private fun ExplainView() {
-        Text(
-            text = getString(R.string.me_automatically_save_photos),
-            modifier = Modifier.padding(start = 32.dp, end = 32.dp, bottom = 16.dp),
-            fontSize = 12.sp,
-            color = Color(
-                ContextCompat.getColor(
-                    LocalContext.current, com.difft.android.base.R.color.t_secondary
-                )
-            )
-        )
-    }
-
-    @Composable
-    private fun ItemViews(
-        selectedValue: Int?,
-        onNewOptionSelected: ((Int?) -> Unit)? = null
-    ) {
-        val context = LocalContext.current
-        val bgItem = remember {
-            Color(
-                ContextCompat.getColor(
-                    context, com.difft.android.base.R.color.bg_elevated
-                )
+            SaveToPhotosSettingsContent(
+                selected = selectedValue.value,
+                defaultLabel = defaultOptionLabel(),
+                onSelect = { newValue ->
+                    if (selectedValue.value != newValue) {
+                        chatSettingViewModel.setSaveToPhotos(newValue)
+                    }
+                },
             )
         }
-
-        LazyColumn(modifier = Modifier.padding(16.dp)) {
-            itemsIndexed(options, key = { _, option -> option.value ?: -1 }) { index, option ->
-                val backgroundShape = remember(option) {
-                    when (index) {
-                        0 -> RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
-                        options.size - 1 -> RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)
-                        else -> RectangleShape
-                    }
-                }
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(bgItem, backgroundShape)
-                            .clickable {
-                                onNewOptionSelected?.invoke(option.value)
-                            }
-                            .padding(start = 16.dp, end = 16.dp),
-                    ) {
-                        val isItemSelected = selectedValue == option.value
-                        val labelTextColor = remember {
-                            Color(
-                                ContextCompat.getColor(
-                                    context, com.difft.android.base.R.color.t_primary
-                                )
-                            )
-                        }
-
-                        Text(
-                            text = getOptionLabel(option),
-                            modifier = Modifier.weight(1f),
-                            color = labelTextColor
-                        )
-
-                        if (isItemSelected) {
-                            val tint: Color = remember {
-                                Color(
-                                    ContextCompat.getColor(
-                                        context, com.difft.android.base.R.color.t_secondary
-                                    )
-                                )
-                            }
-                            Image(
-                                imageVector = ImageVector.vectorResource(id = R.drawable.chat_ic_selected),
-                                colorFilter = ColorFilter.tint(tint),
-                                contentDescription = "Checked",
-                                modifier = Modifier.padding(start = 16.dp)
-                            )
-                        }
-                    }
-
-                    // Add divider between items
-                    if (index < options.size - 1) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    Color(
-                                        ContextCompat.getColor(
-                                            context,
-                                            com.difft.android.base.R.color.bg
-                                        )
-                                    )
-                                )
-                        )
-                    }
-                }
-            }
-        }
     }
 
-    /**
-     * Get the display label for an option.
-     * For the Default option, dynamically show (On/Off) based on global setting.
-     */
-    private fun getOptionLabel(option: SaveToPhotosOption): String {
-        return if (option.value == null) {
-            // Default option - show dynamic status based on global setting
-            val globalEnabled = userManager.getUserData()?.saveToPhotos == true
-            val statusText = if (globalEnabled) {
-                getString(R.string.save_to_photos_on)
-            } else {
-                getString(R.string.save_to_photos_off)
-            }
-            getString(R.string.save_to_photos_default, statusText)
+    /** Label of the "follow the global setting" option, carrying that setting's current state. */
+    private fun defaultOptionLabel(): String {
+        val globalEnabled = userManager.getUserData()?.saveToPhotos == true
+        val statusText = if (globalEnabled) {
+            getString(R.string.save_to_photos_on)
         } else {
-            getString(option.labelResId)
+            getString(R.string.save_to_photos_off)
         }
+        return getString(R.string.save_to_photos_default, statusText)
     }
 }

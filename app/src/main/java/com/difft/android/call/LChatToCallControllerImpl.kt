@@ -42,7 +42,6 @@ import com.difft.android.call.handler.CallMessageHandler
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.chat.call.LChatToCallController
-import com.difft.android.network.config.WsTokenManager
 
 @Singleton
 class LChatToCallControllerImpl @Inject constructor(
@@ -51,7 +50,6 @@ class LChatToCallControllerImpl @Inject constructor(
     private val callMessageCreator: CallMessageCreator,
     private val messageEncryptor: INewMessageContentEncryptor,
     private val dbRoomStore: DBRoomStore,
-    private val wsTokenManager: WsTokenManager,
     private val globalConfigsManager: GlobalConfigsManager,
     private val contactorCacheManager: ContactorCacheManager,
     private val callMessageHandler: CallMessageHandler,
@@ -88,15 +86,11 @@ class LChatToCallControllerImpl @Inject constructor(
                     CallWaitDialogUtil.show(activity)
                 }
 
-                // 确保 Token 有效
-                wsTokenManager.refreshTokenIfNeeded()
-
                 dbRoomStore.createRoomIfNotExist(forWhat)
 
                 LCallManager.checkQuicFeatureGrayStatus()
 
                 val mySelfName = contactorCacheManager.getDisplayName(mySelfId)
-                val token = (globalServices.userManager.getUserData()?.microToken ?: "")
 
                 when (val outcome = callMessageCreator.createCallMessage(
                     forWhat = forWhat,
@@ -113,7 +107,7 @@ class LChatToCallControllerImpl @Inject constructor(
                     createdAt = System.currentTimeMillis()
                 )) {
                     is CallEncryptOutcome.Success -> {
-                        val result = startCallInternal(activity, forWhat, outcome.result, token, chatRoomName)
+                        val result = startCallInternal(activity, forWhat, outcome.result, chatRoomName)
                         if (!result) {
                             withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
                         }
@@ -161,7 +155,6 @@ class LChatToCallControllerImpl @Inject constructor(
         activity: Activity,
         forWhat: For,
         callEncryptResult: CallEncryptResult,
-        token: String,
         chatRoomName: String?
     ): Boolean {
         val callType = resolveCallType(forWhat)

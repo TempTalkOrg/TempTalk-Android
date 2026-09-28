@@ -1,12 +1,8 @@
 package com.difft.android.chat.contacts.contactsdetail
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,13 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,15 +23,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.difft.android.base.ui.compose.input.ClearMode
 import com.difft.android.base.ui.compose.input.DifftClearableTextField
+import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarView
@@ -158,7 +149,7 @@ private fun NameColumn(
         ) {
             Text(
                 text = displayName,
-                style = nameStyle,
+                style = DifftTheme.typography.h4,
                 color = DifftTheme.colors.textPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -208,8 +199,8 @@ private fun NameColumn(
 }
 
 /**
- * 40dp bordered, transparent input holding the remark (empty when there is none), with a trailing
- * clear button. 16sp Regular per spec — a notch below the browse-mode name.
+ * The library form field holding the remark (empty when there is none), with a trailing clear
+ * button. 16sp Regular per spec — a notch below the browse-mode name.
  */
 @Composable
 private fun RemarkNameInput(
@@ -218,32 +209,20 @@ private fun RemarkNameInput(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-    val borderColor = if (focused) DifftTheme.colors.textInfo else DifftTheme.colors.line
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(INPUT_RADIUS))
-            .border(DifftTheme.spacing.borderWidthThin, borderColor, RoundedCornerShape(INPUT_RADIUS))
-    ) {
-        DifftClearableTextField(
-            value = value,
-            onValueChange = onValueChange,
-            onClear = { onValueChange("") },
-            clearMode = ClearMode.WhenNotEmpty,
-            hint = stringResource(R.string.contact_remark_name_placeholder),
-            containerColor = Color.Transparent,
-            textStyle = inputStyle,
-            height = INPUT_HEIGHT,
-            contentPadding = PaddingValues(horizontal = INPUT_INSET),
-            maxLength = ContactRemarkEditViewModel.MAX_REMARK_LENGTH,
-            autoFocus = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            onImeAction = onDone,
-            interactionSource = interactionSource,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
+    DifftClearableTextField(
+        value = value,
+        onValueChange = onValueChange,
+        onClear = { onValueChange("") },
+        style = DifftTextFieldStyle.Form,
+        clearMode = ClearMode.WhenNotEmpty,
+        hint = stringResource(R.string.contact_remark_name_placeholder),
+        textStyle = DifftTheme.typography.p2,
+        maxLength = ContactRemarkEditViewModel.MAX_REMARK_LENGTH,
+        autoFocus = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        onImeAction = onDone,
+        modifier = modifier.fillMaxWidth()
+    )
 }
 
 @Composable
@@ -264,13 +243,13 @@ private fun SubtitleRow(
         if (isOfficialAccount) {
             Text(
                 text = stringResource(R.string.contact_official_account_label),
-                style = subtitleStyle,
+                style = DifftTheme.typography.p3,
                 color = tertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if ((hasRemark && !originalName.isNullOrEmpty()) || hasRemarkAvatar) {
-                Text(text = "・", style = subtitleStyle, color = tertiary)
+                Text(text = "・", style = DifftTheme.typography.p3, color = tertiary)
             }
         }
         when {
@@ -280,7 +259,7 @@ private fun SubtitleRow(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = originalName,
-                    style = subtitleStyle,
+                    style = DifftTheme.typography.p3,
                     color = tertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -290,7 +269,7 @@ private fun SubtitleRow(
             hasRemark && !originalName.isNullOrEmpty() -> {
                 Text(
                     text = stringResource(R.string.contact_name_label, originalName),
-                    style = subtitleStyle,
+                    style = DifftTheme.typography.p3,
                     color = tertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -300,7 +279,7 @@ private fun SubtitleRow(
             hasRemarkAvatar -> {
                 Text(
                     text = stringResource(R.string.contact_avatar_label),
-                    style = subtitleStyle,
+                    style = DifftTheme.typography.p3,
                     color = tertiary,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -343,16 +322,10 @@ private fun SmallOriginalAvatar(
     }
 }
 
-private val nameStyle = TextStyle(fontWeight = FontWeight.Medium, fontSize = 20.sp, lineHeight = 28.sp)
-private val inputStyle = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp)
-private val subtitleStyle = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp)
 
 private val AVATAR_NAME_GAP = 12.dp
 private val PENCIL_GAP = 8.dp
 // Spec says 16dp; Tabler's 2px stroke reads too thin at that size, so 20dp.
 private val PENCIL_SIZE = 20.dp
 private val PENCIL_TOUCH_PADDING = 8.dp
-private val INPUT_HEIGHT = 40.dp
-private val INPUT_RADIUS = 8.dp
-private val INPUT_INSET = 12.dp
 private val QUICK_FILL_TOP_GAP = 4.dp

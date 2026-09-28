@@ -20,7 +20,7 @@
             android:padding="12dp"
             android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
-            app:tint="@color/t.primary" />
+            app:tint="@color/icon" />
 
         <com.difft.android.base.widget.DifftSearchInputView
             android:id="@+id/search_input"

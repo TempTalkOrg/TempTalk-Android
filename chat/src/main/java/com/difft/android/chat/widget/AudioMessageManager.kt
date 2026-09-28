@@ -124,9 +124,24 @@ object AudioMessageManager {
             } else {
                 L.w { "[AudioMessageManager] voice route rejected isNear=$isNear target=${targetType ?: "default"} routed=${player.routedDevice?.type}" }
             }
+            // Screen off travels with the earpiece decision: listening at the ear means the face is
+            // on the chat screen. Any other outcome (far, headset attached, no earpiece, or the
+            // platform rejecting the earpiece so audio stays on the speaker) lets go.
+            VoiceMessageProximityLock.requestHeld(held = accepted && targetType == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)
         } catch (e: Exception) {
             L.e { "[AudioMessageManager] applyProximityRoute failed isNear=$isNear: ${e.stackTraceToString()}" }
         }
+    }
+
+    /** Sensor and screen-off lock start with playback and stop with it, always together. */
+    private fun startProximityTracking() {
+        VoiceMessageProximityLock.enable()
+        ProximitySensorManager.start()
+    }
+
+    private fun stopProximityTracking() {
+        ProximitySensorManager.stop()
+        VoiceMessageProximityLock.disable()
     }
 
     /**
@@ -206,6 +221,10 @@ object AudioMessageManager {
                         currentPlayingMessage?.let {
                             // 如果有正在播放的音频，则发出完成事件
                             emitPlayStatusUpdate(it, PLAY_STATUS_PAUSED)
+                            // The previous session's earpiece pin dies with reset(); its proximity
+                            // lock must not outlive it. The new session re-registers in onPrepared
+                            // and the redelivered reading re-pins and re-acquires if still at the ear.
+                            stopProximityTracking()
                         }
                         currentPlayingMessage = message
                         currentFilePath = filePath
@@ -270,7 +289,7 @@ object AudioMessageManager {
                         isPaused = false
 
                         // Start proximity sensor when audio starts playing
-                        ProximitySensorManager.start()
+                        startProximityTracking()
                     } catch (e: Exception) {
                         L.e { "[AudioMessageManager] startPlaying onPrepared Exception: ${e.stackTraceToString()}" }
                         releasePlayer()
@@ -302,7 +321,7 @@ object AudioMessageManager {
                     emitPlayStatusUpdate(currentPlayingMessage!!, PLAY_STATUS_PAUSED)
 
                     // No playback to route while paused; resumeAudio() restarts the sensor.
-                    ProximitySensorManager.stop()
+                    stopProximityTracking()
                 }
             }
         } catch (e: Exception) {
@@ -326,7 +345,7 @@ object AudioMessageManager {
 
                     // Existing affinity is kept so the route stays continuous across the pause;
                     // the first (undebounced) sensor event confirms or corrects it.
-                    ProximitySensorManager.start()
+                    startProximityTracking()
                 }
             }
         } catch (e: Exception) {
@@ -382,7 +401,7 @@ object AudioMessageManager {
             L.e { "[AudioMessageManager] onPlayComplete reset error: ${e.message}" }
         }
 
-        ProximitySensorManager.stop()
+        stopProximityTracking()
         progressJob?.cancel()
         progressJob = null
         prepareTimeoutJob?.cancel()
@@ -432,7 +451,7 @@ object AudioMessageManager {
         mediaPlayer = null
 
         // Stop proximity sensor when player is released
-        ProximitySensorManager.stop()
+        stopProximityTracking()
 
         progressJob?.cancel()
         progressJob = null

@@ -1,5 +1,9 @@
 package com.difft.android.app
 
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Looper
 import androidx.annotation.VisibleForTesting
 import com.difft.android.base.log.lumberjack.L
@@ -25,13 +29,34 @@ import com.difft.android.base.log.lumberjack.L
  * 4. Main-thread SecurityException parcelled back from a broken GMS install and re-thrown inside
  *    play-services' own Handler — the main Looper is resumed instead of killing the process
  *    (see [isGmsClientSecurityException] / [resumeMainLooper]).
+ * 5. `UnsatisfiedLinkError` (possibly wrapped in `NoClassDefFoundError`) on a Play App Bundle
+ *    base APK installed without any of its split APKs — a third-party APK download sideloaded
+ *    into an emulator. No native library exists in such an install, so whichever library is
+ *    touched first fails and the app can never work; the process is stopped without a report
+ *    (see [isMissingNativeLibraryCrash] / [isBaseOnlyInstall]).
  *
  * Crashlytics initializes via ContentProvider (before Application.onCreate()),
  * so calling [install] in Application.onCreate() guarantees our handler wraps theirs.
  */
 object CrashFilter {
 
-    fun install() {
+    /** Evaluated once in [install]; read by the handler, which must not call into PackageManager. */
+    @Volatile
+    @VisibleForTesting
+    internal var baseOnlyInstall: Boolean = false
+
+    /**
+     * Runs on the main thread inside the blocking startup chain on purpose: [baseOnlyInstall]
+     * must be settled before the handler is registered, because the crashes it gates come from
+     * arbitrary threads right after startup and an off-main warm-up (the `GmsHealth` pattern)
+     * would race the first native-library touch. The cost is one `getApplicationInfo` binder
+     * call, well under the 100 ms blocking-task budget.
+     */
+    fun install(context: Context) {
+        baseOnlyInstall = runCatching { isBaseOnlyInstall(context) }
+            .onFailure { L.w { "[CrashFilter] base-only install check failed: ${it.message}" } }
+            .getOrDefault(false)
+        if (baseOnlyInstall) L.w { "[CrashFilter] Base APK installed without its split APKs; native libraries are missing" }
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             if (thread === Looper.getMainLooper().thread && isGmsClientSecurityException(throwable)) {
@@ -49,6 +74,9 @@ object CrashFilter {
             android.os.Process.killProcess(android.os.Process.myPid())
         } else if (isUCropMissingParametersCrash(throwable)) {
             L.w { "[CrashFilter] Suppressed UCrop missing parameters crash from abnormal device" }
+            android.os.Process.killProcess(android.os.Process.myPid())
+        } else if (isMissingNativeLibraryCrash(throwable)) {
+            L.w { "[CrashFilter] Suppressed missing native library crash on base-only install: ${throwable.message}" }
             android.os.Process.killProcess(android.os.Process.myPid())
         } else if (isFinalizerWatchdogTimeout(thread, throwable)) {
             // Daemon-thread timeout, not a main-thread crash: swallow it. The watchdog thread
@@ -112,6 +140,50 @@ object CrashFilter {
 
     private const val GMS_CLIENT_PACKAGE = "com.google.android.gms.common.internal."
     private const val MAX_MAIN_LOOPER_RESUMES = 50
+
+    /** Injected by bundletool / Play into the base APK manifest of every bundle that has split APKs. */
+    private const val SPLITS_REQUIRED_META_DATA = "com.android.vending.splits.required"
+    private const val MAX_CAUSE_DEPTH = 8
+
+    /**
+     * True when the base APK declares that split APKs are required but none is installed. Only a
+     * Play-built base APK carries the meta-data, so universal APKs (official / F-Droid channels)
+     * and any install with its splits present return false — a genuinely missing library in a
+     * complete install is a packaging bug and must keep reporting.
+     */
+    @VisibleForTesting
+    internal fun isBaseOnlyInstall(context: Context): Boolean {
+        val info = applicationInfoWithMetaData(context)
+        val splitsRequired = info.metaData?.getBoolean(SPLITS_REQUIRED_META_DATA, false) == true
+        return splitsRequired && info.splitSourceDirs.isNullOrEmpty()
+    }
+
+    private fun applicationInfoWithMetaData(context: Context): ApplicationInfo {
+        val pm = context.packageManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.getApplicationInfo(
+                context.packageName,
+                PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong()),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA)
+        }
+    }
+
+    /**
+     * Matches `dlopen failed: library "libX.so" not found` anywhere in the cause chain (ART wraps
+     * the second and later hits of a failed `<clinit>` in `NoClassDefFoundError`), regardless of
+     * which library was touched first. Gated on [baseOnlyInstall] so a real packaging defect is
+     * never masked.
+     */
+    @VisibleForTesting
+    internal fun isMissingNativeLibraryCrash(throwable: Throwable, baseOnlyInstall: Boolean = this.baseOnlyInstall): Boolean {
+        if (!baseOnlyInstall) return false
+        return generateSequence(throwable) { it.cause }
+            .take(MAX_CAUSE_DEPTH)
+            .any { it is UnsatisfiedLinkError && it.message?.contains("dlopen failed") == true && it.message?.contains("not found") == true }
+    }
 
     /**
      * Matches the exact crash: Hook framework launches UCropMultipleActivity directly without

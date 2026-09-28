@@ -55,7 +55,7 @@ class MessageActionConfigBuilderTest {
     fun setUp() {
         // Pin trusted time so recall-timeout math is deterministic.
         ServerTimeProvider.resetForTest(wallClock = { NOW }, elapsedClock = { 0L })
-        builder = MessageActionConfigBuilder(globalConfigsManager)
+        builder = MessageActionConfigBuilder(globalConfigsManager, translateSupported = true)
     }
 
     @After

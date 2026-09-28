@@ -28,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -45,12 +44,10 @@ import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import com.difft.android.base.R as BaseR
 
 internal val BANNER_WIDTH = 160.dp
@@ -63,12 +60,13 @@ internal val AVATAR_SIZE = 16.dp
 internal const val MIC_QUEUE_NAME_MAX_LENGTH = 12
 internal const val MIC_QUEUE_MAX_COUNT = 3
 internal const val MIC_STATE_POLL_MS = 1_000L
-internal const val AVATAR_LETTER_TEXT_SIZE_DP = 8f
+/** Deliberately larger than the 16dp ratio value (7) — the banner letter must stay readable. */
+internal const val AVATAR_LETTER_TEXT_SIZE_DP = 8
 
 internal data class WaitingSpeakerDisplay(
     val sid: String,
     val displayName: String,
-    val avatarModel: Any?,
+    val avatarData: AvatarData?,
 )
 
 @Composable
@@ -110,16 +108,13 @@ fun ScreenShareSpeakerBanner(
         }.collect { waitingSpeakers = it }
     }
 
-    val context = LocalContext.current
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(
             ApplicationHelper.instance,
         )
     }
     val contactorCacheManager = entryPoint.contactorCacheManager
-    val callToChatController = entryPoint.callToChatController
     val displayInfoMap = remember { mutableStateMapOf<String, CallUserDisplayInfo>() }
-    val avatarViewMap = remember { mutableStateMapOf<String, Any?>() }
 
     LaunchedEffect(waitingSpeakers.map { it.sid.value }) {
         waitingSpeakers.forEach { participant ->
@@ -136,24 +131,11 @@ fun ScreenShareSpeakerBanner(
                         CallUserDisplayInfo(uid, null, null)
                     }
                     displayInfoMap[sid] = info
-                    val avatarView = withContext(Dispatchers.Main) {
-                        when (val data = info.avatarData) {
-                            is AvatarData.FromContactor ->
-                                callToChatController.getAvatarByContactor(context, data.contactor)
-                            is AvatarData.FromNameOrUid ->
-                                callToChatController.createAvatarByNameOrUid(context, data.name, data.userId)
-                            null -> null
-                        }
-                    }
-                    if (waitingSpeakers.any { it.sid.value == sid }) {
-                        avatarViewMap[sid] = avatarView
-                    }
                 }
             }
         }
         val validKeys = waitingSpeakers.map { it.sid.value }.toSet()
         displayInfoMap.keys.removeAll { it !in validKeys }
-        avatarViewMap.keys.removeAll { it !in validKeys }
     }
 
     val hasWaiting = waitingSpeakers.isNotEmpty()
@@ -181,7 +163,9 @@ fun ScreenShareSpeakerBanner(
         WaitingSpeakerDisplay(
             sid = p.sid.value,
             displayName = info?.name ?: p.identity?.value ?: p.sid.value,
-            avatarModel = avatarViewMap[p.sid.value],
+            // Forwards the map-held instance unchanged: a fresh copy each frame would defeat
+            // Compose strong skipping and re-run setAvatar on every recomposition.
+            avatarData = info?.avatarData,
         )
     }
 

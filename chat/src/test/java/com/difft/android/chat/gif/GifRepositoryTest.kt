@@ -1,6 +1,5 @@
 package com.difft.android.chat.gif
 
-import com.difft.android.base.user.UserManager
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
@@ -31,14 +30,13 @@ class GifRepositoryTest {
     private val httpClient: ChativeHttpClient = mockk(relaxed = true)
     private val httpService: HttpService = mockk()
     private val urlManager: UrlManager = mockk()
-    private val userManager: UserManager = mockk(relaxed = true)
     private lateinit var repository: GifRepository
 
     @Before
     fun setUp() {
         every { httpClient.httpService } returns httpService
         every { urlManager.gifs } returns "https://host/gifs/"
-        repository = GifRepository(httpClient, urlManager, userManager)
+        repository = GifRepository(httpClient, urlManager)
     }
 
     private fun detail(gif: String?, webp: String? = "w") =
@@ -56,7 +54,7 @@ class GifRepositoryTest {
             // filtered out: missing preview gif
             GifData(id = "3", original = detail("o3"), preview = detail(null), title = "t")
         )
-        coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any()) } returns
             success(GifListResponse(data = list, next = null, pagination = Pagenation(count = 20, offset = 0, total_count = 100)))
 
         val page = repository.fetch(query = null, limit = 20, offset = 0, next = null)
@@ -69,7 +67,7 @@ class GifRepositoryTest {
 
     @Test
     fun `T2 next cursor present without pagination has more`() = runTest {
-        coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any()) } returns
             success(GifListResponse(data = emptyList(), next = "cursor123", pagination = null))
 
         val page = repository.fetch(query = null, limit = 20, offset = 0, next = null)
@@ -80,7 +78,7 @@ class GifRepositoryTest {
 
     @Test
     fun `T2b pagination exhausted has no more`() = runTest {
-        coEvery { httpService.getGifsSearch(any(), any(), any(), any(), any(), any(), any()) } returns
+        coEvery { httpService.getGifsSearch(any(), any(), any(), any(), any(), any()) } returns
             success(GifListResponse(data = emptyList(), next = null, pagination = Pagenation(count = 20, offset = 80, total_count = 100)))
 
         val page = repository.fetch(query = "cat", limit = 20, offset = 80, next = null)
@@ -90,7 +88,7 @@ class GifRepositoryTest {
 
     @Test
     fun `T3 non-success envelope throws GifException`() = runTest {
-        coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any(), any()) } returns
+        coEvery { httpService.getGifsTrending(any(), any(), any(), any(), any()) } returns
             BaseResponse(ver = 1, status = 1, reason = "boom", data = null)
 
         val ex = assertFailsWith<GifException> {

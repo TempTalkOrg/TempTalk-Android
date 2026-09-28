@@ -22,7 +22,9 @@ import com.difft.android.base.ui.theme.DifftTheme
  * Insets: neither DifftScreen nor TitleBar consumes the status bar inset, and BaseActivity
  * skips auto system-bar padding for Compose roots — the caller owns it. Apply
  * `Modifier.systemBarsPadding()` on the root around DifftScreen (project convention),
- * otherwise the title bar renders under the status bar.
+ * otherwise the title bar renders under the status bar. A screen mounted under an XML host that
+ * BaseActivity already padded must consume those insets on its root (`consumeWindowInsets`), or
+ * the Scaffold pads the bottom a second time.
  *
  * Common patterns:
  * - Basic screen with title: `Box(Modifier.systemBarsPadding()) { DifftScreen(title = "Settings") { ... } }`

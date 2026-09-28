@@ -41,6 +41,7 @@ import com.difft.android.chat.message.singleForwardableAttachment
 import com.difft.android.chat.gif.favorite.collectFavoriteEffects
 import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import com.difft.android.base.utils.IGlobalConfigsManager
+import com.difft.android.chat.translate.backend.TranslateBackend
 import com.difft.android.chat.ui.messageaction.MessageAction
 import com.difft.android.chat.ui.messageaction.MessageActionCoordinator
 import com.difft.android.messageserialization.db.store.formatBase58Id
@@ -78,6 +79,9 @@ class ChatForwardMessageFragment : Fragment() {
 
     @Inject
     lateinit var globalConfigsManager: IGlobalConfigsManager
+
+    @Inject
+    lateinit var translateBackend: TranslateBackend
 
     @Inject
     lateinit var activityNoticeDispatcher: com.difft.android.chat.message.ActivityNoticeDispatcher
@@ -329,7 +333,7 @@ class ChatForwardMessageFragment : Fragment() {
         }
     }
 
-    // resolveActionAttachment / shouldTriggerManualDownload are the shared top-level helpers in
+    // resolveActionAttachment / handleAttachmentTapBeforeOpen are the shared top-level helpers in
     // ChatMessageListFragment.kt — one copy of the policy for both surfaces.
 
     /**
@@ -384,12 +388,7 @@ class ChatForwardMessageFragment : Fragment() {
             if (data is TextChatMessage) {
                 if (data.isAttachmentMessage()) {
                     val attachment = data.attachment ?: return
-                    val progress = data.getAttachmentProgress()
-
-                    if (shouldTriggerManualDownload(attachment, progress)) {
-                        downloadAttachment(data, attachment)
-                        return
-                    }
+                    if (handleAttachmentTapBeforeOpen(attachment, data.getAttachmentProgress()) { downloadAttachment(data, attachment) }) return
 
                     if (data.attachment?.isImage() == true || data.attachment?.isVideo() == true) {
                         openPreview(data)
@@ -399,12 +398,7 @@ class ChatForwardMessageFragment : Fragment() {
                     if (forwardContext.forwards?.size == 1) {
                         val forward = forwardContext.forwards?.getOrNull(0) ?: return
                         val attachment = forward.attachments?.getOrNull(0) ?: return
-                        val progress = data.getAttachmentProgress()
-
-                        if (shouldTriggerManualDownload(attachment, progress)) {
-                            downloadAttachment(data, attachment)
-                            return
-                        }
+                        if (handleAttachmentTapBeforeOpen(attachment, data.getAttachmentProgress()) { downloadAttachment(data, attachment) }) return
 
                         if (attachment.isImage() || attachment.isVideo()) {
                             openPreview(generateMessageFromForward(forward) as TextChatMessage)
@@ -442,7 +436,7 @@ class ChatForwardMessageFragment : Fragment() {
             
             // Initialize coordinator if needed
             if (messageActionCoordinator == null) {
-                messageActionCoordinator = MessageActionCoordinator(requireActivity(), globalConfigsManager).apply {
+                messageActionCoordinator = MessageActionCoordinator(requireActivity(), globalConfigsManager, translateBackend.isSupported).apply {
                     setActionListener(object : MessageActionCoordinator.ActionListener {
                         override fun onReactionSelected(message: TextChatMessage, emoji: String, isRemove: Boolean) {}
                         override fun onMoreEmojiClick(message: TextChatMessage) {}
@@ -529,6 +523,10 @@ class ChatForwardMessageFragment : Fragment() {
         override fun onQuoteClicked(quote: Quote) {}
         override fun onReactionClick(message: ChatMessage, emoji: String, remove: Boolean, originTimeStamp: Long) {}
         override fun onReactionLongClick(message: ChatMessage, emoji: String) {}
+
+        // The combined-forward detail view never auto-translates: it has no AutoTranslateCoordinator
+        // and no overlay flows into it, so there is no failed translation here to retry.
+        override fun onTranslateRetry(message: TextChatMessage) {}
     }
 
     private fun initView() {

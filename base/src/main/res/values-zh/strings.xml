@@ -1,4 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="base_close">关闭</string>
     <string name="base_clear_text">清除</string>
     <string name="search_default_hint">搜索</string>
     <string name="chat_message_confidential_message">[消息]</string>
@@ -57,4 +58,6 @@
     <string name="e2ee_sheet_got_it">知道了</string>
     <string name="e2ee_learn_more">了解更多</string>
     <string name="base_bottom_sheet_drag_handle">拖动条</string>
+    <string name="dual_pane_rail_collapse_hint">收起导航栏</string>
+    <string name="dual_pane_rail_expand_hint">展开导航栏</string>
 </resources>

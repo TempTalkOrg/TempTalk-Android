@@ -1,5 +1,7 @@
 package com.difft.android.network.signal
 
+import com.difft.android.base.session.AuthFailureSink
+import com.difft.android.base.session.AuthFailureSource
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
 import com.difft.android.websocket.api.push.exceptions.MalformedResponseException
@@ -35,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class MessageSendRepositoryTest {
 
@@ -44,18 +47,75 @@ class MessageSendRepositoryTest {
     }
     private lateinit var repository: MessageSendRepository
 
+    /**
+     * Hand-written recording fake rather than a mock (mirrors NoOpRefresher in
+     * ProxyConfigProviderTunnelHostsTest). Records the source tags so the auth-failure hook can be
+     * asserted without giving every other test in this file a mock to satisfy.
+     */
+    private class RecordingSink : AuthFailureSink {
+        val sources = mutableListOf<String>()
+        override fun onAuthRejected(source: String) {
+            sources += source
+        }
+    }
+
+    private lateinit var authFailureSink: RecordingSink
+
     private val testMessage: NewOutgoingPushMessage = mockk(relaxed = true)
     private val userRecipient = For.Account("user-123")
     private val groupRecipient = For.Group("group-456")
 
     @Before
     fun setUp() {
-        repository = MessageSendRepository(httpClient)
+        authFailureSink = RecordingSink()
+        repository = MessageSendRepository(httpClient, dagger.Lazy { authFailureSink })
     }
 
     @After
     fun tearDown() {
         clearMocks(messageApiService, httpClient)
+    }
+
+    // --- auth-failure hook: a rejected send reaches SessionAuthGuard ---
+
+    @Test
+    fun `401 reports the auth failure exactly once`() = runTest {
+        coEvery { messageApiService.sendMessage(any(), any()) } returns Response.error(
+            401, "Unauthorized".toResponseBody("text/plain".toMediaType())
+        )
+
+        assertFailsWith<AuthorizationFailedException> {
+            repository.sendMessage(testMessage, userRecipient)
+        }
+
+        assertEquals(listOf(AuthFailureSource.MESSAGE_SEND), authFailureSink.sources)
+    }
+
+    @Test
+    fun `403 reports the auth failure exactly once`() = runTest {
+        coEvery { messageApiService.sendMessage(any(), any()) } returns Response.error(
+            403, "Forbidden".toResponseBody("text/plain".toMediaType())
+        )
+
+        assertFailsWith<AuthorizationFailedException> {
+            repository.sendMessage(testMessage, userRecipient)
+        }
+
+        assertEquals(listOf(AuthFailureSource.MESSAGE_SEND), authFailureSink.sources)
+    }
+
+    @Test
+    fun `a non-auth error code does not report an auth failure`() = runTest {
+        val body = """{"ver":1,"status":200,"reason":"ok"}"""
+        coEvery { messageApiService.sendMessage(any(), any()) } returns Response.error(
+            404, body.toResponseBody("application/json".toMediaType())
+        )
+
+        assertFailsWith<UnregisteredUserException> {
+            repository.sendMessage(testMessage, userRecipient)
+        }
+
+        assertTrue(authFailureSink.sources.isEmpty())
     }
 
     // --- Helper to build error responses with custom headers ---

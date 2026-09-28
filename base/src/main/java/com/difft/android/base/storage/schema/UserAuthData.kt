@@ -38,8 +38,6 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * otherwise be mis-classified as "not migrated yet" and have their auth silently
  * overwritten on every cold start.
  *
- * See design report §2.2 for the full carve-out rationale.
- *
  * **Tag stability contract (`@ProtoNumber`)**: explicit field numbers below match the
  * implicit declaration-order tags that PR #789 shipped (1..16); tags 17..19 were
  * appended later for self-hosted proxy state, tags 20..22 for the favorites favKey.
@@ -47,6 +45,7 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * on every deployed device depends on them.
  *  - **Add a field**: append at the bottom with the next unused tag (23+).
  *  - **Remove a field**: delete the line; **never reuse** the freed tag number.
+ *  - Tags 100..103 were used by a pre-release build and stay retired.
  *  - **Rename a field**: free — tag is the contract, not the Kotlin name.
  *  - **Reorder fields**: free — `@ProtoNumber` decouples wire format from declaration order.
  * Verified by [com.difft.android.base.storage.schema.SchemaWireFormatTest].

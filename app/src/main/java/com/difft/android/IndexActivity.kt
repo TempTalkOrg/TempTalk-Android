@@ -34,7 +34,9 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DualPaneCollapseUtil
+import com.difft.android.base.utils.DualPaneRailUtil
 import com.difft.android.base.utils.DualPaneRatioUtil
+import com.difft.android.base.utils.EdgeToEdgeUtils
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
@@ -54,6 +56,7 @@ import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.chat.contacts.WeakContactReconciler
+import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDialogFragment
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.attachment.migration.ForwardAttachmentMigration
@@ -66,10 +69,15 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.recent.DualPaneSelectionListener
+import com.difft.android.dualpane.DualPaneRailController
+import com.difft.android.dualpane.DualPaneReconciler
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import com.difft.android.chat.recent.RecentChatFragment
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.recent.RecentChatViewModel
 import com.difft.android.chat.setting.ConversationSettingsManager
+import com.difft.android.chat.translate.model.TranslateModelStore
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatBackgroundDrawable
@@ -151,6 +159,15 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     // pane; only a true cold start silently un-collapses it (blank-first-screen avoidance).
     private var recreatedFromSavedState = false
 
+    // Rebuilds the pane tree when the window crosses the dual-pane gate WITHOUT an OS relaunch
+    // (ColorOS fold/unfold, floating window, split-screen). paneStarted gates recreate(), which
+    // is a silent no-op while stopped; onStart is the retry edge for a deferred rebuild.
+    private lateinit var paneReconciler: DualPaneReconciler
+    private var paneStarted = false
+
+    // Navigation rail collapse (dual-pane only); null in single-pane mode.
+    private var railController: DualPaneRailController? = null
+
     private val indicators by lazy {
         listOf(
             binding.indicatorviewChats,
@@ -201,6 +218,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     lateinit var conversationSettingsManager: ConversationSettingsManager
 
     @Inject
+    lateinit var translateModelStore: TranslateModelStore
+
+    @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
 
     @Inject
@@ -230,6 +250,13 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         // Setup dual-pane layout for large screens (w673dp-h480dp)
         setupDualPaneLayout()
+        paneReconciler = DualPaneReconciler(this, binding.root, isStarted = { paneStarted })
+        paneReconciler.attach()
+
+        if (!isDualPaneMode) {
+            // The bar owns the navigation-bar strip (see shouldApplyNavigationBarPadding).
+            EdgeToEdgeUtils.applyBottomInsetAsPadding(binding.clTab)
+        }
 
         val density = resources.displayMetrics.density
         L.i { "[IndexActivity] screen swDp=${resources.configuration.smallestScreenWidthDp} widthDp=${(WindowSizeClassUtil.getWindowWidthPx(this) / density).toInt()} heightDp=${(WindowSizeClassUtil.getWindowHeightPx(this) / density).toInt()} dualPane=$isDualPaneMode" }
@@ -305,7 +332,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                     if (index < 0) return@setOnClickListener
 
                     // Tapping any rail tab is the discoverable way back from a collapsed
-                    // list pane (the divider handle is the other).
+                    // list pane while the rail is visible; with the rail collapsed too, the
+                    // divider handle and Back remain.
                     if (isDualPaneMode && DualPaneCollapseUtil.isCollapsed) {
                         expandListPane()
                     }
@@ -373,6 +401,10 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         // Sync conversation settings
         conversationSettingsManager.syncConversationSettings()
+
+        // Reconcile the auto-translate models with what the conversations actually need. Costs one
+        // SQL query and returns before touching ML Kit when no conversation has the setting on.
+        translateModelStore.syncOnStart()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -493,8 +525,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private fun applyRootBackgroundForTab(position: Int) {
         // Recent (0) and Contacts (1) tabs are flat-surface immersive lists → bg1
         // Me (2) tab is settings-idiom (gray page + elevated cards) → bg
-        // In edge-to-edge mode the activity root drives the status/nav bar color
-        // since no opaque system-bar background is set.
+        // Edge-to-edge, no opaque system-bar background: the root colour shows through the
+        // status bar. The navigation-bar strip belongs to cl_tab here and to the root only in
+        // dual-pane, where there is no bottom bar.
         val bgRes = if (position == 2) {
             com.difft.android.base.R.color.bg
         } else {
@@ -502,6 +535,17 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
         binding.root.setBackgroundResource(bgRes)
     }
+
+    /**
+     * Phone layout: the bottom tab bar consumes the navigation-bar inset itself, so its bg1
+     * keeps that strip bg1 on every tab. Dual-pane keeps the root padding — its rail and panes
+     * reach the window bottom and there is no bottom bar.
+     *
+     * Runs inside [setContentView], before [isDualPaneMode] is assigned, so it reads the
+     * pinned resource mirror of the inflated layout (see `PaneGateResourceAgreementTest`).
+     */
+    override fun shouldApplyNavigationBarPadding(): Boolean =
+        resources.getBoolean(com.difft.android.R.bool.dual_pane_layout_active)
 
     private fun checkUpdate() {
         if (environmentHelper.isInsiderChannel()) return
@@ -854,9 +898,23 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        paneStarted = true
+        // Covers a window resize that happened while we were not on screen (a fold the OS
+        // reported only as onConfigurationChanged, or none at all).
+        paneReconciler.reconcile("onStart")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        paneStarted = false
+    }
+
     override fun onDestroy() {
         paneAnimator?.cancel()
         paneAnimator = null
+        paneReconciler.detach()
         super.onDestroy()
     }
 
@@ -1057,7 +1115,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         } ?: "tmp" // Default to a .tmp extension if MIME type is unknown
 
         val fileName = "shared_file_${System.currentTimeMillis()}.$extension"
-        val file = File(cacheDir, fileName)
+        // Staged in draft_blobs like every other pre-send intermediate: sendFile copies it into
+        // attachment storage, and the startup sweep reclaims whatever a cancel or crash left behind.
+        val file = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY), fileName)
 
         // Copy the bytes, capturing the exact failure so "unsupported file type" reports have a root
         // cause in logcat. Try openInputStream first, then fall back to openFileDescriptor — some
@@ -1142,6 +1202,16 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
             findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
 
+            // Navigation rail collapse: load the persisted state and apply it here, before the
+            // first layout, so a collapsed rail never flashes; the list-pane budget below is
+            // rail-independent (it always subtracts the rail dimen).
+            val rail = findViewById<View>(com.difft.android.R.id.navigation_rail_container)
+            val railDivider = findViewById<View>(com.difft.android.R.id.divider_rail)
+            if (rail != null && railDivider != null) {
+                DualPaneRailUtil.loadAndEmit()
+                railController = DualPaneRailController(rail, railDivider).also { it.bind(this) }
+            }
+
             // Apply list pane width based on current text size (avoid flicker on cold start)
             applyListPaneWidth(TextSizeUtil.isLarger)
             // Re-apply once the edge-to-edge insets have landed: the cold-start apply above
@@ -1224,7 +1294,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      * Collapse gesture: there is no stable list width below the minimum. Pulling a further
      * [COLLAPSE_SNAP_TRIGGER_DP] past it snaps the list pane closed (detail full width);
      * from the collapsed state, pulling the handle back out by the same distance — or
-     * tapping it, tapping a rail tab, or pressing back — snaps it open again.
+     * tapping it, tapping a rail tab (while the rail is visible), or pressing back — snaps it
+     * open again.
      */
     private fun setupDualPaneDivider() {
         if (!isDualPaneMode) return
@@ -1551,6 +1622,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         const val RUBBER_BAND_MAX_DP = 32
 
         const val PANE_SNAP_ANIM_MS = 220L
+
+        // Single-pane hosts have no rail: the contract promises a constant false.
+        private val NO_RAIL: StateFlow<Boolean> = MutableStateFlow(false)
     }
 
     // Per-tab tag (not per-conversation) — one detail fragment per tab, ceiling 3.
@@ -1847,8 +1921,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         if (isDualPaneMode) {
             showContactDetailInDetailPane(contactId)
         } else {
-            // Fallback to Activity navigation for single-pane mode
-            com.difft.android.chat.contacts.contactsdetail.ContactDetailActivity.startActivity(this, contactId)
+            // Single pane: the contact card is the same half-height sheet the chat screen uses.
+            ContactDetailBottomSheetDialogFragment.show(this, contactId)
         }
     }
 
@@ -1873,6 +1947,13 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     // ==================== DualPaneHost implementation ====================
+
+    override val navigationRailCollapsed: StateFlow<Boolean>
+        get() = railController?.collapsedState ?: NO_RAIL
+
+    override fun toggleNavigationRail() {
+        railController?.toggle(currentTabIndex)
+    }
 
     /**
      * Show any fragment in the detail pane (generic method for all detail pages)

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,10 +32,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
@@ -335,7 +332,7 @@ private fun OverflowParticipantCell(
 ) {
     Box(
         modifier = modifier
-            .clip(shape = RoundedCornerShape(8.dp))
+            .clip(shape = DifftTheme.radius.largeShape)
             .background(color = DifftTheme.colors.background)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -352,8 +349,7 @@ private fun OverflowParticipantCell(
             Text(
                 text = "+$overflowCount",
                 color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
+                style = DifftTheme.typography.h4
             )
         }
     }

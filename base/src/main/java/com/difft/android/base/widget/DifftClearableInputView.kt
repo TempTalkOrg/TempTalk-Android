@@ -32,6 +32,8 @@ import com.difft.android.base.ui.compose.input.ClearMode
 import com.difft.android.base.ui.compose.input.DifftClearableTextField
 import com.difft.android.base.ui.compose.input.DifftInputSurface
 import com.difft.android.base.ui.compose.input.DifftInputDefaults
+import com.difft.android.base.ui.compose.input.DifftTextFieldSize
+import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import com.difft.android.base.ui.theme.DifftTheme
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.PaddingValues
@@ -63,19 +65,23 @@ open class DifftClearableInputView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
     private val defaultLeadingIcon: LeadingIcon = LeadingIcon.None,
-    defaultClearMode: ClearMode = ClearMode.WhileEditing,
+    // Library rule: a field with a value always shows its clear icon, focused or not.
+    defaultClearMode: ClearMode = ClearMode.WhenNotEmpty,
     defaultImeAction: ImeAction = ImeAction.Default,
+    defaultStyle: DifftTextFieldStyle = DifftTextFieldStyle.Form,
+    defaultSize: DifftTextFieldSize = DifftTextFieldSize.Large,
     private val defaultHeight: Dp? = null,
-    private val defaultContentPadding: PaddingValues = PaddingValues(0.dp),
+    private val defaultContentPadding: PaddingValues? = PaddingValues(0.dp),
     private val defaultClearIconEndInset: Dp = 0.dp,
 ) : DifftComposeView(context, attrs, defStyleAttr) {
 
     private var queryState by mutableStateOf("")
     private var hintState by mutableStateOf<CharSequence?>(null)
     private var clearModeState by mutableStateOf(defaultClearMode)
+    private var styleState by mutableStateOf(defaultStyle)
+    private var sizeState by mutableStateOf(defaultSize)
     private var keyboardOptionsState by mutableStateOf(KeyboardOptions(imeAction = defaultImeAction))
     private var maxLengthState by mutableStateOf<Int?>(null)
-    private var enabledState by mutableStateOf(true)
     private var autoFocusState = false
     private var containerColorState by mutableStateOf<Int?>(null)
     private var surfaceState by mutableStateOf(DifftInputSurface.Page)
@@ -108,6 +114,13 @@ open class DifftClearableInputView @JvmOverloads constructor(
         get() = clearModeState
         set(value) {
             clearModeState = value
+        }
+
+    /** Library skin: filled search box or outlined form field. */
+    var inputStyle: DifftTextFieldStyle
+        get() = styleState
+        set(value) {
+            styleState = value
         }
 
     var keyboardOptions: KeyboardOptions
@@ -178,6 +191,20 @@ open class DifftClearableInputView @JvmOverloads constructor(
                         else -> DifftInputSurface.Page
                     }
                 }
+                if (hasValue(R.styleable.DifftClearableInputView_difft_inputStyle)) {
+                    styleState = when (getInt(R.styleable.DifftClearableInputView_difft_inputStyle, 0)) {
+                        1 -> DifftTextFieldStyle.Form
+                        else -> DifftTextFieldStyle.Search
+                    }
+                }
+                // Declaring a size pins the box height; an explicit dsi_height still wins below.
+                if (hasValue(R.styleable.DifftClearableInputView_difft_inputSize)) {
+                    sizeState = when (getInt(R.styleable.DifftClearableInputView_difft_inputSize, 1)) {
+                        0 -> DifftTextFieldSize.Medium
+                        else -> DifftTextFieldSize.Large
+                    }
+                    heightState = sizeState.height
+                }
                 dpOrNull(R.styleable.DifftClearableInputView_dsi_height)?.let { heightState = it }
                 dpOrNull(R.styleable.DifftClearableInputView_dsi_minHeight)?.let {
                     minHeightState = it
@@ -187,19 +214,8 @@ open class DifftClearableInputView @JvmOverloads constructor(
                     textSizeSpState = getDimension(R.styleable.DifftClearableInputView_android_textSize, 0f) /
                         resources.displayMetrics.scaledDensity
                 }
-                if (hasValue(R.styleable.DifftClearableInputView_android_enabled)) {
-                    // Route through the setter: the framework does not apply android:enabled on a
-                    // plain View, so this is the only place the XML value lands — it must reach
-                    // BOTH the Compose state and the View level (isEnabled feeds getAutofillType).
-                    isEnabled = getBoolean(R.styleable.DifftClearableInputView_android_enabled, true)
-                }
             }
         }
-    }
-
-    override fun setEnabled(enabled: Boolean) {
-        super.setEnabled(enabled)
-        enabledState = enabled
     }
 
     // ---------- Autofill (View-level) ----------
@@ -322,10 +338,11 @@ open class DifftClearableInputView @JvmOverloads constructor(
             pendingCommand = null
         }
 
-        val defaultTextStyle = DifftTheme.typography.bodyMedium
+        val defaultTextStyle = DifftTheme.typography.p3
         val textStyle = textSizeSpState?.let {
             defaultTextStyle.copy(fontSize = androidx.compose.ui.unit.TextUnit(it, androidx.compose.ui.unit.TextUnitType.Sp))
         } ?: defaultTextStyle
+        val hostOwnsBox = containerColorState != null || forceDark
 
         DifftClearableTextField(
             value = queryState,
@@ -338,18 +355,17 @@ open class DifftClearableInputView @JvmOverloads constructor(
                 onClear()
             },
             hint = hintState?.toString(),
+            style = styleState,
+            size = sizeState,
             clearMode = clearModeState,
             leadingIcon = when (defaultLeadingIcon) {
                 LeadingIcon.None -> null
                 LeadingIcon.Search -> ({
+                    // Untinted: the field supplies the colour via LocalContentColor.
                     Icon(
                         painter = painterResource(R.drawable.base_ic_search),
                         contentDescription = null,
-                        tint = DifftTheme.colors.icon,
-                        modifier = Modifier.size(
-                            width = DifftInputDefaults.LeadingIconWidth,
-                            height = DifftInputDefaults.LeadingIconHeight,
-                        ),
+                        modifier = Modifier.size(DifftInputDefaults.LeadingIconSize),
                     )
                 })
             },
@@ -363,8 +379,10 @@ open class DifftClearableInputView @JvmOverloads constructor(
             textStyle = textStyle,
             height = heightState,
             minHeight = minHeightState,
-            contentPadding = contentPaddingState ?: defaultContentPadding,
-            clearIconEndInset = defaultClearIconEndInset,
+            // Zero shell insets only when the host layout owns the box; a component-drawn box
+            // keeps the library's 12dp insets so text and the clear icon clear the border.
+            contentPadding = contentPaddingState ?: if (hostOwnsBox) defaultContentPadding else null,
+            clearIconEndInset = if (hostOwnsBox) defaultClearIconEndInset else DifftInputDefaults.ClearIconEndInset,
             maxLength = maxLengthState,
             autoFocus = autoFocusState,
             focusRequester = focusRequester,

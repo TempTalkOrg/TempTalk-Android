@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma "Checkbox/Checked" glyph (node 2979:25, Wea Design system 16QV9AE1wA37o9D2Xdc4sO):
+     the 20dp mobile box with the check already positioned inside it — spans 58.8% of the box
+     width, stroke = box/8, outlined as a filled path. Tinted at the use site. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+    <path
+        android:fillColor="@color/t.white"
+        android:pathData="M15.8839,7.517L8.75,14.6509L4.1161,10.017L5.8839,8.2492L8.75,11.1153L14.1161,5.7492L15.8839,7.517Z" />
+</vector>

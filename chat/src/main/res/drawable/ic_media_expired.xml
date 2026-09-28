@@ -11,7 +11,7 @@
         android:strokeLineJoin="round"
         android:strokeWidth="2"
         android:fillColor="@color/transparent"
-        android:strokeColor="@color/t.disable"
+        android:strokeColor="@color/t.third"
         android:strokeLineCap="round" />
     <!-- 斜线 (从右上到左下) -->
     <path
@@ -19,6 +19,6 @@
         android:strokeLineJoin="round"
         android:strokeWidth="2"
         android:fillColor="@color/transparent"
-        android:strokeColor="@color/t.disable"
+        android:strokeColor="@color/t.third"
         android:strokeLineCap="round" />
 </vector>

@@ -45,7 +45,10 @@ data class ConversationSettingUpdate(
     val messageExpiry: Long? = null,
     val messageClearAnchor: Long? = null,
     // Save to photos setting (null: no change, -1: set to default, 0: disabled, 1: enabled)
-    val saveToPhotos: Int? = null
+    val saveToPhotos: Int? = null,
+    // Auto-translate target (null: no change, 0: off, 1: Chinese, 2: English). The value is
+    // non-null in the model, so null alone already means "not changed" — no sentinel needed.
+    val translateSetting: Int? = null
 )
 
 // All wcdb calls in this class run on Dispatchers.IO.
@@ -139,6 +142,20 @@ class ConversationSettingsManager @Inject constructor(
         L.i { "[ConversationSettingsManager] emitSaveToPhotosUpdate: $update" }
         _conversationSettingUpdate.tryEmit(update)
     }
+
+    /**
+     * Emit auto-translate setting update
+     * @param conversationId Conversation ID
+     * @param translateSetting Auto-translate target (0: off, 1: Chinese, 2: English)
+     */
+    fun emitTranslateSettingUpdate(conversationId: String, translateSetting: Int) {
+        val update = ConversationSettingUpdate(
+            conversationId = conversationId,
+            translateSetting = translateSetting
+        )
+        L.i { "[Translate] emitTranslateSettingUpdate: $update" }
+        _conversationSettingUpdate.tryEmit(update)
+    }
     /**
      * Full sync of all rooms' server config. Called on cold start and every foreground,
      * throttled by [MIN_BULK_SYNC_INTERVAL_MS]. Delete + recreate of a single conversation is
@@ -204,14 +221,12 @@ class ConversationSettingsManager @Inject constructor(
     }
 
     /**
-     * 获取房间模型列表
+     * Every room the server may hold config for. The conversation list hides rows whose name is not
+     * resolved yet; the config fetch keys on the id alone, so those rows (a migration import lands
+     * every room unnamed until contacts arrive) are synced too.
      */
     private suspend fun getRoomModels(): List<RoomModel> {
-        return wcdb.room.getAllObjects(
-            DBRoomModel.roomId.notEq("server")
-                .and(DBRoomModel.roomName.notNull())
-                .and(DBRoomModel.roomName.notEq(""))
-        )
+        return wcdb.room.getAllObjects(DBRoomModel.roomId.notEq("server"))
     }
 
     /**
@@ -223,7 +238,6 @@ class ConversationSettingsManager @Inject constructor(
         }
 
         val response = httpClient.httpService.fetchGetConversationSet(
-            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
             GetConversationSetRequestBody(conversationIds)
         )
 

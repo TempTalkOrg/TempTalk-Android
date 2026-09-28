@@ -68,6 +68,15 @@
     </queries>
     <uses-permission android:name="android.permission.GET_PACKAGE_SIZE" />
 
+    <!-- Same-device migration: the two package families must see each other. Declaring specific
+         packages needs no Play justification (only QUERY_ALL_PACKAGES does). -->
+    <queries>
+        <package android:name="org.difft.chative" />
+        <package android:name="org.difft.chative.test" />
+        <package android:name="org.difft.temptalk" />
+        <package android:name="org.difft.temptalk.test" />
+    </queries>
+
     <application
         android:name=".app.TempTalkApplication"
         android:allowBackup="false"
@@ -232,7 +241,6 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
-
         <activity
             android:name=".call.LIncomingCallActivity"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
@@ -334,6 +342,95 @@
         <!--            android:exported="false"-->
         <!--            android:theme="@style/LumberjackTheme"-->
         <!--            tools:replace="android:exported" />-->
+
+        <!-- Migration: one-shot "migration complete" page on the first cold start after a restore-path
+             sign-in (MainActivity routes here when the restore flag reads COMPLETED). -->
+        <!-- Migration: the post-verification source chooser (R1). Launched for result by the login flow; internal only. -->
+        <activity
+            android:name="com.difft.android.migration.v2.login.MigrationSourceChooserActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name="com.difft.android.migration.v2.login.MigrationSuccessActivity"
+            android:exported="false" />
+
+        <!-- Same-device migration: the ONLY exported migration entry point. A UI-less trampoline the
+             other package family starts (for result) to hand the transfer over; it vets the caller's
+             package + signing certificate before opening anything. -->
+        <activity
+            android:name="com.difft.android.migration.v2.transfer.handoff.MigrationHandoffActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Same-device migration: read-only status query both package families answer, so each can
+             decide whether to offer the no-login migration before showing anything. call() only — no
+             URI is ever served, and no permission can protect it (the two families are signed with
+             different certificates), so the caller is vetted in code by uid → package → pinned
+             signing certificate, failing closed on every ambiguity. -->
+        <provider
+            android:name="com.difft.android.migration.v2.handoff.MigrationStatusProvider"
+            android:authorities="${applicationId}.migration.status"
+            android:exported="true"
+            android:grantUriPermissions="false" />
+
+        <!-- Same-device migration: the new package's first-launch "migrate from the old app?" page.
+             Opened by MainActivity's startup probe, or by the trampoline on the old app's behalf
+             (which vets caller package + certificate first) — never directly by another app. -->
+        <activity
+            android:name="com.difft.android.migration.v2.handoff.MigrationHandoffEntryActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- Retiring package only: "move to the new app" guide (title-bar icon / first-launch notice / Me page). -->
+        <activity
+            android:name="com.difft.android.migration.legacy.LegacyMigrationGuideActivity"
+            android:exported="false" />
+
+        <!-- Migration v2 (I4): production P2P RECEIVE Activity (NEW device shows QR). Launched-for-result
+             by :login's VerifyCodeActivity via the MigrationImportLauncher bridge. exported="false" —
+             internal launch only. -->
+        <activity
+            android:name="com.difft.android.migration.v2.transfer.login.MigrationP2pReceiveActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- Migration v2: production P2P SEND Activity (OLD device scans the new device's QR + streams
+             its real export). Launched from the Me page, the home scanner and the same-device trampoline.
+             exported="false" — internal launch only. -->
+        <activity
+            android:name="com.difft.android.migration.v2.transfer.send.MigrationP2pSendActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- Desktop-login confirmation page: opened by the home scanner for every `tsdevice:` QR; the
+             user decides here whether chat history syncs along with the link. Internal launch only. -->
+        <activity
+            android:name="com.difft.android.migration.v2.transfer.link.LinkLoginActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+
+        <!-- Migration v2 (I5): the FGS that OWNS the P2P migration transfer coroutine scope, so an
+             incoming call / backgrounding (Activity death) does NOT cancel the in-flight import.
+             foregroundServiceType="dataSync" — a user-initiated transfer of the user's own data
+             The FOREGROUND_SERVICE +
+             FOREGROUND_SERVICE_DATA_SYNC permissions are declared at the top of this manifest. -->
+        <service
+            android:name="com.difft.android.migration.v2.transfer.MigrationTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Migration v2 (I5): Cancel-action broadcast receiver — fired by the transfer notification's
+             Cancel button. -->
+        <receiver
+            android:name="com.difft.android.migration.v2.transfer.MigrationTransferCancelReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.difft.migration.p2p.ACTION_CANCEL" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

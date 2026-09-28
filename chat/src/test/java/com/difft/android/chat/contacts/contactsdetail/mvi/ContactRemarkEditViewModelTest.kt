@@ -214,13 +214,13 @@ class ContactRemarkEditViewModelTest {
 
         assertFalse(vm.state.value.isEditing)
         assertEquals("", vm.state.value.remarkName)
-        coVerify(exactly = 0) { httpService.fetchConversationSet(any(), any()) }
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
     }
 
     @Test
     fun `a quick-filled name is saved as a remark`() = runTest(dispatcher) {
         val body = slot<ConversationSetRequestBody>()
-        coEvery { httpService.fetchConversationSet(any(), capture(body)) } returns ok()
+        coEvery { httpService.fetchConversationSet(capture(body)) } returns ok()
         val vm = vm()
         vm.dispatch(Intent.Load(contact(name = "Alice")))
         vm.dispatch(Intent.EnterEdit)
@@ -273,7 +273,7 @@ class ContactRemarkEditViewModelTest {
 
     @Test
     fun `save and close submits then closes on success`() = runTest(dispatcher) {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns ok()
+        coEvery { httpService.fetchConversationSet(any()) } returns ok()
         val vm = vm()
         vm.dispatch(Intent.Load(contact(remark = "Buddy")))
         vm.dispatch(Intent.EnterEdit)
@@ -300,7 +300,7 @@ class ContactRemarkEditViewModelTest {
         vm.dispatch(Intent.DiscardEdit)
         assertFalse(vm.state.value.isEditing)
         assertEquals("Buddy", vm.state.value.editingName)
-        coVerify(exactly = 0) { httpService.fetchConversationSet(any(), any()) }
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
     }
 
     @Test
@@ -313,13 +313,13 @@ class ContactRemarkEditViewModelTest {
         vm.dispatch(Intent.SubmitName)
 
         assertFalse(vm.state.value.isEditing)
-        coVerify(exactly = 0) { httpService.fetchConversationSet(any(), any()) }
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
     }
 
     @Test
     fun `submit new remark sends V1 cipher and commits locally`() = runTest(dispatcher) {
         val body = slot<ConversationSetRequestBody>()
-        coEvery { httpService.fetchConversationSet(any(), capture(body)) } returns ok()
+        coEvery { httpService.fetchConversationSet(capture(body)) } returns ok()
         val vm = vm()
         vm.dispatch(Intent.Load(contact()))
         vm.dispatch(Intent.EnterEdit)
@@ -339,7 +339,7 @@ class ContactRemarkEditViewModelTest {
     @Test
     fun `submit empty remark clears with an empty string`() = runTest(dispatcher) {
         val body = slot<ConversationSetRequestBody>()
-        coEvery { httpService.fetchConversationSet(any(), capture(body)) } returns ok()
+        coEvery { httpService.fetchConversationSet(capture(body)) } returns ok()
         val vm = vm()
         vm.dispatch(Intent.Load(contact(remark = "Buddy")))
         vm.dispatch(Intent.EnterEdit)
@@ -355,7 +355,7 @@ class ContactRemarkEditViewModelTest {
 
     @Test
     fun `submit rejected by server toasts reason and stays in edit`() = runTest(dispatcher) {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns rejected("denied")
+        coEvery { httpService.fetchConversationSet(any()) } returns rejected("denied")
         val vm = vm()
         vm.dispatch(Intent.Load(contact()))
         vm.dispatch(Intent.EnterEdit)
@@ -395,7 +395,7 @@ class ContactRemarkEditViewModelTest {
     @Test
     fun `restore avatar clears with an empty string and keeps edit mode`() = runTest(dispatcher) {
         val body = slot<ConversationSetRequestBody>()
-        coEvery { httpService.fetchConversationSet(any(), capture(body)) } returns ok()
+        coEvery { httpService.fetchConversationSet(capture(body)) } returns ok()
         val vm = vm()
         vm.dispatch(Intent.Load(contact(remarkAvatar = "V1|xyz")))
         vm.dispatch(Intent.EnterEdit)

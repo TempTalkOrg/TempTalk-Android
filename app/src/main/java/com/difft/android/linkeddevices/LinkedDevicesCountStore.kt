@@ -14,7 +14,8 @@ import javax.inject.Singleton
 /**
  * Process-scoped best-effort source of truth for the Settings "Linked Devices" count badge.
  * `count == null` means never fetched (badge hidden). Best-effort: swallows all non-cancellation
- * errors, keeps the last-known count, and never logs out.
+ * errors and keeps the last-known count. It never logs out directly; a 401/403 reaches
+ * `SessionAuthGuard` through [DeviceRepository], which confirms before acting.
  *
  * [refresh] always issues a real fetch (lightweight, fired from the Settings tab onResume) but
  * coalesces: a call made while another fetch is in flight returns immediately and is satisfied by

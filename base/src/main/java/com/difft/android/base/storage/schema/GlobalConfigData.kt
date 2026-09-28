@@ -14,7 +14,10 @@ import kotlinx.serialization.protobuf.ProtoNumber
  *  - [callServiceUrlStateV3] — `CallServiceUrlManager`'s `CallServiceUrlDiskState`
  *    kotlinx-serialization blob (legacy key `"call_service_url_state_v3"`).
  *
- * Both are intentionally kept as **opaque [String]** rather than nested
+ * plus [pendingLogin], the login module's held sign-in (JSON), which lives here because this is
+ * the one store a full clear leaves alone.
+ *
+ * All are intentionally kept as **opaque [String]** rather than nested
  * `@Serializable` types, because:
  *  - `NewGlobalConfig` is a 100+-field Gson type in `:base/user/` and
  *    re-annotating its full tree would bloat the migration scope.
@@ -38,7 +41,7 @@ import kotlinx.serialization.protobuf.ProtoNumber
  * start.
  *
  * **Tag stability contract (`@ProtoNumber`)**: explicit field numbers below match the
- * implicit declaration-order tags that PR #789 shipped (1..3). Wire format on every
+ * implicit declaration-order tags that PR #789 shipped (1..3); 4 was appended later. Wire format on every
  * deployed `secure_config.pb` depends on these numbers — see [UserAuthData] for the
  * same rule (append at the bottom with next unused tag; never reuse a freed tag).
  * Verified by [com.difft.android.base.storage.schema.SchemaWireFormatTest].
@@ -52,6 +55,12 @@ data class GlobalConfigData(
     @ProtoNumber(2) val callServiceUrlStateV3: String = "",
     /** Defense-in-depth migration marker — set by `SecureConfigMigration` after a successful legacy SP read. */
     @ProtoNumber(3) val migrationV1Completed: Boolean = false,
+    /**
+     * A verified sign-in held across a full clear or a restart (JSON; empty = none) — the login
+     * module's `PendingLoginStore` owns the shape. Kept here because this store, unlike `secure_user`
+     * and `app_state`, survives `StorageBoundUserManager.clearAll()`.
+     */
+    @ProtoNumber(4) val pendingLogin: String = "",
 ) {
     companion object {
         val EMPTY = GlobalConfigData()

@@ -129,10 +129,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
                     flowOf<Pair<CallData, BaseResponse<RoomState>>?>(null)
                 } else {
                     flow {
-                        val result = callService.checkCall(
-                            (globalServices.userManager.getUserData()?.microToken ?: ""),
-                            callData.roomId
-                        )
+                        val result = callService.checkCall(callData.roomId)
                         emit(callData to result)
                     }
                 }

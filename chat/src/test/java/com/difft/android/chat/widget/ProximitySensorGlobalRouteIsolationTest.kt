@@ -145,7 +145,7 @@ class ProximitySensorGlobalRouteIsolationTest {
     }
 
     @Test
-    fun `T4-10 start is idempotent and never leaves a second registration`() = runTest(testDispatcher) {
+    fun `T4-10 a second start cycles the registration and never leaves two behind`() = runTest(testDispatcher) {
         shadowOf(sensorManager).addSensor(proximitySensor)
 
         ProximitySensorManager.start()
@@ -183,10 +183,48 @@ class ProximitySensorGlobalRouteIsolationTest {
         assertNull(audioManager.communicationDevice)
     }
 
-    private fun deliverProximity(near: Boolean) {
+    @Test
+    fun `T4-20 a FAR reading below the advertised maximum is not near`() = runTest(testDispatcher) {
+        // #1252: sensors whose FAR value sits below maximumRange were permanently NEAR under `value < maximumRange`.
+        shadowOf(proximitySensor).setMaximumRange(10f)
+        shadowOf(sensorManager).addSensor(proximitySensor)
+
+        ProximitySensorManager.start()
+        deliverProximityValue(5f)
+        advanceUntilIdle()
+        // The first value still propagates (route reset contract, T4-9) — but as FAR, not NEAR.
+        assertEquals(listOf(false), nearFlips)
+
+        deliverProximityValue(0f)
+        advanceUntilIdle()
+        assertEquals(listOf(false, true), nearFlips)
+    }
+
+    @Test
+    fun `T4-21 a start while registered cycles the registration so the current value applies again`() = runTest(testDispatcher) {
+        // Auto-play: onPlayComplete stops, the next message starts, the phone never moved. The new
+        // player must still receive the (unchanged) NEAR decision.
+        shadowOf(sensorManager).addSensor(proximitySensor)
+
+        ProximitySensorManager.start()
+        deliverProximity(near = true)
+        advanceUntilIdle()
+        ProximitySensorManager.stop()
+        ProximitySensorManager.start() // restartPending forces an unregister + register even if the stop's sync already ran
+        advanceUntilIdle()
+        deliverProximity(near = true)
+        advanceUntilIdle()
+
+        assertEquals(1, shadowOf(sensorManager).listeners.size)
+        assertEquals(listOf(true, true), nearFlips)
+    }
+
+    private fun deliverProximity(near: Boolean) = deliverProximityValue(if (near) 0f else MAX_RANGE)
+
+    private fun deliverProximityValue(value: Float) {
         val event: SensorEvent = ShadowSensorManager.createSensorEvent(3, Sensor.TYPE_PROXIMITY)
         event.sensor = proximitySensor
-        event.values[0] = if (near) 0f else MAX_RANGE
+        event.values[0] = value
         shadowOf(sensorManager).sendSensorEventToListeners(event)
     }
 

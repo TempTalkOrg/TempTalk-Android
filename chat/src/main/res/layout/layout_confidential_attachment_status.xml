@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status layer for a CONFIDENTIAL attachment whose file has expired or failed to download
+  (see ConfidentialAttachmentStatusView). Sits above the confidential cover: the blurred content
+  stays hidden underneath, while the status is reversed out in white on a single dark scrim.
+  Shared by image/video, voice and generic file bubbles (long text is excluded: it renders as body
+  text and opens through the text dialog); the binder picks the stacked (media) or inline
+  (voice/file) arrangement at bind time.
+  Not clickable on purpose — taps fall through to the cover, which forwards them to the item.
+-->
+<com.difft.android.chat.widget.ConfidentialAttachmentStatusView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/confidential_status_scrim"
+    android:layout_width="0dp"
+    android:layout_height="0dp"
+    android:background="@drawable/bg_confidential_status_scrim"
+    android:clickable="false"
+    android:focusable="false"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <LinearLayout
+        android:id="@+id/confidential_status_expired"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/confidential_status_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_media_expired"
+            app:tint="@color/white" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/confidential_status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/file_expired"
+            android:textColor="@color/white"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/confidential_status_retry"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_media_retry"
+        android:visibility="gone" />
+</com.difft.android.chat.widget.ConfidentialAttachmentStatusView>

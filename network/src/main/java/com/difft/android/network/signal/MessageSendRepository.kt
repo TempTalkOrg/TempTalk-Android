@@ -1,6 +1,8 @@
 package com.difft.android.network.signal
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.session.AuthFailureSink
+import com.difft.android.base.session.AuthFailureSource
 import com.difft.android.websocket.api.push.exceptions.AuthorizationFailedException
 import com.difft.android.websocket.api.push.exceptions.MalformedResponseException
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
@@ -33,7 +35,10 @@ import javax.inject.Singleton
 @Singleton
 class MessageSendRepository @Inject constructor(
     @param:ChativeHttpClientModule.SignalApi
-    private val httpClient: ChativeHttpClient
+    private val httpClient: ChativeHttpClient,
+    // Lazy breaks the Dagger cycle: the sink implementation reaches back into the device
+    // endpoints to confirm a rejection before acting on it.
+    private val authFailureSink: dagger.Lazy<AuthFailureSink>,
 ) {
     private val messageApiService: MessageApiService =
         httpClient.getService(MessageApiService::class.java)
@@ -102,7 +107,12 @@ class MessageSendRepository @Inject constructor(
     ): Nothing {
         L.d { "[MessageSendRepository] throwForErrorCode: code=$code, body=$bodyString" }
         when (code) {
-            401, 403 -> throw AuthorizationFailedException(code, "Authorization failed!")
+            401, 403 -> {
+                // Signal only: the sink confirms against the device endpoint before any logout,
+                // so a business 403 here costs one extra probe, never a session.
+                authFailureSink.get().onAuthRejected(AuthFailureSource.MESSAGE_SEND)
+                throw AuthorizationFailedException(code, "Authorization failed!")
+            }
 
             404 -> {
                 if (bodyString != null) {

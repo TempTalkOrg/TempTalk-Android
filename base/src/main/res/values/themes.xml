@@ -10,8 +10,8 @@
         <item name="colorSecondary">@android:color/transparent</item>
         <item name="colorSecondaryVariant">@android:color/transparent</item>
         <item name="colorOnSecondary">@android:color/transparent</item>
-        <!-- Default page background (settings idiom — light gray in light, dark in dark).
-             Immersive pages override via android:background="@color/bg1" on root layout. -->
+        <!-- Default page background: bg is bgpage-secondary (#F5F5F5 in light).
+             Content pages paint @color/bg1 on their root layout. -->
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
         <item name="android:navigationBarColor">@color/bg</item>

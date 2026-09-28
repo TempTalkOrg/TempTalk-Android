@@ -56,16 +56,18 @@ class IndexIndicator @JvmOverloads constructor(
             icon.layoutParams.width = 35.dp
             icon.layoutParams.height = 35.dp
         } else {
-            applyLabelSize(text, maxSp = 14)
-            icon.layoutParams.width = 25.dp
-            icon.layoutParams.height = 25.dp
+            // Library Bottombar: 24 dp icon, 10 sp label.
+            applyLabelSize(text, maxSp = 10)
+            icon.layoutParams.width = 24.dp
+            icon.layoutParams.height = 24.dp
         }
     }
 
     /**
      * Auto-size DOWN from [maxSp], never up: the phone bottom strip has room and renders at
-     * [maxSp] as before, while the 72dp dual-pane rail shrinks a long label ("Contacts" at
-     * 14sp needs ~62dp, more than the rail's label box) instead of ellipsizing it.
+     * [maxSp], while the 72dp dual-pane rail shrinks a long label ("Contacts") instead of
+     * ellipsizing it. [LABEL_MIN_SP] must stay strictly below every [maxSp] passed here —
+     * setAutoSizeTextTypeUniformWithConfiguration rejects max <= min.
      */
     private fun applyLabelSize(text: AppCompatTextView, maxSp: Int) {
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(
@@ -74,7 +76,7 @@ class IndexIndicator @JvmOverloads constructor(
     }
 
     private companion object {
-        const val LABEL_MIN_SP = 10
+        const val LABEL_MIN_SP = 8
     }
 
     private val tvBadge: AppCompatTextView by lazy { findViewById(R.id.tv_badge) }

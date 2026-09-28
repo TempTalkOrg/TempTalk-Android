@@ -18,9 +18,7 @@ import com.difft.android.login.BindAccountActivity
 import com.difft.android.login.ScreenLockActivity
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
-import util.TimeUtils
 import javax.inject.Inject
-import kotlin.time.Duration.Companion.seconds
 
 @AndroidEntryPoint
 class ScreenLockSettingActivity : BaseActivity() {
@@ -144,10 +142,7 @@ class ScreenLockSettingActivity : BaseActivity() {
             val anyLockEnabled = !userData.passcode.isNullOrEmpty() || !userData.pattern.isNullOrEmpty()
             if (anyLockEnabled) {
                 mBinding.clTimeout.visibility = View.VISIBLE
-                mBinding.tvTimeout.text = if (userData.passcodeTimeout == 0)
-                    getString(R.string.settings_screen_lock_timeout_instant)
-                else
-                    TimeUtils.millis2FitTimeSpan(userData.passcodeTimeout.seconds.inWholeMilliseconds, 3, false)
+                mBinding.tvTimeout.text = passcodeTimeoutLabel(this, userData.passcodeTimeout)
             } else {
                 mBinding.clTimeout.visibility = View.GONE
             }

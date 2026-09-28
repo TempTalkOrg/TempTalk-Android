@@ -12,11 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
@@ -38,7 +35,7 @@ internal fun RemarkQuickFillRow(
     ) {
         Text(
             text = originalName,
-            style = nameStyle,
+            style = DifftTheme.typography.h7,
             color = DifftTheme.colors.textInfo,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -77,6 +74,5 @@ internal fun appendQuickFill(draft: String, originalName: String): String {
     }
 }
 
-private val nameStyle = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp)
 private val GAP = 4.dp
 private val ICON_SIZE = 14.dp

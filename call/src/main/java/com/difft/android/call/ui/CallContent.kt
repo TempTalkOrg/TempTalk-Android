@@ -83,11 +83,11 @@ fun CallContent(
 
     DifftTheme(darkTheme = true) {
         val systemUiController = rememberSystemUiController()
-        val backgroundElevateColor = DifftTheme.colors.backgroundElevate
+        val pagePrimaryColor = DifftTheme.colors.backgroundPagePrimary
 
         SideEffect {
             systemUiController.setStatusBarColor(
-                color = backgroundElevateColor,
+                color = pagePrimaryColor,
                 darkIcons = false
             )
         }
@@ -338,7 +338,7 @@ private fun CallSurface(
 ) {
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = DifftTheme.colors.backgroundElevate
+        color = DifftTheme.colors.backgroundPagePrimary
     ) {
         content()
     }

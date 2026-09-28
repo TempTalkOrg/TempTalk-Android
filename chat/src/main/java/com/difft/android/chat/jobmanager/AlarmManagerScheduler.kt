@@ -33,6 +33,9 @@ class AlarmManagerScheduler(
         }
     }
 
+    /** No-op: minSdk 26 makes this whole scheduler dead code, so it is kept minimal. */
+    override fun cancelAllExcept(keep: Set<Int>) = Unit
+
     private fun setUniqueAlarm(context: Context, time: Long) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, RetryReceiver::class.java).apply {

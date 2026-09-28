@@ -1,6 +1,5 @@
 package com.difft.android.chat.gif.favorite
 
-import com.difft.android.base.user.UserManager
 import com.difft.android.chat.cryptonew.EncryptionDataManager
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
@@ -45,7 +44,6 @@ class FavoriteWriteRepositoryTest {
     private val keyRepo: FavoriteKeyRepo = mockk(relaxed = true)
     private val assetUploader: FavoriteAssetUploader = mockk()
     private val encryptionDataManager: EncryptionDataManager = mockk()
-    private val userManager: UserManager = mockk(relaxed = true)
     // Optimistic writer is not exercised by these blocking-path tests (favorite()/putWithCas/key
     // lifecycle); relaxed so the writeRepo Lazy back-edge resolves without behavior.
     private val optimisticWriter: FavoriteOptimisticWriter = mockk(relaxed = true)
@@ -64,7 +62,7 @@ class FavoriteWriteRepositoryTest {
             syncRepo, keyRepo, encryptionDataManager, dagger.Lazy { repo }
         )
         repo = FavoriteWriteRepository(
-            httpClient, urlManager, syncRepo, keyRepo, assetUploader, userManager,
+            httpClient, urlManager, syncRepo, keyRepo, assetUploader,
             keyLifecycle, dagger.Lazy { optimisticWriter }
         )
     }
@@ -159,7 +157,7 @@ class FavoriteWriteRepositoryTest {
             FavoritesResponse(encVersion = 1, listVersion = 3L, keyId = "kid", blob = null, wrappedFavKey = oldWrapped)
         coEvery { keyRepo.getFavKey() } returns null // no local cache -> exercise the old-KEK unwrap fallback
         val captured = mutableListOf<FavoritesPutRequest>()
-        coEvery { httpService.putFavorites(any(), any(), capture(captured)) } returns resp(status = 0)
+        coEvery { httpService.putFavorites(any(), capture(captured)) } returns resp(status = 0)
 
         repo.rewrapOnMasterKeyRotation(oldPriv, newPriv)
 
@@ -181,7 +179,7 @@ class FavoriteWriteRepositoryTest {
 
         repo.rewrapOnMasterKeyRotation(ByteArray(32) { 1 }, ByteArray(32) { 2 })
 
-        io.mockk.coVerify(exactly = 0) { httpService.putFavorites(any(), any(), any()) }
+        io.mockk.coVerify(exactly = 0) { httpService.putFavorites(any(), any()) }
     }
 
     // ---- onPrimaryLogin: §3.4 rewrap-vs-reset decision ----
@@ -193,7 +191,7 @@ class FavoriteWriteRepositoryTest {
 
         repo.onPrimaryLogin(oldPriv = ByteArray(32) { 1 }, newPriv = ByteArray(32) { 2 })
 
-        io.mockk.coVerify(exactly = 0) { httpService.putFavorites(any(), any(), any()) }
+        io.mockk.coVerify(exactly = 0) { httpService.putFavorites(any(), any()) }
     }
 
     @Test
@@ -205,7 +203,7 @@ class FavoriteWriteRepositoryTest {
 
         repo.onPrimaryLogin(oldPriv = ByteArray(32) { 1 }, newPriv = newPriv)
 
-        io.mockk.coVerify(exactly = 0) { httpService.putFavorites(any(), any(), any()) }
+        io.mockk.coVerify(exactly = 0) { httpService.putFavorites(any(), any()) }
     }
 
     @Test
@@ -219,7 +217,7 @@ class FavoriteWriteRepositoryTest {
         coEvery { keyRepo.hasKey() } returns false // no local cache -> decision relies on old-key unwrap
         coEvery { keyRepo.getFavKey() } returns null // rewrap then falls back to old-KEK unwrap
         val captured = mutableListOf<FavoritesPutRequest>()
-        coEvery { httpService.putFavorites(any(), any(), capture(captured)) } returns resp(status = 0)
+        coEvery { httpService.putFavorites(any(), capture(captured)) } returns resp(status = 0)
 
         repo.onPrimaryLogin(oldPriv = oldPriv, newPriv = newPriv)
 
@@ -243,7 +241,7 @@ class FavoriteWriteRepositoryTest {
         coEvery { keyRepo.getFavKey() } returns favKeyEntry
         stubIdentity(privByte = 2) // deriveCurrentKek() for the new wrappedFavKey on the reset PUT
         val captured = mutableListOf<FavoritesPutRequest>()
-        coEvery { httpService.putFavorites(any(), any(), capture(captured)) } returns resp(status = 0)
+        coEvery { httpService.putFavorites(any(), capture(captured)) } returns resp(status = 0)
 
         // oldPriv = null models a fresh install / cleared storage (no old key captured at login).
         repo.onPrimaryLogin(oldPriv = null, newPriv = newPriv)
@@ -265,7 +263,7 @@ class FavoriteWriteRepositoryTest {
         coEvery { keyRepo.hasKey() } returns true
         coEvery { keyRepo.getFavKey() } returns FavKeyEntry("kid", favKey)
         val captured = mutableListOf<FavoritesPutRequest>()
-        coEvery { httpService.putFavorites(any(), any(), capture(captured)) } returns resp(status = 0)
+        coEvery { httpService.putFavorites(any(), capture(captured)) } returns resp(status = 0)
 
         // oldPriv gone (identity chain broken), but the cached favKey heals it.
         repo.onPrimaryLogin(oldPriv = null, newPriv = newPriv)
@@ -284,7 +282,7 @@ class FavoriteWriteRepositoryTest {
         coEvery { keyRepo.getFavKey() } returns favKeyEntry
         every { syncRepo.cachedListVersion } returns 10L
         coEvery { syncRepo.confirmedRecords() } returns emptyList()
-        coEvery { httpService.putFavorites(any(), any(), any()) } returns resp(status = 0, listVersion = 11L)
+        coEvery { httpService.putFavorites(any(), any()) } returns resp(status = 0, listVersion = 11L)
 
         val newVersion = repo.putWithCas(FavoriteAction.FAVORITE, FavoriteRecord(pointer("a"), 10L), wrappedFavKey = null)
         assertEquals(11L, newVersion)
@@ -297,7 +295,7 @@ class FavoriteWriteRepositoryTest {
         coEvery { syncRepo.confirmedRecords() } returnsMany listOf(emptyList(), emptyList())
         coEvery { syncRepo.pullAndDecrypt() } returns Unit
         val captured = mutableListOf<FavoritesPutRequest>()
-        coEvery { httpService.putFavorites(any(), any(), capture(captured)) } returnsMany listOf(
+        coEvery { httpService.putFavorites(any(), capture(captured)) } returnsMany listOf(
             resp(status = FavoriteWriteRepository.FAVORITES_STATUS_CAS_CONFLICT),
             resp(status = 0, listVersion = 21L)
         )
@@ -316,7 +314,7 @@ class FavoriteWriteRepositoryTest {
         every { syncRepo.cachedListVersion } returns 10L
         coEvery { syncRepo.confirmedRecords() } returns emptyList()
         coEvery { syncRepo.pullAndDecrypt() } returns Unit
-        coEvery { httpService.putFavorites(any(), any(), any()) } returns
+        coEvery { httpService.putFavorites(any(), any()) } returns
             resp(status = FavoriteWriteRepository.FAVORITES_STATUS_CAS_CONFLICT)
 
         assertFailsWith<CasExhaustedException> {
@@ -334,7 +332,7 @@ class FavoriteWriteRepositoryTest {
         coEvery { keyRepo.getFavKey() } returns favKeyEntry
         every { syncRepo.cachedListVersion } returns 5L
         coEvery { syncRepo.confirmedRecords() } returns emptyList()
-        coEvery { httpService.putFavorites(any(), any(), any()) } returns resp(status = 0, listVersion = 42L)
+        coEvery { httpService.putFavorites(any(), any()) } returns resp(status = 0, listVersion = 42L)
         val upserts = mutableListOf<FavoriteGifModel>()
         coEvery { syncRepo.upsert(capture(upserts)) } returns Unit
 

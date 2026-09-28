@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,7 +23,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import com.difft.android.base.ui.theme.DifftTheme
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -149,7 +147,6 @@ fun BoxScope.BubbleView(
                 text = emoji,
                 style = TextStyle(
                     fontSize = 48.sp,
-                    fontFamily = FontFamily.Default,
                     fontWeight = FontWeight(400),
                 ),
             )
@@ -179,17 +176,12 @@ fun BoxScope.BubbleView(
             modifier = bottomTextModifier
                 .background(
                     color = DifftTheme.colors.backgroundTertiary,
-                    shape = RoundedCornerShape(4.dp),
+                    shape = DifftTheme.radius.mediumShape,
                 )
                 .padding(horizontal = 6.dp, vertical = 2.dp),
             text = bottomText,
-            style = TextStyle(
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                fontFamily = FontFamily.Default,
-                fontWeight = FontWeight(400),
-                color = DifftTheme.colors.textPrimary,
-            ),
+            style = DifftTheme.typography.p3,
+            color = DifftTheme.colors.textPrimary,
         )
     }
 }

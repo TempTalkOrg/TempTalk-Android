@@ -62,9 +62,9 @@ object FeatureGrayManager {
      */
     suspend fun refreshFromServer(sources: List<String>?) {
         try {
-            val token = (userManager.getUserData()?.microToken ?: "")
-            if (token.isEmpty()) return
-            val resp = chatHttpClient.httpService.grayCheck((userManager.getUserData()?.microToken ?: ""), GrayCheckRequestBody(sources))
+            // Login-state gate: with no persisted session token there is nothing to check for.
+            if (userManager.getUserData()?.microToken.isNullOrEmpty()) return
+            val resp = chatHttpClient.httpService.grayCheck(GrayCheckRequestBody(sources))
 
             if (resp.status != 0) {
                 L.e { "[FeatureGrayManager] server returned status=${resp.status}" }

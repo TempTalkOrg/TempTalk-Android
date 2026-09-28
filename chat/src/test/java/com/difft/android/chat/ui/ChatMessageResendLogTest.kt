@@ -66,7 +66,7 @@ class ChatMessageResendLogTest {
         dbRoomStore = mockk(relaxed = true),
         chatPaginationControllerFactory = mockk(relaxed = true),
         callManager = mockk(relaxed = true),
-        translateManager = mockk(relaxed = true),
+        autoTranslateCoordinatorFactory = mockk(relaxed = true),
         speechToTextManager = mockk(relaxed = true),
         pushReadReceiptSendJobFactory = mockk(relaxed = true),
         activityNoticeDispatcher = mockk(relaxed = true),

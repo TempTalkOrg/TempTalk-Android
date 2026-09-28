@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
@@ -68,6 +69,12 @@ class ScreenshotDetector(
     private var isListening = false
     private var lastDetectedTime = 0L
     private var startListenTime = 0L
+
+    // Null rather than a 0L sentinel: unlike the epoch-based lastDetectedTime above, this is an
+    // elapsed-realtime value, where 0 is a legal reading (the instant of boot) and not a value
+    // that can stand in for "unset".
+    @Volatile
+    private var lastCaptureAt: Long? = null
 
     // Android 14+ official API callback (lazy to avoid ClassNotFoundException on older versions)
     @get:RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -348,7 +355,28 @@ class ScreenshotDetector(
 
     // ============ Common ============
 
+    /**
+     * Time elapsed since the last capture this detector observed, or [Long.MAX_VALUE] when it has
+     * observed none.
+     *
+     * Updated for every observed capture, including the ones the debounce below drops: the
+     * debounce is there to stop the same capture being announced twice, not to deny that it
+     * happened. A caller timing its own behaviour off a capture needs the latter, so it must not
+     * read the debounced callback as the signal.
+     *
+     * Measured on [SystemClock.elapsedRealtime], since callers compare it against sub-second
+     * thresholds that a wall-clock jump would distort. Note the clock starts at *detection*, not
+     * at the shutter: on the legacy MediaStore path detection can trail the capture itself by the
+     * indexing delay plus the retry backoff, which shifts a caller's window by that much.
+     */
+    fun millisSinceLastCapture(): Long {
+        val at = lastCaptureAt ?: return Long.MAX_VALUE
+        return SystemClock.elapsedRealtime() - at
+    }
+
     private fun handleScreenshotDetected() {
+        lastCaptureAt = SystemClock.elapsedRealtime()
+
         // Debounce to avoid duplicate callbacks
         val now = System.currentTimeMillis()
         if (now - lastDetectedTime < DEBOUNCE_MS) {

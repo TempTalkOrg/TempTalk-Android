@@ -22,7 +22,6 @@ import com.bumptech.glide.signature.ObjectKey
 import com.difft.android.base.glide.EncryptedByteBufferResourceEncoder
 import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.dp
 import com.difft.android.chat.R
@@ -36,7 +35,6 @@ import com.difft.android.chat.message.getAttachmentIdForProgress
 import com.difft.android.chat.message.getAttachmentProgress
 import com.difft.android.chat.message.isConfidential
 import com.hi.dhl.binding.viewbind
-import difft.android.messageserialization.model.AttachmentStatus
 import difft.android.messageserialization.model.isVideo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -122,57 +120,26 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
 
         val progress = message.getAttachmentProgress()
         val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath, attachment.size)
+        // The file decides the state, never the message's direction (see AttachmentDownloadDecision):
+        // a readable file with progress running is an upload; anything else is a copy to fetch.
+        val isUploading = AttachmentDownloadDecision.isUploadInFlight(isFileValid, progress)
         // A readable file is the authority on "downloaded"; repair a lagging status before the
-        // download-state branches read it, so no branch can order a download for a file we have.
-        if (isFileValid) AttachmentStatusRepair.markSuccessIfStale(attachment)
-        val isCurrentDeviceSend = message.isMine && message.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
+        // state chain reads it, so no branch can order a download for a file we have.
+        if (isFileValid && !isUploading) AttachmentStatusRepair.markSuccessIfStale(attachment)
 
-        // Distinguish upload/download state based on whether sent from current device
-        if (isCurrentDeviceSend) {
-            // Current device send - upload state
-            handleUploadState(message, progress, isFileValid, attachmentPath, attachment, isVideo)
-        } else {
-            // Other device send or sync message - download state
-            handleDownloadState(message, progress, isFileValid, attachmentPath, attachment, isVideo)
-        }
-    }
-
-    /**
-     * Handle upload state (sent from current device)
-     */
-    private fun handleUploadState(
-        message: TextChatMessage,
-        progress: Int?,
-        isFileValid: Boolean,
-        attachmentPath: String,
-        attachment: difft.android.messageserialization.model.Attachment,
-        isVideo: Boolean
-    ) {
-        // Load image
-        if (isFileValid) {
+        if (isUploading) {
             loadImage(attachmentPath, attachment.size, attachment.contentType)
+            showUploadProgress(progress ?: 0)
+            return
         }
-
-        // Show progress while uploading
-        if (progress != null && progress in 0..99) {
-            showUploadProgress(progress)
-        } else if (isFileValid) {
-            // Upload complete, show video play button
-            binding.playButton.visibility = if (isVideo) View.VISIBLE else View.GONE
-        } else if (AttachmentDownloadDecision.shouldRescueMissingFile(isFileValid, attachment.status, progress)) {
-            // An own send whose bytes the row says landed, but which are not at this address: the
-            // file moved (pre-per-copy addressing) or is gone. Without this the bubble stays blank
-            // forever — the job's first act is the migration's local rescue, so this usually costs a
-            // file-system copy and no network.
-            downloadAttachment(message, attachmentPath)
-            showDownloadingState(0)
-        }
+        renderFetchState(message, progress, isFileValid, attachmentPath, attachment, isVideo)
     }
 
     /**
-     * Handle download state (sent from other device or sync message)
+     * Everything that is not an upload in flight: the download-side states while no readable file is
+     * here (expired, failed, tap-to-download, downloading, auto-download), or the ready media when it is.
      */
-    private fun handleDownloadState(
+    private fun renderFetchState(
         message: TextChatMessage,
         progress: Int?,
         isFileValid: Boolean,
@@ -180,35 +147,25 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         attachment: difft.android.messageserialization.model.Attachment,
         isVideo: Boolean
     ) {
-        // Priority 1: Check expired state
-        val isExpired = if (progress != null) {
-            progress == -2
-        } else {
-            attachment.status == AttachmentStatus.EXPIRED.code
-        }
+        if (AttachmentDownloadDecision.needsFetch(isFileValid)) {
+            // Priority 1: Check expired state
+            if (AttachmentDownloadDecision.isExpired(attachment.status, progress)) {
+                showExpiredState()
+                return
+            }
 
-        if (isExpired) {
-            showExpiredState()
-            return
-        }
+            // Priority 2: Check failed state
+            if (AttachmentDownloadDecision.isFailed(attachment.status, progress)) {
+                showRetryState()
+                return
+            }
 
-        // Priority 2: Check failed state
-        val isFailed = if (progress != null) {
-            progress == -1
-        } else {
-            attachment.status == AttachmentStatus.FAILED.code
-        }
-
-        if (isFailed) {
-            showRetryState()
-            return
-        }
-
-        // Priority 3: Large file manual download prompt (>10MB)
-        val fileSize = attachment.size
-        if (AttachmentDownloadDecision.shouldPromptManualDownload(isFileValid, fileSize, progress)) {
-            showManualDownloadState(fileSize)
-            return
+            // Priority 3: Large file manual download prompt (>10MB)
+            val fileSize = attachment.size
+            if (AttachmentDownloadDecision.shouldPromptManualDownload(isFileValid, fileSize, progress)) {
+                showManualDownloadState(fileSize)
+                return
+            }
         }
 
         // Load downloaded image
@@ -219,8 +176,10 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         // Priority 4: Downloading or auto download.
         when (AttachmentDownloadDecision.downloadAction(isFileValid, progress)) {
             AttachmentDownloadAction.AUTO_DOWNLOAD -> {
-                downloadAttachment(message, attachmentPath)
-                showDownloadingState(0)
+                // Only a job that was actually enqueued earns the spinner: a row that can never be
+                // fetched (no key — the upload never reached the server) would otherwise sit at 0%
+                // forever, re-drawn on every bind.
+                if (downloadAttachment(message, attachmentPath)) showDownloadingState(0)
             }
 
             AttachmentDownloadAction.SHOW_PROGRESS -> showDownloadingState(progress ?: 0)
@@ -255,6 +214,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     private fun showDownloadingState(progress: Int) {
         binding.downloadStatusView.visibility = View.VISIBLE
         binding.downloadCircleBg.visibility = View.VISIBLE
+        binding.retryCircleBg.visibility = View.GONE
         binding.downloadProgressRing.visibility = View.VISIBLE
         binding.downloadProgressRing.setProgress(progress)
         binding.downloadStatusIcon.setImageResource(R.drawable.ic_media_download)
@@ -263,11 +223,13 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     }
 
     /**
-     * Show retry state
+     * Show retry state: a 40dp / 40% circle behind the refresh glyph, smaller than the 48dp
+     * download circle so the failure reads differently from "downloading".
      */
     private fun showRetryState() {
         binding.downloadStatusView.visibility = View.VISIBLE
-        binding.downloadCircleBg.visibility = View.VISIBLE
+        binding.downloadCircleBg.visibility = View.GONE
+        binding.retryCircleBg.visibility = View.VISIBLE
         binding.downloadProgressRing.visibility = View.GONE
         binding.downloadStatusIcon.setImageResource(R.drawable.ic_media_retry)
         binding.downloadStatusText.visibility = View.GONE
@@ -279,6 +241,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
     private fun showManualDownloadState(fileSize: Int) {
         binding.downloadStatusView.visibility = View.VISIBLE
         binding.downloadCircleBg.visibility = View.VISIBLE
+        binding.retryCircleBg.visibility = View.GONE
         binding.downloadProgressRing.visibility = View.GONE
         binding.downloadStatusIcon.setImageResource(R.drawable.ic_media_download)
         binding.downloadStatusText.visibility = View.VISIBLE
@@ -569,9 +532,10 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         }
     }
 
-    private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {
-        val attachment = message.attachment ?: return
-        val key = attachment.key ?: return
+    /** Enqueues the download; false when the row carries no key and so cannot be fetched at all. */
+    private fun downloadAttachment(message: TextChatMessage, attachmentPath: String): Boolean {
+        val attachment = message.attachment ?: return false
+        val key = attachment.key ?: return false
         val autoSave = currentShouldSaveToPhotos && !message.isConfidential()
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
@@ -584,6 +548,7 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
                 autoSave
             )
         )
+        return true
     }
 
 }

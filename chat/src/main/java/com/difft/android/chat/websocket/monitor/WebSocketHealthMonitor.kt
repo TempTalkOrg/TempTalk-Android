@@ -34,6 +34,28 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** What the monitor should do about a state, split out so the branch matrix is unit-testable. */
+internal enum class ReconnectPolicy { RECONNECT_SWITCH_HOST, RECONNECT_KEEP_HOST, CONNECTED, IGNORE }
+
+/**
+ * Auth-level rejections keep the host: the server answered correctly, it rejected the *credential*.
+ * Recording the host as failed would pollute host selection, and reporting it as a WS failure would
+ * feed a network-quality counter that triggers a speed test. Reconnecting is still right — a false
+ * alarm self-heals into CONNECTED, and a real kick keeps re-emitting until the guard confirms it.
+ */
+internal fun reconnectPolicyFor(state: WebSocketConnectionState): ReconnectPolicy = when (state) {
+    WebSocketConnectionState.AUTHENTICATION_FAILED,
+    WebSocketConnectionState.INACTIVE_FAILED -> ReconnectPolicy.RECONNECT_KEEP_HOST
+
+    WebSocketConnectionState.FAILED,
+    WebSocketConnectionState.DISCONNECTED,
+    WebSocketConnectionState.UNKNOWN_HOST_FAILED -> ReconnectPolicy.RECONNECT_SWITCH_HOST
+
+    WebSocketConnectionState.CONNECTED -> ReconnectPolicy.CONNECTED
+
+    WebSocketConnectionState.CONNECTING -> ReconnectPolicy.IGNORE
+}
+
 /**
  * The monitor is also responsible for sending heartbeats/keep-alive messages to prevent
  * timeouts, if timeout then disconnect the websocket connection. and then the connection will be reconnected inside [checkUnconnectedStateAndReconnect].
@@ -315,25 +337,31 @@ class WebSocketHealthMonitor
     }
 
     private fun checkUnconnectedStateAndReconnect(webSocketConnection: WebSocketConnection) {
-        val job = webSocketConnection.webSocketConnectionState.onEach {
+        val job = webSocketConnection.webSocketConnectionState.onEach { state ->
             if (!isMonitoring) return@onEach
 
-            L.i { "${webSocketConnection.name} [ws]monitor: receive webSocketConnectionState: $it" }
-            if (it is WebSocketConnectionState.FAILED
-                || it is WebSocketConnectionState.DISCONNECTED
-                || it is WebSocketConnectionState.AUTHENTICATION_FAILED
-                || it is WebSocketConnectionState.UNKNOWN_HOST_FAILED
-                || it is WebSocketConnectionState.INACTIVE_FAILED
-            ) {
-                coordinator.onWsFailure()
-                // 任何连接失败都切换 host，下次重连会使用新的 host
-                switchHost(webSocketConnection)
-                L.i { "${webSocketConnection.name} [ws]monitor: start trigger doConnect, webSocketConnectionState: $it" }
-                handleRedoConnect(webSocketConnection)
-                L.i { "${webSocketConnection.name} [ws]monitor: finished trigger doConnect, webSocketConnectionState: $it" }
-            } else if (it is WebSocketConnectionState.CONNECTED) {
-                coordinator.onWsConnected()
-                attempts = 0 // reset attempts when connected
+            L.i { "${webSocketConnection.name} [ws]monitor: receive webSocketConnectionState: $state" }
+            when (reconnectPolicyFor(state)) {
+                ReconnectPolicy.RECONNECT_SWITCH_HOST -> {
+                    coordinator.onWsFailure()
+                    // 连接层失败才切换 host，下次重连会使用新的 host
+                    switchHost(webSocketConnection)
+                    L.i { "${webSocketConnection.name} [ws]monitor: start trigger doConnect, webSocketConnectionState: $state" }
+                    handleRedoConnect(webSocketConnection)
+                    L.i { "${webSocketConnection.name} [ws]monitor: finished trigger doConnect, webSocketConnectionState: $state" }
+                }
+
+                ReconnectPolicy.RECONNECT_KEEP_HOST -> {
+                    L.w { "${webSocketConnection.name} [ws]monitor: auth-level failure $state, reconnect without host switch" }
+                    handleRedoConnect(webSocketConnection)
+                }
+
+                ReconnectPolicy.CONNECTED -> {
+                    coordinator.onWsConnected()
+                    attempts = 0 // reset attempts when connected
+                }
+
+                ReconnectPolicy.IGNORE -> Unit
             }
         }.launchIn(this)
         monitoringJobs.add(job)

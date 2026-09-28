@@ -11,20 +11,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.login.R
 
@@ -44,7 +42,7 @@ internal fun RegisterIntroPage(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(24.dp))
-                .background(DifftTheme.colors.bgElevated)
+                .background(DifftTheme.colors.background)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -71,27 +69,17 @@ internal fun RegisterIntroPage(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
+            DifftButton(
+                text = stringResource(id = R.string.register_intro_next),
                 onClick = onNext,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
                     .onGloballyPositioned { coords ->
                         // Pages share identical layout, so any visible page reports the
                         // same Y; Screen uses this to anchor the floating indicator.
                         onButtonBottomYInRoot((coords.positionInRoot().y + coords.size.height).toInt())
                     },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DifftTheme.colors.primary,
-                    contentColor = Color.White,
-                ),
-            ) {
-                Text(
-                    text = stringResource(id = R.string.register_intro_next),
-                    style = DifftTheme.typography.labelLarge,
-                )
-            }
+            )
         }
     }
 }

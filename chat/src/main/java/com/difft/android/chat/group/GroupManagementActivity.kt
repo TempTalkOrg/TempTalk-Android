@@ -11,6 +11,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.TitleBar
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.DifftToggleView
 import com.difft.android.base.widget.ToastUtil
@@ -68,7 +70,16 @@ class GroupManagementActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        mBinding.ibBack.setOnClickListener { finish() }
+        // applyWindowBackground = false: this is an XML host, so the window background stays the
+        // Activity theme's; a true here would rewrite it from a title-bar ComposeView.
+        mBinding.composeTitleBar.setContent {
+            DifftTheme(applyWindowBackground = false) {
+                TitleBar(
+                    titleText = getString(R.string.group_management),
+                    onBackClick = { finish() },
+                )
+            }
+        }
 
         if (TextUtils.isEmpty(groupId)) return
 

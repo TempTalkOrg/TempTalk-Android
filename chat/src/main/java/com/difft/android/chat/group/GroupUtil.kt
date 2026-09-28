@@ -131,7 +131,18 @@ class GroupUtil @Inject constructor(
 
     val getGroupsStatusUpdate: SharedFlow<Pair<Boolean, List<String>>> = _getGroupsStatusUpdate.asSharedFlow()
 
+    /**
+     * A full sync is running. A second caller — the chat list opening while the post-restore warm-up
+     * still waits on the first sync — starts nothing: the running one lands the same rows, and two
+     * runs would each wipe and refill the group table.
+     */
+    private val fullSyncInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
     suspend fun syncAllGroupAndAllGroupMembers(forceFetch: Boolean, syncMembers: Boolean) = coroutineScope {
+        if (!fullSyncInFlight.compareAndSet(false, true)) {
+            L.i { "[GroupUtil] syncAllGroupAndAllGroupMembers already in flight, skipping forceFetch=$forceFetch" }
+            return@coroutineScope
+        }
         try {
             if (forceFetch || userManager.getUserData()?.syncedGroupAndMembers == false) {
                 val groups = groupRepo.getGroups()
@@ -161,6 +172,8 @@ class GroupUtil @Inject constructor(
         } catch (e: Exception) {
             emitGetGroupsStatusUpdate(false, emptyList())
             L.e(e) { "[GroupUtil] syncAllGroupAndAllGroupMembers fail:" }
+        } finally {
+            fullSyncInFlight.set(false)
         }
     }
 

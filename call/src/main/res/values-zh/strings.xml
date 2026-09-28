@@ -84,7 +84,6 @@
     <string name="call_params_startcall_exception_tip">会议连接参数异常</string>
     <string name="call_proxy_turn_required_tip">当前代理不支持通话。请更新代理地址，或关闭代理后再试。</string>
     <string name="call_service_node_dashboard_title">会议服务设置</string>
-    <string name="call_rating_feedback_no_choice_tip">请给出评分</string>
     <string name="call_rating_feedback_title">请评价您的通话质量</string>
     <string name="call_rating_feedback_sub">您的回答将保持匿名，我们会用它来帮助提升通话体验</string>
     <string name="call_rating_level_very_bad">非常差</string>

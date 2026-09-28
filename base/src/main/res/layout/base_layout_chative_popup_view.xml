@@ -5,15 +5,18 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    app:cardBackgroundColor="@color/bg.popup"
+    android:minWidth="180dp"
+    app:cardBackgroundColor="@color/bg_modal"
     app:cardCornerRadius="8dp"
     app:cardElevation="4dp"
     tools:ignore="ResourceName">
 
+    <!-- 4dp vertical padding = the library's panel caps. -->
     <LinearLayout
         android:orientation="vertical"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:paddingVertical="4dp">
 
         <TextView
             android:layout_marginStart="16dp"

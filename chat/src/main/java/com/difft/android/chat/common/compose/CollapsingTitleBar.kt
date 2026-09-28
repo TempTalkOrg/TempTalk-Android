@@ -24,14 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 
-/** Right-hand slot of [CollapsingTitleBar]. Icon and Text share one slot so swapping keeps layout stable. */
+/**
+ * Right-hand slot of [CollapsingTitleBar]. Icon and Text share one slot so swapping keeps layout
+ * stable; both are tinted `icon`, like the back button.
+ */
 sealed interface TitleBarAction {
     data class Icon(@DrawableRes val iconRes: Int, val onClick: () -> Unit) : TitleBarAction
     data class Text(val label: String, val onClick: () -> Unit) : TitleBarAction
@@ -72,7 +72,7 @@ fun CollapsingTitleBar(
                 .clickable { onBack() }
                 .padding(ICON_PADDING)
                 .size(DifftTheme.spacing.iconMedium),
-            tint = DifftTheme.colors.textPrimary
+            tint = DifftTheme.colors.icon
         )
 
         // The Box keeps the weighted slot alive while the title is hidden; AnimatedVisibility drops
@@ -87,7 +87,7 @@ fun CollapsingTitleBar(
             ) {
                 Text(
                     text = title,
-                    style = titleStyle,
+                    style = DifftTheme.typography.h5,
                     color = DifftTheme.colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -114,8 +114,8 @@ fun CollapsingTitleBar(
 
                 is TitleBarAction.Text -> Text(
                     text = action.label,
-                    style = actionTextStyle,
-                    color = DifftTheme.colors.textInfo,
+                    style = DifftTheme.typography.p2,
+                    color = DifftTheme.colors.icon,
                     modifier = Modifier
                         .clickable { action.onClick() }
                         .padding(horizontal = ICON_PADDING, vertical = ACTION_TEXT_VERTICAL_PADDING)
@@ -126,9 +126,6 @@ fun CollapsingTitleBar(
         }
     }
 }
-
-private val titleStyle = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Medium)
-private val actionTextStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal)
 
 private const val ANIM_MS = 160
 private val BAR_HEIGHT = 52.dp

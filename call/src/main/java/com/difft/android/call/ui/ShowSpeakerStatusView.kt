@@ -20,11 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.R
@@ -85,14 +81,8 @@ fun ShowSpeakerStatusView(participant: Participant, displayName: String, speakin
 
         Text(
             text = StringUtil.truncateWithEllipsis(displayName, PARTICIPANT_NAME_MAX_LENGTH),
-            // SF/P4
-            style = TextStyle(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-                fontFamily = FontFamily.Default,
-                fontWeight = FontWeight(400),
-                color = DifftTheme.colors.textPrimary,
-            )
+            style = DifftTheme.typography.p4,
+            color = DifftTheme.colors.textPrimary,
         )
     }
 }

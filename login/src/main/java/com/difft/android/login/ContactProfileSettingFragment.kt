@@ -20,11 +20,12 @@ import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelec
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.base.widget.WaitDialogHandle
+import com.difft.android.base.widget.waitDialogHandle
 import com.difft.android.chat.common.AvatarPickTempCleaner
 import com.difft.android.chat.common.AvatarUtil
 import com.difft.android.login.databinding.ActivityContactProfileSettingBinding
@@ -76,19 +77,19 @@ class ContactProfileSettingFragment : Fragment() {
     private var _binding: ActivityContactProfileSettingBinding? = null
     private val binding get() = _binding!!
 
+    /**
+     * This screen's own claim on the wait dialog: profile save and the sign-in that precedes it are
+     * one flow, and in dual-pane mode a sibling Fragment shares the Activity. Bound to the view
+     * lifecycle, so it is released when this view goes away.
+     */
+    private lateinit var profileWait: WaitDialogHandle
+
     private val mViewModel: ContactProfileSettingViewModel by viewModels()
     private val mLoginViewModel: LoginViewModel by viewModels()
 
     private val from: Int by lazy {
         arguments?.getInt(ARG_FROM, -1) ?: -1
     }
-
-    val token: String by lazy {
-        (userManager.getUserData()?.microToken ?: "")
-    }
-
-    @Inject
-    lateinit var userManager: UserManager
 
     @Inject
     lateinit var activityProvider: ActivityProvider
@@ -137,6 +138,7 @@ class ContactProfileSettingFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        profileWait = waitDialogHandle()
         initView()
         startObserve()
     }
@@ -303,11 +305,11 @@ class ContactProfileSettingFragment : Fragment() {
         setProfileResultData.observe(viewLifecycleOwner) {
             when (it.status) {
                 Status.LOADING -> {
-                    binding.btnDone.isLoading = true
+                    profileWait.show()
                 }
 
                 Status.SUCCESS -> {
-                    binding.btnDone.isLoading = false
+                    profileWait.dismiss()
                     // Avatar is on the server now — drop the plaintext compress/crop temp
                     // used for upload (no-op for random-avatar files or gallery originals).
                     context?.let { ctx -> AvatarPickTempCleaner.deleteUploadedTemp(ctx, mAvatarFilePath) }
@@ -324,7 +326,7 @@ class ContactProfileSettingFragment : Fragment() {
                 }
 
                 Status.ERROR -> {
-                    binding.btnDone.isLoading = false
+                    profileWait.dismiss()
                     it.exception?.errorMsg?.let { error ->
                         ToastUtil.show(error)
                     }
@@ -340,9 +342,10 @@ class ContactProfileSettingFragment : Fragment() {
     private fun LoginViewModel.observeSignIn() =
         signInLiveData.observe(viewLifecycleOwner) {
             when (it.status) {
-                Status.LOADING -> binding.btnDone.isLoading = true
+                Status.LOADING -> profileWait.show()
                 Status.SUCCESS -> {
-                    binding.btnDone.isLoading = false
+                    // No release here: setProfile is the next leg of the same flow and its loading
+                    // state reaches the same handle, so the modal stays up instead of blinking.
                     mViewModel.setProfile(
                         context = requireActivity(),
                         filePath = mAvatarFilePath,
@@ -352,7 +355,7 @@ class ContactProfileSettingFragment : Fragment() {
                 }
 
                 Status.ERROR -> {
-                    binding.btnDone.isLoading = false
+                    profileWait.dismiss()
                     if (it.exception?.errorCode == DIFFERENT_ACCOUNT_LOGIN_ERROR_CODE) {
                         showDifferentAccountLoginDialog()
                     } else {

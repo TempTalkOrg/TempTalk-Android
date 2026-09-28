@@ -25,7 +25,7 @@
             android:background="@null"
             android:padding="12dp"
             android:src="@drawable/chative_ic_back"
-            android:tint="@color/t.primary" />
+            android:tint="@color/icon" />
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_title"

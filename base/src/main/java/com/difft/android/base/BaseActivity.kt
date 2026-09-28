@@ -3,6 +3,7 @@ package com.difft.android.base
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.Display
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.difft.android.base.log.lumberjack.L
@@ -10,6 +11,7 @@ import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.EdgeToEdgeUtils.applySystemBarsPadding
 import com.difft.android.base.utils.EdgeToEdgeUtils.setupEdgeToEdge
 import com.difft.android.base.utils.LanguageUtils
+import com.difft.android.base.utils.OrientationDisplayWatcher
 import com.difft.android.base.utils.OrientationPolicy
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -33,9 +35,17 @@ abstract class BaseActivity : AppCompatActivity() {
     // clobbered by the fold/unfold re-apply.
     private var policyAppliedOrientation: Int? = null
 
+    // Display-level replay trigger for the orientation policy: the one callback that still
+    // fires when the OS letterboxes this activity instead of relaunching it or delivering
+    // onConfigurationChanged. Filtering (alive, not PiP, host display only, display on) lives
+    // in the watcher so the call activity, which is not a BaseActivity, applies the same rules.
+    private val orientationDisplayWatcher = OrientationDisplayWatcher(this) { display ->
+        reapplyOrientationPolicyIfOwned(display)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Pre-super: setRequestedOrientation post-super on API >= 26 can throw for
-        // translucent activities. Safe here — OrientationPolicy reads only resources.
+        // translucent activities. Safe here — OrientationPolicy reads only display metrics.
         if (shouldApplyOrientationPolicy()) {
             policyAppliedOrientation = OrientationPolicy.applyTo(this)
         }
@@ -118,6 +128,18 @@ abstract class BaseActivity : AppCompatActivity() {
      */
     protected open fun shouldApplyHorizontalPadding(): Boolean = true
 
+    override fun onStart() {
+        super.onStart()
+        if (shouldApplyOrientationPolicy()) {
+            orientationDisplayWatcher.start()
+        }
+    }
+
+    override fun onStop() {
+        orientationDisplayWatcher.stop()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         L.i { "[BaseActivity]${javaClass.name} Activity onResume cost: ${System.currentTimeMillis() - activityStartTimestamp}" }
@@ -137,22 +159,14 @@ abstract class BaseActivity : AppCompatActivity() {
      *
      * Most activities declare enough `configChanges` keys that a fold/unfold does NOT recreate
      * them, so without this they keep whatever the FOLDED posture decided — on a book foldable
-     * whose folded smallestScreenWidthDp is < 600dp that leaves every already-open screen
-     * portrait-locked after unfolding, and `values-sw600dp/orientation.xml` never takes effect.
+     * whose folded display is < 600dp that leaves every already-open screen portrait-locked
+     * after unfolding.
      *
      * [OrientationPolicy.applyTo] is idempotent (it early-returns when the target already
-     * matches), so this is silent and a no-op for every configuration change that does not
-     * cross the sw600dp bucket.
-     *
-     * `newConfig` is deliberately NOT forwarded: `applyTo` resolves
-     * `R.bool.force_portrait_orientation` from `resources`, which the framework has already
-     * re-pointed at the new configuration by the time this callback runs. The locale override
-     * [attachBaseContext] installs via `LanguageUtils.createConfiguredContext` does not pin the
-     * size fields (AppCompat re-derives overrides as a delta against a reference context, and
-     * only changed fields — locale, fontScale — land in that delta), so reading the
-     * config-qualified resource here is correct. Do not swap it for a hand-rolled
-     * `newConfig.smallestScreenWidthDp >= 600` check, which would duplicate the qualifier that
-     * `values-sw600dp/orientation.xml` already owns.
+     * matches) and reads the DISPLAY, not `newConfig`: a configuration change that only reshapes
+     * our window (letterbox, split-screen, freeform resize) leaves the target unchanged, so this
+     * is silent for everything but a real display change. [orientationDisplayWatcher] covers the
+     * display changes the window manager never reports to this activity at all.
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -179,11 +193,11 @@ abstract class BaseActivity : AppCompatActivity() {
      * screen-share landscape lock), the policy backs off until that screen restores a
      * policy-written value.
      */
-    private fun reapplyOrientationPolicyIfOwned() {
+    private fun reapplyOrientationPolicyIfOwned(display: Display? = null) {
         if (!shouldApplyOrientationPolicy()) return
         val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
         if (owned) {
-            policyAppliedOrientation = OrientationPolicy.applyTo(this)
+            policyAppliedOrientation = OrientationPolicy.applyTo(this, display)
         }
     }
 
@@ -192,9 +206,10 @@ abstract class BaseActivity : AppCompatActivity() {
      * on all sizes, or manage orientation themselves (camera, PiP, etc.).
      * When false, BaseActivity leaves `requestedOrientation` untouched.
      *
-     * Note: invoked before `super.onCreate()` (and again from [onConfigurationChanged]) —
-     * overrides must return a constant. Hilt-injected fields and `savedInstanceState` are
-     * not yet available at the pre-super call.
+     * Note: invoked before `super.onCreate()` (and again from [onStart], [onConfigurationChanged],
+     * [onPictureInPictureModeChanged] and the display watcher's replay) — overrides must return a
+     * constant. Hilt-injected fields and `savedInstanceState` are not yet available at the
+     * pre-super call.
      */
     protected open fun shouldApplyOrientationPolicy(): Boolean = true
 }

@@ -116,7 +116,12 @@ class ChativePopupView @JvmOverloads constructor(
                     val iconColor = item.iconColor ?: ContextCompat.getColor(context, R.color.icon)
                     ImageViewCompat.setImageTintList(itemBinding.imageviewIcon, ColorStateList.valueOf(iconColor))
 
-                    itemBinding.textviewLabel.setTextColor(item.textColor ?: iconColor)
+                    // Label defaults to the text token; an item that tints its icon (destructive
+                    // rows pass `error`) still carries that colour through to the label.
+                    val labelColor = item.textColor
+                        ?: item.iconColor
+                        ?: ContextCompat.getColor(context, R.color.t_primary)
+                    itemBinding.textviewLabel.setTextColor(labelColor)
 
                     itemBinding.root.setOnClickListener(item.onClickListener)
                     itemBinding.root

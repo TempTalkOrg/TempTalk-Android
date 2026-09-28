@@ -1,0 +1,96 @@
+package com.difft.android.chat.translate
+
+import com.difft.android.chat.translate.backend.TranslateBackend
+import com.difft.android.chat.translate.backend.TranslateBackendException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
+
+/**
+ * Scriptable [TranslateBackend] for `:chat` tests.
+ *
+ * It replaces the ML Kit static-factory mocking these tests used to need: the engine and the model
+ * store now talk to this interface, so nothing in `:chat` — production or test — depends on Google
+ * code, which is the property the F-Droid channel relies on.
+ */
+class FakeTranslateBackend : TranslateBackend {
+
+    override var isSupported: Boolean = true
+
+    // --- identifyLanguage ---------------------------------------------------
+
+    /** The answer. Null is "no conclusion", which is what drives the engine's char-ratio fallback. */
+    var identifyResult: String? = null
+    var identifyError: Throwable? = null
+    var identifyCount = 0
+
+    // --- translate ----------------------------------------------------------
+
+    var translateResult: String = ""
+    var translateError: Throwable? = null
+
+    /** "$source-$target" for every [translate] call, in order. */
+    val translatedPairs = mutableListOf<String>()
+
+    // --- models -------------------------------------------------------------
+
+    var modelOnDevice: Boolean = false
+    var isModelDownloadedCount = 0
+
+    /** How the next [downloadModel] ends. */
+    var downloadOutcome: Outcome = Outcome.Never
+    var downloadCount = 0
+
+    // --- clients ------------------------------------------------------------
+
+    /** "$source-$target" for every [warmUp] call, in order. */
+    val warmedPairs = mutableListOf<String>()
+    var releaseCount = 0
+
+    sealed interface Outcome {
+        /** Never resolves, so the caller's download stays in flight for the whole test. */
+        data object Never : Outcome
+        data object Success : Outcome
+        data class Fails(val kind: TranslateBackendException.Kind) : Outcome
+
+        /**
+         * The engine abandoned the attempt. Surfaces as a coroutine cancellation, which is exactly
+         * how the ML Kit backend reports a cancelled Task.
+         */
+        data object Cancelled : Outcome
+    }
+
+    override suspend fun identifyLanguage(text: String): String? {
+        identifyCount++
+        identifyError?.let { throw it }
+        return identifyResult
+    }
+
+    override suspend fun translate(text: String, sourceCode: String, targetCode: String): String {
+        translatedPairs += "$sourceCode-$targetCode"
+        translateError?.let { throw it }
+        return translateResult
+    }
+
+    override suspend fun isModelDownloaded(model: ModelId): Boolean {
+        isModelDownloadedCount++
+        return modelOnDevice
+    }
+
+    override suspend fun downloadModel(model: ModelId) {
+        downloadCount++
+        when (val outcome = downloadOutcome) {
+            Outcome.Never -> awaitCancellation()
+            Outcome.Success -> Unit
+            Outcome.Cancelled -> throw CancellationException("backend abandoned the download")
+            is Outcome.Fails -> throw TranslateBackendException(outcome.kind)
+        }
+    }
+
+    override suspend fun warmUp(sourceCode: String, targetCode: String) {
+        warmedPairs += "$sourceCode-$targetCode"
+    }
+
+    override fun releaseClients() {
+        releaseCount++
+    }
+}

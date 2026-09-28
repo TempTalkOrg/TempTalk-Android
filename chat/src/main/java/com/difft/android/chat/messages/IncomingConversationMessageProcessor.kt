@@ -17,6 +17,7 @@ class IncomingConversationMessageProcessor @Inject constructor(
     private val webSocket: AppWebSocketHelper,
     private val dbRoomStore: DBRoomStore,
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
+    private val priorConversationReporter: PriorConversationReporter,
 ) {
     private val cache = HashMap<Long, ConversationPreviewWrapper>()
     suspend fun income(conversationPreviewWrapper: ConversationPreviewWrapper, requestId: Long) {
@@ -87,5 +88,7 @@ class IncomingConversationMessageProcessor @Inject constructor(
         }
         cache.clear()
         sendAck(requestId)
+        // Report the open chat so the server delivers its backlog first.
+        priorConversationReporter.onReplayStarted()
     }
 }

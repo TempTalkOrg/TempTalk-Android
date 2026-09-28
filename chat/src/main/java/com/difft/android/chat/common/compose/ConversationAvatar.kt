@@ -8,6 +8,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.difft.android.base.ui.avatar.AvatarLetterSize
 import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.common.GroupAvatarView
 import com.difft.android.network.group.GroupAvatarData
@@ -23,12 +24,43 @@ fun ContactAvatar(
     contactor: ContactorModel,
     size: Dp,
     modifier: Modifier = Modifier,
-    letterTextSizeDp: Int = 22,
+    letterTextSizeDp: Int = AvatarLetterSize.DEFAULT_LETTER_TEXT_SIZE_DP,
 ) {
     val sizePx = with(LocalDensity.current) { size.roundToPx() }
     AndroidView(
         factory = { ctx -> AvatarView(ctx) },
         update = { view -> view.setAvatar(contactor, letterTextSizeDp, sizePx) },
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+    )
+}
+
+/**
+ * Letter-only avatar for callers with no [ContactorModel]. Same AvatarView chain as
+ * [ContactAvatar], letter branch only; [id] seeds the background colour.
+ */
+@Composable
+fun LetterAvatar(
+    firstLetter: String?,
+    id: String,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    letterTextSizeDp: Int = AvatarLetterSize.DEFAULT_LETTER_TEXT_SIZE_DP,
+) {
+    val sizePx = with(LocalDensity.current) { size.roundToPx() }
+    AndroidView(
+        factory = { ctx -> AvatarView(ctx) },
+        update = { view ->
+            view.setAvatar(
+                url = null,
+                key = null,
+                firstLetter = firstLetter,
+                id = id,
+                letterTextSizeDp = letterTextSizeDp,
+                targetSizePx = sizePx,
+            )
+        },
         modifier = modifier
             .size(size)
             .clip(CircleShape)

@@ -127,7 +127,7 @@ class AccountFragment : Fragment() {
             ComposeDialogManager.showWait(requireContext(), "")
             try {
                 withContext(Dispatchers.IO) {
-                    chatHttpClient.httpService.fetchLogout((userManager.getUserData()?.baseAuth ?: ""))
+                    chatHttpClient.httpService.fetchLogout()
                 }
                 withContext(Dispatchers.Main) {
                     ComposeDialogManager.dismissWait()
@@ -154,7 +154,7 @@ class AccountFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    settingRepo.getProfile((userManager.getUserData()?.microToken ?: ""))
+                    settingRepo.getProfile()
                 }
 
                 withContext(Dispatchers.Main) {
@@ -190,13 +190,12 @@ class AccountFragment : Fragment() {
      */
     private fun changeIdSearchSetting(enabled: Boolean) {
         val idSwitchRule = if (enabled) 1 else 0
-        val token = (userManager.getUserData()?.microToken ?: "")
         ComposeDialogManager.showWait(requireActivity(), "")
         binding.switchCanIdSearch.guardWhile(
             viewLifecycleOwner.lifecycleScope.launch {
                 try {
                     val result = withContext(Dispatchers.IO) {
-                        settingRepo.setProfile(token, searchByCustomUid = idSwitchRule)
+                        settingRepo.setProfile(searchByCustomUid = idSwitchRule)
                     }
                     if (!isAdded || view == null) return@launch
                     if (result.status != 0) {

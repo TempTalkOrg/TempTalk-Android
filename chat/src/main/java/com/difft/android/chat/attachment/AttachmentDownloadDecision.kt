@@ -18,6 +18,39 @@ enum class AttachmentDownloadAction {
     READY
 }
 
+/** Why a tap on an attachment may not proceed. The UI maps each reason to its own toast. */
+enum class AttachmentTapBlockedReason {
+    /** The server no longer serves the file (see [AttachmentDownloadDecision.isExpired]). */
+    EXPIRED,
+
+    /** The bytes are still arriving; the bubble already shows the progress. */
+    DOWNLOADING
+}
+
+/**
+ * What a tap on an attachment bubble must do. Decided in ONE place ([AttachmentDownloadDecision.tapAction])
+ * for every surface that opens attachments — chat list, forward detail, confidential forwards — so
+ * that no entry can reach [Open] (and, for a confidential message, the view receipt and the burn)
+ * without the same checks.
+ */
+sealed interface AttachmentTapAction {
+    /** Nothing may follow; the user is told why. No receipt, no delete. */
+    data class Blocked(val reason: AttachmentTapBlockedReason) : AttachmentTapAction
+
+    /** Start or retry the download silently: a failed transfer, or a large file the user asked for. */
+    data object Download : AttachmentTapAction
+
+    /**
+     * The row says nothing is wrong yet no readable file is here — a transfer that died with the
+     * process, or a file that moved or vanished. Re-fetch (the job's first act is the legacy-address
+     * rescue) and tell the user the file is being prepared.
+     */
+    data object Rescue : AttachmentTapAction
+
+    /** A readable file is on disk: open the preview / viewer / detail. */
+    data object Open : AttachmentTapAction
+}
+
 /**
  * The single rule for "does this bubble need bytes?".
  *
@@ -28,6 +61,38 @@ enum class AttachmentDownloadAction {
  */
 object AttachmentDownloadDecision {
 
+    /** Progress-map sentinel published by the download job for a terminal, non-retryable expiry. */
+    const val PROGRESS_EXPIRED = -2
+
+    /** Progress-map sentinel published by the download job for a retryable failure. */
+    const val PROGRESS_FAILED = -1
+
+    /**
+     * Whether the server has stopped serving this attachment for good. A live progress entry is the
+     * fresher signal and wins over the persisted status, same precedence every bubble uses.
+     */
+    fun isExpired(status: Int, progress: Int?): Boolean =
+        if (progress != null) progress == PROGRESS_EXPIRED else status == AttachmentStatus.EXPIRED.code
+
+    /** Whether the last download attempt failed in a way a retry can fix. */
+    fun isFailed(status: Int, progress: Int?): Boolean =
+        if (progress != null) progress == PROGRESS_FAILED else status == AttachmentStatus.FAILED.code
+
+    /**
+     * The tap policy, in precedence order: expired and in-flight transfers are dead ends; a failed
+     * transfer retries; a readable file opens; a large file not yet fetched starts its download on
+     * request; anything else is a file that should be here and is not — rescue it. A readable file
+     * is the authority for [AttachmentTapAction.Open], never the persisted status.
+     */
+    fun tapAction(status: Int, progress: Int?, isFileValid: Boolean, sizeBytes: Int): AttachmentTapAction = when {
+        isExpired(status, progress) -> AttachmentTapAction.Blocked(AttachmentTapBlockedReason.EXPIRED)
+        isTransferInFlight(progress) -> AttachmentTapAction.Blocked(AttachmentTapBlockedReason.DOWNLOADING)
+        isFailed(status, progress) -> AttachmentTapAction.Download
+        isFileValid -> AttachmentTapAction.Open
+        shouldPromptManualDownload(isFileValid, sizeBytes, progress) -> AttachmentTapAction.Download
+        else -> AttachmentTapAction.Rescue
+    }
+
     fun downloadAction(isFileValid: Boolean, progress: Int?): AttachmentDownloadAction = when {
         isFileValid -> AttachmentDownloadAction.READY
         progress == null -> AttachmentDownloadAction.AUTO_DOWNLOAD
@@ -35,16 +100,27 @@ object AttachmentDownloadDecision {
     }
 
     /**
-     * Whether this bubble's own OUTGOING transfer is still running.
+     * Whether the transfer running for this copy is an UPLOAD.
      *
-     * [downloadAction] cannot answer this and must not try: for a message sent from this device the
-     * file is staged at the address the bubble reads BEFORE the upload starts, so `isFileValid` is
-     * true for the whole transfer and the download rule correctly calls it READY. Only the progress
-     * emitted under this copy's key distinguishes "uploading" from "uploaded" — which is also why an
-     * upload in flight must not let a bubble repair the row's status to SUCCESS.
+     * The file decides, not the message's direction: an outgoing send stages its file at the address
+     * the bubble reads BEFORE the upload starts and keeps it there until the upload lands, while a
+     * download never exposes a readable file before it is complete and verified. So a readable file
+     * with progress in flight can only be an upload. [downloadAction] cannot answer this and must not
+     * try — it sees the staged file and correctly calls the copy READY — which is also why an upload
+     * in flight must not let a bubble repair the row's status to SUCCESS.
+     *
+     * Direction is deliberately not an input. A message's id encodes the SENDING device, and an own
+     * message that arrived as a sync from another device (or came across in a data migration) is
+     * still a copy this device has to fetch, exactly like anyone else's.
      */
-    fun isUploadInFlight(isCurrentDeviceSend: Boolean, progress: Int?): Boolean =
-        isCurrentDeviceSend && progress != null && progress in 0..99
+    fun isUploadInFlight(isFileValid: Boolean, progress: Int?): Boolean =
+        isFileValid && isTransferInFlight(progress)
+
+    /**
+     * Whether ANY transfer (download or upload) is currently running for this copy. While it runs the
+     * bubble shows the progress bar and hides its open button, so a tap must not open or "rescue".
+     */
+    fun isTransferInFlight(progress: Int?): Boolean = progress != null && progress in 0..99
 
     /**
      * Whether to replace the automatic download with a "tap to download" prompt. Same authority: a
@@ -78,13 +154,10 @@ object AttachmentDownloadDecision {
             status == AttachmentStatus.SUCCESS.code
 
     /**
-     * Whether an [AttachmentDownloadAction.AUTO_DOWNLOAD] verdict should actually enqueue the job for
-     * THIS bubble.
-     *
-     * Own sends normally have nothing to fetch — except when [shouldRescueMissingFile] applies: the
-     * row says the bytes were transferred and they are not at this address, so the file moved
-     * (pre-per-copy addressing) or is gone, and the job's local rescue is what brings it back.
+     * Whether a bubble with NO readable file should render the download-side states (expired, failed,
+     * tap-to-download) at all, as opposed to a bubble whose bytes are here. The one case this keeps
+     * apart: a row marked FAILED while its staged file is still present is a failed UPLOAD, which the
+     * message-level send state reports; it must not be drawn as a download waiting for a retry.
      */
-    fun shouldAutoDownload(isCurrentDeviceSend: Boolean, isFileValid: Boolean, status: Int, progress: Int?): Boolean =
-        !isCurrentDeviceSend || shouldRescueMissingFile(isFileValid, status, progress)
+    fun needsFetch(isFileValid: Boolean): Boolean = !isFileValid
 }

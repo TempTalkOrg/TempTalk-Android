@@ -21,6 +21,7 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.collectAsState
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -39,6 +40,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.integration.webp.WebpHeaderParser
 import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
+import com.difft.android.PushScreenShotSendJobFactory
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
@@ -53,6 +55,7 @@ import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.normalizeNewlines
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
@@ -250,6 +253,9 @@ class ChatMessageInputFragment : Fragment() {
 
     @Inject
     lateinit var pushTextSendJobFactory: PushTextSendJobFactory
+
+    @Inject
+    lateinit var pushScreenShotSendJobFactory: PushScreenShotSendJobFactory
 
     @Inject
     lateinit var pushReactionSendJobFactory: PushReactionSendJobFactory
@@ -635,21 +641,29 @@ class ChatMessageInputFragment : Fragment() {
             }
             if (binding.combineForward.isVisible) {
                 binding.combineForward.setContent {
-                    val state = chatViewModel.selectMessagesState.collectAsState()
-                    CombineForwardBar(
-                        stateData = state.value,
-                        onForwardClick = {
-                            chatViewModel.onForwardClick()
-                        },
-                        onCopyClick = {
-                            chatViewModel.onCopyClick()
-                        },
-                        onSaveClick = {
-                            chatViewModel.onSaveSelectedMessages()
-                        },
-                        onRecallClick = {
-                            chatViewModel.onBatchRecallClick()
-                        })
+                    // The bar is a raw ComposeView in the layout, so it needs its own theme host:
+                    // LocalDifftExtendedColors otherwise falls back to the light palette in dark
+                    // mode. It is embedded in the input area and owns no window.
+                    DifftTheme(
+                        darkTheme = isSystemInDarkTheme(),
+                        applyWindowBackground = false
+                    ) {
+                        val state = chatViewModel.selectMessagesState.collectAsState()
+                        CombineForwardBar(
+                            stateData = state.value,
+                            onForwardClick = {
+                                chatViewModel.onForwardClick()
+                            },
+                            onCopyClick = {
+                                chatViewModel.onCopyClick()
+                            },
+                            onSaveClick = {
+                                chatViewModel.onSaveSelectedMessages()
+                            },
+                            onRecallClick = {
+                                chatViewModel.onBatchRecallClick()
+                            })
+                    }
                 }
             }
         }.launchIn(viewLifecycleOwner.lifecycleScope)
@@ -1901,7 +1915,6 @@ class ChatMessageInputFragment : Fragment() {
                 val response = withContext(Dispatchers.IO) {
                     chatHttpClient.httpService
                         .fetchShareConversationConfig(
-                            (globalServices.userManager.getUserData()?.microToken ?: ""),
                             GetConversationShareRequestBody(
                                 listOf(messageArchiveManager.conversationParams(chatViewModel.forWhat.id)),
                                 true
@@ -2001,9 +2014,7 @@ class ChatMessageInputFragment : Fragment() {
             // Input field: bg1 with line border
             binding.clInputContent.setBackgroundResource(R.drawable.chat_msg_input_bg_confidential)
             // Action icon containers: bg1 background (no border)
-            binding.clContact.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential)
-            binding.clAttachment.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential)
-            binding.clAtImage.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential)
+            actionIconContainers().forEach { it.setBackgroundResource(R.drawable.chat_msg_icon_bg_confidential) }
         } else {
             val bg1Color = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1)
             // Restore normal backgrounds
@@ -2013,11 +2024,18 @@ class ChatMessageInputFragment : Fragment() {
             // Input field: normal bg2 background
             binding.clInputContent.setBackgroundResource(R.drawable.chat_msg_input_field_bg)
             // Action icon containers: normal bg2 background
-            binding.clContact.setBackgroundResource(R.drawable.chat_msg_input_bg)
-            binding.clAttachment.setBackgroundResource(R.drawable.chat_msg_input_bg)
-            binding.clAtImage.setBackgroundResource(R.drawable.chat_msg_input_bg)
+            actionIconContainers().forEach { it.setBackgroundResource(R.drawable.chat_msg_input_bg) }
         }
     }
+
+    /** Every 64dp icon container in the more-actions grid; keep in sync with chat_fragment_input.xml. */
+    private fun actionIconContainers(): List<View> = listOf(
+        binding.clMedia,
+        binding.clGif,
+        binding.clAtImage,
+        binding.clAttachment,
+        binding.clContact,
+    )
 
     private fun showRecallDialog(message: ChatMessage) {
         ComposeDialogManager.showMessageDialog(
@@ -2286,7 +2304,6 @@ class ChatMessageInputFragment : Fragment() {
         timeStamp: Long = System.currentTimeMillis(),
         messageId: String = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}",
         attachmentInfo: AttachmentInfo? = null,
-        screenShot: ScreenShot? = null
     ) {
         val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
 
@@ -2363,8 +2380,7 @@ class ChatMessageInputFragment : Fragment() {
                 normalizedMentions,
                 atPersonsString,
                 reactions.toMutableList(),
-                screenShot,
-                sharedContacts.toMutableList(),
+                sharedContact = sharedContacts.toMutableList(),
                 playStatus = if (attachmentInfo?.isAudioMessage == true) AudioMessageManager.PLAY_STATUS_NOT_PLAY else 0
             )
 
@@ -2372,18 +2388,15 @@ class ChatMessageInputFragment : Fragment() {
 
             // Optimistic add so the sent message renders instantly. Recall/reaction add no bubble.
             if (reactions.isEmpty() && recall == null) {
-                // Drop the NEW MESSAGES divider for the rest of this page session, but ONLY when the
-                // user actually composed something (iOS clearUnreadMessagesIndicator hooks the
-                // input-toolbar send path only). A non-null screenShot means this call came from
-                // sendScreenshotNotification(), which fires automatically on screenshot detection —
-                // that must not consume the divider. Recalls and reactions are already excluded by
-                // the enclosing guard; they take a different, bubble-less path.
+                // Drop the NEW MESSAGES divider for the rest of this page session. Every call that
+                // reaches here is a message the user actually composed (iOS
+                // clearUnreadMessagesIndicator hooks the input-toolbar send path only); recalls and
+                // reactions are already excluded by the enclosing guard and take a different,
+                // bubble-less path.
                 //
                 // Called BEFORE the optimistic add so the emission it triggers already sees the
                 // cleared state instead of rendering the divider one last time.
-                if (screenShot == null) {
-                    chatViewModel.clearNewMessageDivider()
-                }
+                chatViewModel.clearNewMessageDivider()
                 chatViewModel.addOneMessage(textMessage)
             }
 
@@ -2433,7 +2446,7 @@ class ChatMessageInputFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    ContactorUtil.fetchAddFriendRequest(requireContext(), (globalServices.userManager.getUserData()?.microToken ?: ""), chatViewModel.forWhat.id, sourceType, source, action)
+                    ContactorUtil.fetchAddFriendRequest(requireContext(), chatViewModel.forWhat.id, sourceType, source, action)
                 }
                 ComposeDialogManager.dismissWait()
                 if (response.status == 0) {
@@ -3194,19 +3207,37 @@ class ChatMessageInputFragment : Fragment() {
     /**
      * Send a screenshot notification message.
      * Called when a screenshot is detected.
+     *
+     * Deliberately NOT routed through [sendTextPush]: that path persists an outgoing row which, for
+     * a notice the user can neither see a status icon on nor resend, would surface as an unclearable
+     * "Send failed" chat-list tag when offline (issue #1265).
+     * [com.difft.android.chat.jobs.PushScreenShotSendJob] sends first and writes the local notice
+     * only once the server accepted it. The composer state (quote / forward / mentions / reactions /
+     * shared contacts) is deliberately absent — an automatic notice must never inherit a pending
+     * reply.
      */
     private fun sendScreenshotNotification() {
         val timeStamp = System.currentTimeMillis()
-        val messageId = "${timeStamp}${globalServices.myId.replace("+", "")}${DEFAULT_DEVICE_ID}"
-        val screenShot = ScreenShot(RealSource(globalServices.myId, 1, timeStamp, timeStamp))
-        // Set messageText for display in chat list preview and message bubble
-        val screenshotText = getString(R.string.chat_took_a_screen_shot, getString(R.string.you))
-        sendTextPush(
-            content = screenshotText,
-            timeStamp = timeStamp,
-            messageId = messageId,
-            screenShot = screenShot
+        val myId = globalServices.myId
+        val forWhat = if (isGroup) For.Group(chatViewModel.forWhat.id) else For.Account(chatViewModel.forWhat.id)
+        // Force mode to 0 when confidential is hidden (group limit or bot)
+        val messageMode = if (shouldHideConfidential) 0 else (chatSettingViewModel.currentConversationSet?.confidentialMode ?: 0)
+        val textMessage = TextMessage(
+            LocalMessageCreator.generateMessageId(timeStamp, myId, DEFAULT_DEVICE_ID),
+            For.Account(myId),
+            forWhat,
+            timeStamp,
+            timeStamp,
+            System.currentTimeMillis(),
+            SendType.Sending.rawValue,
+            chatSettingViewModel.getMessageExpirySeconds(),
+            0,
+            0,
+            messageMode,
+            getString(R.string.chat_took_a_screen_shot, getString(R.string.you)),
+            screenShot = ScreenShot(RealSource(myId, DEFAULT_DEVICE_ID, timeStamp, timeStamp)),
         )
+        ApplicationDependencies.getJobManager().add(pushScreenShotSendJobFactory.create(null, textMessage))
     }
 
     override fun onResume() {

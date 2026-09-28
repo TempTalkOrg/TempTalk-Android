@@ -8,7 +8,6 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -80,54 +79,43 @@ class VoiceMessageView @JvmOverloads constructor(
 
         binding.progressBar.visibility = View.GONE
         binding.tvDownloadHint.visibility = View.GONE
+        // A recycled holder may still carry the previous voice's play listener, which would make the
+        // control swallow taps meant for the bubble (expired toast, retry, tap-to-download). Start
+        // every bind unclickable; the ready path installs the listener again.
+        binding.playButton.setOnClickListener(null)
+        binding.playButton.isClickable = false
+        binding.playButton.isEnabled = true
 
         val progress = audioMessage.getAttachmentProgress()
         // Same readability authority as the other attachment widgets: structural (uncached) check on
         // the ciphertext, size-verified plaintext — a cached "exists" alone must not gate playback
         // nor feed the status repair below.
         val isFileValid = EncryptedAttachmentAccess.isReadable(attachmentPath, attachment.size)
-        val isCurrentDeviceSend = audioMessage.isMine && audioMessage.id.last().digitToIntOrNull() == DEFAULT_DEVICE_ID
-        // An outgoing upload stages its file at this exact address before it starts, so file presence
-        // says nothing about the transfer while it runs.
-        val isUploading = AttachmentDownloadDecision.isUploadInFlight(isCurrentDeviceSend, progress)
+        // The file decides the state, never the message's direction (see AttachmentDownloadDecision):
+        // a readable file with progress running is an upload; anything else is a copy to fetch.
+        val isUploading = AttachmentDownloadDecision.isUploadInFlight(isFileValid, progress)
         // A readable file is the authority on "downloaded"; repair a lagging status before the
         // branches below read it, so no branch can order a download for a file we have.
         if (isFileValid && !isUploading) AttachmentStatusRepair.markSuccessIfStale(attachment)
 
-        if (!isCurrentDeviceSend) {
+        if (AttachmentDownloadDecision.needsFetch(isFileValid)) {
             // Priority 1: Show expired view if file has expired
-            val isExpired = if (progress != null) {
-                progress == -2
-            } else {
-                attachment.status == AttachmentStatus.EXPIRED.code
-            }
-
-            if (isExpired) {
-                binding.tvDownloadHint.visibility = View.VISIBLE
-                binding.tvDownloadHint.text = context.getString(R.string.file_expired)
+            if (AttachmentDownloadDecision.isExpired(attachment.status, progress)) {
+                showHintInsteadOfWaveform(context.getString(R.string.file_expired))
                 return
             }
 
             // Priority 2: Show fail view if download failed
-            val isFailed = if (progress != null) {
-                progress == -1
-            } else {
-                attachment.status == AttachmentStatus.FAILED.code
-            }
-
-            if (isFailed) {
-                binding.tvDownloadHint.visibility = View.VISIBLE
-                binding.tvDownloadHint.text = context.getString(R.string.download_failed)
+            if (AttachmentDownloadDecision.isFailed(attachment.status, progress)) {
+                showHintInsteadOfWaveform(context.getString(R.string.download_failed))
                 return
             }
 
             // Priority 2: Show download prompt for files > 10M
             val fileSize = attachment.size
             if (AttachmentDownloadDecision.shouldPromptManualDownload(isFileValid, fileSize, progress)) {
-                // Show download prompt with file size (reuse fail view with different text)
-                binding.tvDownloadHint.visibility = View.VISIBLE
                 val fileSizeText = FileUtil.readableFileSize(fileSize.toLong())
-                binding.tvDownloadHint.text = context.getString(R.string.chat_tap_to_download) + " ($fileSizeText)"
+                showHintInsteadOfWaveform(context.getString(R.string.chat_tap_to_download) + " ($fileSizeText)")
                 return
             }
         }
@@ -136,7 +124,10 @@ class VoiceMessageView @JvmOverloads constructor(
         binding.audioWaveProgressBar.visibility = View.VISIBLE
         binding.playTime.visibility = View.VISIBLE
 
-        if (isFileValid && (isCurrentDeviceSend || attachment.status == AttachmentStatus.SUCCESS.code || progress == 100)) {
+        // A readable file is playable, upload in flight or not: the send stages the finished voice at
+        // this path before uploading, so the waveform, duration and play control come up at once
+        // (as the image bubble previews its file mid-upload) instead of a blank control with no listener.
+        if (isFileValid) {
             setupAudioView()
         }
 
@@ -146,11 +137,7 @@ class VoiceMessageView @JvmOverloads constructor(
             binding.progressBar.visibility = View.VISIBLE
             binding.progressBar.progress = progress ?: 0
         } else when (AttachmentDownloadDecision.downloadAction(isFileValid, progress)) {
-            AttachmentDownloadAction.AUTO_DOWNLOAD -> if (
-                AttachmentDownloadDecision.shouldAutoDownload(isCurrentDeviceSend, isFileValid, attachment.status, progress)
-            ) {
-                downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
-            }
+            AttachmentDownloadAction.AUTO_DOWNLOAD -> downloadAndSetupMediaPlayer(audioMessage, attachmentPath)
 
             AttachmentDownloadAction.SHOW_PROGRESS -> {
                 binding.progressBar.visibility = View.VISIBLE
@@ -172,6 +159,21 @@ class VoiceMessageView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         cancelSubscriptions()
         super.onDetachedFromWindow()
+    }
+
+    /**
+     * Expired / failed / tap-to-download: the status copy takes the waveform's slot and the duration
+     * goes away. The play button stays as a visual anchor but is inert — no bytes to play.
+     * Waveform and duration are INVISIBLE, not GONE: they keep the row's height, so the bubble does
+     * not shrink and grow as the attachment moves between states.
+     */
+    private fun showHintInsteadOfWaveform(hint: String) {
+        binding.playButton.visibility = View.VISIBLE
+        binding.playButton.isEnabled = false
+        binding.audioWaveProgressBar.visibility = View.INVISIBLE
+        binding.playTime.visibility = View.INVISIBLE
+        binding.tvDownloadHint.visibility = View.VISIBLE
+        binding.tvDownloadHint.text = hint
     }
 
     private fun setupSubscriptions() {
@@ -280,7 +282,9 @@ class VoiceMessageView @JvmOverloads constructor(
         if ((attachment.totalTime == 0L || attachment.amplitudes.isNullOrEmpty())) {
             L.d { "[VoiceMessageView] start extract Amplitudes" }
             binding.audioWaveProgressBar.setAmplitudes(emptyList())
-            binding.playTime.text = formatTime(0)
+            // A migrated row can carry the duration without a waveform: show what is known while the
+            // waveform is computed, instead of a zero that the extraction may never replace.
+            binding.playTime.text = formatTime(attachment.totalTime ?: 0)
             message?.let {
                 AudioAmplitudesHelper.extractAmplitudesFromAacFile(attachmentPath, it)
             }

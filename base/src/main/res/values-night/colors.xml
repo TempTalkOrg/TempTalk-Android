@@ -3,12 +3,11 @@
     <!--Brand Color & Function Color-->
     <color name="primary" tools:ignore="ResourceName">#056FFA</color>
     <color name="success" tools:ignore="ResourceName">#01BC6A</color>
-    <color name="warning" tools:ignore="ResourceName">#F84135</color>
+    <color name="warning" tools:ignore="ResourceName">#FFC814</color>
     <color name="error" tools:ignore="ResourceName">#F84135</color>
     <color name="line" tools:ignore="ResourceName">#474D57</color>
     <color name="icon" tools:ignore="ResourceName">#B7BDC6</color>
 
-    <color name="loading_secondary_icon" tools:ignore="ResourceName">@color/t.secondary</color>
     <color name="number_of_missing_missing_muted" tools:ignore="ResourceName">#474D57</color>
 
     <!--Text Color-->
@@ -36,12 +35,15 @@
     <color name="bg.disable" tools:ignore="ResourceName">#474D57</color>
     <color name="bg.tooltip" tools:ignore="ResourceName">#5E6673</color>
     <color name="bg.popup" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bg_modal" tools:ignore="ResourceName">#2B3139</color>
+    <color name="divider" tools:ignore="ResourceName">#2B3139</color>
     <color name="bg.blue" tools:ignore="ResourceName">#003366</color>
     <color name="bg.sky" tools:ignore="ResourceName">#003366</color>
 
-    <color name="bg" tools:ignore="ResourceName">#181A20</color>
-    <color name="bg.elevated" tools:ignore="ResourceName">#1E2329</color>
+    <color name="bg" tools:ignore="ResourceName">#0B0E11</color>
+    <color name="bg.elevated" tools:ignore="ResourceName">#181A20</color>
     <color name="bgpage_primary" tools:ignore="ResourceName">#0B0E11</color>
+    <color name="bgpage_secondary" tools:ignore="ResourceName">#0B0E11</color>
     <color name="bg5" tools:ignore="ResourceName">#181A20</color>
     <color name="border" tools:ignore="ResourceName">#2B3139</color>
 

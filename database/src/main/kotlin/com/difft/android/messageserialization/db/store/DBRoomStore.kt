@@ -88,9 +88,40 @@ class DBRoomStore @Inject constructor(
                     L.w { "[DBRoomStore] insertObject failed: ${e.stackTraceToString()}" }
                 }
             })
+        // The block above runs only when the row is created here, so a row that reached the DB another
+        // way (a migration importing local state) stays invisible forever: Saved Messages has no
+        // server-side counterpart to refill it and no messages to trigger a message-path update.
+        if (forWhat.id == globalServices.myId) repairSavedMessages(room)
         val endTime = System.currentTimeMillis()
         L.i { "[Message] createRoomIfNotExist took ${endTime - startTime}ms for room ${forWhat.id}" }
         return room
+    }
+
+    /**
+     * Re-assert the Saved Messages invariants on an existing row: it always has the favorites name, is
+     * always visible (`lastActiveTime != 0` is the conversation list's filter), and is never an empty
+     * room. Only what is missing is filled, so a recomputed `lastActiveTime` and a user-cleared
+     * `pinnedTime` are left alone, and a row that is already correct is not written at all.
+     */
+    private fun repairSavedMessages(room: RoomModel) {
+        val favoritesName = ResUtils.getString(R.string.chat_favorites)
+        val needsName = room.roomName.isNullOrEmpty()
+        val needsActiveTime = room.lastActiveTime == 0L
+        if (!needsName && !needsActiveTime && room.emptyRoomSince == null) return
+
+        if (needsName) room.roomName = favoritesName
+        if (needsActiveTime) room.lastActiveTime = System.currentTimeMillis()
+        room.emptyRoomSince = null
+        try {
+            wcdb.room.updateObject(
+                room,
+                arrayOf(DBRoomModel.roomName, DBRoomModel.lastActiveTime, DBRoomModel.emptyRoomSince),
+                DBRoomModel.roomId.eq(room.roomId),
+            )
+            L.i { "[DBRoomStore] repaired Saved Messages room (name=$needsName activeTime=$needsActiveTime)" }
+        } catch (e: Exception) {
+            L.w { "[DBRoomStore] Saved Messages repair failed: ${e.stackTraceToString()}" }
+        }
     }
 
     private fun findRoom(forWhat: For): RoomModel? = findRoom(forWhat.id)
@@ -250,6 +281,40 @@ class DBRoomStore @Inject constructor(
     fun getSaveToPhotos(roomId: String): Int? {
         return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.saveToPhotos
     }
+
+    /**
+     * Update the conversation-level auto-translate target (local only, never synced).
+     * @param roomId Conversation ID
+     * @param translateSetting 0: off, 1: Chinese, 2: English
+     */
+    fun updateTranslateSetting(roomId: String, translateSetting: Int) {
+        L.i { "[Translate] updateTranslateSetting id:$roomId translateSetting: $translateSetting" }
+        wcdb.room.updateValue(
+            translateSetting,
+            DBRoomModel.translateSetting,
+            DBRoomModel.roomId.eq(roomId)
+        )
+
+        // Notify UI refresh
+        RoomChangeTracker.trackRoom(roomId, RoomChangeType.REFRESH)
+    }
+
+    /**
+     * Read the conversation-level auto-translate target.
+     * @return 0: off (also for an unknown conversation), 1: Chinese, 2: English
+     */
+    fun getTranslateSetting(roomId: String): Int =
+        wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.translateSetting ?: 0
+
+    /**
+     * Distinct non-off auto-translate targets across every conversation, in one query.
+     * Used at startup to decide which translation models have to be on device.
+     */
+    fun getActiveTranslateTargets(): Set<Int> =
+        wcdb.room.getOneColumnInt(
+            DBRoomModel.translateSetting,
+            DBRoomModel.translateSetting.notEq(0)
+        ).filterNotNull().toSet()
 
     /**
      * 更新会话的 Critical Alert 状态

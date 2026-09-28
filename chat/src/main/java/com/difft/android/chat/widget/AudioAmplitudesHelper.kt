@@ -9,6 +9,7 @@ import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.chat.message.TextChatMessage
 import com.tencent.wcdb.base.Value
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -35,7 +36,7 @@ object AudioAmplitudesHelper {
             return
         }
 
-        val job = appScope.launch(Dispatchers.IO) {
+        val job = appScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             try {
                 AudioMessageManager.decryptIfNeeded(filePath, message)
 
@@ -163,7 +164,20 @@ object AudioAmplitudesHelper {
             }
         }
 
-        processingMessages[localId] = job
+        startIfUnclaimed(localId, job)
+    }
+
+    /**
+     * Claims the per-attachment slot before the job runs. One bubble is bound several times within
+     * milliseconds, and without this every bind starts its own extraction, so two of them decrypting
+     * to the same plaintext path truncate each other's file and all of them fail.
+     */
+    private fun startIfUnclaimed(localId: String, job: Job) {
+        if (processingMessages.putIfAbsent(localId, job) != null) {
+            job.cancel()
+            return
+        }
+        job.start()
     }
 
     fun release() {

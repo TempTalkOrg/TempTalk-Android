@@ -1,6 +1,5 @@
 package com.difft.android.chat.jobs
 
-import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sanitizeUrl
 
 import androidx.core.net.toUri
@@ -28,6 +27,11 @@ import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.chat.util.MediaUtil
 import com.difft.android.chat.util.SaveAttachmentUtil
+import com.difft.android.network.NetworkException
+import com.difft.android.network.auth.AuthTokenProvider
+import com.difft.android.network.auth.withInvalidTokenRetry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.difft.android.base.utils.Base64
 import com.difft.android.websocket.api.crypto.CryptoUtil
 import java.io.File
@@ -63,6 +67,8 @@ class DownloadAttachmentJob private constructor(
         val fileShareRepo: FileShareRepo
 
         val forwardAttachmentMigration: ForwardAttachmentMigration
+
+        val authTokenProvider: AuthTokenProvider
     }
 
     /**
@@ -265,23 +271,30 @@ class DownloadAttachmentJob private constructor(
         downloadTempFile.delete()
 
         try {
-            val fileShareRepo = EntryPointAccessors.fromApplication<EntryPoint>(context).fileShareRepo
-            val response = fileShareRepo.download(DownloadReq((globalServices.userManager.getUserData()?.microToken ?: ""), authorizedId, fileHash, "")).execute()
-
-            if (!response.isSuccessful) {
-                throw Exception("[DownloadAttachmentJob] download attachment fail: ${response.message()}")
+            val entryPoint = EntryPointAccessors.fromApplication<EntryPoint>(context)
+            val fileShareRepo = entryPoint.fileShareRepo
+            // Own IO dispatcher: Call.execute() blocks. A token rejected after the retry throws InvalidTokenException.
+            val envelope = withContext(Dispatchers.IO) {
+                entryPoint.authTokenProvider.withInvalidTokenRetry("attachmentDownload") { token ->
+                    val resp = fileShareRepo.download(DownloadReq(token, authorizedId, fileHash, "")).execute()
+                    if (!resp.isSuccessful) {
+                        throw NetworkException(resp.code(), "[DownloadAttachmentJob] download attachment fail: ${resp.message()}")
+                    }
+                    resp.body()
+                        ?: throw Exception("[DownloadAttachmentJob] download response body is null, messageId: $messageId")
+                }
             }
 
             // Check response status code
-            val responseStatus = response.body()?.status
-                ?: throw Exception("[DownloadAttachmentJob] download response body is null, messageId: $messageId")
-            when (responseStatus) {
+            when (val responseStatus = envelope.status) {
                 0 -> {
                     // OK, continue with download
                 }
-                2 -> {
-                    // NO_PERMISSION - File has expired
-                    L.w { "[DownloadAttachmentJob] file has expired (status code: 2)" }
+                in EXPIRED_STATUS_CODES -> {
+                    // Terminal: the server no longer serves this file (authorization expired after 30
+                    // days, or the storage object was purged after 35 days). Retrying cannot help, so
+                    // this is an EXPIRED outcome rather than a job failure.
+                    L.w { "[DownloadAttachmentJob] file has expired (status code: $responseStatus) messageId=$messageId" }
                     updateAttachmentStatus(AttachmentStatus.EXPIRED.code)
                     FileUtil.emitProgressUpdate(progressKey(), -2)
                     return
@@ -291,7 +304,6 @@ class DownloadAttachmentJob private constructor(
                     val errorMessage = when (responseStatus) {
                         1 -> "INVALID_PARAMETER"
                         9 -> "NO_SUCH_FILE"
-                        12 -> "INVALID_FILE"
                         99 -> "OTHER_ERROR"
                         else -> "UNKNOWN_ERROR (status: $responseStatus)"
                     }
@@ -300,7 +312,7 @@ class DownloadAttachmentJob private constructor(
             }
 
             // 获取URL列表，优先使用urls数组，回退到单个url
-            val downloadData = response.body()?.data
+            val downloadData = envelope.data
             val urlsToTry = downloadData?.urls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(downloadData?.url)
             L.i { "[DownloadAttachmentJob] API response: using ${if (downloadData?.urls?.isNotEmpty() == true) "urls array" else "fallback url"}, total URLs: ${urlsToTry.size}, messageId: $messageId" }
 
@@ -478,6 +490,16 @@ class DownloadAttachmentJob private constructor(
 
     companion object {
         const val KEY = "DownloadAttachmentJob"
+
+        /**
+         * `/v1/file/download` business statuses that mean the file is gone for good:
+         * 2 = NO_PERMISSION (download authorization expired, 30 days),
+         * 12 = storage object already purged (35 days).
+         * Neither code is in the published STATUS enum of server-docs; both were confirmed by the
+         * file-share server team (2026-09-17) as the two expiry outcomes. See
+         * [com.difft.android.chat.fileshare.FileShareService].
+         */
+        val EXPIRED_STATUS_CODES: Set<Int> = setOf(2, 12)
         private const val KEY_LOCAL_ID = "local_id"
         private const val KEY_MESSAGE_ID = "message_id"
         private const val KEY_ATTACHMENT_ID = "attachment_id"

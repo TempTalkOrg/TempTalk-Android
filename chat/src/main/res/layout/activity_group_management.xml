@@ -6,162 +6,160 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_title_bar"
         android:layout_width="match_parent"
-        android:layout_height="52dp">
+        android:layout_height="wrap_content" />
 
-        <androidx.appcompat.widget.AppCompatImageButton
-            android:id="@+id/ib_back"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:background="@null"
-            android:padding="12dp"
-            android:src="@drawable/chative_ic_back"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/t.primary" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_title"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:background="@null"
-            android:gravity="center"
-            android:text="@string/group_management"
-            android:textColor="@color/t.primary"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="@+id/ib_back"
-            app:layout_constraintLeft_toRightOf="@+id/ib_back"
-            app:layout_constraintTop_toTopOf="@+id/ib_back" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_moderators"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:background="@color/bg.elevated"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp">
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/group_moderators"
-            android:textColor="@color/t.primary"
-            android:textSize="16sp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_moderators"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:layout_marginEnd="10dp"
-            android:lineSpacingExtra="5sp"
-            android:textColor="@color/t.third"
-            android:textSize="16sp"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/arrow"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:text="3" />
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/arrow"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/chat_ic_arrow_right"
-            android:tint="@color/t.primary"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rv_moderators"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/bg.elevated"
-        android:scrollbars="vertical"
-        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-        app:spanCount="5"
-        tools:listitem="@layout/layout_group_member" />
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/base_bg_settings_group"
+        android:divider="@drawable/base_divider_settings_row"
+        android:orientation="vertical"
+        android:showDividers="middle">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_transfer_owner"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:background="@color/bg.elevated"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp">
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_moderators"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:layout_width="wrap_content"
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/group_moderators"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_moderators"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="8dp"
+                android:lineSpacingExtra="5sp"
+                android:textColor="@color/t.third"
+                android:textSize="16sp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/arrow"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="3" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/arrow"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/base_ic_chevron_right"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_moderators"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/group_transfer_owner"
-            android:textColor="@color/t.primary"
-            android:textSize="16sp"
+            android:scrollbars="vertical"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="5"
+            tools:listitem="@layout/layout_group_member" />
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/cl_transfer_owner"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/group_transfer_owner"
+                android:textColor="@color/t.primary"
+                android:textSize="16sp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/base_ic_chevron_right"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="16dp"
+        android:background="@drawable/base_bg_settings_group"
+        android:divider="@drawable/base_divider_settings_row"
+        android:orientation="vertical"
+        android:showDividers="middle">
+
+        <com.difft.android.base.widget.DifftSwitchView
+            android:id="@+id/switch_can_add"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:checked="false"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/group_only_moderators_can_add"
             app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <androidx.appcompat.widget.AppCompatImageView
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/chat_ic_arrow_right"
-            android:tint="@color/t.primary"
+        <com.difft.android.base.widget.DifftSwitchView
+            android:id="@+id/switch_can_speak"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:checked="false"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/group_only_moderators_can_speak1"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <com.difft.android.base.widget.DifftSwitchView
-        android:id="@+id/switch_can_add"
+    </LinearLayout>
+
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="52dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
         android:layout_marginTop="16dp"
-        android:background="@color/bg.elevated"
-        android:checked="false"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp"
-        android:text="@string/group_only_moderators_can_add"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:background="@drawable/base_bg_settings_group"
+        android:orientation="vertical">
 
-    <com.difft.android.base.widget.DifftSwitchView
-        android:id="@+id/switch_can_speak"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:background="@color/bg.elevated"
-        android:checked="false"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp"
-        android:text="@string/group_only_moderators_can_speak1"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        <com.difft.android.base.widget.DifftSwitchView
+            android:id="@+id/switch_can_critical_alert"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:checked="false"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/group_critical_alert"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-    <com.difft.android.base.widget.DifftSwitchView
-        android:id="@+id/switch_can_critical_alert"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:layout_marginTop="16dp"
-        android:background="@color/bg.elevated"
-        android:checked="false"
-        android:paddingStart="16dp"
-        android:paddingEnd="8dp"
-        android:text="@string/group_critical_alert"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+    </LinearLayout>
 
 </LinearLayout>

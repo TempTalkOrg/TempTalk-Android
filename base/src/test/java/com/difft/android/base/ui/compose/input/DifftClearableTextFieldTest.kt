@@ -265,13 +265,17 @@ class DifftClearableTextFieldTest {
     }
 
     // A16: clear tap target is the full 40dp-wide slot at container height (user-ratified
-    // 40dp; pin against a later "wrap_content" shrink)
+    // 40dp; pin against a later "wrap_content" shrink). Container height is the library
+    // Large box (40).
     @Test
     fun clearIcon_tapTargetIs40dpWideAndContainerHigh() {
         rule.setContent { Host(value = "a") }
         val bounds = clearNode().getBoundsInRoot()
         assertTrue(abs((bounds.width - 40.dp).value) <= 0.5f, "width=${bounds.width}")
-        assertTrue(abs((bounds.height - 36.dp).value) <= 0.5f, "height=${bounds.height}")
+        assertTrue(
+            abs((bounds.height - DifftTextFieldSize.Large.height).value) <= 0.5f,
+            "height=${bounds.height}",
+        )
     }
 
     // A17: a11y semantics — ✕ has Role.Button

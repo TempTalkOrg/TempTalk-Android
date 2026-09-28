@@ -425,10 +425,7 @@ class GlobalConfigsManager @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             try {
                 val contact = chatHttpClient.get().httpService
-                    .fetchContactors(
-                        baseAuth = (userManager.getUserData()?.baseAuth ?: ""),
-                        body = ContactsRequestBody(listOf(globalServices.myId))
-                    )
+                    .fetchContactors(body = ContactsRequestBody(listOf(globalServices.myId)))
                     .data?.contacts?.firstOrNull()
 
                 if (contact != null) {

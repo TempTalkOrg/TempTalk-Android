@@ -86,7 +86,6 @@
     <string name="call_params_startcall_exception_tip">Abnormal conference connection parameters.</string>
     <string name="call_proxy_turn_required_tip">This proxy doesn\'t support calls. Update the proxy address, or turn off the proxy and try again.</string>
     <string name="call_service_node_dashboard_title">Call service settings</string>
-    <string name="call_rating_feedback_no_choice_tip">Please give a rating</string>
     <string name="call_rating_feedback_title">Rate the quality of your call</string>
     <string name="call_rating_feedback_sub">Your answer is anonymous. We use it to help improve your call experience.</string>
     <string name="call_rating_level_very_bad">Very bad</string>
@@ -160,6 +159,7 @@
     <string name="call_server_node_connected" translatable="false">Connected</string>
     <string name="call_server_node_disconnected" translatable="false">Disconnected</string>
     <string name="call_server_node_select_server" translatable="false">Select Server</string>
+    <string name="call_server_node_refresh" translatable="false">Refresh</string>
     <string name="call_server_node_primary" translatable="false">Primary</string>
     <string name="call_server_node_fallback" translatable="false">Fallback</string>
     <string name="call_server_node_ips_label" translatable="false">IPs</string>

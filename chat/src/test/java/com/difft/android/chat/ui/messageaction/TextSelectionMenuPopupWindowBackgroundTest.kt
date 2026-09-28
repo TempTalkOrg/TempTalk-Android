@@ -55,7 +55,7 @@ class TextSelectionMenuPopupWindowBackgroundTest {
             activity.window.setBackgroundDrawable(sentinel)
 
             val anchorView = View(activity)
-            val popup = TextSelectionMenuPopup(activity)
+            val popup = TextSelectionMenuPopup(activity, translateSupported = true)
             popup.show(anchorView, "selected text", 0, 0, noopCallbacks)
             shadowOf(Looper.getMainLooper()).idle()
 

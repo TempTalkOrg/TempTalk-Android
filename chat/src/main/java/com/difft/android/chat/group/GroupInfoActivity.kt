@@ -37,7 +37,9 @@ import com.difft.android.chat.databinding.ChatActivityGroupInfoBinding
 import com.difft.android.chat.search.SearchMessageActivity
 import com.difft.android.chat.setting.ChatArchiveSettingsActivity
 import com.difft.android.chat.setting.SaveToPhotosSettingsActivity
+import com.difft.android.chat.setting.translate.TranslateSettingsActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
+import com.difft.android.chat.translate.translateEntryValue
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBRoomStore
@@ -64,7 +66,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -200,6 +201,15 @@ class GroupInfoActivity : BaseActivity() {
                 binding.saveToPhotosText.text = getSaveToPhotosDisplayText(conversationSet.saveToPhotos)
             }
             .launchIn(lifecycleScope)
+
+        // The translate value lives outside conversationSet: the stored target is local-only.
+        if (chatSettingViewModel.translateSupported) {
+            chatSettingViewModel.translateSetting
+                .onEach { binding.translateText.text = translateEntryValue(this, it) }
+                .launchIn(lifecycleScope)
+        } else {
+            binding.translateContainer.visibility = View.GONE
+        }
 
         // Controlled: the conversationSet flow moves the switch once the server accepted, so a
         // failed request simply leaves it alone.
@@ -406,6 +416,14 @@ class GroupInfoActivity : BaseActivity() {
                 ?.let { For.Group(it) } ?: return@setOnClickListener
 
             SaveToPhotosSettingsActivity.start(this@GroupInfoActivity, target)
+        }
+
+        binding.translateContainer.setOnClickListener {
+            val target = groupId
+                .takeIf { it.isNotBlank() }
+                ?.let { For.Group(it) } ?: return@setOnClickListener
+
+            TranslateSettingsActivity.start(this@GroupInfoActivity, target)
         }
 
         binding.disappearingTimeContainer.setOnClickListener {
@@ -699,8 +717,8 @@ class GroupInfoActivity : BaseActivity() {
             // Body (above the editable fields): what reset does.
             Text(
                 text = stringResource(R.string.group_crypto_reset_message),
-                fontSize = 14.sp,
-                color = colorResource(com.difft.android.base.R.color.t_secondary)
+                style = DifftTheme.typography.p3,
+                color = DifftTheme.colors.textSecondary
             )
             Spacer(modifier = Modifier.height(16.dp))
             // Editable group avatar: shows the staged pick when present, else the
@@ -739,45 +757,34 @@ class GroupInfoActivity : BaseActivity() {
                             .align(Alignment.BottomEnd)
                             .size(24.dp)
                             .clip(CircleShape)
-                            .background(colorResource(com.difft.android.base.R.color.icon))
-                            .border(
-                                2.dp,
-                                colorResource(com.difft.android.base.R.color.bg_popup),
-                                CircleShape
-                            )
+                            .background(DifftTheme.colors.icon)
+                            .border(2.dp, DifftTheme.colors.backgroundPopup, CircleShape)
                     ) {
                         Image(
                             painter = painterResource(R.drawable.chat_contact_camera),
                             contentDescription = null,
-                            colorFilter = ColorFilter.tint(
-                                colorResource(com.difft.android.base.R.color.bg_popup)
-                            ),
+                            colorFilter = ColorFilter.tint(DifftTheme.colors.backgroundPopup),
                             modifier = Modifier.size(12.dp)
                         )
                     }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            // Shared clearable input. This dialog is hosted by ComposeDialogManager, which does
-            // not wrap DifftTheme (LocalDifftExtendedColors would fall back to the light
-            // palette in dark mode), so the component wraps its own theme here.
             // maxLength truncates on paste — InputFilter.LengthFilter semantics.
-            DifftTheme(applyWindowBackground = false) {
-                DifftClearableTextField(
-                    value = rememberedState.value,
-                    onValueChange = { rememberedState.value = it },
-                    onClear = { rememberedState.value = "" },
-                    hint = stringResource(R.string.group_crypto_reset_name_hint),
-                    clearMode = ClearMode.WhileEditing,
-                    containerColor = DifftTheme.colors.backgroundTertiary,
-                    textStyle = DifftTheme.typography.bodyMedium.copy(fontSize = 18.sp),
-                    height = null,
-                    minHeight = 36.dp,
-                    contentPadding = PaddingValues(start = 12.dp),
-                    maxLength = 64,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            DifftClearableTextField(
+                value = rememberedState.value,
+                onValueChange = { rememberedState.value = it },
+                onClear = { rememberedState.value = "" },
+                hint = stringResource(R.string.group_crypto_reset_name_hint),
+                clearMode = ClearMode.WhileEditing,
+                containerColor = DifftTheme.colors.backgroundTertiary,
+                textStyle = DifftTheme.typography.bodyMedium.copy(fontSize = 18.sp),
+                height = null,
+                minHeight = 36.dp,
+                contentPadding = PaddingValues(start = 12.dp),
+                maxLength = 64,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

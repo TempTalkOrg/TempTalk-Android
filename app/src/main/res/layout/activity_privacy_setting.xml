@@ -19,7 +19,7 @@
             android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/t.primary" />
+            app:tint="@color/icon" />
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_title"
@@ -42,9 +42,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="8dp"
         android:layout_marginRight="16dp"
-        android:background="@drawable/chat_group_info_bg"
+        android:background="@drawable/base_bg_settings_group"
         android:orientation="vertical">
 
         <androidx.constraintlayout.widget.ConstraintLayout
@@ -52,7 +52,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:paddingStart="16dp"
-            android:paddingEnd="12dp">
+            android:paddingEnd="16dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/tv_screen_lock"
@@ -69,13 +69,12 @@
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/iv_screen_lock_arrow"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/chat_ic_arrow_right"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/base_ic_chevron_right"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:tint="@color/t.primary" />
+                app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
     </LinearLayout>
@@ -84,12 +83,12 @@
         android:id="@+id/tv_security_tips"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="8dp"
         android:background="@null"
         android:paddingStart="32dp"
         android:paddingEnd="28dp"
         android:text="@string/settings_screen_lock_tips"
-        android:textColor="@color/t.secondary"
+        android:textColor="@color/t.third"
         android:textSize="12sp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/ib_back" />
@@ -99,9 +98,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="16dp"
-        android:layout_marginTop="25dp"
+        android:layout_marginTop="16dp"
         android:layout_marginRight="16dp"
-        android:background="@drawable/chat_group_info_bg"
+        android:background="@drawable/base_bg_settings_group"
         android:orientation="vertical"
         android:visibility="gone"
         tools:visibility="visible">
@@ -111,7 +110,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:paddingStart="16dp"
-            android:paddingEnd="12dp">
+            android:paddingEnd="16dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
@@ -130,7 +129,7 @@
                 android:layout_height="match_parent"
                 android:layout_marginEnd="4dp"
                 android:gravity="center_vertical"
-                android:textColor="@color/t.secondary"
+                android:textColor="@color/t.third"
                 android:textSize="14sp"
                 app:layout_constraintBottom_toBottomOf="@+id/iv_use_proxy_arrow"
                 app:layout_constraintEnd_toStartOf="@+id/iv_use_proxy_arrow"
@@ -139,13 +138,12 @@
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/iv_use_proxy_arrow"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/chat_ic_arrow_right"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/base_ic_chevron_right"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:tint="@color/t.primary" />
+                app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
@@ -153,12 +151,12 @@
         android:id="@+id/tv_use_proxy_tips"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="8dp"
         android:background="@null"
         android:paddingStart="32dp"
         android:paddingEnd="28dp"
         android:text="@string/proxy_use_proxy_setting_desc"
-        android:textColor="@color/t.secondary"
+        android:textColor="@color/t.third"
         android:textSize="12sp" />
 
     <LinearLayout
@@ -173,11 +171,11 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginStart="16dp"
-            android:layout_marginTop="25dp"
+            android:layout_marginTop="16dp"
             android:layout_marginEnd="16dp"
-            android:background="@drawable/chat_group_info_bg"
+            android:background="@drawable/base_bg_settings_group"
             android:paddingStart="16dp"
-            android:paddingEnd="8dp">
+            android:paddingEnd="16dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
@@ -190,13 +188,12 @@
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/renew_identity_key_arrow"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/chat_ic_arrow_right"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/base_ic_chevron_right"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:tint="@color/t.primary" />
+                app:layout_constraintTop_toTopOf="parent" />
 
 
         </androidx.constraintlayout.widget.ConstraintLayout>
@@ -206,11 +203,11 @@
         android:id="@+id/tv_renew_key_tips"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
+        android:layout_marginTop="8dp"
         android:background="@null"
         android:paddingStart="32dp"
         android:paddingEnd="28dp"
-        android:textColor="@color/t.secondary"
+        android:textColor="@color/t.third"
         android:textSize="12sp"
         android:visibility="gone"
         app:layout_constraintLeft_toLeftOf="parent"
@@ -223,7 +220,7 @@
         android:id="@+id/ll_delete_account"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="25dp"
+        android:layout_marginTop="16dp"
         android:orientation="vertical">
 
         <androidx.constraintlayout.widget.ConstraintLayout
@@ -231,9 +228,9 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginHorizontal="16dp"
-            android:background="@drawable/chat_group_info_bg"
+            android:background="@drawable/base_bg_settings_group"
             android:paddingStart="16dp"
-            android:paddingEnd="8dp">
+            android:paddingEnd="16dp">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
@@ -245,13 +242,12 @@
                 app:layout_constraintStart_toStartOf="parent" />
 
             <androidx.appcompat.widget.AppCompatImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/chat_ic_arrow_right"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/base_ic_chevron_right"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:tint="@color/t.primary" />
+                app:layout_constraintTop_toTopOf="parent" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -259,11 +255,11 @@
             android:id="@+id/tv_delete_account_tips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
+            android:layout_marginTop="8dp"
             android:paddingStart="32dp"
             android:paddingEnd="28dp"
             android:text="@string/me_delete_account_tips"
-            android:textColor="@color/t.secondary"
+            android:textColor="@color/t.third"
             android:textSize="12sp" />
     </LinearLayout>
 

@@ -43,6 +43,8 @@ import com.difft.android.base.ui.TitleBar
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
+// Debug-only screen; the length is inherent to its flat list of test actions.
+@Suppress("LongMethod")
 @Composable
 fun TestScreen(
     onNavigateBack: () -> Unit,
@@ -87,7 +89,7 @@ fun TestScreen(
                     )
                 }
 
-                HorizontalDivider(color = DifftTheme.colors.bg)
+                HorizontalDivider(color = DifftTheme.colors.divider)
 
                 // Create Groups
                 TestRowItem(
@@ -105,7 +107,7 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.bg)
+                HorizontalDivider(color = DifftTheme.colors.divider)
 
                 // Send Message to Single Group
                 TestRowItem(
@@ -123,7 +125,7 @@ fun TestScreen(
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.bg)
+                HorizontalDivider(color = DifftTheme.colors.divider)
 
                 // Send Message to All Groups
                 TestRowItem(
@@ -131,7 +133,7 @@ fun TestScreen(
                     onClick = onSendMessageToAllGroups
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.bg)
+                HorizontalDivider(color = DifftTheme.colors.divider)
 
                 // Disband Groups
                 TestRowItem(
@@ -147,7 +149,7 @@ fun TestScreen(
                     onClick = onCorruptDatabase
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.bg)
+                HorizontalDivider(color = DifftTheme.colors.divider)
 
                 TestRowItem(
                     title = "Manual Backup Database",
@@ -187,7 +189,7 @@ private fun TestSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(DifftTheme.colors.bgElevated)
+                .background(DifftTheme.colors.background)
         ) {
             content()
         }
@@ -231,10 +233,10 @@ private fun TestRowItem(
         Spacer(modifier = Modifier.width(DifftTheme.spacing.insetSmall))
 
         Icon(
-            painter = painterResource(id = R.drawable.chat_ic_arrow_right),
+            painter = painterResource(id = com.difft.android.base.R.drawable.base_ic_chevron_right),
             contentDescription = null,
-            tint = DifftTheme.colors.textPrimary,
-            modifier = Modifier.size(20.dp)
+            tint = DifftTheme.colors.icon,
+            modifier = Modifier.size(DifftTheme.spacing.iconXSmall)
         )
     }
 }
@@ -251,7 +253,7 @@ private fun NumberInputField(
         modifier = modifier
             .width(60.dp)
             .height(36.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(DifftTheme.radius.mediumShape)
             .background(DifftTheme.colors.background)
             .padding(horizontal = DifftTheme.spacing.insetSmall),
         contentAlignment = Alignment.Center
@@ -313,7 +315,7 @@ private fun TestInputField(
             color = DifftTheme.colors.textPrimary
         ),
         singleLine = false,
-        shape = RoundedCornerShape(4.dp),
+        shape = DifftTheme.radius.mediumShape,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = DifftTheme.colors.background,
             unfocusedContainerColor = DifftTheme.colors.background,
@@ -376,7 +378,7 @@ private fun TestSectionPreview() {
                     }
                 )
 
-                HorizontalDivider(color = DifftTheme.colors.bg)
+                HorizontalDivider(color = DifftTheme.colors.divider)
 
                 TestRowItem(
                     title = "Send Message to All Groups",
@@ -398,7 +400,7 @@ private fun NumberInputFieldPreview() {
     DifftTheme {
         Row(
             modifier = Modifier
-                .background(DifftTheme.colors.bgElevated)
+                .background(DifftTheme.colors.background)
                 .padding(DifftTheme.spacing.insetLarge),
             horizontalArrangement = Arrangement.spacedBy(DifftTheme.spacing.inlineMedium)
         ) {

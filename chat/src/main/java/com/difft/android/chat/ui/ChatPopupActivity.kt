@@ -27,6 +27,7 @@ import com.difft.android.base.widget.InsetAwareConstraintLayout
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
+import com.difft.android.chat.messages.PriorConversationReporter
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
 import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE
 import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE_TYPE
@@ -128,6 +129,9 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
 
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
+
+    @Inject
+    lateinit var priorConversationReporter: PriorConversationReporter
 
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
@@ -449,6 +453,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
         super.onResume()
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
+        priorConversationReporter.onConversationOpened(chatViewModel.forWhat)
         messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 

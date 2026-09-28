@@ -155,6 +155,29 @@
     <string name="chat_speech_to_text_isblank">No text recognized</string>
     <string name="chat_translate_fail">Translation failed</string>
     <string name="chat_translate_to_language">Translate to %s</string>
+    <!-- Conversation auto-translate -->
+    <string name="chat_translate_setting_title">Translate</string>
+    <string name="chat_translate_setting_off">Off</string>
+    <string name="chat_translate_setting_zh">中文</string>
+    <string name="chat_translate_setting_en">English</string>
+    <string name="chat_translate_setting_desc_off">Translation is off.</string>
+    <string name="chat_translate_setting_desc_zh">Chinese translations will be added to the new messages you receive</string>
+    <string name="chat_translate_setting_desc_en">English translations will be added to the new messages you receive</string>
+    <string name="chat_translate_failed_retry">Translation failed, please try again</string>
+    <string name="chat_translate_too_long">Unable to translate when messages over 4KB</string>
+    <string name="chat_translate_powered_by_google">Translated by Google</string>
+    <string name="chat_translate_model_downloading">Downloading translation pack</string>
+    <string name="chat_translate_model_progress">%1$s/%2$s</string>
+    <string name="chat_translate_model_failed">Translation pack download failed</string>
+    <string name="chat_translate_model_stuck">No progress for a while</string>
+    <string name="chat_translate_model_stuck_hint">The translation pack is provided by Google. Your network has been unable to reach it for a while. The download is kept and resumes automatically when the network recovers; you can also retry now.</string>
+    <string name="chat_translate_model_not_ready_short">pack not ready</string>
+    <string name="chat_translate_retry">Retry</string>
+    <string name="chat_translate_cancel">Cancel</string>
+    <string name="chat_translate_reason_no_network">Network unreachable</string>
+    <string name="chat_translate_reason_no_space">Not enough space</string>
+    <string name="chat_translate_reason_dm_disabled">Download manager disabled</string>
+    <string name="chat_translate_reason_sdk_error">Download error</string>
     <string name="language_chinese">Chinese</string>
     <string name="language_english">English</string>
     <string name="chat_confidential_can_not_select">Confidential message cannot be selected</string>
@@ -462,6 +485,7 @@
     <string name="join">Join</string>
     <string name="download_failed">Download failed, please try again!</string>
     <string name="file_expired">File has expired.</string>
+    <string name="file_expired_cannot_view">This file has expired and can no longer be viewed</string>
     <string name="uploading">UPLOADING</string>
     <string name="members">MEMBERS</string>
     <string name="invite_participants">Invite Members</string>
@@ -525,6 +549,8 @@
     <string name="call_is_calling_tip">There is a call in progress. You can answer the call after disconnecting the current call.</string>
 
     <string name="file_load_error">Load error</string>
+    <string name="chat_no_app_to_open_file">No app on this device can open %1$s files</string>
+    <string name="chat_no_app_to_open_file_generic">No app on this device can open this file</string>
     <string name="file_preparing">Preparing file…</string>
     <string name="activate_device_title">Device Inactive</string>
     <string name="activate_device_tips">Due to prolonged inactivity, your device has been temporarily disabled for security reasons, and any unreceived messages have been cleared. Please activate your device to resume use.</string>
@@ -736,4 +762,8 @@
     <string name="media_send_next_free_space">Free up some storage, then try again.</string>
     <string name="media_send_next_retry_or_plain">Try again, or undo the edits and send the original.</string>
     <string name="media_send_next_unknown">Something went wrong (%1$s). Try again.</string>
+
+    <!-- Retiring package: title-bar entry + one-time notice for the move to the new app -->
+    <string name="legacy_migration_app_name_new">Quicall (New)</string>
+    <string name="legacy_migration_entry_short">Move to New App</string>
 </resources>

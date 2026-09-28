@@ -1,7 +1,6 @@
 package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
 import com.difft.android.chat.media.FavoriteEncryptedAttachmentProvider
 import com.difft.android.chat.util.FileEncryptionUtil
 import com.difft.android.network.ChativeHttpClient
@@ -60,15 +59,12 @@ class FavoriteWriteRepository @Inject constructor(
     private val syncRepo: FavoriteSyncRepository,
     private val keyRepo: FavoriteKeyRepo,
     private val assetUploader: FavoriteAssetUploader,
-    private val userManager: UserManager,
     private val keyLifecycle: FavoriteKeyLifecycle,
     // dagger.Lazy breaks the writeRepo <-> optimisticWriter cycle: optimisticWriter injects writeRepo
     // for the CAS core (putWithCas / refavorite); writeRepo only reaches back for the flush delegate.
     private val optimisticWriter: dagger.Lazy<FavoriteOptimisticWriter>
 ) {
     private val favoritesUrl: String get() = urlManager.gifs + "v1/gifs/favorites"
-    // The `/gifs/` route requires token auth (JWT/microToken); the Basic baseAuth fallback gets 401.
-    private fun token(): String = userManager.getUserData()?.microToken ?: ""
 
     /**
      * Favorite a gif. Optimistically caches the item (pending=true, shown immediately), trans-stores
@@ -411,7 +407,6 @@ class FavoriteWriteRepository @Inject constructor(
      *  [FavoriteKeyLifecycle]. */
     internal suspend fun putRewrap(wrappedFavKey: String) = withContext(Dispatchers.IO) {
         val resp = httpClient.httpService.putFavorites(
-            token(),
             favoritesUrl,
             FavoritesPutRequest(
                 encVersion = FavoriteCrypto.ENC_VERSION,
@@ -442,7 +437,6 @@ class FavoriteWriteRepository @Inject constructor(
         // reset replaces the whole list (no CAS); favorite/unfavorite carry listVersion for CAS.
         val casVersion = if (action == FavoriteAction.RESET) null else listVersion
         httpClient.httpService.putFavorites(
-            token(),
             favoritesUrl,
             FavoritesPutRequest(
                 // Declare the scheme version WE encrypted with (v1), never echo the server's stored

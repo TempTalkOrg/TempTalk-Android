@@ -1,7 +1,5 @@
 package com.difft.android.chat.invite
 
-import com.difft.android.base.utils.globalServices
-
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -19,10 +17,10 @@ class InviteRepo @Inject constructor() {
     }
 
     suspend fun getInviteCode(regenerate: Int, short: Int): BaseResponse<GetInviteCodeResponse> =
-        inviteService.getInviteCode((globalServices.userManager.getUserData()?.microToken ?: ""), regenerate, short)
+        inviteService.getInviteCode(regenerate, short)
 
-    suspend fun queryByInviteCode(inviteCode: String): BaseResponse<QueryInviteCodeResponse> = inviteService.queryByInviteCode((globalServices.userManager.getUserData()?.microToken ?: ""), QueryInviteCodeRequest(inviteCode))
+    suspend fun queryByInviteCode(inviteCode: String): BaseResponse<QueryInviteCodeResponse> = inviteService.queryByInviteCode(QueryInviteCodeRequest(inviteCode))
 
-    suspend fun queryByCustomUid(version: Int, customUid: String): BaseResponse<QueryCustomUidResponse> = inviteService.queryByCustomUid((globalServices.userManager.getUserData()?.microToken ?: ""), QueryCustomUidRequest(version, customUid))
+    suspend fun queryByCustomUid(version: Int, customUid: String): BaseResponse<QueryCustomUidResponse> = inviteService.queryByCustomUid(QueryCustomUidRequest(version, customUid))
 
 }

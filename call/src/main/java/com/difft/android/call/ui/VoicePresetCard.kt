@@ -4,17 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,20 +22,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenu
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItem
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItemTone
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
 import com.difft.android.call.data.VoicePreset
-
-/** Lifts a menu that opens inside a bottom sheet off the sheet ground it shares a colour family with. */
-private val SHEET_MENU_ELEVATION = 4.dp
 
 @Composable
 fun VoicePresetCard(
@@ -63,7 +55,7 @@ fun VoicePresetCard(
                 .height(55.dp)
                 .background(
                     color = DifftTheme.colors.backgroundTertiary,
-                    shape = RoundedCornerShape(size = 8.dp)
+                    shape = DifftTheme.radius.largeShape
                 )
                 .clickable { expanded = true }
                 .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
@@ -72,13 +64,8 @@ fun VoicePresetCard(
         ) {
             Text(
                 text = ResUtils.getString(R.string.call_voice_changer_label),
-                style = TextStyle(
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight(400),
-                    color = DifftTheme.colors.textPrimary,
-                )
+                style = DifftTheme.typography.p2,
+                color = DifftTheme.colors.textPrimary,
             )
 
             Row(
@@ -87,13 +74,8 @@ fun VoicePresetCard(
             ) {
                 Text(
                     text = currentPreset.displayText(),
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = DifftTheme.colors.textSecondary,
-                    )
+                    style = DifftTheme.typography.p3,
+                    color = DifftTheme.colors.textSecondary,
                 )
                 Icon(
                     painter = painterResource(id = R.drawable.call_btn_tabler_chevron_right),
@@ -104,35 +86,20 @@ fun VoicePresetCard(
             }
         }
 
-        DropdownMenu(
+        DifftDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.width(menuWidth),
-            containerColor = DifftTheme.colors.backgroundPopup,
-            shadowElevation = SHEET_MENU_ELEVATION,
             offset = DpOffset(x = dropdownOffset, y = 0.dp)
         ) {
             VoicePreset.entries.forEach { preset ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = preset.displayText(),
-                            style = TextStyle(
-                                fontSize = 16.sp,
-                                lineHeight = 24.sp,
-                                color = if (preset == currentPreset)
-                                    DifftTheme.colors.primary
-                                else
-                                    DifftTheme.colors.textPrimary
-                            )
-                        )
-                    },
+                DifftDropdownMenuItem(
+                    text = preset.displayText(),
+                    tone = DifftDropdownMenuItemTone.selection(preset == currentPreset),
                     onClick = {
                         expanded = false
                         onPresetSelected(preset)
-                    },
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    modifier = Modifier.height(46.dp)
+                    }
                 )
             }
         }

@@ -141,7 +141,7 @@ class SearchMessageActivity : BaseActivity() {
                     showNoResults(getString(R.string.search_no_results_found))
                 } else {
                     mBinding.recyclerviewChatHistory.visibility = View.VISIBLE
-                    mBinding.tvTips.visibility = View.GONE
+                    mBinding.llTips.visibility = View.GONE
                     mSearchChatHistoryAdapter.updateWithSearchKey(key, list)
                 }
             } catch (e: CancellationException) {
@@ -172,7 +172,7 @@ class SearchMessageActivity : BaseActivity() {
     private fun showNoResults(tipContent: String) {
         mBinding.recyclerviewChatHistory.visibility = View.GONE
         mSearchChatHistoryAdapter.updateWithSearchKey("", emptyList())
-        mBinding.tvTips.visibility = View.VISIBLE
+        mBinding.llTips.visibility = View.VISIBLE
         mBinding.tvTips.text = tipContent
     }
 }

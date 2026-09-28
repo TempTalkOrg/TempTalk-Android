@@ -486,19 +486,6 @@ class GroupUpdater @Inject constructor(
         }
     }
 
-//    private suspend fun removeServerMessage(source: String, timestamp: Long) {
-//        kotlin.runCatching {
-//            val response = httpClient.httpService.removePendingMessage((globalServices.userManager.getUserData()?.baseAuth ?: ""), source, timestamp.toString()).await()
-//            if (response.status == 0) {
-//                L.i { "[GroupUpdater] remove Server Message success $timestamp" }
-//            } else {
-//                L.e { "[GroupUpdater] remove Server Message failed, status: ${response.status}, reason: ${response.reason}" }
-//            }
-//        }.onFailure {
-//            L.e { "[GroupUpdater] remove Server Message failed -> ${it.stackTraceToString()}" }
-//        }
-//    }
-
     private suspend fun createNewGroupIfNotExist(groupID: String) {
         L.i { "[GroupUpdater] Create new group if not exist, group id is $groupID" }
         if (wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID)) != null) {

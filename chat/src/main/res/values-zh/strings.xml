@@ -150,6 +150,29 @@
     <string name="chat_speech_to_text_isblank">未识别到文字</string>
     <string name="chat_translate_fail">翻译失败</string>
     <string name="chat_translate_to_language">翻译成%s</string>
+    <!-- Conversation auto-translate -->
+    <string name="chat_translate_setting_title">翻译</string>
+    <string name="chat_translate_setting_off">关闭</string>
+    <string name="chat_translate_setting_zh">中文</string>
+    <string name="chat_translate_setting_en">English</string>
+    <string name="chat_translate_setting_desc_off">翻译已关闭</string>
+    <string name="chat_translate_setting_desc_zh">你收到的新消息将增加中文翻译</string>
+    <string name="chat_translate_setting_desc_en">English translations will be added to the new messages you receive</string>
+    <string name="chat_translate_failed_retry">翻译失败，请重试</string>
+    <string name="chat_translate_too_long">消息超过4096字符，不支持翻译</string>
+    <string name="chat_translate_powered_by_google">翻译自 Google</string>
+    <string name="chat_translate_model_downloading">翻译包下载中</string>
+    <string name="chat_translate_model_progress">%1$s/%2$s</string>
+    <string name="chat_translate_model_failed">翻译包下载失败</string>
+    <string name="chat_translate_model_stuck">长时间无进展</string>
+    <string name="chat_translate_model_stuck_hint">翻译包由 Google 提供，当前网络长时间无法连接；任务已保留，网络恢复后自动继续，也可立即重试</string>
+    <string name="chat_translate_model_not_ready_short">翻译包未就绪</string>
+    <string name="chat_translate_retry">重试</string>
+    <string name="chat_translate_cancel">取消</string>
+    <string name="chat_translate_reason_no_network">网络无法连接</string>
+    <string name="chat_translate_reason_no_space">存储空间不足</string>
+    <string name="chat_translate_reason_dm_disabled">系统下载管理器已禁用</string>
+    <string name="chat_translate_reason_sdk_error">下载出错</string>
     <string name="language_chinese">中文</string>
     <string name="language_english">英文</string>
     <string name="chat_confidential_can_not_select">机密消息不能被选中</string>
@@ -437,6 +460,7 @@
     <string name="search_no_results_found">未找到结果</string>
     <string name="download_failed">下载失败，请重试</string>
     <string name="file_expired">文件已过期</string>
+    <string name="file_expired_cannot_view">文件已过期，无法查看</string>
     <string name="uploading">上传中</string>
     <string name="members">成员</string>
     <string name="meetings_action_start">发起</string>
@@ -500,6 +524,8 @@
     <string name="call_is_calling_tip">当前正在通话中，挂断当前通话后即可接听。</string>
 
     <string name="file_load_error">加载失败</string>
+    <string name="chat_no_app_to_open_file">没有可打开 %1$s 文件的应用</string>
+    <string name="chat_no_app_to_open_file_generic">没有可打开此文件的应用</string>
     <string name="file_preparing">正在准备文件…</string>
     <string name="activate_device_title">激活设备</string>
     <string name="activate_device_tips">由于您的设备长时间未使用，为确保账户安全，已暂时禁用并清除未接收的消息。请激活设备恢复使用。</string>
@@ -676,4 +702,8 @@
     <string name="media_send_next_free_space">请清理设备存储空间后重试。</string>
     <string name="media_send_next_retry_or_plain">请重试，或取消编辑后直接发送原文件。</string>
     <string name="media_send_next_unknown">出现未知错误（%1$s），请重试。</string>
+
+    <!-- 旧包：标题栏迁移入口 + 首次启动一次性提示 -->
+    <string name="legacy_migration_app_name_new">Quicall（新版）</string>
+    <string name="legacy_migration_entry_short">迁移到新版</string>
 </resources>

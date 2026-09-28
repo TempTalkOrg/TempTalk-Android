@@ -49,4 +49,14 @@
         app:layout_constraintStart_toStartOf="@+id/ll_content"
         app:layout_constraintTop_toTopOf="@+id/ll_content" />
 
+    <include
+        android:id="@+id/confidential_status_scrim"
+        layout="@layout/layout_confidential_attachment_status"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="@+id/ll_content"
+        app:layout_constraintEnd_toEndOf="@+id/ll_content"
+        app:layout_constraintStart_toStartOf="@+id/ll_content"
+        app:layout_constraintTop_toTopOf="@+id/ll_content" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -21,17 +21,7 @@
         <FrameLayout
             android:id="@+id/avatar_container"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/textview_avatar_letter"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:visibility="gone" />
-        </FrameLayout>
+            android:layout_height="match_parent" />
 
         <ImageView
             android:id="@+id/button_remove"

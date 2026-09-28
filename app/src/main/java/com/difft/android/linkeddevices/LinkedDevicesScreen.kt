@@ -8,19 +8,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -32,7 +30,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -47,6 +44,8 @@ import androidx.core.content.ContextCompat
 import com.difft.android.R
 import com.difft.android.base.ui.TitleBar
 import com.difft.android.base.ui.compose.DifftScreen
+import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
+import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -62,9 +61,9 @@ import java.util.Date
 private data class MenuState(val position: Offset, val device: DeviceUiState)
 
 /**
- * Shared list screen for both hosts. The phone Activity passes showBackButton=true; the tablet
- * Fragment passes showBackButton=!dualPane. The root [Box] hosts the in-composition long-press
- * overlay menu. Fetch is driven by the host's onResume, not from here.
+ * List screen hosted by [LinkedDevicesFragment] on both form factors; the fragment hides the back
+ * button in dual-pane mode. The root [Box] hosts the in-composition long-press overlay menu. Fetch
+ * is driven by the host's onResume, not from here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,12 +92,14 @@ fun LinkedDevicesScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // BaseActivity skips auto system-bar padding for Compose roots; the screen owns it.
-            .systemBarsPadding()
+            // The host's XML root is already padded; consume so the Scaffold does not pad again.
+            .consumeWindowInsets(WindowInsets.safeDrawing)
             .onSizeChanged { rootSize = it }
             .onGloballyPositioned { rootCoords = it },
     ) {
         DifftScreen(
+            // Settings idiom: page colour behind elevated groups, like every other settings page.
+            containerColor = DifftTheme.colors.bg,
             topBar = {
                 TitleBar(
                     titleText = stringResource(R.string.linked_devices_title),
@@ -165,42 +166,29 @@ private fun DeviceListBody(
     onLongPress: (DeviceUiState, Offset) -> Unit,
     onLinkNew: () -> Unit,
 ) {
-    // Rounded section cards on the bg page, bg-colored dividers. An empty list shows only the
-    // Link New Device card (no caption). Single DateFormat shared by every row.
+    // An empty list shows only the Link New Device card (no caption). Single DateFormat shared by
+    // every row.
     val dateFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(DifftTheme.spacing.insetLarge),
+        verticalArrangement = Arrangement.spacedBy(DifftSettingsDefaults.GroupSpacing),
+        contentPadding = PaddingValues(
+            start = DifftSettingsDefaults.PageInset,
+            top = DifftSettingsDefaults.FirstGroupSpacing,
+            end = DifftSettingsDefaults.PageInset,
+            bottom = DifftSettingsDefaults.GroupSpacing,
+        ),
     ) {
         if (devices.isNotEmpty()) {
             item {
-                SectionCard {
-                    devices.forEachIndexed { index, device ->
+                DifftSettingsGroup {
+                    devices.forEach { device ->
                         DeviceRow(device, dateFormat, rootCoords, onLongPress)
-                        if (index < devices.lastIndex) {
-                            HorizontalDivider(
-                                color = DifftTheme.colors.bg,
-                                thickness = DifftTheme.spacing.dividerThickness,
-                            )
-                        }
                     }
                 }
             }
-            item { Spacer(modifier = Modifier.height(DifftTheme.spacing.insetLarge)) }
         }
-        item { SectionCard { LinkNewDeviceRow(onClick = onLinkNew) } }
-    }
-}
-
-@Composable
-private fun SectionCard(content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(DifftTheme.colors.bgElevated),
-    ) {
-        content()
+        item { DifftSettingsGroup { LinkNewDeviceRow(onClick = onLinkNew) } }
     }
 }
 
@@ -223,6 +211,7 @@ private fun DeviceRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(DifftSettingsDefaults.RowSurfaceColor)
             .onGloballyPositioned { rowCoords = it }
             .pointerInput(device.id) {
                 detectTapGestures(
@@ -261,6 +250,8 @@ private fun LinkNewDeviceRow(onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Fill before the click so the ripple draws above it.
+            .background(DifftSettingsDefaults.RowSurfaceColor)
             .clickable { onClick() }
             .padding(horizontal = DifftTheme.spacing.insetLarge, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -281,10 +272,10 @@ private fun LinkNewDeviceRow(onClick: () -> Unit) {
             )
         }
         Icon(
-            painter = painterResource(com.difft.android.chat.R.drawable.chat_ic_arrow_right),
+            painter = painterResource(com.difft.android.base.R.drawable.base_ic_chevron_right),
             contentDescription = null,
-            tint = DifftTheme.colors.textTertiary,
-            modifier = Modifier.size(20.dp),
+            tint = DifftTheme.colors.icon,
+            modifier = Modifier.size(DifftTheme.spacing.iconXSmall),
         )
     }
 }

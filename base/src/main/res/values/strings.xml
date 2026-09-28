@@ -1,4 +1,5 @@
 <resources>
+    <string name="base_close">Close</string>
     <string name="base_clear_text">Clear</string>
     <string name="search_default_hint">Search</string>
     <string name="language_chinese" translatable="false">中文</string>
@@ -71,4 +72,6 @@
     <string name="e2ee_sheet_got_it">OK</string>
     <string name="e2ee_learn_more">Learn more</string>
     <string name="base_bottom_sheet_drag_handle">Drag handle</string>
+    <string name="dual_pane_rail_collapse_hint">Hide navigation rail</string>
+    <string name="dual_pane_rail_expand_hint">Show navigation rail</string>
 </resources>

@@ -87,24 +87,22 @@ object EncryptedAttachmentAccess {
     /**
      * "Fully downloaded" gate for long-text attachments (Read-more / hide-download-card).
      *
-     * A persisted `<basePath>.encrypt` is guaranteed **complete and MAC-valid** by
-     * `DownloadAttachmentJob`: a truncated stream (`totalBytesRead != contentLength`) throws and the
-     * partial file is deleted, and the ciphertext MAC is verified before it is kept. So for
-     * encrypted-at-rest long text, the mere presence of a structurally-valid ciphertext means "done".
+     * The file alone decides. A persisted `<basePath>.encrypt` is guaranteed **complete and
+     * MAC-valid** by `DownloadAttachmentJob`: a truncated stream (`totalBytesRead != contentLength`)
+     * throws and the partial file is deleted, and the ciphertext MAC is verified before it is kept.
+     * A legacy plaintext file cannot self-verify truncation, so it must match the row's recorded
+     * [expectedPlainSize] (see [isReadable] with size).
      *
      * This matters most for **forwarded** long text: the forwarded attachment is embedded in the
      * message's serialized `forwardContext`, so `updateAttachmentStatus` (which writes
      * `DBAttachmentModel`) never flips the rendered `attachment.status` to SUCCESS, and the in-memory
      * download progress is transient (lost on rebind / app restart). Gating such messages on
-     * status/progress left them stuck showing only the 2KB preview even after a full download.
-     *
-     * Legacy plaintext files cannot self-verify truncation, so they still require the caller's
-     * [plaintextStatusReady] signal (status == SUCCESS || progress == 100 || own-device send).
+     * status/progress left them stuck showing only the 2KB preview even after a full download, and
+     * gating on the message's direction misread a forward copy (whose id says nothing about who
+     * wrote the bytes here).
      */
-    fun isLongTextReady(basePath: String, plaintextStatusReady: Boolean): Boolean {
-        if (hasEncrypted(basePath)) return true
-        return hasPlaintext(basePath) && plaintextStatusReady
-    }
+    fun isLongTextReady(basePath: String, expectedPlainSize: Int): Boolean =
+        isReadable(basePath, expectedPlainSize)
 
     /**
      * Build a `content://` [Uri] that streams the decrypted attachment bytes.

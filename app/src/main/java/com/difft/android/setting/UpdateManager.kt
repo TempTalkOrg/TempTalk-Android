@@ -34,7 +34,6 @@ class UpdateManager @Inject constructor(
             try {
                 val result = withContext(Dispatchers.IO) {
                     settingRepo.checkUpdate(
-                        userManager.getUserData()?.microToken ?: "",
                         PackageUtil.getAppVersionName() ?: "",
                         BuildConfig.APP_CHANNEL
                     )

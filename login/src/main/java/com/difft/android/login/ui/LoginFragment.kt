@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import com.difft.android.base.user.UserManager
@@ -21,7 +20,9 @@ import com.difft.android.login.viewmodel.LoginViewModel
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.viewmodel.Status
+import com.difft.android.base.widget.WaitDialogHandle
 import com.difft.android.base.widget.setTopMargin
+import com.difft.android.base.widget.waitDialogHandle
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.hi.dhl.binding.viewbind
 import dagger.hilt.android.AndroidEntryPoint
@@ -37,6 +38,12 @@ class LoginFragment : Fragment() {
     }
 
     private val binding: FragmentLogInBinding by viewbind()
+
+    /**
+     * The next button's own wait dialog: only the account request may raise or release it, and the
+     * view lifecycle releases it on destruction.
+     */
+    private lateinit var nextWait: WaitDialogHandle
 
     @Inject
     lateinit var userManager: UserManager
@@ -56,6 +63,7 @@ class LoginFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        nextWait = waitDialogHandle()
         initView()
         startObserve()
     }
@@ -63,17 +71,17 @@ class LoginFragment : Fragment() {
     private fun initView() {
         binding.account.visibility = View.VISIBLE
         binding.errorHint.visibility = View.GONE
-        disableHandleZone()
-        binding.handleZone.setOnClickListener {
+        disableNext()
+        binding.btnNext.setOnClickListener {
             checkInputAccount()
         }
 
         binding.account.onQueryChanged = { text ->
             val content = text.trim()
             if (content.isEmpty()) {
-                disableHandleZone()
+                disableNext()
             } else {
-                enableHandleZone()
+                enableNext()
                 if (ValidatorUtil.isPhone(content)) {
                     binding.clPhone.visibility = View.VISIBLE
                 } else {
@@ -83,7 +91,7 @@ class LoginFragment : Fragment() {
         }
         // Equivalence note: today's empty branch only disables the button — clPhone stays as-is
         // after a clear (it only changes on the next non-empty input). Do NOT hide it here.
-        binding.account.onClear = { disableHandleZone() }
+        binding.account.onClear = { disableNext() }
 
         binding.clPhone.setOnClickListener {
             val intent = Intent(requireActivity(), CountryPickerActivity::class.java)
@@ -127,24 +135,17 @@ class LoginFragment : Fragment() {
         viewModel.verifyAccount(account, phoneCode)
     }
 
-    private fun disableHandleZone() {
-        binding.handleZone.isEnabled = false
-        binding.animationView.visibility = View.GONE
-        binding.nextText.visibility = View.VISIBLE
-        binding.nextText.setTextColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.t_disable))
+    private fun disableNext() {
+        binding.btnNext.isEnabled = false
     }
 
-    private fun enableHandleZone() {
-        binding.handleZone.isEnabled = true
-        binding.animationView.visibility = View.GONE
-        binding.nextText.visibility = View.VISIBLE
-        binding.nextText.setTextColor(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.t_white))
+    /** Input validity only: a keystroke must never release a dialog the request raised. */
+    private fun enableNext() {
+        binding.btnNext.isEnabled = true
     }
 
-    private fun loadingHandleZone() {
-        binding.handleZone.isEnabled = true
-        binding.animationView.visibility = View.VISIBLE
-        binding.nextText.visibility = View.GONE
+    private fun loadingNext() {
+        nextWait.show()
     }
 
     private fun startObserve() {
@@ -158,7 +159,7 @@ class LoginFragment : Fragment() {
         viewModel.accountInvalidLiveData.observe(viewLifecycleOwner) {
             it ?: return@observe
             if (it.status == Status.ERROR) {
-                enableHandleZone()
+                enableNext()
                 showSignInErrorView(it.exception?.errorMsg)
             }
         }
@@ -166,15 +167,19 @@ class LoginFragment : Fragment() {
     private fun observeVerifyPhone() =
         viewModel.verifyPhoneLiveData.observe(viewLifecycleOwner) {
             when (it.status) {
-                Status.LOADING -> loadingHandleZone()
+                Status.LOADING -> loadingNext()
                 Status.SUCCESS -> {
-                    enableHandleZone()
+                    // Request settled: release the non-cancelable modal before the code screen
+                    // covers this one.
+                    nextWait.dismiss()
+                    enableNext()
                     val bundle = VerifyCodeActivity.createBundle(true, VerifyCodeActivity.TYPE_BIND_PHONE, it.data ?: "")
                     startActivity(Intent(context, VerifyCodeActivity::class.java).putExtras(bundle))
                 }
 
                 Status.ERROR -> {
-                    enableHandleZone()
+                    nextWait.dismiss()
+                    enableNext()
                     showSignInErrorView(it.exception?.errorMsg)
                 }
             }
@@ -183,15 +188,19 @@ class LoginFragment : Fragment() {
     private fun observeVerifyEmail() =
         viewModel.verifyEmailLiveData.observe(viewLifecycleOwner) {
             when (it.status) {
-                Status.LOADING -> loadingHandleZone()
+                Status.LOADING -> loadingNext()
                 Status.SUCCESS -> {
-                    enableHandleZone()
+                    // Request settled: release the non-cancelable modal before the code screen
+                    // covers this one.
+                    nextWait.dismiss()
+                    enableNext()
                     val bundle = VerifyCodeActivity.createBundle(true, VerifyCodeActivity.TYPE_BIND_EMAIL, it.data ?: "")
                     startActivity(Intent(context, VerifyCodeActivity::class.java).putExtras(bundle))
                 }
 
                 Status.ERROR -> {
-                    enableHandleZone()
+                    nextWait.dismiss()
+                    enableNext()
                     showSignInErrorView(it.exception?.errorMsg)
                 }
             }
@@ -202,11 +211,11 @@ class LoginFragment : Fragment() {
             binding.clAccount.background = ResUtils.getDrawable(R.drawable.login_account_error_border)
             binding.errorHint.text = errorMessage
             binding.errorHint.visibility = View.VISIBLE
-            binding.handleZone.setTopMargin(20.dp)
+            binding.btnNext.setTopMargin(20.dp)
         } else {
             binding.clAccount.background = ResUtils.getDrawable(R.drawable.login_account_border)
             binding.errorHint.visibility = View.GONE
-            binding.handleZone.setTopMargin(16.dp)
+            binding.btnNext.setTopMargin(16.dp)
         }
     }
 }

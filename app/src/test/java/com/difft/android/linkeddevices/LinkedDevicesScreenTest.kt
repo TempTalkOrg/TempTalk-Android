@@ -7,7 +7,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.test.TestDispatcherRule
@@ -42,10 +41,9 @@ class LinkedDevicesScreenTest {
     val composeTestRule = createComposeRule()
 
     private val repo: DeviceRepository = mockk()
-    private val logoutManager: LogoutManager = mockk(relaxed = true)
     private val countStore: LinkedDevicesCountStore = mockk(relaxed = true)
 
-    private fun buildViewModel() = LinkedDevicesViewModel(repo, logoutManager, countStore)
+    private fun buildViewModel() = LinkedDevicesViewModel(repo, countStore)
 
     private fun setScreen(vm: LinkedDevicesViewModel) {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))

@@ -11,6 +11,7 @@ import androidx.annotation.LayoutRes
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
+import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -29,6 +30,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
  * - Max width constraint for wide screens (640dp), applied through [BottomSheetBehavior.setMaxWidth]
  *   before the first layout pass so the sheet never flashes at full width
  * - Custom layout support (bypass default container)
+ * - Black 50% window dim, the same scrim the Compose sheets and dialogs draw
  *
  * Usage Mode 1 - Default Container (with rounded corners and drag handle):
  * 1. Override [getContentLayoutResId] to provide your content layout
@@ -217,6 +219,9 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // Must happen before the first measure: resizing the sheet in onShow (after the first
         // layout) produces a visible full-width -> 640dp jump.
         dialog.behavior.applyMaxWidth(getMaxWidth())
+
+        // Same scrim as the Compose sheets and dialogs; the Material theme default is ~60%.
+        dialog.window?.setDimAmount(ColorTokens.ScrimDimAmount)
 
         // Set cancelable based on configuration
         isCancelable = isCancelableByUser()

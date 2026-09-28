@@ -80,7 +80,6 @@
             android:layout_height="wrap_content"
             android:paddingBottom="16dp"
             android:textSize="20sp"
-            app:dsi_clearMode="whileEditing"
             app:dsi_containerColor="@android:color/transparent"
             app:dsi_contentPaddingStart="16dp"
             app:dsi_imeAction="done" />

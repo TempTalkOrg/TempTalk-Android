@@ -1,15 +1,18 @@
 package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.sanitizeUrl
 import com.difft.android.chat.fileshare.DownloadReq
 import com.difft.android.chat.fileshare.FileShareRepo
 import com.difft.android.chat.media.EncryptedAttachmentAccess
+import com.difft.android.network.NetworkException
+import com.difft.android.network.auth.AuthTokenProvider
+import com.difft.android.network.auth.withInvalidTokenRetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +28,7 @@ import javax.inject.Singleton
 @Singleton
 class FavoriteCiphertextFetcher @Inject constructor(
     private val fileShareRepo: FileShareRepo,
-    private val userManager: UserManager,
+    private val authTokenProvider: AuthTokenProvider,
 ) {
     /**
      * Download the encrypted attachment for ([authorizeId], [fileHash]) and store its structurally-
@@ -40,11 +43,15 @@ class FavoriteCiphertextFetcher @Inject constructor(
     ): Boolean = withContext(Dispatchers.IO) {
         val tempFile = File(destEncFile.parentFile, "${destEncFile.name}.part")
         try {
-            val token = userManager.getUserData()?.microToken ?: ""
-            val resp = fileShareRepo.download(DownloadReq(token, authorizeId, fileHash, "")).execute()
-            val body = resp.body()
-            if (!resp.isSuccessful || body?.status != 0) {
-                L.w { "[FavoriteCiphertextFetcher] download meta failed fileHash=$fileHash http=${resp.code()} status=${body?.status}" }
+            val body = authTokenProvider.withInvalidTokenRetry("favoriteDownload") { token ->
+                val resp = fileShareRepo.download(DownloadReq(token, authorizeId, fileHash, "")).execute()
+                if (!resp.isSuccessful) {
+                    throw NetworkException(resp.code(), "download meta failed http=${resp.code()}")
+                }
+                resp.body() ?: throw IOException("download meta response body is null")
+            }
+            if (body.status != 0) {
+                L.w { "[FavoriteCiphertextFetcher] download meta failed fileHash=$fileHash status=${body.status}" }
                 return@withContext false
             }
             val urls = body.data?.urls?.takeIf { it.isNotEmpty() } ?: listOfNotNull(body.data?.url)

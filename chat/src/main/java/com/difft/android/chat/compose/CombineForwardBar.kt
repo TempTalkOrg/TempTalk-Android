@@ -19,16 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.R
 
 
@@ -57,20 +55,19 @@ fun CombineForwardBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colorResource(com.difft.android.base.R.color.bg2)),
+            .background(DifftTheme.colors.backgroundSecondary),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colorResource(com.difft.android.base.R.color.bg3))
+                .background(DifftTheme.colors.backgroundTertiary)
                 .padding(vertical = 4.dp)
         ) {
             Text(
                 text = "${state.selectedMessageIds.size}/${state.totalMessageCount} ${stringResource(R.string.chat_message_input_hint)}",
-                fontSize = 12.sp,
-                color = colorResource(com.difft.android.base.R.color.t_primary),
-                fontWeight = FontWeight.Bold,
+                style = DifftTheme.typography.h7,
+                color = DifftTheme.colors.textPrimary,
                 modifier = Modifier.align(Alignment.Center)
             )
         }
@@ -136,9 +133,9 @@ fun IconWithText(
     modifier: Modifier = Modifier  // Pass modifier for flexibility
 ) {
     val tintColor = if (isEnabled) {
-        colorResource(id = com.difft.android.base.R.color.t_primary)
+        DifftTheme.colors.textPrimary
     } else {
-        colorResource(id = com.difft.android.base.R.color.t_disable)
+        DifftTheme.colors.textDisabled
     }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -157,7 +154,7 @@ fun IconWithText(
             text = text,
             maxLines = 2,  // Allow text to wrap to 2 lines
             overflow = TextOverflow.Ellipsis,
-            fontSize = 12.sp,
+            style = DifftTheme.typography.p4,
             color = tintColor,
             textAlign = TextAlign.Center
         )
@@ -179,9 +176,9 @@ fun RecallIconWithText(
     modifier: Modifier = Modifier
 ) {
     val tintColor = if (isEnabled) {
-        colorResource(id = com.difft.android.base.R.color.t_error) // Red when enabled
+        DifftTheme.colors.textError // Red when enabled
     } else {
-        colorResource(id = com.difft.android.base.R.color.t_disable) // Gray when disabled
+        DifftTheme.colors.textDisabled // Gray when disabled
     }
     // Display text with count in parentheses: "Recall (2)" or just "Recall" if count is 0
     val displayText = if (count > 0) "$text ($count)" else text
@@ -203,7 +200,7 @@ fun RecallIconWithText(
             text = displayText,
             maxLines = 2,  // Allow text to wrap to 2 lines
             overflow = TextOverflow.Ellipsis,
-            fontSize = 12.sp,
+            style = DifftTheme.typography.p4,
             color = tintColor,
             textAlign = TextAlign.Center
         )

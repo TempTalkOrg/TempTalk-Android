@@ -52,7 +52,7 @@ class TextPreviewSelectionPopupWindowBackgroundTest {
             val sentinel = ColorDrawable(Color.RED)
             activity.window.setBackgroundDrawable(sentinel)
 
-            val popup = TextPreviewSelectionPopup(activity)
+            val popup = TextPreviewSelectionPopup(activity, translateSupported = true)
             popup.show(Rect(0, 0, 100, 100), isFullSelection = false, callbacks = noopCallbacks)
             shadowOf(Looper.getMainLooper()).idle()
 
@@ -76,7 +76,7 @@ class TextPreviewSelectionPopupWindowBackgroundTest {
             val sentinel = ColorDrawable(Color.RED)
             activity.window.setBackgroundDrawable(sentinel)
 
-            val popup = TextPreviewSelectionPopup(activity)
+            val popup = TextPreviewSelectionPopup(activity, translateSupported = true)
             popup.show(Rect(0, 0, 100, 100), isFullSelection = false, callbacks = noopCallbacks)
             shadowOf(Looper.getMainLooper()).idle()
 

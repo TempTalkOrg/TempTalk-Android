@@ -1,6 +1,5 @@
 package com.difft.android.call.manager
 
-import com.difft.android.base.utils.globalServices
 
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallType
@@ -86,7 +85,6 @@ class CallMessageManager @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             try {
                 val result = chatHttpService.removePendingMessage(
-                    (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                     source,
                     timestamp
                 )

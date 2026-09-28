@@ -2,19 +2,10 @@ package com.difft.android.chat.gif.compose
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,12 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
-import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItem
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItemColors
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuPanel
 import kotlin.math.roundToInt
 import com.difft.android.chat.ui.messageaction.MessageActionMenuColors
 
@@ -73,10 +64,10 @@ fun BoxScope.GifFavoriteMenu(
     )
 
     var menuSize by remember { mutableStateOf(IntSize.Zero) }
-    Surface(
-        shape = RoundedCornerShape(8.dp),
+    // Panel and content stay on the forced-dark message-action palette: this menu belongs to the
+    // chat panel family, which renders dark under both themes.
+    DifftDropdownMenuPanel(
         color = MessageActionMenuColors.panel,
-        shadowElevation = 4.dp,
         modifier = Modifier
             .align(Alignment.TopStart)
             .onSizeChanged { menuSize = it }
@@ -90,29 +81,17 @@ fun BoxScope.GifFavoriteMenu(
                 )
             }
     ) {
-        // Padding = 16dp horizontal / 10dp vertical per design (a DropdownMenuItem's 48dp min height
-        // looks too tall for a single row).
-        Row(
-            modifier = Modifier
-                .clickable {
-                    onClick()
-                    onDismiss()
-                }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                tint = MessageActionMenuColors.contentDefault,
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = stringResource(labelRes),
-                style = DifftTheme.typography.bodyMedium,
-                color = MessageActionMenuColors.contentDefault
-            )
-        }
+        DifftDropdownMenuItem(
+            text = stringResource(labelRes),
+            iconRes = iconRes,
+            colors = DifftDropdownMenuItemColors(
+                content = MessageActionMenuColors.contentDefault,
+                pressedPill = MessageActionMenuColors.pressedPill,
+            ),
+            onClick = {
+                onClick()
+                onDismiss()
+            }
+        )
     }
 }

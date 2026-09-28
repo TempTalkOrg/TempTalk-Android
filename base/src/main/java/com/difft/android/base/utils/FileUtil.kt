@@ -8,12 +8,15 @@ import android.os.Build
 import android.os.Environment
 import android.os.Environment.MEDIA_MOUNTED
 import android.os.ParcelFileDescriptor
+import android.os.Process
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.text.TextUtils
 import android.webkit.MimeTypeMap
 import androidx.annotation.VisibleForTesting
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.storage.StorageNames
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import java.io.Closeable
@@ -46,6 +49,9 @@ object FileUtil {
 
     /** Large file threshold for manual download prompt (10MB) */
     const val LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
+
+    /** Coarsest mtime resolution to tolerate when comparing file timestamps (FAT family: 2s). */
+    private const val MTIME_GRANULARITY_SLACK_MS = 2_000L
 
     @JvmStatic
     fun canWriteToMediaStore(): Boolean {
@@ -203,7 +209,21 @@ object FileUtil {
         return name.contains("_log_") && name.endsWith(".txt")
     }
 
-    private fun deleteDirectoryContents(directory: File, preserveLogs: Boolean) {
+    /**
+     * The encrypted `secure_config` store and the Tink keyset that unlocks it: global config, call
+     * URL state and the one verified sign-in held across another account's wipe — no account
+     * material. A full clear leaves both alone; a `.pb` without its keyset is unreadable.
+     */
+    @VisibleForTesting
+    internal fun isSecureConfigFile(file: File): Boolean {
+        if (file.isDirectory) return false
+        val parent = file.parentFile?.name ?: return false
+        return (parent == "datastore" && file.name == StorageNames.SECURE_CONFIG_FILE) ||
+            (parent == "shared_prefs" && file.name == "${StorageNames.SECURE_CONFIG_KEYSET_PREFS_FILE}.xml")
+    }
+
+    @VisibleForTesting
+    internal fun deleteDirectoryContents(directory: File, preserveLogs: Boolean) {
         if (!directory.exists() || !directory.isDirectory) return
 
         directory.listFiles()?.forEach { file ->
@@ -212,10 +232,13 @@ object FileUtil {
                 L.d { "[FileUtil] Preserving log file: ${file.absolutePath}" }
                 return@forEach
             }
+            if (isSecureConfigFile(file)) return@forEach
 
             try {
                 if (file.isDirectory) {
                     deleteDirectoryContents(file, preserveLogs)
+                    // A directory that still holds a preserved file stays, silently.
+                    if (file.listFiles()?.isNotEmpty() == true) return@forEach
                 }
                 if (!file.delete()) {
                     L.w { "[FileUtil] Failed to delete file: ${file.absolutePath}, exists: ${file.exists()}, canRead: ${file.canRead()}, canWrite: ${file.canWrite()}" }
@@ -486,22 +509,29 @@ object FileUtil {
     /**
      * Clear temp directories on startup.
      * These directories are used for intermediate files during attachment processing.
-     * After app restart, any files here are orphaned and can be safely deleted.
+     * Only files written by a previous process are orphans: a share received during this cold
+     * start may already be staged in draft_blobs by the time the sweep runs, so files newer than
+     * the process start are kept.
      */
     fun clearDraftAttachmentsDirectory() {
         try {
+            val processStartWallMs = System.currentTimeMillis() -
+                (SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime())
+            // lastModified() can be truncated to whole seconds (FUSE-backed external storage, FAT
+            // family), so a file written right after process start could read as older than the
+            // millisecond start time. Only files clearly older than that are treated as orphans.
+            val staleBeforeMs = processStartWallMs - MTIME_GRANULARITY_SLACK_MS
             // Clear current draft_blobs directory
             val draftDir = FilePathManager.draftAttachmentsDir
             if (draftDir.exists()) {
-                draftDir.listFiles()?.forEach { file ->
-                    if (file.isFile) {
-                        file.delete()
-                    }
-                }
-                L.i { "[FileUtil] Cleared draft_blobs directory" }
+                val stale = draftDir.listFiles().orEmpty()
+                    .filter { it.isFile && it.lastModified() < staleBeforeMs }
+                stale.forEach { it.delete() }
+                L.i { "[FileUtil] draft_blobs sweep deleted=${stale.size}" }
             }
 
-            // Clear legacy temp_attachments directory (for users upgrading from older versions)
+            // Clear legacy temp_attachments directory (for users upgrading from older versions).
+            // Nothing writes here any more, so no process-start guard is needed.
             val legacyTempDir = File(draftDir.parentFile, "temp_attachments")
             if (legacyTempDir.exists()) {
                 legacyTempDir.listFiles()?.forEach { file ->

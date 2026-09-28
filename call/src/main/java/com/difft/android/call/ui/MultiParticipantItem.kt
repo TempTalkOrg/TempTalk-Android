@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -17,7 +16,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,7 +28,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import com.difft.android.base.ui.theme.DifftTheme
@@ -40,7 +37,6 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.ui.video.VideoItemTrackSelector
 import com.difft.android.call.ui.video.ViewType
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.Room
@@ -182,28 +178,10 @@ fun MultiParticipantItem(
                             contentAlignment = Alignment.Center
                         ) {
                             userDisplayInfo.avatarData?.let { avatarData ->
-                                key(avatarData) {
-                                    // No avatarSizeDp on purpose: the 96dp tile avatar keeps the
-                                    // same 22dp letter as the 1v1 and incoming-call 96dp avatars;
-                                    // scaling large avatars is a design decision, not a fix.
-                                    AndroidView(
-                                        factory = { ctx ->
-                                            when (avatarData) {
-                                                is AvatarData.FromContactor ->
-                                                    callToChatController.getAvatarByContactor(ctx, avatarData.contactor)
-                                                is AvatarData.FromNameOrUid ->
-                                                    callToChatController.createAvatarByNameOrUid(
-                                                        ctx,
-                                                        avatarData.name,
-                                                        avatarData.userId
-                                                    )
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .height(96.dp)
-                                            .width(96.dp)
-                                    )
-                                }
+                                // No letterTextSizeDp on purpose: the 96dp tile avatar keeps the
+                                // same 22dp letter as the 1v1 and incoming-call 96dp avatars;
+                                // scaling large avatars is a design decision, not a fix.
+                                callToChatController.Avatar(data = avatarData, size = 96.dp)
                             }
                         }
                     }
@@ -240,7 +218,7 @@ fun MultiParticipantItem(
                         )
                         .wrapContentWidth()
                         .height(STATUS_PILL_HEIGHT)
-                        .background(color = DifftTheme.colors.backgroundElevate, shape = RoundedCornerShape(size = 4.dp))
+                        .background(color = DifftTheme.colors.backgroundPagePrimary, shape = DifftTheme.radius.mediumShape)
                         .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
                     verticalAlignment = Alignment.Bottom,

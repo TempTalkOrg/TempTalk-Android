@@ -17,28 +17,28 @@ class BindRepo @Inject constructor() {
         httpClient.getService(BindEmailService::class.java)
     }
 
-    suspend fun verifyEmail(basicAuth: String, email: String, nonce: String?): BaseResponse<BindAccountResponse> {
+    suspend fun verifyEmail(email: String, nonce: String?): BaseResponse<BindAccountResponse> {
         val params = mutableMapOf("email" to email)
         nonce?.let { params["nonce"] = it }
-        return bindService.verifyEmail(basicAuth, params)
+        return bindService.verifyEmail(params)
     }
 
-    suspend fun verifyEmailCode(basicAuth: String, emailCode: String, nonce: String?): BaseResponse<Any> {
+    suspend fun verifyEmailCode(emailCode: String, nonce: String?): BaseResponse<Any> {
         val params = mutableMapOf("verificationCode" to emailCode)
         nonce?.let { params["nonce"] = it }
-        return bindService.verifyEmailCode(basicAuth, params)
+        return bindService.verifyEmailCode(params)
     }
 
-    suspend fun verifyPhone(basicAuth: String, phone: String, nonce: String?): BaseResponse<BindAccountResponse> {
+    suspend fun verifyPhone(phone: String, nonce: String?): BaseResponse<BindAccountResponse> {
         val params = mutableMapOf("phone" to phone)
         nonce?.let { params["nonce"] = it }
-        return bindService.verifyPhone(basicAuth, params)
+        return bindService.verifyPhone(params)
     }
 
-    suspend fun verifyPhoneCode(basicAuth: String, phone: String, code: String, nonce: String?): BaseResponse<Any> {
+    suspend fun verifyPhoneCode(phone: String, code: String, nonce: String?): BaseResponse<Any> {
         val params = mutableMapOf("verificationCode" to code)
         params["phone"] = phone
         nonce?.let { params["nonce"] = it }
-        return bindService.verifyPhoneCode(basicAuth, params)
+        return bindService.verifyPhoneCode(params)
     }
 }

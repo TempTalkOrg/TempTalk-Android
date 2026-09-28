@@ -10,6 +10,7 @@ import com.difft.android.chat.message.isAttachmentMessage
 import com.difft.android.chat.message.isLongTextAttachment
 import com.difft.android.chat.message.singleForwardableAttachment
 import difft.android.messageserialization.model.SpeechToTextStatus
+import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.isAnimatedImage
 import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
@@ -21,7 +22,9 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos
  * Builds MessageActionPopup configuration based on message conditions
  */
 class MessageActionConfigBuilder(
-    private val globalConfigsManager: IGlobalConfigsManager
+    private val globalConfigsManager: IGlobalConfigsManager,
+    /** False on a build that ships no translate backend; the translate actions are then omitted. */
+    private val translateSupported: Boolean,
 ) {
     
     /**
@@ -164,6 +167,21 @@ class MessageActionConfigBuilder(
             // Voice files (flags=0) are forwardable, so they remain selectable.
             if (message.attachment?.isAudioMessage() != true) {
                 actions.add(MessageAction.multiSelect())
+            }
+
+            // ② Transform — Translate (text)
+            if (translateSupported && hasTextContent(message)) {
+                // "Turn off" is only meaningful while a translation is actually on screen. The
+                // transient states (translating / same language / failed) render nothing, so
+                // offering "off" there would be a button that does nothing.
+                val translateStatus = message.translateData?.translateStatus
+                val showingTranslation =
+                    translateStatus == TranslateStatus.ShowCN || translateStatus == TranslateStatus.ShowEN
+                if (showingTranslation) {
+                    actions.add(MessageAction.translateOff())
+                } else {
+                    actions.add(MessageAction.translate())
+                }
             }
 
             // ② Transform — Speech to Text (audio)

@@ -7,6 +7,8 @@ import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.chat.ChatMessageListBehavior
 import com.difft.android.chat.ChatPaginationController
 import difft.android.messageserialization.For
+import com.difft.android.chat.translate.AutoTranslateCoordinator
+import com.difft.android.chat.translate.AutoTranslateCoordinatorFactory
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -162,6 +164,12 @@ abstract class ChatMessageViewModelTestBase {
         // (which ids reach the `IN` set, on which dispatcher) are about production code, and a
         // mocked hydrator would only replay whatever the test told it.
         childRowLoader = FakeMessageChildRowLoader(childRowCorpus)
+        // The coordinator is mocked, but its overlay MUST be a real flow: it is a combine source of
+        // the pipeline under test, and a mock that never emits would stall every assertion.
+        val translateCoordinator: AutoTranslateCoordinator = mockk(relaxed = true)
+        every { translateCoordinator.overlay } returns MutableStateFlow(emptyMap())
+        val translateFactory: AutoTranslateCoordinatorFactory = mockk()
+        every { translateFactory.create(any(), any()) } returns translateCoordinator
 
         return ChatMessageViewModel(
             forWhat = forWhat,
@@ -170,7 +178,7 @@ abstract class ChatMessageViewModelTestBase {
             dbRoomStore = mockk(relaxed = true),
             chatPaginationControllerFactory = factory,
             callManager = mockk(relaxed = true),
-            translateManager = mockk(relaxed = true),
+            autoTranslateCoordinatorFactory = translateFactory,
             speechToTextManager = mockk(relaxed = true),
             pushReadReceiptSendJobFactory = mockk(relaxed = true),
             activityNoticeDispatcher = mockk(relaxed = true),

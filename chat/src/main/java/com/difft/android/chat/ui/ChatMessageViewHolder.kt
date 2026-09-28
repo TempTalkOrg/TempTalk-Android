@@ -38,6 +38,7 @@ import com.difft.android.chat.message.ChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NoticeAggregator
 import com.difft.android.chat.message.TextChatMessage
+import com.difft.android.chat.translate.ui.TranslateBlockBinder
 import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.message.generateMessageFromForward
 import com.difft.android.chat.message.isAttachmentMessage
@@ -50,7 +51,6 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.CombinedForwardMode
 import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.SpeechToTextStatus
-import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.isAudioMessage
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
@@ -93,7 +93,8 @@ sealed class MessageCallbacks {
         val onQuoteClicked: (quote: Quote) -> Unit,
         val onReactionClick: (message: ChatMessage, emoji: String, remove: Boolean, originTimeStamp: Long) -> Unit,
         val onReactionLongClick: (message: ChatMessage, emoji: String) -> Unit,
-        val onSelectPinnedMessage: ((messageId: String, selected: Boolean) -> Unit)?
+        val onSelectPinnedMessage: ((messageId: String, selected: Boolean) -> Unit)?,
+        val onTranslateRetry: (message: TextChatMessage) -> Unit
     ) : MessageCallbacks()
 
     /**
@@ -242,6 +243,21 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val tvTranslateContent: AppCompatTextView
             get() = if (isMine) mineBinding!!.tvTranslateContent else othersBinding!!.tvTranslateContent
 
+        private val tvTranslateAttribution: AppCompatTextView
+            get() = if (isMine) mineBinding!!.tvTranslateAttribution else othersBinding!!.tvTranslateAttribution
+
+        private val tvTranslateError: AppCompatTextView
+            get() = if (isMine) mineBinding!!.tvTranslateError else othersBinding!!.tvTranslateError
+
+        private val translateViews: TranslateBlockBinder.Views
+            get() = TranslateBlockBinder.Views(
+                container = clTranslate,
+                progress = pbTranslate,
+                content = tvTranslateContent,
+                attribution = tvTranslateAttribution,
+                error = tvTranslateError,
+            )
+
         private val clSpeechToText: ConstraintLayout
             get() = if (isMine) mineBinding!!.clSpeechToText else othersBinding!!.clSpeechToText
 
@@ -369,7 +385,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             // Reaction、Translate、SpeechToText
             bindReactionView(message, cb.onReactionClick, cb.onReactionLongClick, contactorCache)
-            bindTranslateView(message)
+            bindTranslateView(message, cb.onTranslateRetry)
             bindSpeechToTextView(message)
 
             // Checkbox 选择
@@ -570,8 +586,14 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             initReactionView(itemView, reactionsView, message, onReactionClick, onReactionLongClick, contactorCache)
         }
 
-        private fun bindTranslateView(message: TextChatMessage) {
-            initTranslateView(message, clTranslate, pbTranslate, tvTranslateContent)
+        private fun bindTranslateView(message: TextChatMessage, onTranslateRetry: (TextChatMessage) -> Unit) {
+            bindTranslateBlock(translateViews, message, onTranslateRetry)
+        }
+
+        /** Update the translate block only — `ChatMessageAdapter.PAYLOAD_TRANSLATE`. */
+        fun bindTranslateOnly(message: ChatMessage, onTranslateRetry: (TextChatMessage) -> Unit) {
+            if (message !is TextChatMessage) return
+            bindTranslateBlock(translateViews, message, onTranslateRetry)
         }
 
         private fun bindSpeechToTextView(message: TextChatMessage) {
@@ -900,39 +922,17 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         }
     }
 
-    fun initTranslateView(
+    /**
+     * Renders the translate block. Lives here rather than in [TranslateBlockBinder] only because
+     * [showContent] — the long-press copy + copy-notice behaviour shared with speech-to-text — is
+     * private to this class.
+     */
+    internal fun bindTranslateBlock(
+        views: TranslateBlockBinder.Views,
         message: TextChatMessage,
-        clTranslate: ConstraintLayout,
-        pbTranslate: ProgressBar,
-        tvTranslateContent: AppCompatTextView
+        onTranslateRetry: (TextChatMessage) -> Unit,
     ) {
-        clTranslate.isVisible = false
-        message.translateData?.let {
-            clTranslate.isVisible = true
-            pbTranslate.isVisible = false
-            when (it.translateStatus) {
-                TranslateStatus.Invisible -> {
-                    clTranslate.isVisible = false
-                }
-
-                TranslateStatus.Translating -> {
-                    pbTranslate.isVisible = true
-                    tvTranslateContent.text = itemView.context.getString(R.string.chat_translating)
-                }
-
-                TranslateStatus.ShowEN -> {
-                    showContent(tvTranslateContent, it.translatedContentEN ?: "", message)
-                }
-
-                TranslateStatus.ShowCN -> {
-                    showContent(tvTranslateContent, it.translatedContentCN ?: "", message)
-                }
-
-                else -> {
-                    clTranslate.isVisible = false
-                }
-            }
-        }
+        TranslateBlockBinder.bind(views, message, onTranslateRetry, ::showContent)
     }
 
     fun initSpeechToTextView(

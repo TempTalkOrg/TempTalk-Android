@@ -52,7 +52,6 @@ abstract class DifftToggleView @JvmOverloads constructor(
 ) : DifftComposeView(context, attrs, defStyleAttr), Checkable {
 
     private var checkedState by mutableStateOf(false)
-    private var enabledState by mutableStateOf(true)
     private var onCheckedChangeListener: ((DifftToggleView, Boolean) -> Unit)? = null
     private var onToggleRequestListener: ((DifftToggleView, Boolean) -> Unit)? = null
 
@@ -107,24 +106,11 @@ abstract class DifftToggleView @JvmOverloads constructor(
                 clickable = getBoolean(R.styleable.DifftToggleView_android_clickable, true)
                 focusable = getBoolean(R.styleable.DifftToggleView_android_focusable, true)
                 checkedState = getBoolean(R.styleable.DifftToggleView_android_checked, false)
-                if (hasValue(R.styleable.DifftToggleView_android_enabled)) {
-                    // The framework does not apply android:enabled on a plain View; route it through
-                    // the setter so both the View flag and the Compose state see it.
-                    isEnabled = getBoolean(R.styleable.DifftToggleView_android_enabled, true)
-                }
             }
         }
         isClickable = clickable
         isFocusable = focusable
     }
-
-    /**
-     * Compose lazily on first measure instead of on attach: a GONE box (the common state of the
-     * message-list and contact-row checkboxes) then costs no composition at all, and the shell keeps
-     * every View-facing state outside the composition so nothing is lost.
-     */
-    override val shouldCreateCompositionOnAttachedToWindow: Boolean
-        get() = false
 
     // ---------- Checkable ----------
 
@@ -170,11 +156,6 @@ abstract class DifftToggleView @JvmOverloads constructor(
     fun setOnToggleRequestListener(listener: ((view: DifftToggleView, requested: Boolean) -> Unit)?) {
         onToggleRequestListener = listener
         if (listener != null) onCheckedChangeListener = null
-    }
-
-    override fun setEnabled(enabled: Boolean) {
-        super.setEnabled(enabled)
-        enabledState = enabled
     }
 
     override fun performClick(): Boolean {

@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.input.ImeAction
 import com.difft.android.base.R
 import com.difft.android.base.ui.compose.input.ClearMode
+import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -73,11 +74,26 @@ class DifftClearableInputViewTest {
         assertEquals(ImeAction.Search, view.keyboardOptions.imeAction)
     }
 
+    // Both shells default to WhenNotEmpty: the library keeps the ✕ visible whenever the field
+    // holds a value, focused or not.
     @Test
-    fun baseClass_defaultsToWhileEditingAndDefaultAction() {
+    fun baseClass_defaultsToWhenNotEmptyAndDefaultAction() {
         val view = mountView()
-        assertEquals(ClearMode.WhileEditing, view.clearMode)
+        assertEquals(ClearMode.WhenNotEmpty, view.clearMode)
         assertEquals(ImeAction.Default, view.keyboardOptions.imeAction)
+    }
+
+    // The base shell is the form field; the search subclass overrides the skin.
+    @Test
+    fun shellDefaultStyles_formOnBaseSearchOnSubclass() {
+        assertEquals(DifftTextFieldStyle.Form, mountView().inputStyle)
+        lateinit var searchView: DifftSearchInputView
+        rule.activityRule.scenario.onActivity { activity ->
+            searchView = DifftSearchInputView(activity)
+            activity.setContentView(searchView)
+        }
+        rule.waitForIdle()
+        assertEquals(DifftTextFieldStyle.Search, searchView.inputStyle)
     }
 
     // B4: external setter fires no callback

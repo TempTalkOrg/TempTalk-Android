@@ -36,12 +36,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import com.difft.android.call.BuildConfig
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 
@@ -170,14 +167,9 @@ fun CriticalAlertFullScreen(
                 // Title
                 Text(
                     text = title,
-                    style = TextStyle(
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(510),
-                        color = DifftTheme.colors.textPrimary,
-                        textAlign = TextAlign.Center,
-                    )
+                    style = DifftTheme.typography.h6,
+                    color = DifftTheme.colors.textPrimary,
+                    textAlign = TextAlign.Center,
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -185,36 +177,20 @@ fun CriticalAlertFullScreen(
                 // Message
                 Text(
                     text = message,
-                    style = TextStyle(
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        color = DifftTheme.colors.textSecondary,
-                        textAlign = TextAlign.Center,
-                    )
+                    style = DifftTheme.typography.p4,
+                    color = DifftTheme.colors.textSecondary,
+                    textAlign = TextAlign.Center,
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF3D73F5))
-                        .testTag("critical_alert_join_btn")
-                        .clickable { onJoinClick() }
-                        .padding(vertical = 10.dp, horizontal = 30.dp)
-                ) {
-                    Text(
-                        text = stringResource(id = com.difft.android.call.R.string.join_call),
-                        color = Color.White,
-                        fontFamily = FontFamily.Default,
-                        fontWeight = FontWeight(400),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
+                // Content width, not fillMaxWidth: the alert card is a fixed narrow column and the
+                // design's sample is a content-width button.
+                DifftButton(
+                    text = stringResource(id = com.difft.android.call.R.string.join_call),
+                    onClick = onJoinClick,
+                    modifier = Modifier.testTag("critical_alert_join_btn"),
+                )
 
                 Spacer(modifier = Modifier.height(20.dp))
             }

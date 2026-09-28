@@ -13,8 +13,9 @@ import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
- * Tablet dual-pane Compose host for the Linked Devices screen: a thin ComposeView shell; the back
- * button is hidden in dual-pane mode.
+ * Compose host for the Linked Devices screen on both form factors: a thin ComposeView shell inside
+ * [LinkedDevicesActivity] on phones and inside the dual-pane detail pane on tablets, where the back
+ * button is hidden. The host's XML root carries the system-bar insets.
  */
 @AndroidEntryPoint
 class LinkedDevicesFragment : Fragment() {

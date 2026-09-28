@@ -23,11 +23,8 @@ import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.DraftRepository
-import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.HttpService
 import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.signal.DeviceRepository
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.network.requests.ConversationSetRequestBody
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -65,15 +62,12 @@ class RecentChatViewModel @Inject constructor(
     private val dbRoomStore: DBRoomStore,
     @param:ChativeHttpClientModule.Call
     private val httpClient: Lazy<ChativeHttpClient>,
-    @param:ChativeHttpClientModule.Chat
-    private val chatHttpClient: Lazy<ChativeHttpClient>,
     private val draftRepository: DraftRepository,
     private val appIconBadgeManager: Lazy<AppIconBadgeManager>,
     private val messageNotificationUtil: Lazy<MessageNotificationUtil>,
     private val callDataManagerLazy: Lazy<CallDataManager>,
     private val contactorCacheManager: ContactorCacheManager,
     private val groupUtil: Lazy<GroupUtil>,
-    private val deviceRepository: DeviceRepository,
 ) : ViewModel() {
 
     private val language by lazy {
@@ -204,7 +198,7 @@ class RecentChatViewModel @Inject constructor(
         L.d { "[Call] RecentChatViewModel retrieveCallingList" }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val response = callService.getCallingList((globalServices.userManager.getUserData()?.microToken ?: ""))
+                val response = callService.getCallingList()
                 if(response.status == 0) {
                     L.d { "[Call] RecentChatViewModel retrieve calling list from server: ${response.status}, ${response.data?.calls}" }
                     val joinAbleCalls = response.data?.calls
@@ -314,7 +308,6 @@ class RecentChatViewModel @Inject constructor(
                         .getHttpClient()
                         .httpService
                         .fetchConversationSet(
-                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             setting
                         )
                 }
@@ -329,20 +322,6 @@ class RecentChatViewModel @Inject constructor(
                 e.message?.let { message -> ToastUtil.show(message) }
             }
         }
-    }
-
-    suspend fun activateDevice(): BaseResponse<Any> {
-        return chatHttpClient.get().getService(HttpService::class.java)
-            .activateDevice((globalServices.userManager.getUserData()?.baseAuth ?: ""))
-    }
-
-    /**
-     * Check device auth via Retrofit suspend fun.
-     * Replaces blocking PushServiceSocket call.
-     * Throws AuthorizationFailedException on 401/403 (handled by caller for logout).
-     */
-    suspend fun checkDeviceAuth() {
-        deviceRepository.checkDeviceAuth()
     }
 
     fun markAllAsRead(activity: Activity) {

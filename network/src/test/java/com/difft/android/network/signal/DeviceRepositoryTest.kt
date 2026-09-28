@@ -1,5 +1,7 @@
 package com.difft.android.network.signal
 
+import com.difft.android.base.session.AuthFailureSink
+import com.difft.android.base.session.AuthFailureSource
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.websocket.api.messages.multidevice.DeviceInfo
@@ -37,14 +39,64 @@ class DeviceRepositoryTest {
     }
     private lateinit var repository: DeviceRepository
 
+    /**
+     * Hand-written recording fake rather than a mock (mirrors NoOpRefresher in
+     * ProxyConfigProviderTunnelHostsTest). Records the source tags so the auth-failure hook can be
+     * asserted without giving every other test in this file a mock to satisfy.
+     */
+    private class RecordingSink : AuthFailureSink {
+        val sources = mutableListOf<String>()
+        override fun onAuthRejected(source: String) {
+            sources += source
+        }
+    }
+
+    private lateinit var authFailureSink: RecordingSink
+
     @Before
     fun setUp() {
-        repository = DeviceRepository(httpClient)
+        authFailureSink = RecordingSink()
+        repository = DeviceRepository(httpClient, dagger.Lazy { authFailureSink })
     }
 
     @After
     fun tearDown() {
         clearMocks(deviceApiService, httpClient)
+    }
+
+    // --- auth-failure hook: every 401/403 through executeDeviceCall reaches SessionAuthGuard ---
+
+    @Test
+    fun `getDevices 401 reports the auth failure exactly once`() = runTest {
+        coEvery { deviceApiService.getDevices() } returns Response.error(
+            401, "Unauthorized".toResponseBody("text/plain".toMediaType())
+        )
+
+        assertFailsWith<AuthorizationFailedException> { repository.getDevices() }
+
+        assertEquals(listOf(AuthFailureSource.DEVICE_API), authFailureSink.sources)
+    }
+
+    @Test
+    fun `getDevices 403 reports the auth failure exactly once`() = runTest {
+        coEvery { deviceApiService.getDevices() } returns Response.error(
+            403, "Forbidden".toResponseBody("text/plain".toMediaType())
+        )
+
+        assertFailsWith<AuthorizationFailedException> { repository.getDevices() }
+
+        assertEquals(listOf(AuthFailureSource.DEVICE_API), authFailureSink.sources)
+    }
+
+    @Test
+    fun `getDevices 404 does not report an auth failure`() = runTest {
+        coEvery { deviceApiService.getDevices() } returns Response.error(
+            404, "".toResponseBody("text/plain".toMediaType())
+        )
+
+        assertFailsWith<NotFoundException> { repository.getDevices() }
+
+        assertTrue(authFailureSink.sources.isEmpty())
     }
 
     // --- checkDeviceAuth: success ---

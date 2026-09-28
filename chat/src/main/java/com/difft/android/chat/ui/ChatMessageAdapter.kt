@@ -45,12 +45,45 @@ abstract class ChatMessageAdapter(
             override fun areContentsTheSame(oldItem: ChatMessage, newItem: ChatMessage): Boolean {
                 return oldItem == newItem
             }
+
+            override fun getChangePayload(oldItem: ChatMessage, newItem: ChatMessage): Any? =
+                changePayloadFor(oldItem, newItem)
         }) {
 
     companion object {
         // Payload constants for partial refresh
         const val PAYLOAD_SELECTION = "payload_selection"
         const val PAYLOAD_HIGHLIGHT = "payload_highlight"
+        const val PAYLOAD_TRANSLATE = "payload_translate"
+
+        /**
+         * Diff payload for a pair the DiffUtil callback already decided are the same item with
+         * different contents, so something did change.
+         *
+         * A translation arriving is by far the most frequent such change once auto-translate is on,
+         * and rebinding the whole row for it re-runs avatar, quote, forward and reaction binding for
+         * no reason. Any other difference returns null, i.e. a full rebind.
+         */
+        internal fun changePayloadFor(oldItem: ChatMessage, newItem: ChatMessage): Any? {
+            if (oldItem !is TextChatMessage || newItem !is TextChatMessage) return null
+            return if (oldItem.contentEqualsIgnoringTranslate(newItem)) PAYLOAD_TRANSLATE else null
+        }
+
+        /**
+         * The payloads this adapter can apply without a full rebind.
+         *
+         * DiffUtil merges the payloads of several notifications into ONE list, so the decision is
+         * "which of them are recognised", not "is there exactly one": with two recognised payloads
+         * the old `size == 1` check fell through and rebound the whole row after already doing the
+         * partial work twice. An empty result means "fall through to the full bind" — which is also
+         * what a holder type with no partial path gets.
+         */
+        internal fun partialPayloadsFor(payloads: List<Any>, isMessageHolder: Boolean): Set<String> {
+            if (payloads.isEmpty() || !isMessageHolder) return emptySet()
+            return PARTIAL_PAYLOADS.filterTo(mutableSetOf()) { it in payloads }
+        }
+
+        private val PARTIAL_PAYLOADS = listOf(PAYLOAD_SELECTION, PAYLOAD_HIGHLIGHT, PAYLOAD_TRANSLATE)
 
         // 消息内容类型定义（0-99）
         private const val CONTENT_TYPE_TEXT = 0
@@ -273,26 +306,20 @@ abstract class ChatMessageAdapter(
         data.selectedStatus = data.id in selectMessageState.selectedMessageIds
 
         // ========== Payload partial refresh handling ==========
-        if (payloads.isNotEmpty()) {
-            // Handle selection state partial refresh
-            if (payloads.contains(PAYLOAD_SELECTION)) {
-                if (holder is ChatMessageViewHolder.Message) {
-                    holder.bindSelectionOnly(data) { id, selected ->
-                        onSelectedMessage(id, selected)
-                    }
-                }
-                // If only PAYLOAD_SELECTION, return early without full binding
-                if (payloads.size == 1) return
+        // An empty set means no partial path applies (unknown payload, or a holder type without
+        // one), and the full bind below runs.
+        val partial = partialPayloadsFor(payloads, holder is ChatMessageViewHolder.Message)
+        if (partial.isNotEmpty() && holder is ChatMessageViewHolder.Message) {
+            if (PAYLOAD_SELECTION in partial) {
+                holder.bindSelectionOnly(data) { id, selected -> onSelectedMessage(id, selected) }
             }
-
-            // Handle highlight partial refresh
-            if (payloads.contains(PAYLOAD_HIGHLIGHT)) {
-                if (holder is ChatMessageViewHolder.Message) {
-                    holder.bindHighlightOnly(data, mHighlightItemIds)
-                }
-                // If only PAYLOAD_HIGHLIGHT, return early without full binding
-                if (payloads.size == 1) return
+            if (PAYLOAD_HIGHLIGHT in partial) {
+                holder.bindHighlightOnly(data, mHighlightItemIds)
             }
+            if (PAYLOAD_TRANSLATE in partial) {
+                holder.bindTranslateOnly(data) { message -> onTranslateRetry(message) }
+            }
+            return
         }
 
         // ========== Full binding logic ==========
@@ -314,7 +341,8 @@ abstract class ChatMessageAdapter(
                         onReactionClick(message, emoji, remove, originTimeStamp)
                     },
                     onReactionLongClick = { message, emoji -> onReactionLongClick(message, emoji) },
-                    onSelectPinnedMessage = { id, selected -> onSelectedMessage(id, selected) }
+                    onSelectPinnedMessage = { id, selected -> onSelectedMessage(id, selected) },
+                    onTranslateRetry = { message -> onTranslateRetry(message) }
                 )
             }
 
@@ -415,6 +443,9 @@ abstract class ChatMessageAdapter(
         message: ChatMessage,
         emoji: String,
     )
+
+    /** Inline retry tap inside the translate block of a failed manual translation. */
+    abstract fun onTranslateRetry(message: TextChatMessage)
 
     open fun onSelectedMessage(messageId: String, selected: Boolean) = Unit
 

@@ -64,6 +64,16 @@ data class UserData(
     var mostUseEmojis: String? = null,
     var dualPaneRatio: Float = -1f, //双栏布局 list_pane 占可用宽度的比例(0.0–1.0),-1 表示未自定义,走默认逻辑
     var dualPaneListCollapsed: Boolean = false, // dual-pane list pane collapsed (divider dragged past the minimum)
+    var legacyMigrationGuideShown: Boolean = false, // retiring package: the one-time "move to the new app" notice was shown
+
+    // — Same-device no-login migration handoff bookkeeping (plain markers, never credential material) —
+    // Sender side: the id minted before the first byte leaves; cleared once the receipt is handled.
+    var migrationHandoffId: String = "",
+    // Receiver side: the handoff id whose credential this install actually adopted.
+    var migrationHandoffCompletedId: String = "",
+    // Sender side: when the receipt arrived and this install signed itself out (0 = never).
+    var migrationHandoffDoneAt: Long = 0,
+    var dualPaneRailCollapsed: Boolean = false, // dual-pane navigation rail collapsed (list header toggle)
 
     // — App lifecycle —
     var lastUseTime: Long = 0,

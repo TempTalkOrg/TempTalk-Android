@@ -115,7 +115,8 @@ class MessageDetailActivity : BaseActivity() {
 
             setTime(message.timeStamp, binding.tvTime1)
             setTime(message.systemShowTimestamp, binding.tvTime3)
-            setTime(message.readTime, binding.tvTime4)
+            // A migrated "not started" sentinel is negative; setTime hides the row on 0, so map it there.
+            setTime(message.readTime.takeIf { it > 0 } ?: 0L, binding.tvTime4)
             binding.tvExpiresInSeconds.text = message.expiresInSeconds.toString()
 
             if (message.roomId != globalServices.myId) {
@@ -144,7 +145,7 @@ class MessageDetailActivity : BaseActivity() {
             setTime(message.timeStamp, binding.tvReceivedTime1)
             setTime(message.receivedTimeStamp, binding.tvReceivedTime2)
             setTime(message.systemShowTimestamp, binding.tvReceivedTime3)
-            setTime(message.readTime, binding.tvReceivedTime4)
+            setTime(message.readTime.takeIf { it > 0 } ?: 0L, binding.tvReceivedTime4)
             binding.tvReceivedExpiresInSeconds.text = message.expiresInSeconds.toString()
         }
 

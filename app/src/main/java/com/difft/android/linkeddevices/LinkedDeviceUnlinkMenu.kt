@@ -1,18 +1,9 @@
 package com.difft.android.linkeddevices
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,13 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
 import com.difft.android.R
-import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItem
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuItemTone
+import com.difft.android.base.ui.compose.menu.DifftDropdownMenuPanel
 import kotlin.math.roundToInt
 
 /**
@@ -52,10 +43,7 @@ fun BoxScope.LinkedDeviceUnlinkMenu(
     )
 
     var menuSize by remember { mutableStateOf(IntSize.Zero) }
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = DifftTheme.colors.backgroundActionPopup,
-        shadowElevation = 4.dp,
+    DifftDropdownMenuPanel(
         modifier = Modifier
             .align(Alignment.TopStart)
             .onSizeChanged { menuSize = it }
@@ -68,27 +56,14 @@ fun BoxScope.LinkedDeviceUnlinkMenu(
                 )
             }
     ) {
-        Row(
-            modifier = Modifier
-                .clickable {
-                    onUnlink()
-                    onDismiss()
-                }
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                painter = painterResource(com.difft.android.chat.R.drawable.ic_trash_24),
-                contentDescription = null,
-                tint = DifftTheme.colors.error,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                text = stringResource(R.string.linked_devices_unlink_action),
-                style = DifftTheme.typography.bodyMedium,
-                color = DifftTheme.colors.error,
-            )
-        }
+        DifftDropdownMenuItem(
+            text = stringResource(R.string.linked_devices_unlink_action),
+            iconRes = com.difft.android.chat.R.drawable.ic_trash_24,
+            tone = DifftDropdownMenuItemTone.Destructive,
+            onClick = {
+                onUnlink()
+                onDismiss()
+            },
+        )
     }
 }

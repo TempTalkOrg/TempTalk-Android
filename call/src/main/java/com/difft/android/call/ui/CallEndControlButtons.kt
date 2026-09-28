@@ -63,7 +63,9 @@ fun GroupCallLeaveButton(
     // Same arithmetic the planner budgets with, so the rendered control can never drift from it.
     val totalWidth = CallActionBarPlanner.groupEndWidth(size.value.toInt()).dp
     val chevronSize = if (compact) 12.dp else 14.dp
-    val tailShape = RoundedCornerShape(topStart = 0.dp, topEnd = 100.dp, bottomStart = 0.dp, bottomEnd = 100.dp)
+    // Full-radius on the end side only, so `radius.pill` (a 50% CircleShape) cannot express it:
+    // percent corners give the same half-of-min-dimension the previous 100.dp literal was clamped to.
+    val tailShape = RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50)
 
     // Declaration order matters for z-order and hit-test priority in Compose Box:
     // the last-declared child is drawn on top and wins hit-testing in overlap zones.

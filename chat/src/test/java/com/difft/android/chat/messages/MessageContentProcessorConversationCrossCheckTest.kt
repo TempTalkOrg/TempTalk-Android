@@ -143,6 +143,7 @@ class MessageContentProcessorConversationCrossCheckTest {
             webSocket = mockk(relaxed = true),
             dbRoomStore = mockk(relaxed = true),
             envelopToMessageProcessor = envelopToMessageProcessor,
+            priorConversationReporter = mockk(relaxed = true),
         )
     }
 

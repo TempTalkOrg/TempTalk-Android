@@ -9,7 +9,6 @@ import android.view.Window
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -69,7 +67,7 @@ fun ScreenSharingView(
 
     Box(
         modifier = Modifier.fillMaxSize()
-            .clip(shape = RoundedCornerShape(8.dp))
+            .clip(shape = DifftTheme.radius.largeShape)
             .background(DifftTheme.colors.background),
         contentAlignment = Alignment.Center )
     {

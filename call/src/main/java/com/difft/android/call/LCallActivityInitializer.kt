@@ -25,13 +25,15 @@ import com.difft.android.call.manager.CallLifecycleObserver
 import com.difft.android.call.manager.CallScreenshotController
 import com.difft.android.call.manager.CallServiceManager
 import com.difft.android.call.manager.PictureInPictureManager
-import com.difft.android.call.manager.ProximitySensorManager
+import com.difft.android.call.manager.ProximityScreenOffController
+import com.difft.android.call.manager.shouldHoldProximityLock
 import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.ui.CallContent
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.base.utils.hideNavigationBar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -254,10 +256,17 @@ internal fun LCallActivity.initializePictureInPictureManager() {
 }
 
 internal fun LCallActivity.initializeProximitySensor() {
-    proximitySensorManager = ProximitySensorManager(
-        activity = this,
-        isScreenSharingProvider = { viewModel.callUiController.isShareScreening.value }
-    ).also { it.initialize() }
+    proximityScreenOffController = ProximityScreenOffController(
+        context = this,
+        lifecycle = lifecycle,
+        scope = lifecycleScope,
+        shouldHold = combine(
+            viewModel.audioRoute,
+            viewModel.cameraEnabled,
+            viewModel.callUiController.isShareScreening,
+            ::shouldHoldProximityLock,
+        ),
+    ).also { it.start() }
 }
 
 internal fun LCallActivity.initializeDialogManager() {

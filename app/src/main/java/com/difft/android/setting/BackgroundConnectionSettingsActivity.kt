@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,18 +40,16 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.TitleBar
-import com.difft.android.base.ui.compose.DifftSwitchRow
+import com.difft.android.base.ui.compose.settings.DifftSwitchRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.widget.ToastUtil
@@ -235,7 +232,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                                         R.color.bg_elevated
                                     )
                                 ),
-                                RoundedCornerShape(8.dp)
+                                DifftTheme.radius.largeShape
                             )
                     ) {
                         // Main switch item
@@ -359,7 +356,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         val context = LocalContext.current
         Text(
             text = stringResource(com.difft.android.chat.R.string.background_connection_tips),
-            fontSize = 14.sp,
+            style = DifftTheme.typography.p3,
             color = Color(
                 ContextCompat.getColor(
                     context,
@@ -408,7 +405,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         ) {
             Text(
                 text = title,
-                fontSize = 16.sp,
+                style = DifftTheme.typography.p2,
                 color = Color(
                     ContextCompat.getColor(
                         context,
@@ -420,7 +417,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
 
             Text(
                 text = status,
-                fontSize = 16.sp,
+                style = DifftTheme.typography.p2,
                 color = Color(
                     ContextCompat.getColor(
                         context,
@@ -432,22 +429,15 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
 
             // Arrow - use alpha to hide but preserve space
             Box(
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    imageVector = ImageVector.vectorResource(id = com.difft.android.chat.R.drawable.chat_ic_arrow_right),
+                    imageVector = ImageVector.vectorResource(id = com.difft.android.base.R.drawable.base_ic_chevron_right),
                     contentDescription = null, // Decorative icon, no accessibility description needed
-                    colorFilter = ColorFilter.tint(
-                        Color(
-                            ContextCompat.getColor(
-                                context,
-                                R.color.t_primary
-                            )
-                        )
-                    ),
+                    colorFilter = ColorFilter.tint(DifftTheme.colors.icon),
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(16.dp)
                         .alpha(if (showArrow) 1f else 0f)
                 )
             }

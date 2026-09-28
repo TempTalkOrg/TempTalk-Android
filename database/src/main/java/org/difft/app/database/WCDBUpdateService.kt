@@ -343,7 +343,7 @@ object WCDBUpdateService :
                                         L.i { "[WCDBUpdateService] room=$roomId sendingStatus cleared (conditional; no-op if a send raced in)" }
                                     }
 
-                                    // Skip forward/copy notices so the preview falls back to the latest
+                                    // Skip forward/copy/translate notices so the preview falls back to the latest
                                     // non-notice message. notifyType is inside messageText JSON (not a
                                     // column) — matched via LIKE with a trailing-comma anchor (substring
                                     // pinned by LocalMessageCreatorForwardNoticeTest); isNull keeps
@@ -356,6 +356,7 @@ object WCDBUpdateService :
                                                     .or(
                                                         DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_FORWARD_NOTICE,%")
                                                             .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_COPY_NOTICE,%"))
+                                                            .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED,%"))
                                                     )
                                             ),
                                         DBMessageModel.systemShowTimestamp.order(Order.Desc)
@@ -500,6 +501,7 @@ object WCDBUpdateService :
     // Forward/copy notice notifyType (excluded from room preview) — keep in sync with TTNotifyMessage
     private const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020
     private const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021
+    private const val NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED = 10022
 
     /**
      * 判断是否是归档系统消息（Earlier messages expired）

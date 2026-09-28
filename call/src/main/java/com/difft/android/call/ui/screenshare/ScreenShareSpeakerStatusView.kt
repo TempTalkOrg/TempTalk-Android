@@ -3,7 +3,6 @@ package com.difft.android.call.ui.screenshare
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,10 +19,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import coil3.compose.rememberAsyncImagePainter
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.Palette
 import com.difft.android.call.R
 import com.difft.android.call.ui.LocalImageLoaderProvider
 import com.difft.android.call.ui.rememberParticipantDisplayName
@@ -60,7 +59,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
     ConstraintLayout(
         modifier = modifier
             .height(24.dp)
-            .clip(shape = RoundedCornerShape(4.dp))
+            .clip(shape = DifftTheme.radius.mediumShape)
             .background(
                 DifftTheme.colors.background.copy(alpha = 0.8f)
             )
@@ -91,7 +90,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
 
         val tintColor = when {
             audioMuted -> Color.Unspecified // 不设置颜色，或者根据需要设置
-            else -> Color(0xFF82C1FC)
+            else -> Palette.Blue200
         }
 
         Icon(
@@ -120,7 +119,7 @@ fun ScreenShareSpeakerStatusView(modifier: Modifier, activeSpeaker: Participant,
                     centerVerticallyTo(parent)
                 },
             text = StringUtil.truncateWithEllipsis(username, 9),
-            fontSize = 12.sp,
+            style = DifftTheme.typography.p4,
             color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

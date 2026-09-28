@@ -20,9 +20,9 @@ class SettingRepo @Inject constructor() {
         httpClient.getService(SettingService::class.java)
     }
 
-    suspend fun getProfile(token: String): BaseResponse<GetProfileResponse> = settingService.getProfile(token)
+    suspend fun getProfile(): BaseResponse<GetProfileResponse> = settingService.getProfile()
 
-    suspend fun setProfile(token: String, searchByPhone: Int? = null, searchByEmail: Int? = null, searchByCustomUid: Int? = null, customUid: String? = null): BaseResponse<GetProfileResponse> = settingService.setProfile(token, SetStatusRequestBody(searchByPhone, searchByEmail, searchByCustomUid, customUid))
+    suspend fun setProfile(searchByPhone: Int? = null, searchByEmail: Int? = null, searchByCustomUid: Int? = null, customUid: String? = null): BaseResponse<GetProfileResponse> = settingService.setProfile(SetStatusRequestBody(searchByPhone, searchByEmail, searchByCustomUid, customUid))
 
-    suspend fun checkUpdate(token: String, version: String, channel: String): BaseResponse<CheckUpdateResponse> = settingService.checkUpdate(token, version, channel)
+    suspend fun checkUpdate(version: String, channel: String): BaseResponse<CheckUpdateResponse> = settingService.checkUpdate(version, channel)
 }

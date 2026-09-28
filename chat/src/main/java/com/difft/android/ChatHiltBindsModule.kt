@@ -1,9 +1,11 @@
 package com.difft.android
 
+import com.difft.android.base.session.AuthFailureSink
 import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.base.utils.IMessageNotificationUtil
 import com.difft.android.chat.common.ConversationManagerImpl
+import com.difft.android.chat.websocket.SessionAuthGuard
 import com.difft.android.chat.websocket.WebSocketManager
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Binds
@@ -43,4 +45,9 @@ abstract class ChatHiltBindsModule {
     @Binds
     @Singleton
     abstract fun bindConnectionRefresher(webSocketManager: WebSocketManager): IConnectionRefresher
+
+    //Bind SessionAuthGuard to AuthFailureSink so :network can report 401/403 without seeing :chat
+    @Binds
+    @Singleton
+    abstract fun bindAuthFailureSink(sessionAuthGuard: SessionAuthGuard): AuthFailureSink
 }

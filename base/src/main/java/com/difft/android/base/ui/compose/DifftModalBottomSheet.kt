@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
 import com.difft.android.base.R
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.hideNavigationBar
 
 /**
@@ -44,6 +45,13 @@ object DifftBottomSheetDefaults {
     val DragHandleHeight: Dp = 5.dp
     val DragHandleTopPadding: Dp = 12.dp
     val DragHandleBottomPadding: Dp = 8.dp
+
+    /**
+     * Shared modal scrim (library: black 50 %). Read from [ColorTokens] rather than
+     * `DifftTheme.colors.scrim`: this object is not composable and so cannot read a
+     * CompositionLocal, and both themes carry the same value anyway.
+     */
+    val ScrimColor: Color = ColorTokens.Light.Scrim
 }
 
 /**
@@ -56,8 +64,8 @@ object DifftBottomSheetDefaults {
  * `width()` silently defeats the 640dp cap (issue #1197). Width is controlled only via
  * [sheetMaxWidth].
  *
- * Callers that are not inside a [DifftTheme] (e.g. a bare `ComposeView` mounted on an Activity)
- * must pass explicit night-aware [containerColor] / [dragHandleColor]; the defaults read DifftTheme tokens.
+ * [containerColor] / [dragHandleColor] default to the [DifftTheme] tokens; every host mounting a
+ * sheet provides that theme, so a caller only passes them to deviate from the library look.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,8 +74,8 @@ fun DifftModalBottomSheet(
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     sheetMaxWidth: Dp = DifftBottomSheetDefaults.MaxWidth,
     shape: Shape = DifftBottomSheetDefaults.SheetShape,
-    containerColor: Color = DifftTheme.colors.backgroundBottomSheet,
-    scrimColor: Color = BottomSheetDefaults.ScrimColor,
+    containerColor: Color = DifftTheme.colors.backgroundPopup,
+    scrimColor: Color = DifftBottomSheetDefaults.ScrimColor,
     showDragHandle: Boolean = true,
     dragHandleColor: Color = DifftTheme.colors.textDisabled,
     hideNavigationBar: Boolean = false,

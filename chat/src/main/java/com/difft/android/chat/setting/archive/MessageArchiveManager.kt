@@ -21,6 +21,7 @@ import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.requests.ConversationShareRequestBody
 import com.difft.android.network.requests.GetConversationShareRequestBody
 import com.difft.android.websocket.api.messages.GetPublicKeysReq
+import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -40,6 +41,7 @@ import org.difft.app.database.models.DBResetIdentityKeyModel
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.ResetIdentityKeyModel
+import org.difft.app.database.models.RoomModel
 import org.difft.app.database.wcdb
 import util.AppForegroundObserver
 import util.TimeUtils
@@ -67,6 +69,31 @@ class MessageArchiveManager @Inject constructor(
     companion object {
         private const val FOREGROUND_INTERVAL_MS = 5 * 60 * 1000L  // 5 minutes
         private const val BACKGROUND_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
+
+        /** `ResetIdentityKeyModel.status`: fetched from the server, messages not cleared yet. */
+        private const val RESET_STATUS_PENDING = 0
+
+        /** `ResetIdentityKeyModel.status`: messages cleared and notice posted. */
+        private const val RESET_STATUS_PROCESSED = 1
+
+        /**
+         * Server reset records that still need archiving, as pending rows. A record already
+         * processed for the same reset time is skipped, so the outcome does not depend on whether
+         * `/keys?beginTimestamp=` echoes the boundary record back (observed: it does not).
+         */
+        internal fun pendingResetIdentityKeyRecords(
+            known: Map<String?, ResetIdentityKeyModel>,
+            remote: List<PublicKeyInfo>,
+        ): List<ResetIdentityKeyModel> = remote.filter { info ->
+            val local = known[info.uid]
+            local == null || local.status != RESET_STATUS_PROCESSED || local.resetTime != info.resetIdentityKeyTime
+        }.map { info ->
+            ResetIdentityKeyModel().apply {
+                uid = info.uid
+                resetTime = info.resetIdentityKeyTime
+                status = RESET_STATUS_PENDING
+            }
+        }
     }
 
     @Volatile
@@ -407,7 +434,6 @@ class MessageArchiveManager @Inject constructor(
     } else {
         val response = chatHttpClient.httpService
             .fetchShareConversationConfig(
-                (globalServices.userManager.getUserData()?.microToken ?: ""),
                 GetConversationShareRequestBody(
                     listOf(conversationParams(forWhat.id)),
                     false
@@ -446,7 +472,6 @@ class MessageArchiveManager @Inject constructor(
         } else {
             val response = chatHttpClient.httpService
                 .updateConversationConfig(
-                    (globalServices.userManager.getUserData()?.microToken ?: ""),
                     conversationParams(forWhat.id),
                     ConversationShareRequestBody(messageExpiry)
                 )
@@ -480,21 +505,22 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
+    /** Messages [userId] sent before [timestamp] that an identity-key reset clears (the self room is never touched). */
+    private fun resetIdentityKeyClearCondition(userId: String, timestamp: Long): Expression =
+        DBMessageModel.fromWho.eq(userId)
+            .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
+            .and(DBMessageModel.timeStamp.lt(timestamp))
+            .and(DBMessageModel.roomId.notEq(globalServices.myId))
+
     /**
      * Delete all messages sent by [userId] with timestamp before [timestamp], in batches.
+     * Returns false when the sweep aborted, so the caller keeps the reset pending for a retry.
      */
-    private suspend fun clearMessagesBeforeTimestamp(userId: String, timestamp: Long, pageSize: Long = 100) {
-        try {
+    private suspend fun clearMessagesBeforeTimestamp(userId: String, timestamp: Long, pageSize: Long = 100): Boolean {
+        return try {
             L.i { "[MessageArchiveManager] start clearing messages for user: $userId before timestamp: $timestamp" }
             while (true) {
-                val messages = wcdb.message.getAllObjects(
-                    DBMessageModel.fromWho.eq(userId)
-                        .and(DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY))
-                        .and(DBMessageModel.timeStamp.lt(timestamp))
-                        .and(DBMessageModel.roomId.notEq(globalServices.myId)),
-                    null,
-                    pageSize
-                )
+                val messages = wcdb.message.getAllObjects(resetIdentityKeyClearCondition(userId, timestamp), null, pageSize)
 
                 L.i { "[MessageArchiveManager] clearMessagesBeforeTimestamp:" + messages.size + "===" + messages.map { it.timeStamp } }
                 messages.forEach {
@@ -509,12 +535,20 @@ class MessageArchiveManager @Inject constructor(
             }
 
             L.i { "[MessageArchiveManager] finished clearing messages for user: $userId before timestamp: $timestamp" }
+            true
         } catch (e: Exception) {
             L.e { "[MessageArchiveManager] error clearing messages: ${e.message}" }
+            false
         }
     }
 
-    /** Check for users who reset their identity key and clear their corresponding messages. */
+    /**
+     * Cold-start catch-up for resets this device could not receive as a notify (e.g. passively
+     * logged out with the DB kept, then signed back in). Idempotent: it only re-queues records
+     * that are new, still pending from an interrupted run, or carry a later reset time, and the
+     * archive step itself posts nothing in a room that has nothing to clear, so a routine cold
+     * start ends up doing no writes.
+     */
     private suspend fun checkIdentityKeyReset() {
         try {
             // Fetch incremental reset records starting from the latest known reset timestamp
@@ -522,25 +556,21 @@ class MessageArchiveManager @Inject constructor(
             L.i { "[MessageArchiveManager] checkIdentityKeyReset maxResetTime: $maxResetTime" }
 
             val checkIdentityKeyResetResponse = chatHttpClient.httpService.getPublicKeys(
-                (globalServices.userManager.getUserData()?.microToken ?: ""),
                 GetPublicKeysReq(beginTimestamp = maxResetTime)
             )
             if (checkIdentityKeyResetResponse.isSuccess()) {
-                val resetIdentityKeyModels = checkIdentityKeyResetResponse.data?.keys?.map {
-                    ResetIdentityKeyModel().apply {
-                        uid = it.uid
-                        resetTime = it.resetIdentityKeyTime
-                        status = 0
+                val remote = checkIdentityKeyResetResponse.data?.keys.orEmpty()
+                val known = wcdb.resetIdentityKey.getAllObjects().associateBy { it.uid }
+                val pending = pendingResetIdentityKeyRecords(known, remote)
+                L.i { "[MessageArchiveManager] checkIdentityKeyReset remote=${remote.size} pending=${pending.map { it.uid to it.resetTime }}" }
+                if (pending.isNotEmpty()) {
+                    wcdb.resetIdentityKey.insertOrReplaceObjects(pending)
+                }
+                // Also resumes records a previous run was killed before marking processed
+                wcdb.resetIdentityKey.getAllObjects(DBResetIdentityKeyModel.status.eq(RESET_STATUS_PENDING))
+                    .forEach { resetIdentityKeyModel ->
+                        archiveMessagesByResetIdentityKey(resetIdentityKeyModel.uid!!, resetIdentityKeyModel.resetTime!!)
                     }
-                }
-                L.i { "[MessageArchiveManager] checkIdentityKeyReset success: ${resetIdentityKeyModels?.map { it.uid to it.resetTime }}" }
-                if (!resetIdentityKeyModels.isNullOrEmpty()) {
-                    wcdb.resetIdentityKey.insertOrReplaceObjects(resetIdentityKeyModels)
-                    wcdb.resetIdentityKey.getAllObjects(DBResetIdentityKeyModel.status.eq(0))
-                        .map { resetIdentityKeyModel ->
-                            archiveMessagesByResetIdentityKey(resetIdentityKeyModel.uid!!, resetIdentityKeyModel.resetTime!!)
-                        }
-                }
             } else {
                 L.w { "[MessageArchiveManager] checkIdentityKeyReset failed: ${checkIdentityKeyResetResponse.reason}" }
             }
@@ -549,32 +579,64 @@ class MessageArchiveManager @Inject constructor(
         }
     }
 
-    suspend fun archiveMessagesByResetIdentityKey(operator: String, resetIdentityKeyTime: Long) {
-        if (operator == globalServices.myId) { // Self reset: create notify messages for all 1v1 conversations
-            wcdb.room.getAllObjects(DBRoomModel.roomId.notEq(globalServices.myId).and(DBRoomModel.roomType.eq(0)))
-                .map { room ->
-                    localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry ?: 0L)
-                }.let { messages ->
-                    L.i { "[MessageArchiveManager] create reset identity key notify message for self, rooms size:${messages.size}" }
-                    dbMessageStore.putWhenNonExist(*messages.toTypedArray())
-                }
-        } else { // Other user reset: create notify message for the 1v1 conversation if it exists
-            wcdb.room.getFirstObject(DBRoomModel.roomId.eq(operator))?.let {
-                L.i { "[MessageArchiveManager] create reset identity key message -> operator:${operator}  resetIdentityKeyTime:${resetIdentityKeyTime}" }
-                localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(operator), resetIdentityKeyTime, it.messageExpiry ?: 0L).let { message ->
-                    dbMessageStore.putWhenNonExist(message)
-                }
-            } ?: run {
-                L.i { "[MessageArchiveManager] no need to create reset identity key message, can't find room for operator:${operator}" }
+    /**
+     * Clear [operator]'s messages sent before [resetIdentityKeyTime] and post the local
+     * "reset the identity key, history cleared" notice. Shared by the server notify (type 19)
+     * and the cold-start catch-up above.
+     *
+     * The notice follows the same rules as the archive tombstone (and iOS `fetchThreadsToUpdate`):
+     *  - only in a 1v1 room that still holds messages to clear, so a never-chatted or already
+     *    emptied room is not resurfaced with a lone notice;
+     *  - never twice for one reset: a notify row already at [resetIdentityKeyTime] in that room
+     *    suppresses another. The key is deliberately payload-agnostic (timestamp, not action type)
+     *    so a notice migrated from another platform, which carries a foreign id and a different
+     *    payload shape, still counts;
+     *  - stamped with [resetIdentityKeyTime] so it sorts where the reset happened.
+     * Order matters: rooms are resolved and the notice posted BEFORE the paged clear. A run killed
+     * mid-sweep would otherwise find those rooms already empty on resume and drop their notice.
+     * The record is marked processed only once the sweep completed; a failed sweep stays pending
+     * and is retried on the next cold start, where the notice check above prevents a second post.
+     * Runs under [archiveMutex]: the cold-start catch-up and the live notify can target the same
+     * reset at once, and the room check above is an exists-then-insert like the tombstone's.
+     */
+    suspend fun archiveMessagesByResetIdentityKey(operator: String, resetIdentityKeyTime: Long) = archiveMutex.withLock {
+        val noticeRooms = roomsNeedingResetIdentityKeyNotice(operator, resetIdentityKeyTime)
+        if (noticeRooms.isNotEmpty()) {
+            val messages = noticeRooms.map { room ->
+                localMessageCreator.get().createResetIdentityKeyMessage(operator, For.Account(room.roomId), resetIdentityKeyTime, room.messageExpiry ?: 0L)
             }
+            dbMessageStore.putWhenNonExist(*messages.toTypedArray())
         }
-        clearMessagesBeforeTimestamp(operator, resetIdentityKeyTime)
+
+        val cleared = clearMessagesBeforeTimestamp(operator, resetIdentityKeyTime)
+        L.i { "[MessageArchiveManager] reset identity key archived operator=$operator resetTime=$resetIdentityKeyTime noticeRooms=${noticeRooms.size} cleared=$cleared" }
 
         wcdb.resetIdentityKey.insertOrReplaceObject(ResetIdentityKeyModel().apply {
             uid = operator
             resetTime = resetIdentityKeyTime
-            status = 1 // Mark as processed
+            status = if (cleared) RESET_STATUS_PROCESSED else RESET_STATUS_PENDING
         })
+    }
+
+    /** 1v1 rooms that still hold messages to clear for this reset and do not yet carry its notice. */
+    private fun roomsNeedingResetIdentityKeyNotice(operator: String, resetIdentityKeyTime: Long): List<RoomModel> {
+        val myId = globalServices.myId
+        val candidates = if (operator == myId) {
+            wcdb.room.getAllObjects(DBRoomModel.roomId.notEq(myId).and(DBRoomModel.roomType.eq(0)))
+        } else {
+            listOfNotNull(wcdb.room.getFirstObject(DBRoomModel.roomId.eq(operator)))
+        }
+        return candidates.filter { room ->
+            val hasMessagesToClear = wcdb.message.getFirstObject(
+                resetIdentityKeyClearCondition(operator, resetIdentityKeyTime).and(DBMessageModel.roomId.eq(room.roomId))
+            ) != null
+            val hasNotice = wcdb.message.getFirstObject(
+                DBMessageModel.roomId.eq(room.roomId)
+                    .and(DBMessageModel.type.eq(MessageModel.TYPE_NOTIFY))
+                    .and(DBMessageModel.systemShowTimestamp.eq(resetIdentityKeyTime))
+            ) != null
+            hasMessagesToClear && !hasNotice
+        }
     }
 }
 

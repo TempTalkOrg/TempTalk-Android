@@ -4,81 +4,75 @@ import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 
-/** Figma switch geometry (51×31 iOS pill). Single source for the shell and every Compose call site. */
+/**
+ * Switch geometry and motion, from the library Switch page's "Android switcher" (Material 3)
+ * frames. Single source for the shell and every Compose call site.
+ */
 object DifftSwitchDefaults {
-    val TrackWidth: Dp = 51.dp
-    val TrackHeight: Dp = 31.dp
-    val KnobSize: Dp = 27.dp
-    val KnobInset: Dp = 2.dp
+    /** Track box: a 52×32 pill, the same box in both states. */
+    val TrackWidth: Dp = 52.dp
+    val TrackHeight: Dp = 32.dp
 
-    /** 51 − 27 − 2×2 */
-    val KnobTravel: Dp = TrackWidth - KnobSize - KnobInset * 2
-    val TrackShape: Shape = RoundedCornerShape(percent = 50)
+    /** Off-track outline; the on track is a flat fill. */
+    val TrackBorderWidth: Dp = 2.dp
+
+    /** The knob grows as it slides: 24dp inset 4dp when on, 16dp inset 8dp when off. */
+    val KnobSizeOn: Dp = 24.dp
+    val KnobSizeOff: Dp = 16.dp
+    val KnobInsetOn: Dp = 4.dp
+    val KnobInsetOff: Dp = 8.dp
+
+    /** Knob start edge, measured from the track start. Vertical centring is the layout's job. */
+    val KnobOffsetOn: Dp = TrackWidth - KnobInsetOn - KnobSizeOn
+    val KnobOffsetOff: Dp = KnobInsetOff
+
     val KnobShape: Shape = CircleShape
 
-    /** Figma filter0_dd: dy 3 / black 6% + dy 3 / blur 4 / black 15%. */
-    val KnobElevation: Dp = 2.dp
-    val KnobShadowAmbient: Color = Color.Black.copy(alpha = 0.06f)
-    val KnobShadowSpot: Color = Color.Black.copy(alpha = 0.15f)
+    /** Figma Disable-On / Disable-Off: the state colours stay and the whole control is veiled. */
+    const val DisabledAlpha: Float = 0.4f
 
     val KnobAnimationDurationMillis: Int = 150
 
-    /** Knob slide. Shared so the shell and every call site animate identically. */
+    /** Knob slide and grow. Shared so the shell and every call site animate identically. */
     val KnobAnimationSpec: AnimationSpec<Dp> = tween(KnobAnimationDurationMillis)
-
-    /** Label-row metrics shared by [DifftSwitchRow] and the XML label-row shell. */
-    val RowMinHeight: Dp = 52.dp
-    val LabelSpacing: Dp = 12.dp
-
-    /**
-     * Row label: the theme's bodyLarge with letterSpacing zeroed. bodyLarge carries 0.5sp, which
-     * neither the migrated XML rows (16sp, default spacing) nor the migrated Compose rows had.
-     */
-    val LabelTextStyle: TextStyle
-        @Composable @ReadOnlyComposable
-        get() = DifftTheme.typography.bodyLarge.copy(letterSpacing = 0.sp)
 }
 
 /**
- * The app's switch (Figma `Switch`, 51×31 pill with a 27dp knob inset 2dp).
+ * The app's switch: follows the library Switch page's "Android switcher" (Material 3) frames — a
+ * 52×32 pill whose knob is 24dp inset 4dp at the end when on, and 16dp inset 8dp at the start over
+ * a `textDisabled`-bordered grey track when off.
  *
  * Mirrors the Material3 `Switch` parameter shape so call sites migrate by renaming. A non-null
  * [onCheckedChange] makes it toggleable in its own right with switch semantics and a 48dp-tall
- * touch target; `null` renders the visual only, for rows ([DifftSwitchRow]) or View shells that own
+ * touch target; `null` renders the visual only, for rows (`DifftSwitchRow`) or View shells that own
  * the click and the semantics.
  *
  * Tap only — no drag. `SwitchCompat` does support dragging the thumb; dropping it is a deliberate
  * trade-off: Figma specifies no drag, and a draggable knob would fight the label row's whole-row
  * click, where the switch is a child of the tappable row rather than the target itself.
  *
- * Disabled states are not in Figma; they follow the [DifftCheckBox] treatment — distinct colours
- * rather than an alpha veil: the track drops to `backgroundDisabled` in both states while the knob
- * keeps its position, so the state stays readable on the light and dark palettes alike (0.38 alpha
- * over `bg.disable` is all but invisible in both).
+ * Disabled follows Figma's Disable-On / Disable-Off, which keep the enabled colours and veil the
+ * whole control at [DifftSwitchDefaults.DisabledAlpha]: Disable-On stays recognisably blue instead
+ * of collapsing onto the same grey as Disable-Off.
  */
 @Composable
 fun DifftSwitch(
@@ -87,17 +81,22 @@ fun DifftSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val track = if (enabled && checked) DifftTheme.colors.primary else DifftTheme.colors.backgroundDisabled
-    val knob = DifftTheme.colors.iconOnPrimary
-    val offsetX by animateDpAsState(
-        targetValue = if (checked) DifftSwitchDefaults.KnobTravel else 0.dp,
+    val track = if (checked) DifftTheme.colors.primary else DifftTheme.colors.backgroundDisabled
+    val knob = if (checked) DifftTheme.colors.iconOnPrimary else DifftTheme.colors.textDisabled
+    val knobSize by animateDpAsState(
+        targetValue = if (checked) DifftSwitchDefaults.KnobSizeOn else DifftSwitchDefaults.KnobSizeOff,
         animationSpec = DifftSwitchDefaults.KnobAnimationSpec,
-        label = "difft_switch_knob",
+        label = "difft_switch_knob_size",
+    )
+    val knobOffsetX by animateDpAsState(
+        targetValue = if (checked) DifftSwitchDefaults.KnobOffsetOn else DifftSwitchDefaults.KnobOffsetOff,
+        animationSpec = DifftSwitchDefaults.KnobAnimationSpec,
+        label = "difft_switch_knob_offset",
     )
 
     val interaction = if (onCheckedChange != null) {
         Modifier
-            // Height only; the width stays 51dp so row alignment does not shift.
+            // Height only; the width stays the track width so row alignment does not shift.
             .defaultMinSize(minHeight = DifftTheme.spacing.minTouchTarget)
             .toggleable(
                 value = checked,
@@ -110,7 +109,7 @@ fun DifftSwitch(
     }
 
     Box(
-        // wrap_content → the design's 51×31 box; an explicit size arrives as EXACTLY and wins.
+        // wrap_content → the design's track box; an explicit size arrives as EXACTLY and wins.
         // Never fillMaxSize: wrap_content children receive AT_MOST, which fillMaxSize expands to.
         // The interaction's touch-target min goes first: defaultMinSize only applies when the
         // incoming min is 0, so the geometry min would otherwise swallow it.
@@ -120,28 +119,33 @@ fun DifftSwitch(
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            // background(shape) rather than clip(shape): clipping the track would also clip the
-            // knob's drop shadow at the pill edge and erase it.
+            // background(shape) rather than clip(shape): clipping would trim the knob at the pill
+            // edge. The border draws inside the bounds, so the off track keeps the same 52×32 box
+            // as the on track. The disabled veil sits here so it covers the knob too, and leaves
+            // the touch target untouched.
             modifier = Modifier
                 .size(DifftSwitchDefaults.TrackWidth, DifftSwitchDefaults.TrackHeight)
-                .background(track, DifftSwitchDefaults.TrackShape)
-                .padding(DifftSwitchDefaults.KnobInset),
+                .alpha(if (enabled) 1f else DifftSwitchDefaults.DisabledAlpha)
+                .background(track, DifftTheme.radius.pill)
+                .then(
+                    if (checked) {
+                        Modifier
+                    } else {
+                        Modifier.border(
+                            width = DifftSwitchDefaults.TrackBorderWidth,
+                            color = DifftTheme.colors.textDisabled,
+                            shape = DifftTheme.radius.pill,
+                        )
+                    },
+                ),
             contentAlignment = Alignment.CenterStart,
         ) {
             Box(
-                // Lambda offset: it changes placement only, so the animation stays out of both
-                // measurement (the track remains exactly 51×31) and recomposition — the value is
-                // read in the placement lambda instead of in this composable's scope.
+                // Size and offset run on one spec, so the knob grows and slides in step; the size
+                // change re-measures the knob each frame, the offset only moves its placement.
                 modifier = Modifier
-                    .offset { IntOffset(offsetX.roundToPx(), 0) }
-                    .size(DifftSwitchDefaults.KnobSize)
-                    .shadow(
-                        elevation = DifftSwitchDefaults.KnobElevation,
-                        shape = DifftSwitchDefaults.KnobShape,
-                        clip = false,
-                        ambientColor = DifftSwitchDefaults.KnobShadowAmbient,
-                        spotColor = DifftSwitchDefaults.KnobShadowSpot,
-                    )
+                    .offset { IntOffset(knobOffsetX.roundToPx(), 0) }
+                    .size(knobSize)
                     .background(knob, DifftSwitchDefaults.KnobShape),
             )
         }

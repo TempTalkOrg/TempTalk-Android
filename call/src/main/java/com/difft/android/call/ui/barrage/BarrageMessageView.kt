@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,13 +36,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.call.LCallUiConstants
@@ -285,7 +280,7 @@ private fun BarrageMessageCard(message: BarrageMessage, textMaxLength: Int) {
             .shadow(elevation = 10.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000))
             .wrapContentWidth()
             .heightIn(min = LCallUiConstants.BARRAGE_MESSAGE_ITEM_HEIGHT.dp)
-            .background(color = DifftTheme.colors.bgElevated, shape = RoundedCornerShape(size = 8.dp))
+            .background(color = DifftTheme.colors.backgroundPopup, shape = DifftTheme.radius.largeShape)
             .padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 6.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -302,12 +297,7 @@ private fun BarrageMessageCard(message: BarrageMessage, textMaxLength: Int) {
                     .widthIn(max = 360.dp)
                     .heightIn(min = 20.dp),
                 text = annotatedString,
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight(400),
-                ),
+                style = DifftTheme.typography.p3,
                 overflow = TextOverflow.Ellipsis
             )
         }

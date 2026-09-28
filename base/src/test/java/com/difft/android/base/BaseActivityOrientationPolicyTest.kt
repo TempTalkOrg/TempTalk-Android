@@ -3,6 +3,7 @@ package com.difft.android.base
 import android.app.Activity
 import android.app.Application
 import android.content.pm.ActivityInfo
+import android.hardware.display.DisplayManager
 import com.difft.android.base.utils.OrientationPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -12,17 +13,21 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDisplayManager
 
 /**
  * Unit tests for [OrientationPolicy.applyTo] — the orientation policy that
- * [BaseActivity.onCreate] (pre-super) and [BaseActivity.onConfigurationChanged] delegate to.
+ * [BaseActivity.onCreate] (pre-super), [BaseActivity.onConfigurationChanged],
+ * [BaseActivity.onPictureInPictureModeChanged] and the
+ * [com.difft.android.base.utils.OrientationDisplayWatcher] replay delegate to.
  *
  * The policy lives outside `BaseActivity` (which is `@AndroidEntryPoint` + abstract, so
  * exercising it directly would need Hilt test infrastructure and a test-only manifest):
- * `applyTo` takes a plain [Activity] and reads only `resources`, so the behavioural cases
- * below run against a stock Robolectric [Activity] with no Hilt, no test manifest, no MockK.
- * Robolectric `@Config(qualifiers=...)` selects which `orientation.xml` resolves, which is
- * the whole input to the policy.
+ * `applyTo` takes a plain [Activity] and reads only the display's real metrics, so the
+ * behavioural cases below run against a stock Robolectric [Activity] with no Hilt, no test
+ * manifest, no MockK. Robolectric `@Config(qualifiers=...)` sizes the default display, which is
+ * the whole input to the policy; `ShadowDisplayManager.addDisplay` stands in for the display
+ * the activity is NOT configured against (the letterbox case).
  *
  * `BaseActivity.shouldApplyOrientationPolicy()`'s opt-out branch (used by `BeyondCorpActivity`)
  * is deliberately NOT covered here: it is a `BaseActivity` member, so it still needs the Hilt +
@@ -49,8 +54,7 @@ class BaseActivityOrientationPolicyTest {
         OrientationPolicy.applyTo(activity)
 
         assertEquals(
-            "A compact phone window (smallestScreenWidthDp < 600) resolves values/orientation.xml " +
-                "force_portrait_orientation=true, so the policy MUST lock portrait — that lock is " +
+            "A phone-sized display (short side < 600dp) MUST lock portrait — that lock is " +
                 "the primary guard keeping phones out of the dual-pane width gate",
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
             activity.requestedOrientation
@@ -70,12 +74,8 @@ class BaseActivityOrientationPolicyTest {
         OrientationPolicy.applyTo(activity)
 
         assertEquals(
-            "A tablet / unfolded-foldable window resolves values-sw600dp/orientation.xml " +
-                "force_portrait_orientation=false, so the policy must release the lock and let the " +
-                "user rotate. The qualifier names `sw600dp` explicitly because smallestScreenWidthDp — " +
-                "not the available width — is what selects values-sw600dp on a device; Robolectric " +
-                "4.14.1 happens to derive sw from w/h too (measured: dropping `sw600dp` here still " +
-                "passes), so the explicit term keeps the test pinned to the production selector",
+            "A tablet / unfolded-foldable display (short side >= 600dp) must release the lock and " +
+                "let the user rotate",
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
             activity.requestedOrientation
         )
@@ -102,6 +102,39 @@ class BaseActivityOrientationPolicyTest {
         assertEquals(
             "…and the converged value is still the phone portrait lock, not a released one",
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            activity.requestedOrientation
+        )
+    }
+
+    @Test
+    fun `threshold — 599dp locks portrait, 600dp releases`() {
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, OrientationPolicy.targetForDisplayShortSide(599))
+        assertEquals(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, OrientationPolicy.targetForDisplayShortSide(600))
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `letterboxed window — the display decides, not the activity's own configuration`() {
+        // The activity is configured phone-sized (a 498dp letterbox window, or a folded-posture
+        // configuration the OS never refreshed), but the display it sits on is an unfolded inner
+        // panel. Xiaomi 18 Fold: window sw=498dp, display 859x608dp.
+        val activity = createActivity()
+        val unfoldedDisplayId = ShadowDisplayManager.addDisplay("w859dp-h608dp")
+        val unfoldedDisplay = activity.getSystemService(DisplayManager::class.java).getDisplay(unfoldedDisplayId)
+        assertEquals(
+            "Precondition: the activity's own configuration is phone-bucket",
+            true,
+            activity.resources.configuration.smallestScreenWidthDp < 600
+        )
+
+        OrientationPolicy.applyTo(activity, unfoldedDisplay)
+
+        assertEquals(
+            "Deciding from the activity's window would answer 'phone' and re-request portrait, which " +
+                "is what the OS answered with the letterbox in the first place — a self-fulfilling lock " +
+                "(44 relaunches in 4 s on a Xiaomi 18 Fold). The display is 608dp on its short side, so " +
+                "the policy must release",
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
             activity.requestedOrientation
         )
     }

@@ -15,6 +15,7 @@ import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.ConversationSettingUpdate
 import com.difft.android.chat.setting.SAVE_TO_PHOTOS_SET_DEFAULT
 import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.chat.translate.backend.TranslateBackend
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.ConversationSetRequestBody
@@ -50,8 +51,16 @@ class ChatSettingViewModel @AssistedInject constructor(
     private val conversationSettingsManager: ConversationSettingsManager,
     @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
-    private val dbRoomStore: DBRoomStore
+    private val dbRoomStore: DBRoomStore,
+    translateBackend: TranslateBackend,
 ) : ViewModel() {
+
+    /**
+     * Whether this build can translate at all. A plain value, not a flow: it is fixed for the
+     * process, and the two entry screens use it to decide whether the translate row exists.
+     */
+    val translateSupported: Boolean = translateBackend.isSupported
+
     private val _conversationSet = MutableStateFlow<ConversationSetResponseBody?>(null)
     val conversationSet: StateFlow<ConversationSetResponseBody?> = _conversationSet.asStateFlow()
 
@@ -76,6 +85,14 @@ class ChatSettingViewModel @AssistedInject constructor(
     val saveToPhotos: StateFlow<Int?> = conversationSet
         .map { it?.saveToPhotos }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Conversation auto-translate target derived from [conversationSet]. 0: off, 1: Chinese,
+     * 2: English. Read-only here — the settings screen owns the write path.
+     */
+    val translateSetting: StateFlow<Int> = conversationSet
+        .map { it?.translateSetting ?: 0 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     /**
      * 获取当前会话配置的快照值
@@ -132,7 +149,8 @@ class ChatSettingViewModel @AssistedInject constructor(
                 .copy(
                     messageExpiry = update.messageExpiry ?: current.messageExpiry,
                     messageClearAnchor = update.messageClearAnchor ?: current.messageClearAnchor,
-                    saveToPhotos = if (hasSaveToPhotosUpdate) newSaveToPhotos else current.saveToPhotos
+                    saveToPhotos = if (hasSaveToPhotosUpdate) newSaveToPhotos else current.saveToPhotos,
+                    translateSetting = update.translateSetting ?: current.translateSetting
                 )
         } ?: run {
             // If no current config, create a new config with update values
@@ -143,7 +161,8 @@ class ChatSettingViewModel @AssistedInject constructor(
                 confidentialMode = update.confidentialMode ?: 0,
                 messageExpiry = update.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime(),
                 messageClearAnchor = update.messageClearAnchor ?: 0L,
-                saveToPhotos = newSaveToPhotos
+                saveToPhotos = newSaveToPhotos,
+                translateSetting = update.translateSetting ?: 0
             )
         }
     }
@@ -220,7 +239,6 @@ class ChatSettingViewModel @AssistedInject constructor(
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService
                         .fetchConversationSet(
-                            (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                             ConversationSetRequestBody(
                                 conversation = conversation,
                                 remark = remark,
@@ -244,7 +262,8 @@ class ChatSettingViewModel @AssistedInject constructor(
                                 messageExpiry = latest?.messageExpiry
                                     ?: normalizeMessageExpiry(echoed.conversation, echoed.messageExpiry),
                                 messageClearAnchor = latest?.messageClearAnchor ?: echoed.messageClearAnchor,
-                                saveToPhotos = latest?.saveToPhotos
+                                saveToPhotos = latest?.saveToPhotos,
+                                translateSetting = latest?.translateSetting ?: 0
                             )
                             // Accepted with nothing echoed back: apply the values this request
                             // asked for, exactly as an update event would. A re-fetch instead would
@@ -318,7 +337,6 @@ class ChatSettingViewModel @AssistedInject constructor(
             try {
                 val response = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchGetConversationSet(
-                        (globalServices.userManager.getUserData()?.baseAuth ?: ""),
                         GetConversationSetRequestBody(listOf(conversationId))
                     )
                 }
@@ -328,11 +346,14 @@ class ChatSettingViewModel @AssistedInject constructor(
                         val conversationSet = conversationSets.conversations.find { body -> body.conversation == conversationId }
                         conversationSet?.let { set ->
                             val finalMessageExpiry = normalizeMessageExpiry(set.conversation, set.messageExpiry)
-                            // Preserve local saveToPhotos value (not synced to server)
+                            // Preserve local-only values (never synced to server). Step 1 loaded
+                            // them from the DB before this network call, so the snapshot is current.
                             val localSaveToPhotos = _conversationSet.value?.saveToPhotos
+                            val localTranslateSetting = _conversationSet.value?.translateSetting ?: 0
                             val finalSet = set.copy(
                                 messageExpiry = finalMessageExpiry,
-                                saveToPhotos = localSaveToPhotos
+                                saveToPhotos = localSaveToPhotos,
+                                translateSetting = localTranslateSetting
                             )
                             // Update database cache (saveToPhotos is not included, uses separate updateSaveToPhotos)
                             withContext(Dispatchers.IO) {
@@ -370,7 +391,8 @@ class ChatSettingViewModel @AssistedInject constructor(
                         confidentialMode = room.confidentialMode,
                         messageExpiry = room.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime(),
                         messageClearAnchor = room.messageClearAnchor ?: 0L,
-                        saveToPhotos = room.saveToPhotos
+                        saveToPhotos = room.saveToPhotos,
+                        translateSetting = room.translateSetting
                     )
                 } else {
                     null

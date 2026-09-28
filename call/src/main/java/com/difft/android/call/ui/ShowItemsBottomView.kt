@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import com.difft.android.base.ui.compose.DifftSwitch
@@ -37,11 +36,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import com.difft.android.call.BuildConfig
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
@@ -187,7 +182,7 @@ fun ShowItemsBottomView(
                                     .testTag("call_more_btn_switch_camera")
                                     .width(48.dp)
                                     .height(48.dp)
-                                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 100.dp))
+                                    .background(color = DifftTheme.colors.backgroundTertiary, shape = DifftTheme.radius.pill)
                                     .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
@@ -213,13 +208,8 @@ fun ShowItemsBottomView(
 
                             Text(
                                 text = ResUtils.getString(R.string.call_toolbar_bottom_switch_text),
-                                style = TextStyle(
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp,
-                                    fontFamily = FontFamily.Default,
-                                    fontWeight = FontWeight(400),
-                                    color = DifftTheme.colors.textPrimary
-                                )
+                                style = DifftTheme.typography.p3,
+                                color = DifftTheme.colors.textPrimary,
                             )
                         }
                     }
@@ -237,7 +227,7 @@ fun ShowItemsBottomView(
                                     .testTag("call_more_btn_critical_alert")
                                     .width(48.dp)
                                     .height(48.dp)
-                                    .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 100.dp))
+                                    .background(color = DifftTheme.colors.backgroundTertiary, shape = DifftTheme.radius.pill)
                                     .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                                         try {
@@ -273,13 +263,8 @@ fun ShowItemsBottomView(
 
                             Text(
                                 text = ResUtils.getString(R.string.call_toolbar_bottom_critical_alert_text),
-                                style = TextStyle(
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp,
-                                    fontFamily = FontFamily.Default,
-                                    fontWeight = FontWeight(400),
-                                    color = DifftTheme.colors.textPrimary
-                                )
+                                style = DifftTheme.typography.p3,
+                                color = DifftTheme.colors.textPrimary,
                             )
                         }
                     }
@@ -297,7 +282,7 @@ fun ShowItemsBottomView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(55.dp)
-                            .background(color = DifftTheme.colors.backgroundTertiary, shape = RoundedCornerShape(size = 8.dp))
+                            .background(color = DifftTheme.colors.backgroundTertiary, shape = DifftTheme.radius.largeShape)
                             .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -307,13 +292,8 @@ fun ShowItemsBottomView(
                                 .wrapContentWidth()
                                 .height(24.dp),
                             text = ResUtils.getString(R.string.call_toolbar_noise_suppression_text),
-                            style = TextStyle(
-                                fontSize = 16.sp,
-                                lineHeight = 24.sp,
-                                fontFamily = FontFamily.Default,
-                                fontWeight = FontWeight(400),
-                                color = DifftTheme.colors.textPrimary,
-                            )
+                            style = DifftTheme.typography.p2,
+                            color = DifftTheme.colors.textPrimary,
                         )
 
                         DifftSwitch(

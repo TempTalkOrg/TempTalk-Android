@@ -86,7 +86,7 @@ fun TwoRowActionBar(
                     if (showPlate) {
                         Modifier
                             .background(
-                                color = DifftTheme.colors.backgroundElevate.copy(alpha = TWO_ROW_PLATE_ALPHA),
+                                color = DifftTheme.colors.backgroundPagePrimary.copy(alpha = TWO_ROW_PLATE_ALPHA),
                                 shape = RoundedCornerShape(16.dp),
                             )
                             .padding(vertical = CallActionBarPlanner.TWO_ROW_PLATE_PADDING_DP.dp)

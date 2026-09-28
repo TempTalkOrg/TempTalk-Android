@@ -3,7 +3,6 @@ package com.difft.android.chat.contacts.contactsdetail.mvi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.common.upload.ContactAvatarUploader
 import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditContract.Effect
 import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditContract.Intent
@@ -191,7 +190,6 @@ class ContactRemarkEditViewModel @Inject constructor(
             try {
                 val result = withContext(Dispatchers.IO) {
                     httpClient.httpService.fetchConversationSet(
-                        globalServices.userManager.getUserData()?.baseAuth ?: "",
                         ConversationSetRequestBody(conversation = contactId, remark = encrypted)
                     )
                 }
@@ -284,7 +282,6 @@ class ContactRemarkEditViewModel @Inject constructor(
     private suspend fun setRemarkAvatarInternal(contactId: String, encryptedValue: String, uploadedPath: String?) {
         val result = withContext(Dispatchers.IO) {
             httpClient.httpService.fetchConversationSet(
-                globalServices.userManager.getUserData()?.baseAuth ?: "",
                 ConversationSetRequestBody(conversation = contactId, remarkAvatar = encryptedValue)
             )
         }

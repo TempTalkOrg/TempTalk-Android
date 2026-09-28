@@ -1,11 +1,15 @@
 package com.difft.android.chat.util
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.widget.ToastUtil
+import com.difft.android.chat.R
 import com.difft.android.chat.media.EncryptedAttachmentAccess
 import util.ScreenLockUtil
 import java.io.File
@@ -14,46 +18,63 @@ fun Context.viewFile(path: String) {
     // Encrypted-at-rest attachment (image/audio): view via the decrypting content provider. The
     // plaintext file is transient/absent, so a FileProvider uri to it would ENOENT.
     if (EncryptedAttachmentAccess.hasEncrypted(path)) {
-        viewUri(EncryptedAttachmentAccess.contentUriFromBasePath(path))
+        viewUri(EncryptedAttachmentAccess.contentUriFromBasePath(path), File(path).name)
         return
     }
-    ScreenLockUtil.temporarilyDisabled = true
-    val context = this
-    try {
-        val uri = FileProvider.getUriForFile(
-            context,
-            context.applicationContext.packageName + ".provider",
+    val uri = try {
+        FileProvider.getUriForFile(
+            this,
+            applicationContext.packageName + ".provider",
             File(path)
         )
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            addCategory(Intent.CATEGORY_DEFAULT)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setData(uri)
-            setDataAndType(uri, MediaUtil.getMimeType(context, uri))
-        }
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        L.w(e) { "view File error:" }
-        context.shareFile(path)
+    } catch (e: IllegalArgumentException) {
+        // The exception message embeds the absolute file path; log the class only.
+        L.w { "[FileOpen] file not under a provider root error=${e.javaClass.simpleName}" }
+        ToastUtil.showLong(R.string.file_load_error)
+        return
     }
+    viewUri(uri, File(path).name)
 }
 
-/** ACTION_VIEW for a content [uri] (e.g. the decrypting provider uri). */
-fun Context.viewUri(uri: Uri) {
-    ScreenLockUtil.temporarilyDisabled = true
-    val context = this
-    try {
+/**
+ * ACTION_VIEW for a content [uri] (e.g. the decrypting provider uri), trying each MIME candidate for
+ * [fileName] in turn. Tells the user when no installed app can open the file instead of silently
+ * falling back to the share sheet.
+ */
+fun Context.viewUri(uri: Uri, fileName: String? = null) {
+    val mime = MediaUtil.getMimeType(this, uri)
+    val extension = fileName?.substringAfterLast('.', "")?.takeIf { it.isNotEmpty() }
+        ?: MimeTypeMap.getFileExtensionFromUrl(uri.toString())?.takeIf { it.isNotEmpty() }
+    var receiverRejected = false
+    for (type in FileOpenMime.candidates(mime, extension)) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             addCategory(Intent.CATEGORY_DEFAULT)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            setDataAndType(uri, MediaUtil.getMimeType(context, uri))
+            setDataAndType(uri, type)
         }
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        L.w(e) { "view Uri error:" }
-        context.shareUri(uri)
+        try {
+            startActivity(intent)
+            // Exempt the screen lock only once an external app is actually taking over; our onPause
+            // is dispatched after this call returns, so setting it here still precedes it.
+            ScreenLockUtil.temporarilyDisabled = true
+            return
+        } catch (_: ActivityNotFoundException) {
+            // Expected when no app claims this type; the next candidate may still succeed.
+        } catch (_: SecurityException) {
+            // Never log the exception message/stack: it embeds the content uri.
+            L.w { "[FileOpen] receiver rejected uri type=$type ext=$extension" }
+            receiverRejected = true
+        }
+    }
+    L.w { "[FileOpen] no app for ext=$extension mime=$mime rejected=$receiverRejected" }
+    if (receiverRejected) {
+        // An app claimed the type but refused the uri grant; "no app" would mislead the user.
+        ToastUtil.showLong(R.string.file_load_error)
+    } else if (extension != null) {
+        ToastUtil.showLong(getString(R.string.chat_no_app_to_open_file, ".$extension"))
+    } else {
+        ToastUtil.showLong(R.string.chat_no_app_to_open_file_generic)
     }
 }
 

@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.chat.MessageContactsCacheUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.message.ChatMessage
+import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.message.EncryptionHeaderChatMessage
 import com.difft.android.chat.message.NotifyChatMessage
 import com.difft.android.chat.messages.TestScopeApplication
@@ -61,6 +62,7 @@ class ChatMessageAdapterE2eeHeaderTest {
             override fun onQuoteClicked(quote: Quote) = Unit
             override fun onReactionClick(message: ChatMessage, emoji: String, remove: Boolean, originTimeStamp: Long) = Unit
             override fun onReactionLongClick(message: ChatMessage, emoji: String) = Unit
+            override fun onTranslateRetry(message: TextChatMessage) = Unit
             override fun onE2eeHeaderClick() {
                 headerClickCount++
             }

@@ -57,6 +57,110 @@
     </issue>
 
     <!--
+        DifftWidgetRequired — :base hosts the DifftButton / DifftSwitch / DifftCheckBox
+        composables and their XML shells, so it is the one module allowed to touch the raw
+        widgets. The files below predate the rule and are excluded on purpose:
+          - DialogTestActivity + test_custom_view_dialog: the dialog test page and its
+            fixture layout, kept as-is by decision (its Material3 Buttons are test scaffolding)
+          - ps_bottom_nav_bar: the media picker's drawable-driven "original" toggle, not a
+            settings checkbox
+          - layout_media_quality_select_dialog: a text-only option pair with no matching
+            DifftButton size yet (#1217 item 3)
+    -->
+    <issue id="DifftWidgetRequired">
+        <ignore path="base/" />
+        <ignore path="app/src/main/java/com/difft/android/setting/DialogTestActivity.kt" />
+        <ignore path="app/src/main/res/layout/test_custom_view_dialog.xml" />
+        <ignore path="selector/src/main/res/layout/ps_bottom_nav_bar.xml" />
+        <ignore path="chat/src/main/res/layout/layout_media_quality_select_dialog.xml" />
+    </issue>
+
+    <!--
+        DifftTypeScaleRequired (issue #1232) — the theme package defines DifftTheme.typography,
+        so it alone builds TextStyles by hand; the rest of :base uses the scale like everyone
+        else. DifftClearableInputView copies an XML android:textSize into its field style — the
+        size is the layout's, not a hand-written metric. DialogTestActivity is the dialog test
+        fixture kept as-is. The remaining entries are genuine one-off sizes that are not on the
+        Figma type scale (11, 17, 18, 22, 23, 28/38, 48 sp — badges, timers, barrage text,
+        emoji, the intro title); each stays hand-written until design either adds the step or
+        drops the size.
+    -->
+    <issue id="DifftTypeScaleRequired">
+        <ignore path="base/src/main/java/com/difft/android/base/ui/theme/" />
+        <ignore path="base/src/main/java/com/difft/android/base/widget/DifftClearableInputView.kt" />
+        <ignore path="app/src/main/java/com/difft/android/setting/DialogTestActivity.kt" />
+        <!-- 22sp Bold intro title (titleLarge.copy) -->
+        <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroPage.kt" />
+        <!-- 18sp group name input (bodyMedium.copy) -->
+        <ignore path="chat/src/main/java/com/difft/android/chat/group/GroupInfoActivity.kt" />
+        <!-- 48sp barrage bubble text -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/barrage/BubbleView.kt" />
+        <!-- 28/38 emoji glyphs in the reaction sheet -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/actionbar/EmojiReactionSheet.kt" />
+        <!-- 17sp audio device name -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/ShowAudioDeviceOnClickView.kt" />
+        <!-- participant name sized from the tile (11sp or unspecified) -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/SingleParticipantCallPage.kt" />
+        <!-- 23sp emoji glyph and 11/14 shortcut labels in the message action menu -->
+        <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/MessageActionContent.kt" />
+    </issue>
+
+    <!--
+        DifftColorTokenRequired — colours come from `DifftTheme.colors` (semantic) or
+        `Palette` (raw ramp step); the theme package defines both, so it alone writes
+        colour literals. Everything below is a deliberate one-off that has no token, with
+        the reason on each line.
+    -->
+    <issue id="DifftColorTokenRequired">
+        <ignore path="base/src/main/java/com/difft/android/base/ui/theme/" />
+        <!-- dev-only dialog test screen, kept as-is -->
+        <ignore path="app/src/main/java/com/difft/android/setting/DialogTestActivity.kt" />
+        <!-- bg_confidential_area has no token -->
+        <ignore path="chat/src/main/java/com/difft/android/chat/presend/FilePreSendActivity.kt" />
+        <!-- launcher-style background, theme-independent by design -->
+        <ignore path="app/src/main/java/com/difft/android/ui/KeyUnavailableScreen.kt" />
+        <!-- Figma knob shadow rgba(0, 35, 11, .2), not a library colour -->
+        <ignore path="base/src/main/java/com/difft/android/base/ui/compose/DifftSwitch.kt" />
+        <!-- Material tip hues with no library equivalent -->
+        <ignore path="base/src/main/java/com/difft/android/base/widget/ComposeDialogManager.kt" />
+        <!-- overlay alphas over arbitrary content -->
+        <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/MessageActionContent.kt" />
+        <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/MessageActionMenuColors.kt" />
+        <!-- call shadow / veil literals over live video, no token -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/CountDownTimerView.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/screenshare/ScreenShareSpeakerBanner.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/alert/CallCriticalAlertBanner.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/CallStatusNotificationBar.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/barrage/BarrageMessageView.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/actionbar/CallActionBarLayouts.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/actionbar/CallActionButton.kt" />
+        <ignore path="call/src/main/java/com/difft/android/call/ui/alert/CriticalAlertFullScreen.kt" />
+    </issue>
+
+    <!--
+        DifftRadiusRequired — corner radii come from `DifftTheme.radius` (2 / 4 / 8 / pill);
+        the theme package defines the tiers. The rest are radii that are simply not on the
+        scale, each with its value noted, and stay hand-written until design adds the step
+        or drops the size.
+    -->
+    <issue id="DifftRadiusRequired">
+        <ignore path="base/src/main/java/com/difft/android/base/ui/theme/" />
+        <!-- 12 -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/ShowBottomCallEndView.kt" />
+        <ignore path="app/src/main/java/com/difft/android/setting/TestScreen.kt" />
+        <!-- 20 -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/alert/CriticalAlertFullScreen.kt" />
+        <!-- 16 -->
+        <ignore path="call/src/main/java/com/difft/android/call/ui/actionbar/CallActionBarLayouts.kt" />
+        <!-- 24 -->
+        <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroPage.kt" />
+        <!-- 6 -->
+        <ignore path="chat/src/main/java/com/difft/android/chat/ui/messageaction/TextSelectionMenuPopup.kt" />
+        <!-- 3 -->
+        <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroScreen.kt" />
+    </issue>
+
+    <!--
         Third-party lint detectors shipping with bundled libraries (e.g. Timber's
         `WrongTimberUsageDetector`) sometimes use deprecated lint APIs that
         produce a `LintError` meta-warning on AGP 8+. This is not a defect in

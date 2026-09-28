@@ -49,8 +49,7 @@
             android:includeFontPadding="false"
             android:lines="1"
             android:textColor="@color/t.primary"
-            android:textSize="14sp"
-            android:textStyle="bold"
+            android:textSize="16sp"
             tools:text="Bess" />
 
         <TextView
@@ -60,7 +59,7 @@
             android:ellipsize="end"
             android:lines="1"
             android:textColor="@color/t.third"
-            android:textSize="12sp"
+            android:textSize="14sp"
             tools:text="xxxxxxxxx@gmail.com" />
 
     </LinearLayout>

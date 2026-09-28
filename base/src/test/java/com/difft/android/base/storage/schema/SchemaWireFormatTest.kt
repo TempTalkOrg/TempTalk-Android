@@ -75,6 +75,17 @@ class SchemaWireFormatTest {
     }
 
     @Test
+    fun `GlobalConfigData written before tag 4 existed reads back with an empty pendingLogin`() {
+        // The fixture predates the field: every deployed secure_config.pb decodes to the new
+        // default, and a value written into the new tag survives a round-trip beside the old ones.
+        val old = ProtoBuf.decodeFromByteArray<GlobalConfigData>(GLOBAL_CONFIG_DATA_FIXTURE_HEX.hexToByteArray())
+        assertEquals("", old.pendingLogin)
+        val withHeld = old.copy(pendingLogin = "{\"account\":\"+1\"}")
+        val decoded = ProtoBuf.decodeFromByteArray<GlobalConfigData>(ProtoBuf.encodeToByteArray(withHeld))
+        assertEquals(withHeld, decoded)
+    }
+
+    @Test
     fun `GlobalConfigData default-only instance encodes to zero bytes`() {
         val encoded = ProtoBuf.encodeToByteArray(GlobalConfigData())
         assertEquals(0, encoded.size, "empty GlobalConfigData must encode to 0 bytes")

@@ -34,7 +34,7 @@
             android:src="@drawable/chative_ic_back"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/t.primary" />
+            app:tint="@color/icon" />
 
         <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_title"
@@ -51,5 +51,42 @@
             app:layout_constraintTop_toTopOf="@+id/ib_back" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Optional caller-supplied guidance (the migration pairing page's scan state); hidden unless the caller passes hints. -->
+    <LinearLayout
+        android:id="@+id/ll_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:paddingStart="32dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="32dp"
+        android:paddingBottom="48dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:alpha="0.86"
+            android:textColor="@color/t.white"
+            android:textSize="14sp"
+            tools:text="hint" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_hint_secondary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:alpha="0.6"
+            android:textColor="@color/t.white"
+            android:textSize="12sp"
+            tools:text="secondary" />
+
+    </LinearLayout>
 
 </FrameLayout>

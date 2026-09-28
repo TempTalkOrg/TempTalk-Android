@@ -3,6 +3,7 @@ package com.difft.android.base.utils
 import android.view.View
 import android.widget.ImageView
 import androidx.fragment.app.Fragment
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Utility object for dual-pane layout support
@@ -98,5 +99,14 @@ interface DualPaneHost {
      * @param tag Optional tag for the fragment transaction
      */
     fun showDetailFragment(fragment: Fragment, tag: String? = null)
+
+    /**
+     * Whether the Chats / Contacts / Me navigation rail is collapsed. Dual-pane only: a
+     * single-pane host reports a constant `false`.
+     */
+    val navigationRailCollapsed: StateFlow<Boolean>
+
+    /** Collapse or expand the navigation rail. No-op in single-pane mode. */
+    fun toggleNavigationRail()
 }
 

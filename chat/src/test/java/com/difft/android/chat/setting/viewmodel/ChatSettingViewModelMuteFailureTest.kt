@@ -6,6 +6,7 @@ import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.setting.ConversationSettingUpdate
 import com.difft.android.chat.setting.ConversationSettingsManager
+import com.difft.android.chat.translate.FakeTranslateBackend
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.BaseResponse
@@ -26,6 +27,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -97,6 +99,7 @@ class ChatSettingViewModelMuteFailureTest {
         conversationSettingsManager = conversationSettingsManager,
         httpClient = httpClient,
         dbRoomStore = dbRoomStore,
+        translateBackend = FakeTranslateBackend(),
     )
 
     /** Sends a mute request and blocks until the returned job settled. */
@@ -122,7 +125,7 @@ class ChatSettingViewModelMuteFailureTest {
 
     @Test
     fun `a rejected mute request leaves conversationSet untouched`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns
+        coEvery { httpService.fetchConversationSet(any()) } returns
             BaseResponse(ver = 1, status = 10001, reason = "rejected", data = null)
         val vm = viewModel()
         assertNull(vm.conversationSet.value)
@@ -136,7 +139,7 @@ class ChatSettingViewModelMuteFailureTest {
 
     @Test
     fun `a rejected mute request with no reason still toasts`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns
+        coEvery { httpService.fetchConversationSet(any()) } returns
             BaseResponse(ver = 1, status = 10001, reason = null, data = null)
         val vm = viewModel()
 
@@ -148,7 +151,7 @@ class ChatSettingViewModelMuteFailureTest {
 
     @Test
     fun `an accepted mute request emits the new config`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns BaseResponse(
+        coEvery { httpService.fetchConversationSet(any()) } returns BaseResponse(
             ver = 1,
             status = 0,
             reason = null,
@@ -181,17 +184,17 @@ class ChatSettingViewModelMuteFailureTest {
      */
     @Test
     fun `an accepted mute request with no data merges the requested value`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns
+        coEvery { httpService.fetchConversationSet(any()) } returns
             BaseResponse(ver = 1, status = 0, reason = null, data = null)
         val vm = viewModel()
         vm.seedUnmutedConfig()
         // The startup fetch has landed, so anything past this count would be a refresh.
-        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any(), any()) }
+        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any()) }
 
         vm.mute()
 
         assertEquals(1, vm.conversationSet.value?.muteStatus)
-        coVerify(exactly = 1) { httpService.fetchGetConversationSet(any(), any()) }
+        coVerify(exactly = 1) { httpService.fetchGetConversationSet(any()) }
         // Only the requested column is written; the rest keep whatever the database holds instead
         // of being rewritten from an in-memory config.
         verify(exactly = 1) {
@@ -213,7 +216,7 @@ class ChatSettingViewModelMuteFailureTest {
      */
     @Test
     fun `an accepted mute request emits before it persists`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns BaseResponse(
+        coEvery { httpService.fetchConversationSet(any()) } returns BaseResponse(
             ver = 1,
             status = 0,
             reason = null,
@@ -240,15 +243,15 @@ class ChatSettingViewModelMuteFailureTest {
      */
     @Test
     fun `an accepted mute request with no data and no config re-fetches it`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns
+        coEvery { httpService.fetchConversationSet(any()) } returns
             BaseResponse(ver = 1, status = 0, reason = null, data = null)
         val vm = viewModel()
-        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any(), any()) }
+        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any()) }
         assertNull(vm.conversationSet.value)
 
         vm.mute()
 
-        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 2) { httpService.fetchGetConversationSet(any(), any()) }
+        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 2) { httpService.fetchGetConversationSet(any()) }
     }
 
     /**
@@ -258,12 +261,12 @@ class ChatSettingViewModelMuteFailureTest {
      */
     @Test
     fun `an accepted mute request with no config awaits the re-fetch and reports a failed one`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } returns
+        coEvery { httpService.fetchConversationSet(any()) } returns
             BaseResponse(ver = 1, status = 0, reason = null, data = null)
         val refreshStarted = CompletableDeferred<Unit>()
         val releaseRefresh = CompletableDeferred<Unit>()
         var refreshes = 0
-        coEvery { httpService.fetchGetConversationSet(any(), any()) } coAnswers {
+        coEvery { httpService.fetchGetConversationSet(any()) } coAnswers {
             // The first call is the view model's own startup refresh; hold the fallback one.
             if (++refreshes > 1) {
                 refreshStarted.complete(Unit)
@@ -272,7 +275,7 @@ class ChatSettingViewModelMuteFailureTest {
             throw IllegalStateException("offline")
         }
         val vm = viewModel()
-        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any(), any()) }
+        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any()) }
         assertNull(vm.conversationSet.value)
 
         val job = vm.setConversationConfigs(
@@ -294,7 +297,7 @@ class ChatSettingViewModelMuteFailureTest {
 
     @Test
     fun `a thrown mute request leaves conversationSet untouched`() {
-        coEvery { httpService.fetchConversationSet(any(), any()) } throws IllegalStateException("offline")
+        coEvery { httpService.fetchConversationSet(any()) } throws IllegalStateException("offline")
         val vm = viewModel()
 
         vm.mute()

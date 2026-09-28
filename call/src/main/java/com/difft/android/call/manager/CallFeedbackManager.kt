@@ -87,15 +87,15 @@ class CallFeedbackManager @Inject constructor(
      * @param params 反馈请求参数
      */
     private suspend fun submitCallFeedbackInternal(params: CallFeedbackRequestBody) {
-        val token = (globalServices.userManager.getUserData()?.microToken ?: "")
-        if (token.isNullOrEmpty()) {
+        // Login-state gate: with no persisted session token there is no session to report on.
+        if (globalServices.userManager.getUserData()?.microToken.isNullOrEmpty()) {
             L.e { "[Call] CallFeedbackManager submitCallFeedback failed: missing authentication token" }
             return
         }
         
         try {
             val response = withContext(Dispatchers.IO) {
-                callService.callFeedback(token, params)
+                callService.callFeedback(params)
             }
             
             if (response.status == 0) {

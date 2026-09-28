@@ -33,6 +33,7 @@ import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.R
 import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.chat.common.SendMessageUtils
+import com.difft.android.chat.messages.PriorConversationReporter
 import com.difft.android.chat.databinding.ChatFragmentGroupChatBinding
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.ChatHeaderCallFragment
@@ -121,6 +122,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     lateinit var messageNotificationUtil: MessageNotificationUtil
 
     @Inject
+    lateinit var priorConversationReporter: PriorConversationReporter
+
+    @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     @Inject
@@ -178,6 +182,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
 
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
+        priorConversationReporter.onConversationOpened(chatViewModel.forWhat)
         messageNotificationUtil.cancelCriticalAlertNotification(chatViewModel.forWhat.id)
     }
 

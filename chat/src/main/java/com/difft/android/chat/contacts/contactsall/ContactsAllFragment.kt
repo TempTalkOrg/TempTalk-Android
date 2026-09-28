@@ -211,6 +211,9 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
             .getDrawable(requireContext(), com.difft.android.chat.R.drawable.chat_icon_message_sent_failed)
             ?.mutate()
             ?.apply { setTint(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.t_primary)) }
+        // Band colour = this page's own background (bg1), so the sticky letter header blends with
+        // the list like the iOS contacts tab instead of showing as a lighter strip.
+        val bandColor = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.bg1)
         decoration = SectionDecoration(requireContext(), object : SectionDecoration.DecorationCallback {
             override fun getGroupId(position: Int): Long {
                 if (position < 0 || position >= it.size) return -1
@@ -231,7 +234,7 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
                 if (position < 0 || position >= it.size) return null
                 return if (it[position].expireAt != null) pendingIcon else null
             }
-        })
+        }, bandColor)
         decoration?.let { d -> binding.recyclerviewContacts.addItemDecoration(d) }
 
         // Draw a 1dp divider under the last pending item, only when the pending group is non-empty.

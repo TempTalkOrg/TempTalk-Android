@@ -2,6 +2,7 @@ package com.difft.android.chat.gif.favorite
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.application
+import com.difft.android.chat.di.AppCoroutineScope
 import com.difft.android.chat.gif.GifSendInput
 import com.difft.android.chat.gif.GifSendUseCase
 import com.difft.android.chat.media.EncryptedAttachmentAccess

@@ -69,6 +69,7 @@ class RoomSendStatusQueriesTest {
         type: Int = MessageModel.TYPE_TEXT,
         from: String = myId,
         roomType: Int = 0,
+        screenShotJson: String? = null,
     ) {
         wcdbInstance.message.insertObject(MessageModel().apply {
             this.id = id
@@ -79,7 +80,24 @@ class RoomSendStatusQueriesTest {
             this.systemShowTimestamp = ts
             this.type = type
             this.sendType = sendType
+            this.screenShotJson = screenShotJson
         })
+    }
+
+    /**
+     * A screenshot notice as older installs persisted it: an ordinary TYPE_TEXT outgoing row
+     * carrying `screenShotJson`. It renders as a centered notice with no status icon and no resend,
+     * so a failed one is invisible in the conversation — the second reason the predicates carry a
+     * scope exclusion (issue #1265).
+     */
+    private fun insertScreenshotRow(roomId: String, sendType: Int = MessageModel.SEND_TYPE_FAILED) {
+        insertMessage(
+            id = "$roomId-screenshot",
+            roomId = roomId,
+            ts = 100L,
+            sendType = sendType,
+            screenShotJson = """{"realSource":{"source":"$myId","sourceDevice":1,"timestamp":100,"serverTimestamp":100}}""",
+        )
     }
 
     /**
@@ -140,6 +158,25 @@ class RoomSendStatusQueriesTest {
             DBMessageModel.systemShowTimestamp.order(Order.Desc)
         )
         assertEquals("r-hit-failed", firstDesc?.id)
+    }
+
+    // #1265 — a room whose only failed row is a screenshot notice must not be flagged: the row has
+    // no status icon and no resend affordance, so the tag it earns is unclearable by the user.
+    @Test
+    fun `hasFailedOutgoingMessage ignores a failed screenshot row`() {
+        insertScreenshotRow("r-screenshot")
+
+        assertFalse(wcdbInstance.hasFailedOutgoingMessage("r-screenshot"))
+    }
+
+    // Control arm: the exclusion is keyed on `screenShotJson`, not on the room, so an ordinary
+    // failed message in the SAME room still counts.
+    @Test
+    fun `hasFailedOutgoingMessage still sees a real failure beside a screenshot row`() {
+        insertScreenshotRow("r-screenshot-mixed")
+        insertMessage("mixed-failed", "r-screenshot-mixed", ts = 200L, sendType = MessageModel.SEND_TYPE_FAILED)
+
+        assertTrue(wcdbInstance.hasFailedOutgoingMessage("r-screenshot-mixed"))
     }
 
     @Test
@@ -275,6 +312,36 @@ class RoomSendStatusQueriesTest {
         // Same predicate as `hasFailedOutgoingMessage`: the tombstone is not a failure, so the
         // room clears — the clear side is what recovers a room flagged on older rows.
         assertEquals(ROOM_SEND_STATUS_NONE, storedSendStatus("r-clear-c"))
+    }
+
+    @Test
+    fun `clearRoomSendStatusIfNoFailure treats a failed screenshot row as no failure`() {
+        insertRoom("r-clear-screenshot", ROOM_SEND_STATUS_FAILED)
+        insertScreenshotRow("r-clear-screenshot")
+
+        wcdbInstance.clearRoomSendStatusIfNoFailure("r-clear-screenshot")
+
+        assertEquals(ROOM_SEND_STATUS_NONE, storedSendStatus("r-clear-screenshot"))
+    }
+
+    // The startup reconcile in `WcdbJobStorage.reconcileFailedRoomTags`, end to end: list every
+    // flagged room, then run the guarded clear on each. A room flagged only by a screenshot row
+    // heals; a room with a genuine failure keeps its tag.
+    @Test
+    fun `flagged-room listing plus guarded clears heal a room flagged only by a screenshot row`() {
+        insertRoom("r-reconcile-screenshot", ROOM_SEND_STATUS_FAILED)
+        insertRoom("r-reconcile-real", ROOM_SEND_STATUS_FAILED)
+        insertRoom("r-reconcile-clean", ROOM_SEND_STATUS_NONE)
+        insertScreenshotRow("r-reconcile-screenshot")
+        insertMessage("reconcile-failed", "r-reconcile-real", ts = 100L, sendType = MessageModel.SEND_TYPE_FAILED)
+
+        val flagged = wcdbInstance.roomIdsWithNonNoneSendStatus()
+        assertEquals(setOf("r-reconcile-screenshot", "r-reconcile-real"), flagged)
+        flagged.forEach { wcdbInstance.clearRoomSendStatusIfNoFailure(it) }
+
+        assertEquals(ROOM_SEND_STATUS_NONE, storedSendStatus("r-reconcile-screenshot"))
+        assertEquals(ROOM_SEND_STATUS_FAILED, storedSendStatus("r-reconcile-real"))
+        assertEquals(ROOM_SEND_STATUS_NONE, storedSendStatus("r-reconcile-clean"))
     }
 
     @Test
@@ -502,6 +569,16 @@ class RoomSendStatusQueriesTest {
         insertArchiveTombstone("rs-tombstone")
 
         assertFalse(wcdbInstance.hasSendingOutgoingMessage("rs-tombstone"))
+    }
+
+    // #1265 — the exclusion covers the SENDING aggregate too, on purpose: a legacy screenshot row
+    // stuck at Sending has no job left to settle it and no resend path, so counting it would pin
+    // the room's sending indicator on forever.
+    @Test
+    fun `hasSendingOutgoingMessage ignores a screenshot row`() {
+        insertScreenshotRow("rs-screenshot", sendType = MessageModel.SEND_TYPE_SENDING)
+
+        assertFalse(wcdbInstance.hasSendingOutgoingMessage("rs-screenshot"))
     }
 
     @Test

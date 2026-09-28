@@ -23,19 +23,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.ui.theme.tokens.Palette
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
@@ -270,7 +269,7 @@ private fun MicActionButton(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .border(width = 2.dp, color = colorResource(id = com.difft.android.base.R.color.blue_400), shape = CircleShape)
+                    .border(width = 2.dp, color = Palette.Blue400, shape = CircleShape)
             )
             Box(
                 contentAlignment = Alignment.Center,
@@ -279,7 +278,7 @@ private fun MicActionButton(
                     .size(18.dp)
                     .background(
                         brush = Brush.linearGradient(
-                            colors = listOf(Color(0xFF4DA0FF), Color(0xFF82C1FC), Color(0xFF328AFD)),
+                            colors = listOf(Palette.Blue300, Palette.Blue200, Palette.Blue400),
                             start = Offset(0f, 0f),
                             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                         ),
@@ -288,8 +287,7 @@ private fun MicActionButton(
             ) {
                 Text(
                     text = voicePreset.emoji,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
+                    style = DifftTheme.typography.p4,
                     textAlign = TextAlign.Center
                 )
             }

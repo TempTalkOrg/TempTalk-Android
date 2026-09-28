@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.View
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.ItemDecoration
 import com.difft.android.base.R
@@ -20,10 +21,10 @@ class GroupMemberDecoration(context: Context, private val callback: DecorationCa
     private val fontMetrics: Paint.FontMetrics = Paint.FontMetrics()
 
     init {
-        paint.color = context.resources.getColor(R.color.bg2)
+        paint.color = ContextCompat.getColor(context, R.color.bg2)
         textPaint = TextPaint()
         textPaint.isAntiAlias = true
-        textPaint.color = context.resources.getColor(R.color.t_primary)
+        textPaint.color = ContextCompat.getColor(context, R.color.t_primary)
         textPaint.textSize = 14.dp.toFloat()
         textPaint.getFontMetrics(fontMetrics)
         textPaint.textAlign = Paint.Align.LEFT
