@@ -381,6 +381,9 @@ class CallRoomController(
             if (quicProxy != null) {
                 L.i { "[Call] QUIC-over-proxy enabled host=${quicProxy.host} port=${quicProxy.port}" }
             }
+            val forcePhysical = useQuicSignal && proxyConfig == null
+            val physicalNetworkHandle =
+                if (forcePhysical) appContext.physicalNetworkHandle() else 0
 
             // Tie the verifier to the SAME gate as proxyRtcConfig so they can't drift:
             // a non-null proxyRtcConfig was produced from proxyConfig, so the safe-call
@@ -429,6 +432,8 @@ class CallRoomController(
                     quicProxyCaCertPem = null,
                     quicProxySpkiPin = quicProxy?.spkiPinBase64,
                     quicConnectTimeoutMs = QUIC_CONNECT_TIMEOUT_MS,
+                    forcePhysical = forcePhysical,
+                    physicalNetworkHandle = physicalNetworkHandle,
                 )
             )
             L.i { "[Call] connectToRoom connected" }

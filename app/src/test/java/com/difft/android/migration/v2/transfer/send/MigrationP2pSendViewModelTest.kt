@@ -207,6 +207,25 @@ class MigrationP2pSendViewModelTest {
         }
     }
 
+    /**
+     * T44 — the receiver-only states added for reverse pairing and the commit boundary are no-ops
+     * here. They are part of one sealed [TransferState], so the send screen's exhaustive mapping has
+     * to name them; naming them as no-ops is what keeps a receiver state off the send screen.
+     */
+    @Test
+    fun `the receiver-only reverse-pairing and committed states leave the send state alone`() = runTest {
+        val vm = newVm()
+        vm.state.test {
+            assertEquals(MigrationP2pSendState.Idle, awaitItem())
+            MigrationTransferStateHolder.update(TransferState.AwaitingDesktopConfirm("desk"))
+            MigrationTransferStateHolder.update(TransferState.AwaitingDesktopConnect("desk", 30_000L))
+            MigrationTransferStateHolder.update(TransferState.CommittedUnconfirmed)
+            expectNoEvents()
+            assertEquals(MigrationP2pSendState.Idle, vm.state.value)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test
     fun `late collector re-attaches to in-flight Transferring (holder replay)`() = runTest {
         // Simulate an Activity recreated mid-send: the FGS already wrote Transferring before the VM's

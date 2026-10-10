@@ -44,6 +44,22 @@ class AttachmentLocalIdMapperTest {
     }
 
     @Test
+    fun `a row with no server id and no content type still maps`() {
+        // Written by the migration importer for a source that had neither (a never-uploaded or
+        // Desktop-origin attachment); the read side must not fail the whole hydration over it.
+        val model = row(localId = null).also {
+            it.authorityId = null
+            it.contentType = null
+        }
+
+        val mapped = model.toAttachment()
+
+        assertEquals(NO_SERVER_ATTACHMENT_ID, mapped.authorityId)
+        assertEquals(GENERIC_CONTENT_TYPE, mapped.contentType)
+        assertEquals("photo.jpg", mapped.fileName)
+    }
+
+    @Test
     fun `message-owned mapper round-trips localId`() {
         val model = domainAttachment("local-abc").toAttachmentModel("msg-1")
 

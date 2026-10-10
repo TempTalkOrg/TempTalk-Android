@@ -231,8 +231,9 @@ class CriticalAlertActivity: ComponentActivity() {
         // 重新启动自动关闭
         scheduleAutoFinish()
 
-        // 播放声音和闪光灯
-        criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
+        // Same rule as onCreate: a notification tap must not restart the alert sound.
+        val isNotification = intent.getBooleanExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, false)
+        if (!isNotification) criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
     }
 
 
@@ -373,8 +374,7 @@ class CriticalAlertActivity: ComponentActivity() {
                             } else {
                                 matchedCall.let { data ->
                                     if (data.callName.isNullOrEmpty()) {
-                                        L.w { "[CriticalAlert] Call name is null or empty for conversationId: $conversationId" }
-                                        L.w { "[CriticalAlert]  data: $data" }
+                                        L.w { "[CriticalAlert] callName empty conversationId=$conversationId type=${data.type} roomId=${data.roomId} caller=${data.caller.uid} source=${data.source} notifying=${data.notifying}" }
                                         when (data.type) {
                                             CallType.ONE_ON_ONE.type -> {
                                                 data.callName = contactorCacheManager.getDisplayNameById(data.conversation)

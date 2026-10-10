@@ -30,12 +30,12 @@ class IncomingConversationMessageProcessor @Inject constructor(
         kotlin.runCatching { webSocket.sendAckToChatDataWebSocketWithoutLog(requestId) }.onFailure {
             L.e { "[Message] sendAck exception -> ${it.stackTraceToString()}" }
         }.onSuccess {
-            L.i { "[Message] sendAck for requestId $requestId success" }
+            L.d { "[Message] sendAck for requestId $requestId success" }
         }
     }
 
     suspend fun endReceive(requestId: Long) {
-        L.i { "[Message] endReceive request id: $requestId" }
+        L.d { "[Message] endReceive request id: $requestId" }
         cache.onEach { (requestId, conversationPreviewWrapper) ->
             val conversationPreview = conversationPreviewWrapper.conversationPreview ?: return@onEach
             val forWhat = if (conversationPreview.conversationId.hasGroupId()) {

@@ -233,4 +233,26 @@ class SessionStatusAndCancelTest {
     }
 
     // endregion
+
+    // region committed-but-unconfirmed (T41b)
+
+    @Test
+    fun `an unconfirmed session is retired without a terminal and a cancel on it is too late`() {
+        val sm = manager()
+        val prepared = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(prepared.sessionId, "f1", prepared.slots.getValue("f1").token, "1.1.1.1")
+
+        sm.markUnconfirmed(prepared.sessionId)
+        // What the listener teardown does minutes later. Retiring this as CANCELLED would publish a
+        // definite, false verdict about an import that already reached its commit point.
+        sm.clear()
+
+        val status = sm.status(prepared.sessionId, prepared.sessionToken)
+        assertNull(status.terminal)
+        assertEquals(TransferStages.PROMOTING, status.stage)
+        // A cancel can undo nothing past the commit point, so it is answered like a promoting session.
+        assertEquals(CancelState.TOO_LATE, sm.cancel(prepared.sessionId, prepared.sessionToken).state)
+    }
+
+    // endregion
 }

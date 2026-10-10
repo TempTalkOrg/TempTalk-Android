@@ -371,11 +371,24 @@ class PromoteStep(
         }
     }
 
-    private companion object {
+    companion object {
+        /**
+         * True once P2 ran: the staging database file has been renamed away and the real one is in
+         * place. This is the commit boundary — the point past which the primary database is already
+         * the migrated one, so no failure verdict may be published for the transfer.
+         *
+         * Observed on the filesystem rather than reported by [promote], because the rename is what P2
+         * *is*: [moveDatabaseFile] already reads exactly these two facts to decide whether it has
+         * work to do, and a marker's mere existence is true after a P1-only failure too, where the
+         * live database is still the empty net-install one.
+         */
+        fun isDatabasePromoted(stagingDbPath: String, realDbPath: String): Boolean =
+            !File(stagingDbPath).exists() && File(realDbPath).exists()
+
         /** Staging sidecars moved along with the main file. */
-        val STAGING_SIDECAR_SUFFIXES = listOf("-wal", "-shm")
+        private val STAGING_SIDECAR_SUFFIXES = listOf("-wal", "-shm")
 
         /** Sidecars an opened live DB leaves behind: SQLite WAL/shm/journal and WCDB repair materials. */
-        val LIVE_SIDECAR_SUFFIXES = listOf("-wal", "-shm", "-journal", "-first.material", "-last.material", "-incremental.material")
+        private val LIVE_SIDECAR_SUFFIXES = listOf("-wal", "-shm", "-journal", "-first.material", "-last.material", "-incremental.material")
     }
 }

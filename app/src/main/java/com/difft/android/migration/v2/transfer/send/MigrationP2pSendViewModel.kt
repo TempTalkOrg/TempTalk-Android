@@ -492,7 +492,10 @@ class MigrationP2pSendViewModel(
             // Receiver-only states, never reached on the send screen; benign no-op.
             is TransferState.WaitingForPeer,
             TransferState.Promoting,
-            TransferState.Promoted -> current
+            TransferState.Promoted,
+            is TransferState.AwaitingDesktopConfirm,
+            is TransferState.AwaitingDesktopConnect,
+            TransferState.CommittedUnconfirmed -> current
             TransferState.Sent -> MigrationP2pSendState.Done
             is TransferState.Failed -> {
                 L.w { "[MigrationV2][P2P][Tx] send failed reason=${transfer.reason}" }

@@ -69,7 +69,7 @@ class MessageForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        L.i { "[MessageForegroundService] onStartCommand()" }
+        L.d { "[MessageForegroundService] onStartCommand()" }
 
         postForegroundNotification()
 

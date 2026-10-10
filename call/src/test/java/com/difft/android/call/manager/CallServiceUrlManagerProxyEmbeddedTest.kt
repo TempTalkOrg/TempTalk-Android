@@ -43,6 +43,7 @@ class CallServiceUrlManagerProxyEmbeddedTest {
         every { proxyProvider.isEnabledForCall } returns proxyEnabled
         val gcm = mockk<IGlobalConfigsManager>(relaxed = true)
         every { gcm.getProxyTunnelCallDomains() } returns proxyCallDomains
+        val physicalTransport = mockk<CallPhysicalHttpTransport>(relaxed = true)
 
         return CallServiceUrlManager(
             statisticsLogManager = Lazy { statsLog },
@@ -50,6 +51,7 @@ class CallServiceUrlManagerProxyEmbeddedTest {
             secureConfigStore = secureConfigStore,
             proxyConfigProviderLazy = Lazy { proxyProvider },
             globalConfigsManagerLazy = Lazy { gcm },
+            physicalHttpTransport = Lazy { physicalTransport },
         )
     }
 

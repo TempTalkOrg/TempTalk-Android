@@ -13,7 +13,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /**
  * Encoder/decoder for the obfuscated proxy share link (format spec v1, see
- * `docs/claude/proxy-share-link-format.md`).
+ * `docs/agents/proxy-share-link-format.md`).
  *
  * ```
  * ytp://config?d=<base64url-nopad( envelope )>

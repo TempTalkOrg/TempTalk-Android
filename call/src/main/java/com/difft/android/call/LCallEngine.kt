@@ -1,6 +1,7 @@
 package com.difft.android.call
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.EnvironmentHelper
@@ -63,7 +64,8 @@ object LCallEngine {
             @SuppressLint("TimberDirectCall")
             override fun log(priority: LoggingLevel, t: Throwable?, message: String) {
                 if (L.enabled && Timber.treeCount > 0) {
-                    Timber.log(priority.toAndroidLogPriority(), t, L.replaceUid(message))
+                    val androidPriority = sdkNoisePriority(message) ?: priority.toAndroidLogPriority()
+                    Timber.log(androidPriority, t, L.replaceUid(message))
                 }
             }
         }
@@ -72,6 +74,18 @@ object LCallEngine {
         registerNetworkConnectionListener(context, scope)
 
         LiveKit.init(context)
+    }
+
+    /**
+     * SDK lines that are per-candidate or known-benign are demoted so the file log (INFO and
+     * above) keeps call milestones only. Returns null to keep the SDK's own priority.
+     */
+    private fun sdkNoisePriority(message: String): Int? = when {
+        // One line per ICE candidate, carries local addresses.
+        "onIceCandidate" in message -> Log.DEBUG
+        // xquic reports the (expected) absence of 0-RTT as [error] on every connect.
+        "early data is not enabled" in message -> Log.INFO
+        else -> null
     }
 
     private fun registerNetworkConnectionListener(context: Context, scope: CoroutineScope) {

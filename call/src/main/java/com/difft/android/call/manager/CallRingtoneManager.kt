@@ -1,303 +1,288 @@
 package com.difft.android.call.manager
 
-import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
 import android.media.Ringtone
-import android.media.RingtoneManager
-import android.net.Uri
-import androidx.core.net.toUri
+import androidx.annotation.RawRes
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.R
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 通话铃声管理器
- * 负责管理通话相关的铃声播放、停止和循环播放
+ * Plays, loops and stops call ringtones.
+ *
+ * Every touch of a [Ringtone] and of the ringtone state runs on [serial], a single-parallelism
+ * dispatcher, so dispatched tasks run one at a time and a stop can never interleave with a
+ * `play()`. Enqueue order may differ from request order (`issue*` bumps the generation before
+ * `submit*` enqueues), which the generation checks resolve: [generation] is bumped on the
+ * caller's thread by every request, so a request issued later invalidates queued work
+ * immediately. [toneGeneration] is bumped by play/hangup only, so
+ * the call-teardown stop that always follows [playHangupRingTone] cannot skip or cut the hangup
+ * tone; that tone releases itself after [HANGUP_RELEASE_DELAY_MS].
+ *
+ * Invariants: [release] is the only caller of `Ringtone.stop()`; [playIfCurrent] is the only
+ * caller of `Ringtone.play()`; every request builds a fresh [Ringtone] (a stopped instance would
+ * replay through the unowned remote-player path, issue #1313).
  */
 @Singleton
-class CallRingtoneManager @Inject constructor(
-    @param:ApplicationContext private val context: Context
+class CallRingtoneManager internal constructor(
+    private val source: CallRingtoneSource,
+    /** Must be single-parallelism and created once per manager. */
+    private val serial: CoroutineDispatcher,
+    private val scope: CoroutineScope,
 ) {
-    private var currentRingtone: Ringtone? = null
-    private var isLooping = false
-    private var loopingJob: Job? = null
-    
-    // 检查播放状态的轮询间隔（毫秒）
-    private val playbackCheckInterval = 100L
-    // 设备静音/震动时的重试间隔（毫秒），避免紧密循环
-    private val silentRetryInterval = 1000L
+    @Inject
+    constructor(source: CallRingtoneSource) : this(source, Dispatchers.IO.limitedParallelism(1), appScope)
+
+    /** G: bumped by every request, on the caller's thread. */
+    private val generation = AtomicLong(0)
+
+    /** T: highest generation of a play/hangup request; stops never touch it. */
+    private val toneGeneration = AtomicLong(0)
+
+    // Confined to [serial].
+    private var current: Ringtone? = null
+    private var currentIsHangup = false
+    private var loopJob: Job? = null
+
+    internal data class ToneSpec(@param:RawRes val resId: Int, val looping: Boolean, val label: String)
 
     /**
-     * 播放通话铃声
-     * @param callType 通话类型（1on1、group、instant）
-     * @param roleType 角色类型（caller、callee）
-     * @param tag 日志标签，用于调试
+     * Plays the call ringtone for the given call type and role.
+     * @param callType 1on1 / group / instant
+     * @param roleType caller / callee
+     * @param tag log tag of the caller
      */
     fun playRingTone(callType: String?, roleType: String?, tag: String? = null) {
-        L.d { "[Call] CallRingtoneManager playRingTone: callType=$callType, roleType=$roleType, tag=$tag" }
-        appScope.launch {
-            // 如果已经有铃声在播放，先停止
-            if (currentRingtone != null) {
-                L.d { "[Call] CallRingtoneManager Ringtone already playing, stopping first" }
-                stopRingToneInternal()
-            }
-
-            val ringtoneUri = getRingtoneUri(callType, roleType)
-            if (ringtoneUri != null) {
-                try {
-                    currentRingtone = RingtoneManager.getRingtone(context, ringtoneUri)
-                    L.d { "[Call] CallRingtoneManager do playRingTone, isLooping=$isLooping" }
-
-                    if (isLooping) {
-                        startLoopingRingtone()
-                    } else {
-                        currentRingtone?.play()
-                    }
-                } catch (e: Exception) {
-                    L.e { "[Call] CallRingtoneManager Failed to play ringtone: ${e.message}" }
-                }
-            } else {
-                L.w { "[Call] CallRingtoneManager No ringtone URI found for callType=$callType, roleType=$roleType" }
-            }
-        }
+        val gen = issueTone("play", tag, "callType=$callType role=$roleType")
+        submitPlay(gen, callType, roleType, tag)
     }
 
-    /**
-     * 从 Intent 中提取信息并播放铃声
-     * @param intent 包含通话类型和角色信息的 Intent
-     */
+    /** Extracts call type and role from [intent] and plays the ringtone. */
     fun startRingTone(intent: Intent) {
         val callType = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CALL_TYPE)
         val roleType = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CALL_ROLE)
         playRingTone(callType, roleType, tag = "showCallNotification")
     }
 
-    /**
-     * 播放挂断铃声
-     * @param coroutineScope 协程作用域，用于异步播放
-     */
+    /** Plays the hangup tone once. A later [stopRingTone] leaves it alone; it releases itself. */
     fun playHangupRingTone() {
-        appScope.launch(Dispatchers.IO) {
-            L.d { "[Call] CallRingtoneManager set ringTone call_hangup" }
-            val ringtoneUri = "android.resource://${context.packageName}/${R.raw.new_call_hangup}".toUri()
-            
-            try {
-                // 先停止当前播放的铃声
-                stopRingToneInternal()
-                
-                currentRingtone = RingtoneManager.getRingtone(context, ringtoneUri)
-                if (currentRingtone == null) {
-                    L.d { "[Call] CallRingtoneManager call_hangup ringTone is null" }
-                } else {
-                    currentRingtone?.play()
-                }
-            } catch (e: Exception) {
-                L.e { "[Call] CallRingtoneManager Failed to play hangup ringtone: ${e.message}" }
-            }
-        }
+        submitHangup(issueTone("hangup", "hangup", ""))
     }
 
-    /**
-     * 停止铃声播放
-     * @param tag 日志标签，用于调试
-     */
+    /** Stops the current ringtone. Leaves a playing hangup tone alone. */
     fun stopRingTone(tag: String? = null) {
-        L.d { "[Call] CallRingtoneManager stopRingTone, tag=$tag" }
-        appScope.launch(Dispatchers.IO) {
-            stopRingToneInternal()
-        }
+        submitStop(issueStop(tag), tag)
     }
 
     /**
-     * 内部方法：停止铃声播放
-     */
-    private fun stopRingToneInternal() {
-        try {
-            isLooping = false
-            
-            // 取消循环播放协程
-            loopingJob?.cancel()
-            loopingJob = null
-            
-            // 停止当前播放的铃声（始终调用 stop 以确保底层 MediaPlayer 被释放，避免 finalize 超时崩溃）
-            currentRingtone?.let {
-                try {
-                    it.stop()
-                } catch (e: IllegalStateException) {
-                    L.e { "[Call] CallRingtoneManager Ringtone is in an illegal state: ${e.message}" }
-                } catch (e: NullPointerException) {
-                    L.e { "[Call] CallRingtoneManager NullPointerException encountered while stopping ringtone: ${e.message}" }
-                }
-            }
-        } catch (e: Exception) {
-            L.e { "[Call] CallRingtoneManager Error stopping ringtone: ${e.message}" }
-        } finally {
-            currentRingtone = null // 释放资源
-        }
-    }
-
-    /**
-     * 根据通话类型和角色获取铃声 URI
-     * @param callType 通话类型
-     * @param roleType 角色类型
-     * @return 铃声 URI，如果找不到则返回 null
-     */
-    private fun getRingtoneUri(callType: String?, roleType: String?): Uri? {
-        return when {
-            callType == CallType.ONE_ON_ONE.type -> {
-                if (roleType == CallRole.CALLER.type) {
-                    L.d { "[Call] CallRingtoneManager set ringTone call_outgoing_1v1" }
-                    isLooping = true // 1v1 去电需要循环播放
-                    "android.resource://${context.packageName}/${R.raw.new_call_outgoing_1v1}".toUri()
-                } else {
-                    L.d { "[Call] CallRingtoneManager set ringTone new_call_incomming_1v1" }
-                    isLooping = true // 1v1 来电铃声需要循环播放
-                    "android.resource://${context.packageName}/${R.raw.new_call_incomming_1v1}".toUri()
-                }
-            }
-            
-            (callType == CallType.GROUP.type || callType == CallType.INSTANT.type) && roleType == CallRole.CALLEE.type -> {
-                L.d { "[Call] CallRingtoneManager set ringTone call_incomming_group" }
-                isLooping = false // 群组来电不循环播放
-                "android.resource://${context.packageName}/${R.raw.new_call_incomming_group}".toUri()
-            }
-            
-            else -> null
-        }
-    }
-
-    /**
-     * 启动循环播放铃声
-     * 使用 Kotlin Coroutines 实现循环播放，等待铃声完整播放完成后再重新播放
-     */
-    private fun startLoopingRingtone() {
-        // 取消之前的循环任务（如果存在）
-        loopingJob?.cancel()
-        loopingJob = null
-        
-        val ringtone = currentRingtone ?: run {
-            L.w { "[Call] CallRingtoneManager Cannot start looping: ringtone is null" }
-            return
-        }
-        
-        // 启动循环播放协程
-        loopingJob = appScope.launch(Dispatchers.IO) {
-            try {
-                // 循环播放：等待播放完成，然后重新播放
-                while (shouldContinueLooping(ringtone)) {
-                    // 静音/震动模式下避免播放与紧密循环
-                    if (!isRingerAudible()) {
-                        delay(silentRetryInterval)
-                        continue
-                    }
-
-                    // 防止静音检查与播放之间状态变化
-                    if (!shouldContinueLooping(ringtone)) break
-
-                    // 播放铃声
-                    playRingtoneSafely(ringtone) ?: break
-
-                    // 等待铃声播放完成
-                    waitForPlaybackComplete(ringtone)
-                }
-            } catch (e: Exception) {
-                L.e { "[Call] CallRingtoneManager Unexpected error in looping: ${e.message}" }
-            } finally {
-                // 循环结束，清理 job 引用
-                loopingJob = null
-                L.d { "[Call] CallRingtoneManager Looping ringtone stopped" }
-            }
-        }
-    }
-    
-    /**
-     * 检查是否应该继续循环播放
-     * @param originalRingtone 原始铃声实例，用于验证是否被替换
-     * @return true 表示应该继续，false 表示应该停止
-     */
-    private fun shouldContinueLooping(originalRingtone: Ringtone): Boolean {
-        if (loopingJob?.isActive == false || !isLooping) return false
-        
-        val current = currentRingtone
-        if (current == null || current !== originalRingtone) {
-            L.d { "[Call] CallRingtoneManager Ringtone changed, stopping loop" }
-            return false
-        }
-        
-        return true
-    }
-    
-    /**
-     * 安全地播放铃声
-     * @param ringtone 要播放的铃声实例
-     * @return 播放成功返回 ringtone，失败返回 null
-     */
-    private suspend fun playRingtoneSafely(ringtone: Ringtone): Ringtone? {
-        return try {
-            if (ringtone.isPlaying) {
-                ringtone.stop()
-            }
-            ringtone.play()
-            ringtone
-        } catch (e: IllegalStateException) {
-            L.e { "[Call] CallRingtoneManager Ringtone is in an illegal state: ${e.message}" }
-            null
-        } catch (e: Exception) {
-            L.e { "[Call] CallRingtoneManager Error playing ringtone: ${e.message}" }
-            null
-        }
-    }
-
-    private fun isRingerAudible(): Boolean {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        return audioManager?.ringerMode == AudioManager.RINGER_MODE_NORMAL
-    }
-    
-    /**
-     * 等待铃声播放完成
-     * 通过轮询检查播放状态，直到播放完成或超时
-     * @param ringtone 要等待的铃声实例
-     */
-    private suspend fun waitForPlaybackComplete(ringtone: Ringtone) {
-        val startTime = System.currentTimeMillis()
-        
-        while (shouldContinueLooping(ringtone)) {
-            // 检查播放状态
-            val isPlaying = try {
-                ringtone.isPlaying
-            } catch (e: Exception) {
-                L.e { "[Call] CallRingtoneManager Error checking playback state: ${e.message}" }
-                return
-            }
-            
-            // 如果不在播放，说明播放完成
-            if (!isPlaying) {
-                val duration = System.currentTimeMillis() - startTime
-                L.d { "[Call] CallRingtoneManager Ringtone playback completed after ${duration}ms" }
-                return
-            }
-            
-            // 等待一段时间后再次检查
-            delay(playbackCheckInterval)
-        }
-    }
-
-    /**
-     * 清理资源
-     * 在不再需要时调用，释放所有资源
+     * Invalidates every pending play synchronously and enqueues the release on the serial
+     * dispatcher. This is not a synchronous stop: `Ringtone.stop()` runs after this returns.
+     * A playing hangup tone is left alone and releases itself.
      */
     fun cleanup() {
-        stopRingToneInternal()
+        stopRingTone(tag = "cleanup")
+    }
+
+    // ---- caller-thread half: bump + log. Split from submit* only so tests can reproduce
+    // out-of-order enqueue between threads. ----
+
+    @VisibleForTesting
+    internal fun issueTone(kind: String, tag: String?, detail: String): Long {
+        val gen = generation.incrementAndGet()
+        toneGeneration.accumulateAndGet(gen, ::maxOf)
+        L.i { "[Call] CallRingtoneManager $kind requested tag=$tag gen=$gen $detail" }
+        return gen
+    }
+
+    @VisibleForTesting
+    internal fun issueStop(tag: String?): Long {
+        val gen = generation.incrementAndGet()
+        L.i { "[Call] CallRingtoneManager stop requested tag=$tag gen=$gen" }
+        return gen
+    }
+
+    // ---- serial half ----
+
+    @VisibleForTesting
+    internal fun submitPlay(gen: Long, callType: String?, roleType: String?, tag: String?) {
+        scope.launch(serial) {
+            if (!isLatest(gen)) {
+                logSkip("play", gen, tag)
+                return@launch
+            }
+            release(tag, gen)
+            val spec = resolveTone(callType, roleType)
+            if (spec == null) {
+                L.w { "[Call] CallRingtoneManager no tone for callType=$callType role=$roleType" }
+                return@launch
+            }
+            val rt = source.create(spec.resId)
+            if (rt == null) {
+                L.w { "[Call] CallRingtoneManager getRingtone null tone=${spec.label}" }
+                return@launch
+            }
+            install(rt, isHangup = false)
+            L.i { "[Call] CallRingtoneManager start tone=${spec.label} looping=${spec.looping} gen=$gen" }
+            if (spec.looping) loop(gen, rt) else playIfCurrent(rt, isLatest(gen))
+        }
+    }
+
+    @VisibleForTesting
+    internal fun submitHangup(gen: Long) {
+        scope.launch(serial) {
+            // Checks T, not G: a stop never makes a hangup request stale.
+            if (!isLatestTone(gen)) {
+                logSkip("hangup", gen, "hangup")
+                return@launch
+            }
+            release("hangup", gen)
+            val rt = source.create(R.raw.new_call_hangup)
+            if (rt == null) {
+                L.w { "[Call] CallRingtoneManager getRingtone null tone=hangup" }
+                return@launch
+            }
+            install(rt, isHangup = true)
+            L.i { "[Call] CallRingtoneManager start tone=hangup gen=$gen" }
+            playIfCurrent(rt, isLatestTone(gen))
+            // Yields the serial slot; a later play/hangup may supersede (and release) this tone.
+            delay(HANGUP_RELEASE_DELAY_MS)
+            if (current === rt) release("hangup-complete", gen)
+        }
+    }
+
+    @VisibleForTesting
+    internal fun submitStop(gen: Long, tag: String?) {
+        scope.launch(serial) {
+            // A later request releases on its own, so a stale stop has nothing left to do.
+            if (!isLatest(gen)) {
+                logSkip("stop", gen, tag)
+                return@launch
+            }
+            if (currentIsHangup) {
+                L.i { "[Call] CallRingtoneManager stop leaves hangup tone tag=$tag gen=$gen" }
+                return@launch
+            }
+            release(tag, gen)
+        }
+    }
+
+    private fun isLatest(gen: Long) = generation.get() == gen
+
+    private fun isLatestTone(gen: Long) = toneGeneration.get() == gen
+
+    private fun logSkip(kind: String, gen: Long, tag: String?) {
+        L.i { "[Call] CallRingtoneManager skip stale $kind gen=$gen latest=${generation.get()} tag=$tag" }
+    }
+
+    private fun install(rt: Ringtone, isHangup: Boolean) {
+        current = rt
+        currentIsHangup = isHangup
+    }
+
+    /**
+     * Sole owner of `Ringtone.stop()`. Idempotent and never suspends. Clears [current] before
+     * `stop()` so no later [playIfCurrent] can reach the released instance. `stop()` is called
+     * even for a tone that never played so the underlying MediaPlayer is freed instead of being
+     * left to a finalizer (finalize-timeout crash, #338). Never `join()`s the loop: it runs on
+     * the same single slot and would deadlock; the cancel plus the generation check is enough.
+     */
+    private fun release(tag: String?, gen: Long) {
+        loopJob?.cancel()
+        loopJob = null
+        val rt = current ?: return
+        current = null
+        currentIsHangup = false
+        try {
+            rt.stop()
+        } catch (e: Exception) {
+            L.w { "[Call] CallRingtoneManager stop threw ${e.javaClass.simpleName}: ${e.message}" }
+        }
+        L.i { "[Call] CallRingtoneManager stopped tag=$tag gen=$gen" }
+    }
+
+    /**
+     * Sole owner of `Ringtone.play()`. [live] is computed by the caller right before this call
+     * with no suspension point in between. Skips `play()` while the tone is still playing instead
+     * of stop + play, which would replay through the remote-player path.
+     */
+    private fun playIfCurrent(rt: Ringtone, live: Boolean): Boolean {
+        if (!live || current !== rt) return false
+        return try {
+            if (!rt.isPlaying) rt.play()
+            true
+        } catch (e: Exception) {
+            L.w { "[Call] CallRingtoneManager play threw ${e.javaClass.simpleName}: ${e.message}" }
+            false
+        }
+    }
+
+    /**
+     * The loop is the play task itself, on [serial]. Cancellation (from [release]) wakes it at a
+     * `delay` and propagates; there is deliberately no catch here.
+     */
+    private suspend fun loop(gen: Long, rt: Ringtone) {
+        val self = currentCoroutineContext()[Job]
+        loopJob = self
+        try {
+            while (isLatest(gen) && current === rt) {
+                if (!source.isRingerAudible()) {
+                    delay(SILENT_RETRY_MS)
+                    continue
+                }
+                if (!playIfCurrent(rt, isLatest(gen))) break
+                if (!runCatching { rt.isPlaying }.getOrDefault(false)) {
+                    // play() returned without starting (e.g. ring stream at volume 0): back off
+                    // instead of re-issuing play() with no suspension point.
+                    delay(SILENT_RETRY_MS)
+                    continue
+                }
+                awaitCompletion(gen, rt)
+            }
+        } finally {
+            if (loopJob === self) loopJob = null
+            L.i { "[Call] CallRingtoneManager loop ended gen=$gen" }
+        }
+    }
+
+    private suspend fun awaitCompletion(gen: Long, rt: Ringtone) {
+        while (isLatest(gen) && current === rt && runCatching { rt.isPlaying }.getOrDefault(false)) {
+            delay(PLAYBACK_POLL_MS)
+        }
+    }
+
+    private fun resolveTone(callType: String?, roleType: String?): ToneSpec? = when {
+        callType == CallType.ONE_ON_ONE.type ->
+            if (roleType == CallRole.CALLER.type) {
+                ToneSpec(R.raw.new_call_outgoing_1v1, looping = true, label = "outgoing_1v1")
+            } else {
+                ToneSpec(R.raw.new_call_incomming_1v1, looping = true, label = "incoming_1v1")
+            }
+
+        (callType == CallType.GROUP.type || callType == CallType.INSTANT.type) && roleType == CallRole.CALLEE.type ->
+            ToneSpec(R.raw.new_call_incomming_group, looping = false, label = "incoming_group")
+
+        else -> null
+    }
+
+    internal companion object {
+        const val PLAYBACK_POLL_MS = 100L
+        const val SILENT_RETRY_MS = 1_000L
+
+        /** Covers the 0.86 s hangup clip plus start latency. */
+        const val HANGUP_RELEASE_DELAY_MS = 1_500L
     }
 }

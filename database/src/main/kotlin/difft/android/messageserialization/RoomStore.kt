@@ -21,4 +21,10 @@ interface RoomStore {
     suspend fun updateMessageReadPosition(forWhat: For, readPosition: Long)
 
     suspend fun getUnreadMessageInfo(room: For): UnreadMessageInfo
+
+    /** Manual mark-unread state as (flag, markUnreadAt); (CLEAR, 0) when the room has no row. */
+    suspend fun getMarkUnread(forWhat: For): Pair<Int, Long>
+
+    /** Stores the manual mark-unread state and refreshes the conversation list. */
+    suspend fun updateMarkUnread(forWhat: For, markUnreadFlag: Int, markUnreadAt: Long)
 }

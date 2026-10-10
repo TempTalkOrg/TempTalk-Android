@@ -1,11 +1,14 @@
 package com.difft.android.chat.ui.messageaction
 
+import android.graphics.Point
 import android.graphics.Rect
 import android.text.Layout
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import kotlin.math.hypot
 
 /**
  * Manages custom text selection for a TextView.
@@ -40,7 +43,8 @@ class TextSelectionManager(
     
     /**
      * Callback for handle position changes during drag.
-     * Used by TextPreviewActivity for auto-scroll when handle reaches edge.
+     * Used by TextPreviewActivity for auto-scroll when handle reaches edge, and by
+     * [SelectionMenuSync] to hide the message action menu while a handle is dragged.
      */
     interface HandleDragCallback {
         /**
@@ -49,7 +53,13 @@ class TextSelectionManager(
          * @param isStart Whether this is the start handle (true) or end handle (false)
          */
         fun onHandleDrag(screenY: Float, isStart: Boolean)
-        
+
+        /**
+         * Called once per gesture, when the dragged handle has moved beyond the touch slop since
+         * DOWN, so a plain tap on a handle never reports a drag (#1294).
+         */
+        fun onHandleDragStarted(isStart: Boolean) {}
+
         /**
          * Called when handle drag ends.
          */
@@ -59,8 +69,16 @@ class TextSelectionManager(
     // Selection state
     private var selectionStart = 0
     private var selectionEnd = 0
+
+    // The text can change under a live selection (a rebind re-truncates a long-text bubble, #1294), so
+    // layout and text lookups read the offsets clamped to the current text.
+    private val textLength: Int get() = textView.text?.length ?: 0
+    private val safeStart: Int get() = selectionStart.coerceIn(0, textLength)
+    private val safeEnd: Int get() = selectionEnd.coerceIn(0, textLength)
     private var isEnabled = true
     private var isDragging = false
+    private var dragStartNotified = false
+    private val touchSlop = ViewConfiguration.get(textView.context).scaledTouchSlop
     
     // UI components
     private var overlayContainer: ViewGroup? = null
@@ -70,6 +88,9 @@ class TextSelectionManager(
     
     // View to constrain highlight bounds (e.g., RecyclerView)
     private var clipBoundsView: View? = null
+    private val scrollLocation = IntArray(2)
+    private val scrollBox = Rect()
+    private val scrollClip = Rect()
     
     // Callbacks
     var onSelectionChanged: SelectionCallback? = null
@@ -113,27 +134,15 @@ class TextSelectionManager(
         // Create selection handles
         startHandle = SelectionHandleView(textView.context, isStart = true).apply {
             visibility = View.GONE
-            onDragStart = { isDragging = true }
-            onDragEnd = { 
-                isDragging = false
-                // Snap handle to correct position after drag
-                updateHandlePositions()
-                notifySelectionChanged()
-                handleDragCallback?.onHandleDragEnd()
-            }
+            onDragStart = ::onHandleTouchDragStart
+            onDragEnd = ::onHandleTouchDragEnd
             onDrag = { deltaX, deltaY -> handleDrag(isStart = true, deltaX, deltaY) }
         }
         
         endHandle = SelectionHandleView(textView.context, isStart = false).apply {
             visibility = View.GONE
-            onDragStart = { isDragging = true }
-            onDragEnd = { 
-                isDragging = false
-                // Snap handle to correct position after drag
-                updateHandlePositions()
-                notifySelectionChanged()
-                handleDragCallback?.onHandleDragEnd()
-            }
+            onDragStart = ::onHandleTouchDragStart
+            onDragEnd = ::onHandleTouchDragEnd
             onDrag = { deltaX, deltaY -> handleDrag(isStart = false, deltaX, deltaY) }
         }
         
@@ -154,9 +163,10 @@ class TextSelectionManager(
             FrameLayout.LayoutParams.WRAP_CONTENT
         ))
         
-        // Ensure handles are on top with elevation
-        startHandle?.elevation = 10f
-        endHandle?.elevation = 10f
+        // Handles above the highlight; must stay below MENU_TRANSLATION_Z_PX so the action menu
+        // draws and receives touches over them (#1294)
+        startHandle?.elevation = SELECTION_HANDLE_ELEVATION_PX
+        endHandle?.elevation = SELECTION_HANDLE_ELEVATION_PX
         
         // Position highlight view to match textView (after adding to container)
         updateHighlightViewPosition()
@@ -264,8 +274,10 @@ class TextSelectionManager(
      */
     fun getSelectedText(): String {
         val text = textView.text ?: return ""
-        return if (selectionStart < selectionEnd && selectionStart >= 0 && selectionEnd <= text.length) {
-            text.subSequence(selectionStart, selectionEnd).toString()
+        val start = safeStart
+        val end = safeEnd
+        return if (start < end) {
+            text.subSequence(start, end).toString()
         } else {
             ""
         }
@@ -312,6 +324,37 @@ class TextSelectionManager(
         }
     }
     
+    /**
+     * Per-frame follow for a list scroll (#1294): moves the highlight (position and clip) and the
+     * handles with the text without re-recording the highlight path. Handles stay put while dragged.
+     */
+    fun onListScrolled() {
+        val container = overlayContainer ?: return
+        val highlight = highlightView ?: return
+        container.getLocationOnScreen(scrollLocation)
+        val (containerX, containerY) = scrollLocation
+        textView.getLocationOnScreen(scrollLocation)
+        val (textX, textY) = scrollLocation
+        highlight.x = (textX - containerX).toFloat()
+        highlight.y = (textY - containerY).toFloat()
+        clipBoundsView?.let { boundsView ->
+            // setClipBounds copies the rect and skips an unchanged one.
+            highlight.clipBounds = boundsView.clipBoxOnScreen(scrollBox, scrollLocation).toHighlightClip(textX, textY, scrollClip)
+        }
+        if (!isDragging) updateHandlePositions()
+    }
+
+    /** Screen-space [this] box as a clip for the highlight view, which sits at the TextView's position. */
+    private fun Rect.toHighlightClip(textX: Int, textY: Int, out: Rect): Rect {
+        out.set(
+            (left - textX).coerceAtLeast(0),
+            (top - textY).coerceAtLeast(0),
+            (right - textX).coerceAtMost(textView.width),
+            (bottom - textY).coerceAtMost(textView.height),
+        )
+        return out
+    }
+
     /**
      * Select the word at the given character offset.
      * If the offset is on whitespace, selects the nearest word.
@@ -375,6 +418,8 @@ class TextSelectionManager(
         
         val layout = textView.layout ?: return null
         val container = overlayContainer ?: return null
+        val start = safeStart
+        val end = safeEnd
         
         // Get positions
         val textViewLocation = IntArray(2)
@@ -384,16 +429,16 @@ class TextSelectionManager(
         val offsetY = textViewLocation[1] + textView.paddingTop
         
         // Get start line bounds
-        val startLine = layout.getLineForOffset(selectionStart)
+        val startLine = layout.getLineForOffset(start)
         val startLineTop = layout.getLineTop(startLine)
         
         // Get end line bounds
-        val endLine = layout.getLineForOffset(selectionEnd)
+        val endLine = layout.getLineForOffset(end)
         val endLineBottom = layout.getLineBottom(endLine)
         
         // Get horizontal bounds
-        val startX = layout.getPrimaryHorizontal(selectionStart)
-        val endX = layout.getPrimaryHorizontal(selectionEnd)
+        val startX = layout.getPrimaryHorizontal(start)
+        val endX = layout.getPrimaryHorizontal(end)
         
         // For multi-line selection, use full width
         val left: Int
@@ -514,25 +559,15 @@ class TextSelectionManager(
             highlight.layoutParams = params
         }
         
-        // Calculate and apply clip bounds if a bounds view is provided
+        // Clip the highlight to the bounds view's content box, if one is provided
         clipBoundsView?.let { boundsView ->
-            val boundsViewLocation = IntArray(2)
-            boundsView.getLocationOnScreen(boundsViewLocation)
-            
-            // Calculate clip bounds relative to highlight view's position
-            // highlightView is at (offsetX, offsetY) in container coordinates
-            // We need bounds relative to highlightView's own coordinate system (0,0 is top-left of highlightView)
-            val clipLeft = (boundsViewLocation[0] - textViewLocation[0]).coerceAtLeast(0)
-            val clipTop = (boundsViewLocation[1] - textViewLocation[1]).coerceAtLeast(0)
-            val clipRight = (boundsViewLocation[0] + boundsView.width - textViewLocation[0]).coerceAtMost(textView.width)
-            val clipBottom = (boundsViewLocation[1] + boundsView.height - textViewLocation[1]).coerceAtMost(textView.height)
-            
-            highlight.clipBounds = Rect(clipLeft, clipTop, clipRight, clipBottom)
+            highlight.clipBounds =
+                boundsView.clipBoxOnScreen(Rect()).toHighlightClip(textViewLocation[0], textViewLocation[1], Rect())
         }
     }
     
     private fun updateHighlight() {
-        highlightView?.setSelection(selectionStart, selectionEnd)
+        highlightView?.setSelection(safeStart, safeEnd)
     }
     
     private fun updateHandlePositions() {
@@ -545,105 +580,90 @@ class TextSelectionManager(
             return
         }
         
-        // Get textView position relative to overlay container
-        val textViewLocation = IntArray(2)
-        val containerLocation = IntArray(2)
-        textView.getLocationOnScreen(textViewLocation)
-        container.getLocationOnScreen(containerLocation)
+        val origin = textView.contentOriginIn(container)
+        val clip = VerticalClip.of(clipBoundsView, container)
+        startHandle?.let { placeHandle(it, layout.edgeLineFor(safeStart), origin, clip, isStart = true) }
+        endHandle?.let { placeHandle(it, layout.edgeLineFor(safeEnd), origin, clip, isStart = false) }
+    }
+    
+    private fun onHandleTouchDragStart() {
+        isDragging = true
+        dragStartNotified = false
+    }
+    
+    private fun onHandleTouchDragEnd() {
+        isDragging = false
+        dragStartNotified = false
+        // Snap handle to correct position after drag
+        updateHandlePositions()
+        notifySelectionChanged()
+        handleDragCallback?.onHandleDragEnd()
+    }
+    
+    /**
+     * Places a handle so its line spans the text line: the start handle (circle on top) connects
+     * at the line bottom, the end handle (circle below) at the line top
+     * (see [SelectionHandleView.pivotOffsetY]). Visible iff the drawn part (circle + line, not the
+     * touch padding) intersects [clip]; a handle straddling a clip edge is cut there like the text.
+     */
+    private fun placeHandle(
+        handle: SelectionHandleView,
+        line: EdgeLine,
+        origin: Point,
+        clip: VerticalClip,
+        isStart: Boolean
+    ) {
+        handle.setLineHeight(line.height.toFloat())
         
-        val offsetX = textViewLocation[0] - containerLocation[0] + textView.paddingLeft
-        val offsetY = textViewLocation[1] - containerLocation[1] + textView.paddingTop
-        
-        // Calculate start handle position
-        // Start handle: circle at top, line points down INTO the text line
-        // Line should span the entire text line height (from line top to line bottom)
-        val startLine = layout.getLineForOffset(selectionStart)
-        val startX = layout.getPrimaryHorizontal(selectionStart)
-        val startLineTop = layout.getLineTop(startLine).toFloat()
-        val startLineBottom = layout.getLineBottom(startLine).toFloat()
-        val startLineHeight = startLineBottom - startLineTop
-        
-        // Get clip bounds view location for handle visibility check
-        val boundsViewLocation = IntArray(2)
-        val boundsTop: Int
-        val boundsBottom: Int
-        if (clipBoundsView != null) {
-            clipBoundsView!!.getLocationOnScreen(boundsViewLocation)
-            boundsTop = boundsViewLocation[1]
-            boundsBottom = boundsViewLocation[1] + clipBoundsView!!.height
+        val connectY = if (isStart) line.bottom else line.top
+        val handleX = (origin.x + line.x - handle.pivotOffsetX).toInt()
+        val handleY = (origin.y + connectY - handle.pivotOffsetY).toInt()
+        val visualTop = handleY + handle.visualTopInset.toInt()
+        val visualBottom = visualTop + handle.visualExtentPx.toInt()
+        val isVisible = clip.intersects(visualTop, visualBottom)
+        handle.visibility = if (isVisible) View.VISIBLE else View.GONE
+        // Handle-local clip; null when the drawn part is fully inside (never computed for UNBOUNDED).
+        handle.clipBounds = if (isVisible && (visualTop < clip.top || visualBottom > clip.bottom)) {
+            Rect(0, clip.top - handleY, handle.totalWidth.toInt(), clip.bottom - handleY)
         } else {
-            boundsTop = Int.MIN_VALUE
-            boundsBottom = Int.MAX_VALUE
+            null
         }
-        
-        startHandle?.let { handle ->
-            // Set line height to match text line height
-            handle.setLineHeight(startLineHeight)
-            
-            val handleX = (offsetX + startX - handle.pivotOffsetX).toInt()
-            // Position so handle's line covers the text line (line bottom at text line bottom)
-            // Handle structure: [circle (radius*2)] + [line (lineHeight)]
-            // pivotOffsetY = totalHeight = radius*2 + lineHeight
-            // We want: handleY + pivotOffsetY = text line bottom
-            val handleY = (offsetY + startLineBottom - handle.pivotOffsetY).toInt()
-            
-            // Check if handle is within visible bounds
-            val handleScreenY = containerLocation[1] + handleY
-            val handleBottomScreenY = handleScreenY + handle.totalHeight.toInt()
-            val isVisible = handleBottomScreenY > boundsTop && handleScreenY < boundsBottom
-            handle.visibility = if (isVisible) View.VISIBLE else View.GONE
-            
-            // Use layout params to position the handle (so touch detection works correctly)
-            val params = handle.layoutParams as? FrameLayout.LayoutParams
-            if (params != null) {
+
+        // Layout params position the handle (so touch hits match); unchanged margins skip the relayout
+        (handle.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            if (params.leftMargin != handleX || params.topMargin != handleY) {
                 params.leftMargin = handleX
                 params.topMargin = handleY
                 handle.layoutParams = params
             }
-            // Reset translation in case it was set during dragging
-            handle.translationX = 0f
-            handle.translationY = 0f
-            
-            // Force layout to update bounds immediately
-            handle.requestLayout()
         }
+        // Reset translation in case it was set during dragging
+        handle.translationX = 0f
+        handle.translationY = 0f
+    }
+    
+    /**
+     * Selection-edge rows for anchoring the message action menu (#1294), in overlay-container
+     * coordinates, unclipped and extended to each handle's knob. A row is null exactly when its
+     * handle is GONE. Returns [SelectionRowRects.NONE] when detached, without layout or
+     * selection, while the TextView is not shown, or during a handle drag.
+     */
+    fun getVisibleHandleRowRects(): SelectionRowRects {
+        val layout = textView.layout ?: return SelectionRowRects.NONE
+        val container = overlayContainer ?: return SelectionRowRects.NONE
+        if (!hasSelection() || isDragging || !textView.isShown) return SelectionRowRects.NONE
         
-        // Calculate end handle position
-        // End handle: line points up INTO the text line, circle at bottom
-        // Line should span the entire text line height (from line top to line bottom)
-        val endLine = layout.getLineForOffset(selectionEnd)
-        val endX = layout.getPrimaryHorizontal(selectionEnd)
-        val endLineTop = layout.getLineTop(endLine).toFloat()
-        val endLineBottom = layout.getLineBottom(endLine).toFloat()
-        val endLineHeight = endLineBottom - endLineTop
-        
-        endHandle?.let { handle ->
-            // Set line height to match text line height
-            handle.setLineHeight(endLineHeight)
-            
-            val handleX = (offsetX + endX - handle.pivotOffsetX).toInt()
-            // Position so handle's line covers the text line (line top at text line top)
-            // Handle structure: [line (lineHeight)] + [circle (radius*2)]
-            // pivotOffsetY = 0 (top of handle)
-            // We want: handleY + pivotOffsetY = text line top
-            val handleY = (offsetY + endLineTop - handle.pivotOffsetY).toInt()
-            
-            // Check if handle is within visible bounds
-            val handleScreenY = containerLocation[1] + handleY
-            val handleBottomScreenY = handleScreenY + handle.totalHeight.toInt()
-            val isVisible = handleBottomScreenY > boundsTop && handleScreenY < boundsBottom
-            handle.visibility = if (isVisible) View.VISIBLE else View.GONE
-            
-            // Use layout params to position the handle
-            val params = handle.layoutParams as? FrameLayout.LayoutParams
-            if (params != null) {
-                params.leftMargin = handleX
-                params.topMargin = handleY
-                handle.layoutParams = params
+        val origin = textView.contentOriginIn(container)
+        val width = textView.width - textView.paddingLeft - textView.paddingRight
+        fun row(handle: SelectionHandleView?, offset: Int, isStart: Boolean): Rect? =
+            handle?.takeIf { it.visibility == View.VISIBLE }?.let {
+                layout.edgeLineFor(offset).toRowRect(origin, width)
+                    .withHandleKnob(it.visualExtentPx.toInt(), isStart)
             }
-            handle.translationX = 0f
-            handle.translationY = 0f
-        }
+        return SelectionRowRects(
+            start = row(startHandle, safeStart, isStart = true),
+            end = row(endHandle, safeEnd, isStart = false)
+        )
     }
     
     private fun handleDrag(isStart: Boolean, deltaX: Float, deltaY: Float) {
@@ -658,6 +678,15 @@ class TextSelectionManager(
         handle.translationX += deltaX
         handle.translationY += deltaY
         
+        // The translation is the drag distance since DOWN (placeHandle zeroes it on every settle)
+        if (!dragStartNotified && hypot(handle.translationX, handle.translationY) > touchSlop) {
+            dragStartNotified = true
+            // A handle cut at the list edge is drawn whole once it really moves (a tap keeps the cut);
+            // placeHandle recomputes the clip when it settles.
+            handle.clipBounds = null
+            handleDragCallback?.onHandleDragStarted(isStart)
+        }
+        
         // Get handle's base position from layout params
         val params = handle.layoutParams as? FrameLayout.LayoutParams
         val baseX = params?.leftMargin ?: 0
@@ -667,7 +696,7 @@ class TextSelectionManager(
         val handleTipX = baseX + handle.translationX + handle.pivotOffsetX
         val handleTipY = baseY + handle.translationY  // Top of handle
         
-        // Notify callback of handle position (for auto-scroll in TextPreviewActivity)
+        // Notify callback of handle position (auto-scroll in TextPreviewActivity; ignored by SelectionMenuSync)
         val containerLocation = IntArray(2)
         container.getLocationOnScreen(containerLocation)
         val screenY = containerLocation[1] + handleTipY + handle.totalHeight

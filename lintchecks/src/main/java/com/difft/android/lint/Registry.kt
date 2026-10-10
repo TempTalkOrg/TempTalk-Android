@@ -25,7 +25,7 @@ import com.android.tools.lint.detector.api.Issue
  *   - UI unification (DifftWidgetRequired, DifftTypeScaleRequired,
  *     DifftColorTokenRequired, DifftRadiusRequired)
  *
- * See `docs/claude/lintchecks-extension-roadmap.md` for the future-rule
+ * See `docs/agents/lintchecks-extension-roadmap.md` for the future-rule
  * roadmap (concurrency anti-patterns, Android-generic patterns, etc.).
  */
 class Registry : IssueRegistry() {
@@ -37,7 +37,7 @@ class Registry : IssueRegistry() {
     )
 
     override val issues: List<Issue> = listOf(
-        // Logging API blacklist — see .claude/rules/logging-standards.md
+        // Logging API blacklist — see docs/agents/logging-standards-full.md
         LogApiDetector.LOG_NOT_L,
         LogApiDetector.TIMBER_DIRECT_CALL,
         PrintLnDetector.KOTLIN_IO_PRINTLN,

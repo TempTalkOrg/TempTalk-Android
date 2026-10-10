@@ -56,7 +56,7 @@ class AppWebSocketHelper
             val request = chatDataWebSocketConnection.readRequest()
             try {
                 if (isSignalServiceEnvelope(request)) {
-                    L.i { "[AppWebSocketHelper] read message envelope:" + request.requestId }
+                    L.d { "[AppWebSocketHelper] read message envelope:" + request.requestId }
                     val envelope: Envelope? = parseSignalServiceEnvelope(request)
                     return Pair(request.requestId, envelope)
                 } else if (isSocketConversationRequest(request)) {
@@ -67,11 +67,11 @@ class AppWebSocketHelper
                         ConversationPreviewWrapper(conversationPreview)
                     )
                 } else if (isSocketConversationEmptyRequest(request)) {
-                    L.i { "[AppWebSocketHelper] read message conversation empty:" + request.requestId }
+                    L.i { "[AppWebSocketHelper] conversation previews done, acked requestId=${request.requestId}" }
                     sendAckToChatDataWebSocket(request.requestId);
                     return Pair(request.requestId, ChatDataMessageFlag.END_CONVERSATION_PREVIEW_MGS)
                 } else if (isSocketEmptyRequest(request)) {
-                    L.i { "[AppWebSocketHelper] read message queue empty requestId=${request.requestId}" }
+                    L.i { "[AppWebSocketHelper] queue empty, acked requestId=${request.requestId}" }
                     sendAckToChatDataWebSocket(request.requestId);
                     return Pair(request.requestId, ChatDataMessageFlag.END_QUEUE)
                 } else {
@@ -97,7 +97,7 @@ class AppWebSocketHelper
             L.w { "[AppWebSocketHelper] read message envelope is null:" + request.requestId }
             sendAckToChatDataWebSocket(request.requestId);
         } else {
-            L.i { "[AppWebSocketHelper] parse envelope success: ${request.requestId} ${envelope.timestamp}" }
+            L.d { "[AppWebSocketHelper] parse envelope success: ${request.requestId} ${envelope.timestamp}" }
         }
         return envelope
     }
@@ -106,7 +106,7 @@ class AppWebSocketHelper
     @Throws(IOException::class)
     fun sendAckToChatDataWebSocket(requestId: Long) {
         sendAckToChatDataWebSocketWithoutLog(requestId)
-        L.i { "[AppWebSocketHelper] send ack -> requestId:$requestId" }
+        L.d { "[AppWebSocketHelper] send ack -> requestId:$requestId" }
     }
 
     @Throws(IOException::class)

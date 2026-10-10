@@ -12,7 +12,6 @@ import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AppLockCallbackManager
-import com.difft.android.base.utils.OrientationPolicy
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
 import com.difft.android.call.handler.CallActionHandler
@@ -49,10 +48,8 @@ import kotlinx.coroutines.withContext
  */
 
 internal fun LCallActivity.initializeState() {
-    // sw600dp orientation policy (portrait on phones, free rotation on tablets / unfolded
-    // foldables) — LCallActivity is not a BaseActivity, so apply it directly. Overrides the
-    // manifest portrait lock on large screens, same as every policy-managed activity.
-    policyAppliedOrientation = OrientationPolicy.applyTo(this)
+    // The orientation policy is applied pre-super in LCallActivity.onCreate (it must precede
+    // the first frame); nothing orientation-related belongs here.
     onGoingCallStateManager.setIsInCalling(true)
 
     if (isAppLockEnabled()) {
@@ -238,19 +235,6 @@ internal fun LCallActivity.initializePictureInPictureManager() {
         onPipModeChanged = { isInPipMode ->
             viewModel.callUiController.setPipModeEnabled(isInPipMode)
             onGoingCallStateManager.setIsInPipMode(isInPipMode)
-        },
-        onPipClosed = {
-            onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
-                handleExitClick(
-                    CallExitParams(
-                        roomId,
-                        callIntent.callerId,
-                        callRole,
-                        onGoingCallStateManager.callType(),
-                        onGoingCallStateManager.getConversationId()
-                    )
-                )
-            }
         }
     ).also { it.initialize() }
 }

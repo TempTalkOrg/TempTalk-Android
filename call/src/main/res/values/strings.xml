@@ -7,6 +7,8 @@
     <string name="call_is_calling_tip">You are already in a meeting.</string>
     <string name="call_status_calling">Calling…</string>
     <string name="call_connecting_title">Connecting…</string>
+    <string name="call_notification_in_progress">Call in progress</string>
+    <string name="call_notification_hang_up">Hang up</string>
     <string name="call_media_send_issue">Others may not hear you. Recovering...</string>
     <string name="call_status_encrypted">End-to-end encrypted</string>
     <string name="call_connecting_retry_tip">The meeting is connecting, please try again later.</string>
@@ -78,6 +80,9 @@
     <string name="call_topbar_critical_alert_entrance_text1">No answer?</string>
     <string name="call_topbar_critical_alert_entrance_text2">Send a Critical Alert.</string>
     <string name="call_join_failed_tip">Failed to join the call, please try again.</string>
+    <string name="call_slider_decline">Decline</string>
+    <string name="call_slider_answer">Answer</string>
+    <string name="call_slider_hint">Swipe right to answer, left to decline</string>
     <string name="call_start_failed_tip">Failed to start the call, please try again.</string>
     <string name="call_chat_header_1v1_another_device">In call on another device.</string>
     <string name="call_chat_header_started_call">%s started a call</string>

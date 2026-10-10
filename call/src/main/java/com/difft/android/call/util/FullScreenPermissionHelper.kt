@@ -54,7 +54,7 @@ object FullScreenPermissionHelper {
 
     private fun isManufacturer(target: String) = manufacturer == target
 
-    private fun getSystemProperty(prop: String): String {
+    internal fun getSystemProperty(prop: String): String {
         if (!prop.matches(Regex("^[a-zA-Z0-9._-]+$"))) return ""
         return try {
             val clz = Class.forName("android.os.SystemProperties")

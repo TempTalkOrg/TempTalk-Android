@@ -26,9 +26,8 @@ import com.difft.android.migration.v2.handoff.MigrationHandoffGate
 import com.difft.android.migration.v2.handoff.MigrationHandoffReconciler
 import com.difft.android.migration.v2.login.MigrationImportLauncherImpl
 import com.difft.android.migration.v2.restore.RestoreOrchestrator
-import com.difft.android.migration.v2.restore.RestoreResult
-import com.difft.android.migration.v2.transfer.login.MigrationP2pPullController
 import com.difft.android.migration.v2.transfer.login.MigrationP2pReceiveController
+import com.difft.android.migration.v2.transfer.login.ReversePairController
 import com.difft.android.migration.v2.transfer.send.HANDOFF_NOT_ACKNOWLEDGED
 import com.difft.android.migration.v2.transfer.send.MigrationP2pSendController
 import com.difft.android.migration.v2.transfer.send.classifyFailure
@@ -59,8 +58,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
@@ -115,15 +112,8 @@ class MigrationTransferService : LifecycleService() {
     /** The sender's receiver session and what follows from it — see [SenderVerdictTracker]. */
     private val verdicts by lazy { SenderVerdictTracker(pendingVerdictStore, controlScope) }
 
-    /**
-     * A Desktop export QR scanned while this device was waiting to be scanned. The receiver role
-     * consumes it, tears down its listener and pulls instead, keeping the same service, account and
-     * terminal handling. Cleared on every receiver start.
-     */
-    private val pullRequests = MutableStateFlow<QrPayload?>(null)
-
-    /** The receiver role's wait for a peer and the code rotation beside it (see [ReceiverPairing]). */
-    private val pairing = ReceiverPairing(pullRequests.filterNotNull(), PAIRING_TIMEOUT_MS, PAIRING_ROTATE_INTERVAL_MS)
+    /** The receiver role's wait for a peer or a scan, and the code rotation (see [ReceiverPairing]). */
+    private val pairing = ReceiverPairing(PAIRING_TIMEOUT_MS, PAIRING_ROTATE_INTERVAL_MS)
 
     /** The CPU + Wi-Fi locks a transfer holds — see [TransferLocks]. */
     private val transferLocks by lazy { TransferLocks(this) }
@@ -141,7 +131,7 @@ class MigrationTransferService : LifecycleService() {
                     credentialHandoff = intent.getBooleanExtra(EXTRA_CREDENTIAL_HANDOFF, false),
                 )
 
-            ACTION_START_PULL -> requestPull(intent.getStringExtra(EXTRA_QR_PAYLOAD).orEmpty())
+            ACTION_START_REVERSE_PAIR -> pairing.requestScan(intent.getStringExtra(EXTRA_QR_PAYLOAD).orEmpty())
 
             ACTION_START_SENDER ->
                 startSenderRole(
@@ -187,7 +177,7 @@ class MigrationTransferService : LifecycleService() {
         }
         MigrationTransferStateHolder.reset()
         MigrationTransferStateHolder.update(TransferState.Starting)
-        pullRequests.value = null
+        pairing.resetScan()
         // Loopback never touches the radio; holding a Wi-Fi lock for it would only cost battery.
         transferLocks.acquire(wifi = !sameDevice)
         serviceScope.launch { runReceiver(account, sameDevice, credentialHandoff) }
@@ -226,6 +216,11 @@ class MigrationTransferService : LifecycleService() {
                     MigrationTransferStateHolder.update(TransferState.Promoting)
                     MigrationTransferStateHolder.update(TransferState.Promoted)
                 },
+                // The database is switched but its tail is unproven: keep the data, publish no terminal
+                // to the peer, and let the screen force the cold start that finishes the promote.
+                onCommittedUnconfirmed = {
+                    MigrationTransferStateHolder.update(TransferState.CommittedUnconfirmed)
+                },
                 // After the body is in, a rejection is the import's own verdict, never a peer that left.
                 onRejected = { if (isPromoting()) failReceiver(it, fromOutcome = true) else failReceiverEventually(it) },
             )
@@ -239,14 +234,14 @@ class MigrationTransferService : LifecycleService() {
             // old one refused at once. Same device shows no code, so nothing rotates there.
             val rotation = if (sameDevice) null else serviceScope.launch { pairing.rotatePin(controller) }
             // Suspend until the receive outcome resolves so the FGS stays up across the whole import.
-            // Bound the no-peer case so a backgrounded receiver does not stay up indefinitely. A Desktop
-            // export QR scanned meanwhile turns this role into a pull: the listener goes down (nobody
-            // will connect to it) and the same coroutine, locks and terminal handling carry the pull.
-            val pullTarget = pairing.awaitPeerOrPull()
+            // Bound the no-peer case so a backgrounded receiver does not stay up indefinitely. A
+            // computer's export QR scanned meanwhile turns this role into reverse pairing: the listener
+            // stays up — it is what the computer connects back to — and the same coroutine, locks and
+            // terminal handling carry it.
+            val macTarget = pairing.awaitPeerOrScan()
             rotation?.cancel()
-            if (pullTarget != null) {
-                controller.stopReceiver()
-                runPull(account, pullTarget)
+            if (macTarget != null) {
+                runReversePair(account, handle, macTarget)
             }
         } catch (e: CancellationException) {
             controller.stopReceiver()
@@ -267,6 +262,26 @@ class MigrationTransferService : LifecycleService() {
             }
             finishRole()
         }
+    }
+
+    /**
+     * The reverse-pairing leg of the receiver role: ask the scanned computer to connect back, then
+     * hand the outcome to the ordinary upload path, exactly as the listening leg does. Runs inside
+     * [runReceiver]'s try, so cancellation, teardown and the terminal notification are shared.
+     */
+    private suspend fun runReversePair(
+        account: String,
+        handle: MigrationP2pReceiveController.ReceiverHandle,
+        mac: QrPayload,
+    ) {
+        ReversePairController(
+            appContext = applicationContext,
+            registry = handle.pairingRegistry,
+            environmentHelper = environmentHelper,
+            appVersion = BuildConfig.VERSION_NAME,
+            account = account,
+        ).run(scope = serviceScope, mac = mac, listen = handle.displayTarget)
+        MigrationTransferStateHolder.state.first { it.isTerminal() }
     }
 
     /** Routes a receiver failure through the arbiter, so a dropped link can still turn out to be the peer's cancel. */
@@ -625,62 +640,6 @@ class MigrationTransferService : LifecycleService() {
     }
 
 
-    /** ACTION_START_PULL: hand a scanned Desktop export QR to the waiting receiver role. */
-    private fun requestPull(raw: String) {
-        val target = QrPayloadCodec.decode(raw)
-        if (target?.transferKey == null) {
-            L.w { "[MigrationV2][P2P][FGS] pull ignored — not a migration payload" }
-            return
-        }
-        // A receiver still coming up (Starting) takes the pull too: the request is a StateFlow the
-        // receiver loop reads once it waits. With no receiver at all nothing would ever consume it, so
-        // the holder says so — otherwise the screen would sit on "preparing" with no way out.
-        val current = MigrationTransferStateHolder.state.value
-        if (current !is TransferState.WaitingForPeer && current != TransferState.Starting) {
-            L.w { "[MigrationV2][P2P][FGS] pull with no receiver (state=$current) → failing" }
-            MigrationTransferStateHolder.update(TransferState.Failed(REASON_NO_RECEIVER))
-            return
-        }
-        L.i { "[MigrationV2][P2P][FGS] pull requested from ${target.alias} @ ${target.ip}:${target.port}" }
-        pullRequests.value = target
-    }
-
-    /**
-     * The pull leg of the receiver role: Transferring with byte progress → Promoting → Promoted, or
-     * Failed carrying the wire reason. Runs inside [runReceiver]'s try so cancellation, teardown and
-     * the terminal notification are shared with the listening leg.
-     */
-    private suspend fun runPull(account: String, target: QrPayload) {
-        val peer = target.alias.takeIf { it.isNotBlank() }
-        receiverTotalBytes = 0L
-        MigrationTransferStateHolder.update(
-            TransferState.Transferring(TransferState.Role.RECEIVER, INDETERMINATE, peerAlias = peer),
-        )
-        // The Desktop advertises every address it has; talk to the one that answers (see runSender).
-        val target = EndpointRace.resolve(target)
-            ?: throw java.net.SocketException("none of the ${target.candidates.size} advertised addresses answered")
-        val puller = MigrationP2pPullController(
-            context = applicationContext,
-            orchestrator = restoreOrchestrator,
-            environmentHelper = environmentHelper,
-            appVersion = BuildConfig.VERSION_NAME,
-            loggingInAccount = account,
-        )
-        val onPullProgress: (Float, Long) -> Unit = { ratio, total ->
-            receiverTotalBytes = total
-            onReceiverProgress(ratio)
-        }
-        when (val result = puller.pull(target, onProgress = onPullProgress, onBodyComplete = ::publishPromoting)) {
-            is RestoreResult.ReadyForSignIn -> {
-                L.i { "[MigrationV2][P2P][Pull] promoted → ReadyForSignIn (returning to login)" }
-                MigrationTransferStateHolder.update(TransferState.Promoting)
-                MigrationTransferStateHolder.update(TransferState.Promoted)
-            }
-            is RestoreResult.Rejected -> MigrationTransferStateHolder.update(TransferState.Failed("rejected: ${result.error.code}"))
-            is RestoreResult.Failed -> MigrationTransferStateHolder.update(TransferState.Failed("failed: ${result.error.code}"))
-        }
-    }
-
     /** An unreachable peer is a one-liner; anything else keeps its stack. */
     private fun Throwable.describeFailure(): String =
         if (isPeerUnreachable()) "could not reach the peer: $message" else stackTraceToString()
@@ -734,8 +693,8 @@ class MigrationTransferService : LifecycleService() {
         const val ACTION_START_RECEIVER = "com.difft.migration.p2p.ACTION_START_RECEIVER"
         const val ACTION_START_SENDER = "com.difft.migration.p2p.ACTION_START_SENDER"
 
-        /** Receiver role only: pull from the Desktop whose export QR (`dir = "download"`) rides in [EXTRA_QR_PAYLOAD]. */
-        const val ACTION_START_PULL = "com.difft.migration.p2p.ACTION_START_PULL"
+        /** Receiver role only: reverse-pair with the computer whose export QR rides in [EXTRA_QR_PAYLOAD]. */
+        const val ACTION_START_REVERSE_PAIR = "com.difft.migration.p2p.ACTION_START_REVERSE_PAIR"
 
         /** Cancel action; keep in sync with [MigrationTransferNotificationHelper.ACTION_CANCEL]. */
         const val ACTION_CANCEL = MigrationTransferNotificationHelper.ACTION_CANCEL
@@ -771,8 +730,9 @@ class MigrationTransferService : LifecycleService() {
         /** How long one pairing code stays on screen before the listener issues the next. */
         internal const val PAIRING_ROTATE_INTERVAL_MS = 60 * 1000L
 
-        /** A Desktop pull was requested while no receiver role was up to carry it. */
-        internal const val REASON_NO_RECEIVER = "pull-without-receiver"
+        /** Reverse pairing was requested while no receiver role was up to carry it. */
+        @VisibleForTesting
+        internal const val REASON_NO_RECEIVER = "reverse-pair-without-receiver"
 
         /** Indeterminate progress signal carried in [TransferState.Transferring]. */
         private const val INDETERMINATE = -1f
@@ -797,12 +757,12 @@ class MigrationTransferService : LifecycleService() {
         }
 
         /**
-         * Turns the waiting receiver role into a pull from the Desktop whose export QR was just
-         * scanned. Ignored when no receiver is waiting.
+         * Turns the waiting receiver role into reverse pairing with the computer whose export QR was
+         * just scanned. Ignored when no receiver is waiting.
          */
-        fun startPull(context: Context, rawQrPayload: String) {
+        fun startReversePair(context: Context, rawQrPayload: String) {
             val intent = Intent(context, MigrationTransferService::class.java).apply {
-                action = ACTION_START_PULL
+                action = ACTION_START_REVERSE_PAIR
                 putExtra(EXTRA_QR_PAYLOAD, rawQrPayload)
             }
             context.startService(intent)

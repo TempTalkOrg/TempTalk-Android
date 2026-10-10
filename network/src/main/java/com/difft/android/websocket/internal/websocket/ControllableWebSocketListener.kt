@@ -21,7 +21,7 @@ class ControllableWebSocketListener(
 
     override fun onOpen(webSocket: WebSocket, response: Response) {
         if (invalid) return
-        L.i { "[$id]: onOpen" }
+        L.d { "[$id]: onOpen" }
         websocketListener.onOpen(webSocket, response)
     }
 
@@ -39,19 +39,19 @@ class ControllableWebSocketListener(
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
         if (invalid) return
-        L.i { "[$id]: onClosing" }
+        L.d { "[$id]: onClosing" }
         websocketListener.onClosing(webSocket, code, reason)
     }
 
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         if (invalid) return
-        L.i { "[$id]: onClosed" }
+        L.d { "[$id]: onClosed" }
         websocketListener.onClosed(webSocket, code, reason)
     }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         if (invalid) return
-        L.i { "[$id]: onFailure" }
+        L.d { "[$id]: onFailure" }
         websocketListener.onFailure(webSocket, t, response)
     }
 }

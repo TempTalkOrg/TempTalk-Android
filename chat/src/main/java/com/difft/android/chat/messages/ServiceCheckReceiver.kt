@@ -13,15 +13,10 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.launch
 
 /**
- * 定时检查广播接收器
- *
- * 由 AlarmManager 定期触发，用于检查并恢复 MessageForegroundService 的运行状态
- *
- * 触发间隔：
- * - 有精确闹钟权限：5 分钟（非 Doze）/ ~15 分钟（Doze，系统延长）
- * - 无精确闹钟权限：5 分钟（非 Doze）/ 30分钟-2小时（Doze，系统维护窗口）
- *
- * 注意：每次触发后会重新调度下一次闹钟，保持常驻检查
+ * Periodic AlarmManager check that recovers [MessageForegroundService] and wakes the
+ * WebSocket monitor. Fires every 5 min outside Doze; inside Doze the system stretches it to
+ * ~15 min with the exact-alarm permission or 30 min - 2 h without. Each delivery re-arms the
+ * next alarm, so the chain is one-shot + re-arm.
  */
 class ServiceCheckReceiver : BroadcastReceiver() {
 
@@ -34,16 +29,15 @@ class ServiceCheckReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        L.i { "[ServiceCheck] Alarm triggered" }
+        L.i { "[ServiceCheck] alarm fired serviceRunning=${MessageForegroundService.isRunning}" }
 
-        // 使用 goAsync() 保证异步操作完成
+        // goAsync() keeps the receiver alive until the coroutine below finishes.
         val pendingResult = goAsync()
 
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext, ReceiverEntryPoint::class.java
         )
 
-        // 协程异步执行，避免阻塞主线程
         appScope.launch {
             try {
                 // End the chain when keep-alive is disabled: no re-arm, no service start.
@@ -54,13 +48,9 @@ class ServiceCheckReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // 重新调度下一次闹钟（保持常驻）
                 entryPoint.messageServiceManager().scheduleAlarmCheck()
-
-                // 检查并恢复
                 entryPoint.messageServiceManager().checkAndRecover()
             } finally {
-                // 确保无论成功或失败都调用 finish()
                 pendingResult.finish()
             }
         }

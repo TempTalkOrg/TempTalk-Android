@@ -15,6 +15,7 @@ import com.difft.android.websocket.api.util.INewMessageContentEncryptor.Companio
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor.Companion.MESSAGE_MINIMUM_SUPPORTED_VERSION
 import com.difft.android.websocket.api.util.RustEncryptionException
 import com.difft.android.websocket.api.util.SignalServiceContentCreator
+import com.difft.android.websocket.api.util.transformGroupIdFromLocalToServer
 import com.difft.android.websocket.api.util.toOutgoingReadPositionEntity
 import com.difft.android.websocket.api.websocket.WebSocketUnavailableException
 import com.difft.android.network.signal.MessageSendRepository
@@ -33,6 +34,7 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Receip
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMessage
 import org.whispersystems.signalservice.internal.push.SyncMessageKt
 import org.whispersystems.signalservice.internal.push.content
+import org.whispersystems.signalservice.internal.push.conversationId
 import org.whispersystems.signalservice.internal.push.encryptContent
 import org.whispersystems.signalservice.internal.push.syncMessage
 import java.io.IOException
@@ -323,9 +325,9 @@ class NewSignalServiceMessageSender @Inject constructor(
                     L.e { "[Message] [sendMessage][$timestamp] StaleDevicesException (${e.stackTraceToString()})" }
                     throw e
                 } catch (e: WebSocketUnavailableException) {
-                    L.e { "[Message] [sendMessage][$timestamp] Pipe unavailable, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
+                    L.w { "[Message][$timestamp] pipe unavailable, falling back to http: ${e.javaClass.simpleName}: ${e.message}" }
                 } catch (e: IOException) {
-                    L.e { "[Message][$timestamp] Pipe failed, falling back... (${e.javaClass.simpleName}: ${e.stackTraceToString()})" }
+                    L.w { "[Message][$timestamp] pipe failed, falling back to http: ${e.javaClass.simpleName}: ${e.message}" }
                 }
                 val response = messageSendRepository.sendMessage(newOutgoingMessage, recipient)
                 if (response.status == 11001 || response.data!!.missing.isNullOrEmpty().not() || response.data!!.stale.isNullOrEmpty().not()) {
@@ -698,6 +700,42 @@ class NewSignalServiceMessageSender @Inject constructor(
     private fun createReceiptContent(message: ReceiptMessage): Content {
         val container = Content.newBuilder()
         return container.setReceiptMessage(message).build()
+    }
+
+    /**
+     * Sync the user's manual "mark as unread / read" state to the account's other devices.
+     * Standalone sync message addressed to self (no primary recipient), same as the read sync in
+     * [sendReceipt]. The caller stores `success.systemShowTimestamp` as the mark time.
+     */
+    suspend fun sendMarkAsUnread(
+        room: For,
+        flag: SyncMessage.MarkAsUnread.Flag,
+        sendTimestamp: Long
+    ): SendMessageResult {
+        L.i { "[Message] [$sendTimestamp] Sending markAsUnread sync flag=${flag.name} room=${room.id}" }
+        val syncContent = content {
+            syncMessage = syncMessage {
+                markAsUnread = SyncMessageKt.markAsUnread {
+                    conversation = conversationId {
+                        when (room) {
+                            is For.Group -> groupId = ByteString.copyFrom(room.id.transformGroupIdFromLocalToServer())
+                            is For.Account -> number = room.id
+                        }
+                    }
+                    this.flag = flag
+                }
+            }
+        }
+        return sendMessage(
+            localAddress,
+            room,
+            sendTimestamp,
+            syncContent,
+            false,
+            Optional.empty(),
+            Optional.empty(),
+            null
+        )
     }
 
     private fun createMultiDeviceReadContent(readMessages: List<SyncMessage.Read>): Content {

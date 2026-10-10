@@ -520,7 +520,8 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
                 }
                 .listener(object : RequestListener<Drawable> {
                     override fun onLoadFailed(e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean): Boolean {
-                        L.e { "[MediaMsg] Load FAILED - path: $attachmentPath, contentType: $contentType, expectedSize: $expectedSize, actualFileSize: $actualFileSize, lastModified: $fileLastModified, error: ${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }
+                        // No path: the file name is user content; ext + sizes identify the case.
+                        L.e { "[MediaMsg] load failed ext=${File(attachmentPath).extension} contentType=$contentType expectedSize=$expectedSize actualFileSize=$actualFileSize lastModified=$fileLastModified error=${e?.rootCauses?.joinToString { it.message ?: "unknown" }}" }
                         return false
                     }
 
@@ -532,10 +533,10 @@ class ImageAndVideoMessageView @JvmOverloads constructor(
         }
     }
 
-    /** Enqueues the download; false when the row carries no key and so cannot be fetched at all. */
+    /** Enqueues the download; false when the row carries no usable key and so cannot be fetched at all. */
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String): Boolean {
         val attachment = message.attachment ?: return false
-        val key = attachment.key ?: return false
+        val key = attachment.key?.takeIf { it.isNotEmpty() } ?: return false
         val autoSave = currentShouldSaveToPhotos && !message.isConfidential()
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(

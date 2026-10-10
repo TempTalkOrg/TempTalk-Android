@@ -5,9 +5,11 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.migration.crypto.BackupCryptoImpl
 import com.difft.android.migration.model.MigrationError
+import com.difft.android.migration.model.MigrationException
 import com.difft.android.migration.model.RestorePhase
 import com.difft.android.migration.v2.container.AttachmentByteSource
 import com.difft.android.migration.v2.container.ContainerTotals
+import com.difft.android.migration.v2.container.ContainerReader
 import com.difft.android.migration.v2.container.ContainerReaderImpl
 import com.difft.android.migration.v2.container.ContainerWriterImpl
 import com.difft.android.migration.v2.container.FileArchiveSink
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -40,9 +43,11 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowStatFs
 import java.io.ByteArrayInputStream
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -81,6 +86,15 @@ class RestoreOrchestratorStreamingTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        // Robolectric reports 0 available bytes for an unregistered volume, which the restore's free-space
+        // guard would correctly read as a full disk. Give it room so these cases exercise what they mean to.
+        ShadowStatFs.registerStats(context.filesDir, ROOMY_BLOCKS, ROOMY_BLOCKS, ROOMY_BLOCKS)
+    }
+
+    @After
+    fun resetPlatformState() {
+        ShadowStatFs.reset()
+        PromoteMarkerStore(context).clear()
     }
 
     // ── (a) happy path → staging import + promote + ReadyForSignIn ───────────────────────────────
@@ -118,30 +132,45 @@ class RestoreOrchestratorStreamingTest {
     }
 
     @Test
-    fun `a failure after promote keeps the SIGNING_IN flag so the sign-in can resume`() = runTest {
+    fun `a failure after promote is committed-unconfirmed and keeps the SIGNING_IN flag`() = runTest {
         val bytes = writeRealContainer(account)
         val paths = tmpPaths()
         // Promote succeeds; the very next step (advancing the flag) writes SIGNING_IN and then fails,
-        // the shape of any post-commit error. The data is on disk, so the flag must survive cleanup.
+        // the shape of any post-commit error. The data is on disk, so the flag must survive cleanup —
+        // and no verdict may be published in either direction, so the failure escapes as
+        // CommittedUnconfirmed rather than being reported as an ordinary Failed result.
         val flagStore = spyk(RestoreFlagStore(context).also { it.clear() })
         every { flagStore.advance(RestorePhase.SIGNING_IN) } answers {
             callOriginal()
             throw IllegalStateException("post-promote failure")
         }
         val promote = okPromote()
-
-        val result = orchestratorWith(ContainerReaderImpl(crypto)).restoreFromStream(
-            source = ByteArrayInputStream(bytes),
-            transferKey = transferKey,
-            currentVerifyAccount = account,
-            paths = paths,
-            flagStore = flagStore,
-            promoteStep = promote,
-            stagingFactory = { relaxedStaging() },
-            isFreshTarget = { true },
+        // The promote is mocked, so stand in the marker a real one leaves while its own tail (P3/P4)
+        // is unfinished: that marker is what the cold-start resume reads, and its presence is what
+        // keeps the flag from being cleared as a last resort.
+        PromoteMarkerStore(context).write(
+            PromoteMarker.create(
+                stagingDbPath = paths.stagingDbPath,
+                stagingKey = null,
+                attachmentsStagingDir = paths.attachmentsStagingDir,
+                realDbPath = paths.realDbPath,
+                realAttachmentDir = paths.realAttachmentDir,
+            ),
         )
 
-        assertIs<RestoreResult.Failed>(result)
+        assertFailsWith<MigrationException.CommittedUnconfirmed> {
+            orchestratorWith(ContainerReaderImpl(crypto)).restoreFromStream(
+                source = ByteArrayInputStream(bytes),
+                transferKey = transferKey,
+                currentVerifyAccount = account,
+                paths = paths,
+                flagStore = flagStore,
+                promoteStep = promote,
+                stagingFactory = { relaxedStaging() },
+                isFreshTarget = { true },
+            )
+        }
+
         coVerify(exactly = 1) { promote.promote(any(), any(), any(), any(), any()) }
         assertEquals(RestorePhase.SIGNING_IN, RestoreFlagStore(context).currentPhase(), "promoted data must keep its flag")
     }
@@ -442,6 +471,42 @@ class RestoreOrchestratorStreamingTest {
         )
     }
 
+    // ── T39: running out of space before the commit boundary ────────────────────────────────────
+
+    @Test
+    fun `out of space during the staging import discards staging and never promotes`() = runTest {
+        val bytes = writeRealContainer(account)
+        val paths = tmpPaths()
+        val flagStore = RestoreFlagStore(context).also { it.clear() }
+        val promote = mockk<PromoteStep>()
+        val staging = relaxedStaging()
+        // Running out of room mid-import, raised where the spool and the attachment writer raise it.
+        // ContainerReader passes a MigrationException through untouched — which is exactly why
+        // OutOfSpace is one — so the classification survives to the orchestrator's catch.
+        val reader = mockk<ContainerReader>()
+        coEvery { reader.readStreaming(any(), any(), any(), any(), any()) } throws
+            MigrationException.OutOfSpace("receive spool write ran out of space")
+
+        val result = RestoreOrchestrator(
+            context, reader, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+        ).restoreFromStream(
+            source = ByteArrayInputStream(bytes),
+            transferKey = transferKey,
+            currentVerifyAccount = account,
+            paths = paths,
+            flagStore = flagStore,
+            promoteStep = promote,
+            stagingFactory = { staging },
+            isFreshTarget = { true },
+        )
+
+        assertEquals(MigrationError.DiskSpaceInsufficient, assertIs<RestoreResult.Failed>(result).error)
+        coVerify(exactly = 1) { staging.discard() }
+        coVerify(exactly = 0) { promote.promote(any(), any(), any(), any(), any()) }
+        assertTrue(!PromoteMarkerStore(context).exists(), "nothing was committed, so no promote marker exists")
+        assertTrue(!flagStore.exists(), "a pre-commit failure leaves no RESTORING residue")
+    }
+
     // ── helpers (mirror RestoreOrchestratorTest's seams) ─────────────────────────────────────────
 
     private fun orchestratorWith(reader: ContainerReaderImpl) =
@@ -467,6 +532,7 @@ class RestoreOrchestratorStreamingTest {
             stagingDbPath = File(work, "staging.db").absolutePath,
             attachmentsStagingDir = File(work, "att-staging").absolutePath,
             containerWorkFile = File(work, "container.ttmig").absolutePath,
+            spoolDir = File(work, "spool").absolutePath,
         )
     }
 
@@ -571,4 +637,9 @@ class RestoreOrchestratorStreamingTest {
                 width = null, height = null, durationMs = null, fileName = "a.jpg",
             )
         )
+
+    private companion object {
+        /** ~4 GiB of 4 KiB blocks: more than any of these fixtures could ever need. */
+        const val ROOMY_BLOCKS = 1_000_000
+    }
 }

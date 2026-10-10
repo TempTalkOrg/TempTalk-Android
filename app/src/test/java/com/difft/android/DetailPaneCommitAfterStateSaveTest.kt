@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 
 /**
  * Framework-assumption test for the restoreDetailFragmentsState state-loss fix
- * (per docs/claude/testing-patterns.md § Framework Assumption Tests).
+ * (per docs/agents/testing-patterns.md § Framework Assumption Tests).
  *
  * ## Coverage contract — read before relying on this test
  *

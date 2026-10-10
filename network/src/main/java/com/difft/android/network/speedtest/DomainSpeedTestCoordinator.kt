@@ -60,6 +60,9 @@ class DomainSpeedTestCoordinator @Inject constructor(
 
     private val snapshot = AtomicReference<List<HostSpeedResult>>(emptyList())
     private val invalidatedHostsThisSession: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    @Volatile
+    private var lastLoggedPersistedHost: String? = null
     private val lastTestTime = AtomicLong(0L)
     private val isTestRunning = AtomicBoolean(false)
     private val wsConsecutiveFailures = AtomicInteger(0)
@@ -94,7 +97,11 @@ class DomainSpeedTestCoordinator @Inject constructor(
         // Synchronous lookup via UserManager's in-memory snapshot — no I/O.
         val persisted = userManager.getUserData()?.bestHost
         if (!persisted.isNullOrBlank() && persisted !in invalidatedHostsThisSession) {
-            L.i { "[$TAG] getBestHostSync: using persisted host=$persisted" }
+            // Called on every URL build; log the choice only when it changes.
+            if (persisted != lastLoggedPersistedHost) {
+                lastLoggedPersistedHost = persisted
+                L.i { "[$TAG] getBestHostSync: using persisted host=$persisted" }
+            }
             return persisted
         }
 
@@ -271,7 +278,7 @@ class DomainSpeedTestCoordinator @Inject constructor(
             if (best != null) {
                 userManager.update { bestHost = best.host }
             }
-            L.i { "[$TAG] speed test completed, best=${best?.host} (${best?.latencyMs}ms), all=$results" }
+            L.i { "[$TAG] speed test completed best=${best?.host} (${best?.latencyMs}ms) all=${results.joinToString { "${it.host}:${it.latencyMs}ms/${it.isAvailable}" }}" }
         } finally {
             isTestRunning.set(false)
         }

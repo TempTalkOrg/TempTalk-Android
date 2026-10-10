@@ -191,6 +191,10 @@ class ContactDetailFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        // Self is known from the arguments alone, so the self card never flashes another layout.
+        if (uiState.contactor == null) {
+            uiState = uiState.copy(isSelf = contactId.isNotEmpty() && contactId == globalServices.myId)
+        }
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -283,11 +287,20 @@ class ContactDetailFragment : Fragment() {
                 if (finalContact.isPresent) {
                     updateContactView(finalContact.get())
                 }
+                // Resolve even without local contact data, so an unknown peer shows the non-friend
+                // actions right away instead of waiting for the server round-trip.
+                markRelationResolved()
                 getContactorInfoFromServer()
             } catch (e: Exception) {
                 L.e { "[ContactDetailFragment] Error in initData: ${e.stackTraceToString()}" }
+                // Never leave the action row blank: fall back to the last known relation.
+                if (isAdded && view != null) markRelationResolved()
             }
         }
+    }
+
+    private fun markRelationResolved() {
+        uiState = uiState.copy(isFriend = isFriend, isWeakPending = isWeakPending, isRelationResolved = true)
     }
 
     private fun getContactorInfoFromServer() {
@@ -575,6 +588,7 @@ class ContactDetailFragment : Fragment() {
             contactor = contactor,
             isFriend = isFriend,
             isWeakPending = isWeakPending,
+            isRelationResolved = true,
             isSelf = isSelf,
             isOfficialAccount = isOfficialAccount,
             displayName = displayName,

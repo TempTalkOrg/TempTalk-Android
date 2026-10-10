@@ -287,7 +287,7 @@ object WCDBUpdateService :
 
                         launch {
                             try {
-                                L.i { "[Message][WCDBUpdateService] updating room:$roomId, changes:$roomChanges" }
+                                L.i { "[Message][WCDBUpdateService] updating room=$roomId changes=${roomChanges.map { it.type }}" }
 
                                 // ✅ 检查是否需要重新查询数据
                                 val needsDataUpdate = roomChanges.any {
@@ -470,7 +470,7 @@ object WCDBUpdateService :
 
                 // ✅ Batch处理完成后统一emit，触发UI刷新
                 _roomTableUpdated.tryEmit(Unit)
-                L.i { "[WCDBUpdateService] Batch processing completed, notification emitted" }
+                L.d { "[WCDBUpdateService] Batch processing completed, notification emitted" }
             }
             .catch { e ->
                 L.e(e) { "[Message][WCDBUpdateService] Error in flow:" }

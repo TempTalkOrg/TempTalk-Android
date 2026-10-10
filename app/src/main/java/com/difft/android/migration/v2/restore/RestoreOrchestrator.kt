@@ -70,7 +70,7 @@ class RestoreOrchestrator @Inject constructor(
     private val migrationImportLauncher: MigrationImportLauncher,
     /**
      * Secure-storage writer for the carried identity material. The install is a single atomic update
-     * performed immediately before promote — see [installIdentity] for why it must not go through
+     * performed immediately before promote — see [RestoreCommitTail] for why it must not go through
      * `EncryptionDataManager.updateAciIdentityKey`.
      */
     private val userManager: UserManager,
@@ -107,6 +107,8 @@ class RestoreOrchestrator @Inject constructor(
         promoteStep: PromoteStep = PromoteStep(context),
         stagingFactory: (stagingDbPath: String) -> StagingDatabase = { StagingDatabase.create(context, it) },
         isFreshTarget: () -> Boolean = migrationImportLauncher::isFreshInstallTarget,
+        storageGuard: StorageGuard = StorageGuard.forContext(context),
+        commitTail: RestoreCommitTail = defaultCommitTail(),
     ): RestoreResult = withContext(Dispatchers.IO) {
         L.i { "[MigrationV2][Restore] orchestrator start" }
         val work = File(paths.containerWorkFile).parentFile
@@ -153,11 +155,19 @@ class RestoreOrchestrator @Inject constructor(
             // Promote and finalize, shared with the streaming path; promote is the single commit. The
             // shared tail re-checks isFreshTarget immediately before it, so a device that became
             // non-fresh during the import discards staging instead of clobbering the live DB.
-            promoteAndFinalize(staging, paths, flagStore, work, promoteStep, isFreshTarget, carriedIdentity)
-                ?.let { rejected -> _progress.update { null }; return@withContext rejected }
+            storageGuard.requireHeadroom("import-tail")
+            commitTail.run(
+                staging, paths, flagStore, work, promoteStep, isFreshTarget, carriedIdentity,
+                storageGuard = storageGuard,
+            )?.let { rejected -> _progress.update { null }; return@withContext rejected }
             L.i { "[MigrationV2][Restore] complete → phase=SIGNING_IN (A5 to continue signIn + restart)" }
             _progress.update { null }
             RestoreResult.ReadyForSignIn
+        } catch (e: MigrationException.CommittedUnconfirmed) {
+            // Same rule as the streaming path: the data IS the primary database now, so neither a
+            // Failed verdict nor a cleanup is true; the promote marker and flag feed the cold-start resume.
+            _progress.update { null }
+            throw e
         } catch (e: CancellationException) {
             L.w { "[MigrationV2][Restore] cancelled" }
             cleanupOnFailure(paths, flagStore, work)
@@ -215,11 +225,13 @@ class RestoreOrchestrator @Inject constructor(
         onProgress: (Float) -> Unit = {},
         // Same-device no-login handoff: the container is expected to carry a session credential, and
         // this install adopts it right after promote so it comes up already signed in. A handoff
-        // stream carrying NO credential is rejected before promote (see [promoteAndFinalize]).
+        // stream carrying NO credential is rejected before promote (see [RestoreCommitTail]).
         credentialHandoff: Boolean = false,
         // What the peer reads as "still working" through GET /status: stage, record count, attachment
         // bytes as they land, and the commit point. Distinct from onProgress, this device's own bar.
         liveness: TransferProgressReporter = TransferProgressReporter.None,
+        storageGuard: StorageGuard = StorageGuard.forContext(context),
+        commitTail: RestoreCommitTail = defaultCommitTail(),
     ): RestoreResult = withContext(Dispatchers.IO) {
         L.i { "[MigrationV2][Restore] streaming orchestrator start (P2P no-disk)" }
         val work = File(paths.containerWorkFile).parentFile
@@ -255,20 +267,28 @@ class RestoreOrchestrator @Inject constructor(
                 credentialSink = if (credentialHandoff) ({ carriedCredential = it }) else null,
                 onProgress = onProgress,
                 liveness = liveness,
+                storageGuard = storageGuard,
             )
 
             // Promote and finalize — the identical tail to the file path. Promote is the single commit
             // point and is reached only because readStreaming returned normally with a verified HMAC.
             // The shared tail re-checks isFreshTarget immediately before it, so a device that became
             // non-fresh during a long stream import discards staging instead of clobbering the live DB.
-            promoteAndFinalize(
+            storageGuard.requireHeadroom("import-tail")
+            commitTail.run(
                 staging, paths, flagStore, work, promoteStep, isFreshTarget, carriedIdentity,
                 credentialHandoff = credentialHandoff, carriedCredential = carriedCredential,
-                liveness = liveness,
+                liveness = liveness, storageGuard = storageGuard,
             )?.let { rejected -> _progress.update { null }; return@withContext rejected }
             L.i { "[MigrationV2][Restore] streaming complete → phase=SIGNING_IN (A5/I4 to continue signIn + restart)" }
             _progress.update { null }
             RestoreResult.ReadyForSignIn
+        } catch (e: MigrationException.CommittedUnconfirmed) {
+            // No cleanupOnFailure and no result: the data IS the primary database now, and the promote
+            // marker and the restore flag are exactly what the cold-start recovery needs. The caller
+            // publishes no terminal to the peer either — neither "succeeded" nor "failed" is true.
+            _progress.update { null }
+            throw e
         } catch (e: CancellationException) {
             L.w { "[MigrationV2][Restore] streaming cancelled" }
             cleanupOnFailure(paths, flagStore, work)
@@ -441,6 +461,7 @@ class RestoreOrchestrator @Inject constructor(
         credentialSink: ((NeutralCredential) -> Unit)?,
         onProgress: (Float) -> Unit = {},
         liveness: TransferProgressReporter = TransferProgressReporter.None,
+        storageGuard: StorageGuard? = null,
     ): StagingDatabase {
         resetAttachmentsStagingDir(paths)
         val staging = stagingFactory(paths.stagingDbPath)
@@ -452,6 +473,10 @@ class RestoreOrchestrator @Inject constructor(
             val progress = ProgressReporter(onProgress)
             var attachmentFiles = 0
             var attachmentWriteFailures = 0
+            // readStreaming invokes onRecord sequentially from its own single reader coroutine, like
+            // the two counters above, so a plain local needs no synchronization. Throttled because a
+            // StatFs syscall per imported record is a measurable regression on a large library.
+            var sinceStorageCheck = 0
             containerReader.readStreaming(
                 source = source,
                 passphrase = transferKey, // R3: ephemeral key in the passphrase position; NEVER logged
@@ -490,6 +515,10 @@ class RestoreOrchestrator @Inject constructor(
                     currentCoroutineContext().ensureActive()
                     importer.onRecord(record)
                     progress.recordDone()
+                    if (++sinceStorageCheck >= STORAGE_CHECK_EVERY_RECORDS) {
+                        sinceStorageCheck = 0
+                        storageGuard?.requireHeadroom("import")
+                    }
                 },
                 onManifest = { manifest ->
                     // Fail-fast account match before any record reaches staging. This path has no
@@ -511,109 +540,6 @@ class RestoreOrchestrator @Inject constructor(
     }
 
     /**
-     * The shared tail for both [restore] and [restoreFromStream]: advance to PROMOTING, run the
-     * [PromoteStep] critical section — the single commit point, which owns its own marker and cold-start
-     * recovery — then advance to SIGNING_IN and clean the work area. Promote is reached only after a
-     * verified import, so no unverified data is ever committed.
-     *
-     * The net-install check is re-taken immediately before promote. The first check happens before the
-     * import, and a large import can take minutes, during which a concurrent sign-in could establish an
-     * account and write the live DB; promoting then would clobber it. So a device that became non-fresh
-     * has its staging discarded and gets the same [MigrationError.TargetNotEmpty] rejection the early
-     * guard returns, without promote ever being called. Returns null when the re-check passed and
-     * promote ran.
-     *
-     * [carriedIdentity] is installed into secure storage right after that re-check and before promote.
-     * The ordering is crash-safe in both directions: installed but crashed before promote, the retry
-     * re-installs the same bytes idempotently; crashed after promote, the identity is already persisted
-     * so the resumed sign-in publishes the original one. Placing it after the re-check means a rejected
-     * restore never touches secure storage. The identity is deliberately not carried in the promote
-     * marker — a private key must not land in a plaintext file, and this ordering already makes resume
-     * correct.
-     */
-    private suspend fun promoteAndFinalize(
-        staging: StagingDatabase,
-        paths: RestorePaths,
-        flagStore: RestoreFlagStore,
-        work: File?,
-        promoteStep: PromoteStep,
-        isFreshTarget: () -> Boolean,
-        carriedIdentity: NeutralIdentity?,
-        credentialHandoff: Boolean = false,
-        carriedCredential: NeutralCredential? = null,
-        liveness: TransferProgressReporter = TransferProgressReporter.None,
-    ): RestoreResult? {
-        // Re-check: a device that became non-fresh during the import must not be promoted onto, which
-        // would overwrite the now-live DB. Discard staging, clear the pre-promote flag and reject as the
-        // early guard does. No marker exists yet, so clearing the flag leaves no cold-start residue.
-        if (!isFreshTarget()) {
-            L.w { "[MigrationV2][Restore] pre-promote re-check failed: target became non-fresh during import — discard, no promote" }
-            runCatching { staging.discard() }
-            runCatching { flagStore.clear() }
-            cleanupWork(work)
-            return RestoreResult.Rejected(MigrationError.TargetNotEmpty)
-        }
-        // Install the identity before promote — see this method's kdoc. The material is checked first:
-        // sign-in's first request registers this device and revokes the old one while its second decodes
-        // this identity, so a key that cannot decode strands the user on both devices.
-        val identityToInstall = carriedIdentity?.let { carried ->
-            try {
-                CarriedIdentityNormalizer.normalize(carried)
-            } catch (e: CarriedIdentityNormalizer.InvalidIdentity) {
-                L.w { "[MigrationV2][Restore] carried identity unusable (${e.message}) — discard, no promote" }
-                runCatching { staging.discard() }
-                runCatching { flagStore.clear() }
-                cleanupWork(work)
-                return RestoreResult.Rejected(MigrationError.IdentityInvalid)
-            }
-        }
-        if (identityToInstall != null) {
-            installIdentity(identityToInstall)
-        } else {
-            L.i { "[MigrationV2][Restore] container carried no identity — login will generate one (pre-1.1 behaviour)" }
-        }
-        // A no-login handoff whose container carried no credential must not be promoted: the premise is
-        // that this device comes up signed in, and the sender would read a 200 as licence to wipe its own
-        // session. Rejected before promote, exactly like an unusable identity.
-        if (credentialHandoff && carriedCredential == null) {
-            L.w { "[MigrationV2][Restore] handoff container carried no credential — discard, no promote" }
-            runCatching { staging.discard() }
-            runCatching { flagStore.clear() }
-            cleanupWork(work)
-            return RestoreResult.Rejected(MigrationError.CredentialMissing)
-        }
-        // Past this line a peer's /cancel can undo nothing; it is answered `too_late` and the promote
-        // runs to its end. Every reject that could still stop this import is above.
-        liveness.committing()
-        flagStore.advance(RestorePhase.PROMOTING)
-        publish("promoting", 80)
-        promoteStep.promote(
-            stagingDbPath = paths.stagingDbPath,
-            stagingKey = staging.stagingKey,
-            attachmentsStagingDir = paths.attachmentsStagingDir,
-            realDbPath = paths.realDbPath,
-            realAttachmentDir = paths.realAttachmentDir,
-        )
-        flagStore.advance(RestorePhase.SIGNING_IN)
-        // The credential lands after promote: the database it unlocks has to be on disk first, and a
-        // crash before this point leaves a device that can still finish on the ordinary login path. A
-        // skipped install means a sign-in raced it, so reject and let the sender keep its credential.
-        if (carriedCredential != null) {
-            if (credentialInstaller.install(carriedCredential) is CredentialInstaller.Result.SkippedNotFresh) {
-                cleanupWork(work)
-                return RestoreResult.Rejected(MigrationError.TargetNotEmpty)
-            }
-            // No sign-in runs on this path, so nothing else would advance the flag. The two writes live
-            // in different stores and cannot be atomic; a crash between them is resolved at startup by
-            // `RestoreFlagStore.consumeSigningInFor`.
-            flagStore.advance(RestorePhase.COMPLETED)
-        }
-        publish("ready", 100)
-        cleanupWork(work)
-        return null
-    }
-
-    /**
      * Fail-fast account-match assertion for the streaming path, mirroring the file path's [accountMatches].
      * A mismatch throws, so the read propagates it before any record is committed and staging is
      * discarded. The raw account values are compared but never logged.
@@ -622,43 +548,6 @@ class RestoreOrchestrator @Inject constructor(
         if (!accountMatches(manifestAccount, currentVerifyAccount)) {
             L.w { "[MigrationV2][Restore] streaming account mismatch (manifest vs logging-in account) — reject" }
             throw MigrationException.RestoreFailed("streaming container account does not match the logging-in account")
-        }
-    }
-
-    /**
-     * Install the carried identity material into secure storage as one atomic `userManager.update {}`
-     * write, rather than through `EncryptionDataManager.updateAciIdentityKey`.
-     *
-     * That helper stamps `aciIdentityKeyGenTime = System.currentTimeMillis()`, and the old-key decrypt
-     * fallback is gated by a 24h window measured from that timestamp, so re-stamping it to now would
-     * silently re-open the fallback window and desynchronize it from the carried old key pair. The
-     * carried generation time must be written verbatim, so the fields are written directly here.
-     *
-     * The restore target is a net install, so its identity, favKey and proxy fields are empty: this is
-     * a plain install, not a merge. `commit = true` makes the write durable before promote runs, which
-     * is what makes "crashed after promote implies identity persisted" literally true.
-     *
-     * The log line carries only booleans and timestamps — never key or passphrase material.
-     */
-    private fun installIdentity(identity: NeutralIdentity) {
-        userManager.update(commit = true) {
-            aciIdentityPublicKey = identity.aciPublicKey
-            aciIdentityPrivateKey = identity.aciPrivateKey
-            aciIdentityOldPublicKey = identity.oldAciPublicKey
-            aciIdentityOldPrivateKey = identity.oldAciPrivateKey
-            // VERBATIM — see kdoc; a re-stamped value breaks the old-key fallback window.
-            aciIdentityKeyGenTime = identity.identityKeyGenTime
-            favKey = identity.favKey
-            favKeyId = identity.favKeyId
-            favKeyVersion = identity.favKeyVersion
-            proxyShareLink = identity.proxyShareLink
-            proxyEnabled = identity.proxyEnabled
-            proxyProtectCallIp = identity.proxyProtectCallIp
-        }
-        L.i {
-            "[MigrationV2][Restore] identity installed hasOldPair=" +
-                "${!identity.oldAciPrivateKey.isNullOrEmpty()} genTime=${identity.identityKeyGenTime} " +
-                "hasFavKey=${!identity.favKey.isNullOrEmpty()}"
         }
     }
 
@@ -768,9 +657,9 @@ class RestoreOrchestrator @Inject constructor(
     }
 
     /**
-     * Failure cleanup: discard the staging products and the work area. The restore flag is left alone
-     * when a promote marker exists, since [PromoteStep] owns that recovery; otherwise the failure was
-     * before or during import, so the flag is cleared and no stale RESTORING residue is left.
+     * Failure cleanup: discard the staging products, the flag and the work area — but only for a
+     * failure that happened before the promote marker was written. Past that point [PromoteStep] owns
+     * the recovery and every one of those artifacts is an input to it, so the whole body is skipped.
      */
     /**
      * Start an import from a known-empty staging attachment dir.
@@ -798,20 +687,34 @@ class RestoreOrchestrator @Inject constructor(
         // probe and flag.clear() do file IO that can throw under the same storage condition that caused
         // it, which would lose the original result.
         runCatching {
+            // The barrier here is the marker (P0), not the rename (P2), and deliberately so: from the
+            // moment the marker exists the staging database and the staging attachments are what
+            // `PromoteStep.resumeIfPending` needs to finish P2 and P3, so deleting them would strand
+            // every future cold start on a promote it can never complete. "May I delete the staging
+            // products?" and "may I tell the peer how this ended?" are different questions.
+            val committed = PromoteMarkerStore(context).exists() ||
+                flagStore.currentPhase().let { it == RestorePhase.SIGNING_IN || it == RestorePhase.COMPLETED }
+            if (committed) {
+                L.w { "[MigrationV2][Restore] failure after the commit boundary — keeping staging, flag and marker for recovery" }
+                return
+            }
             runCatching { StagingDatabase.deleteStagingArtifacts(paths.stagingDbPath) }
             runCatching { File(paths.attachmentsStagingDir).deleteRecursively() }
-            // A live marker means promote owns recovery; SIGNING_IN/COMPLETED means promote finished and
-            // the data is on disk, so the flag must survive for the sign-in to resume. Anything else
-            // failed before promote, so clear it.
-            val promoted = flagStore.currentPhase().let { it == RestorePhase.SIGNING_IN || it == RestorePhase.COMPLETED }
-            if (!PromoteMarkerStore(context).exists() && !promoted) {
-                flagStore.clear()
-            }
+            flagStore.clear()
             cleanupWork(work)
         }.onFailure { e ->
             L.w { "[MigrationV2][Restore] cleanupOnFailure secondary failure (original error preserved): ${e.stackTraceToString()}" }
         }
     }
+
+    /** The commit tail with this orchestrator's own progress and work-area hooks bound in. */
+    private fun defaultCommitTail(): RestoreCommitTail = RestoreCommitTail(
+        context = context,
+        userManager = userManager,
+        credentialInstaller = credentialInstaller,
+        publish = ::publish,
+        cleanupWork = ::cleanupWork,
+    )
 
     companion object {
         /**
@@ -819,5 +722,8 @@ class RestoreOrchestrator @Inject constructor(
          * [FormatCompat.SUPPORTED_FORMAT_VERSION] and retained here for the log line.
          */
         const val SUPPORTED_FORMAT_VERSION = FormatCompat.SUPPORTED_FORMAT_VERSION
+
+        /** How many imported records pass between two free-space probes. */
+        const val STORAGE_CHECK_EVERY_RECORDS = 2_000
     }
 }

@@ -93,7 +93,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         // Self-heal the badge + official branch if the cache populates after this header was bound
-        // during the pre-preload window (initView resets all state at its top, so re-running is idempotent).
+        // during the pre-preload window (initView always ends in the same state for the same inputs, so re-running is idempotent).
         OfficialAccountCache.state
             .map { chatViewModel.forWhat.id in it }
             .distinctUntilChanged()
@@ -131,12 +131,13 @@ class ChatHeaderFragment : CommonHeaderFragment() {
     private fun initView(friend: Boolean?) {
         val chatUIData = chatViewModel.chatUIData.value
         val contact = chatUIData.contact ?: return
-//        binding.imageviewMenuMore.visibility = View.GONE
-        binding.imageviewAddContact.visibility = View.GONE
-        binding.imageviewCreateGroup.visibility = View.GONE
-        binding.buttonCall.visibility = View.GONE
         binding.imageviewBotBadge.isVisible = contact.id.isOfficialAccount()
 
+        if (contact.id == globalServices.myId || contact.id.isOfficialAccount()) {
+            binding.imageviewAddContact.visibility = View.GONE
+            binding.imageviewCreateGroup.visibility = View.GONE
+            binding.buttonCall.visibility = View.GONE
+        }
         if (contact.id == globalServices.myId) {
             binding.textviewNickname.text = getString(com.difft.android.base.R.string.chat_favorites)
         } else if (contact.id.isOfficialAccount()) {
@@ -149,13 +150,15 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                     wcdb.contactor.getFirstObject(DBContactorModel.id.eq(contact.id)) != null
                 }
                 if (!isAdded || view == null) return@launch
+                // Icons keep their current visibility until the lookup returns and are then set in one
+                // pass, so the frequent re-runs of initView don't hide-then-reshow them.
+                binding.imageviewAddContact.isVisible = !isFriend
+                binding.imageviewCreateGroup.isVisible = isFriend
                 if (isFriend) {
-                    binding.imageviewCreateGroup.visibility = View.VISIBLE
                     binding.imageviewCreateGroup.setOnClickListener {
                         CreateGroupActivity.startActivity(requireActivity(), arrayListOf(contact.id))
                     }
 
-                    binding.buttonCall.visibility = View.VISIBLE
                     binding.buttonCall.setOnClickListener {
                         // viewLifecycleOwner scope + post-suspend isAdded/view guard; activity?: avoids requireActivity() ISE.
                         viewLifecycleOwner.lifecycleScope.launch {
@@ -168,7 +171,6 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                         }
                     }
                 } else {
-                    binding.imageviewAddContact.visibility = View.VISIBLE
                     binding.imageviewAddContact.setOnClickListener { requestAddFriend() }
                 }
 

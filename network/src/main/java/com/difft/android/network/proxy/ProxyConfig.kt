@@ -13,7 +13,7 @@ import javax.crypto.spec.SecretKeySpec
  * (to the real TempTalk origin) is unaffected and keeps using the bundled
  * `chative_ssl_ca.pem` trust anchor.
  *
- * Share-code format (spec v1, see `docs/claude/proxy-share-link-format.md`) is
+ * Share-code format (spec v1, see `docs/agents/proxy-share-link-format.md`) is
  * an obfuscated, optionally passphrase-encrypted token handled by
  * [ProxyLinkCodec]:
  * ```

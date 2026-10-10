@@ -68,11 +68,12 @@ class ChatMessageResendLogTest {
         callManager = mockk(relaxed = true),
         autoTranslateCoordinatorFactory = mockk(relaxed = true),
         speechToTextManager = mockk(relaxed = true),
-        pushReadReceiptSendJobFactory = mockk(relaxed = true),
+        readReceiptDispatcher = mockk(relaxed = true),
         activityNoticeDispatcher = mockk(relaxed = true),
         onGoingCallStateManager = mockk(relaxed = true),
         callDataManager = mockk(relaxed = true),
-        messageHydrator = MessageHydrator(FakeMessageChildRowLoader())
+        messageHydrator = MessageHydrator(FakeMessageChildRowLoader()),
+        conversationUnreadMarker = mockk(relaxed = true)
     )
 
     private fun message(id: String): ChatMessage = mockk(relaxed = true) {

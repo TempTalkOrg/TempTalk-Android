@@ -15,8 +15,12 @@ import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -57,6 +61,9 @@ import java.util.concurrent.atomic.AtomicReference
  *  - a backend that cannot translate makes the whole store inert
  *  - the backend's failure kinds map onto the store's retry reasons
  *  - concurrent ensureDownloaded calls never lose a required model
+ *  - awaitReady asks the device before downloading, joins an in-flight download, reports a
+ *    failed one as not ready, gives up when the one it waits on gets stuck, restarts one that
+ *    is already stuck, and keeps waiting on a slow one however long it takes
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TranslateModelStoreTest {
@@ -322,6 +329,229 @@ class TranslateModelStoreTest {
             assertEquals(2, backend.downloadCount)
         }
 
+    // --- awaitReady ---------------------------------------------------------
+
+    @Test
+    fun `awaitReady trusts the device over an empty cache and downloads nothing`() = runTest {
+        // Cold start with no auto-translate room: syncOnStart never populated the cache.
+        backend.modelOnDevice = true
+        assertFalse(store.isReady(TranslateLang.ZH))
+
+        assertTrue(store.awaitReady(TranslateLang.ZH))
+
+        assertEquals(0, backend.downloadCount)
+        assertTrue(store.isReady(TranslateLang.ZH))
+        assertEquals(ModelState.Ready, store.state.value[zh])
+    }
+
+    @Test
+    fun `awaitReady joins a download another trigger already started`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(gate)
+        store.ensureDownloaded(zh, DownloadTrigger.ENTER_CONVERSATION)
+        settle()
+        assertEquals(1, backend.downloadCount)
+
+        val ready = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+        assertFalse("must wait for the in-flight download", ready.isCompleted)
+
+        gate.complete(Unit)
+        settle()
+
+        assertTrue(ready.isCompleted)
+        assertTrue(ready.getCompleted())
+        assertEquals("the in-flight download is joined, not duplicated", 1, backend.downloadCount)
+    }
+
+    @Test
+    fun `awaitReady starts the download itself and reports its failure`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(gate)
+
+        val ready = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+        assertEquals(1, backend.downloadCount)
+        assertFalse(ready.isCompleted)
+
+        gate.completeExceptionally(TranslateBackendException(TranslateBackendException.Kind.NETWORK))
+        settle()
+
+        assertTrue(ready.isCompleted)
+        assertFalse(ready.getCompleted())
+        assertTrue(store.state.value[zh] is ModelState.Failed)
+    }
+
+    @Test
+    fun `awaitReady gives up when the download it waits on gets stuck`() = runTest {
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Never
+        val ready = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+        assertFalse(ready.isCompleted)
+
+        // The watchdog's no-progress window runs on the wall clock, so flip the state directly.
+        stateFlow().value = mapOf(zh to ModelState.Downloading(10L, 100L, stuck = true))
+        settle()
+
+        assertTrue(ready.isCompleted)
+        assertFalse(ready.getCompleted())
+        assertEquals(1, backend.downloadCount)
+    }
+
+    @Test
+    fun `awaitReady on an already stuck download restarts it and waits for the new attempt`() = runTest {
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Never
+        store.ensureDownloaded(zh, DownloadTrigger.ENTER_CONVERSATION)
+        settle()
+        assertEquals(1, backend.downloadCount)
+        stateFlow().value = mapOf(zh to ModelState.Downloading(0L, -1L, stuck = true))
+
+        // The retry (a manual translate) must not answer "stuck" from the stale attempt.
+        val gate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(gate)
+        val ready = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+        assertFalse("waits on the restarted attempt", ready.isCompleted)
+        assertEquals("the stuck attempt is torn down and started over", 2, backend.downloadCount)
+        val restarted = store.state.value[zh]
+        assertTrue(restarted is ModelState.Downloading && !restarted.stuck)
+
+        gate.complete(Unit)
+        settle()
+        assertTrue(ready.isCompleted)
+        assertTrue(ready.getCompleted())
+    }
+
+    @Test
+    fun `a restarted attempt survives the replaced job unwinding`() = runTest {
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Never
+        store.ensureDownloaded(zh, DownloadTrigger.ENTER_CONVERSATION)
+        settle()
+        stateFlow().value = mapOf(zh to ModelState.Downloading(0L, -1L, stuck = true))
+
+        // The engine restarts the stuck attempt on a manual translate; the replaced job then unwinds
+        // (cancellation handler + finally) after the new one has taken the slot.
+        val gate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(gate)
+        store.ensureDownloaded(zh, DownloadTrigger.MANUAL_TRANSLATE)
+        settle()
+        assertEquals(2, backend.downloadCount)
+        assertTrue("the new attempt's state is intact", store.state.value[zh] is ModelState.Downloading)
+
+        // The wait that follows must join the new attempt, not find an empty slot and start a third.
+        val ready = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+        assertFalse(ready.isCompleted)
+        assertEquals("no duplicate download", 2, backend.downloadCount)
+
+        gate.complete(Unit)
+        settle()
+        assertTrue(ready.getCompleted())
+    }
+
+    @Test
+    fun `a waiter on a replaced attempt follows the new one instead of failing`() = runTest {
+        val oldGate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.HeldUntil(oldGate)
+        val first = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+        assertFalse(first.isCompleted)
+        assertEquals(1, backend.downloadCount)
+
+        // Flip to stuck and restart within one dispatch, so the first waiter's collector only ever
+        // sees the conflated NotStarted; its job is then cancelled underneath it.
+        val newGate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(newGate)
+        val second = storeScope.async {
+            stateFlow().value = mapOf(zh to ModelState.Downloading(0L, -1L, stuck = true))
+            store.awaitReady(TranslateLang.ZH)
+        }
+        settle()
+        assertEquals(2, backend.downloadCount)
+
+        // The replaced attempt ends (as cancelled) after the new one took the slot.
+        oldGate.completeExceptionally(CancellationException("replaced"))
+        settle()
+        assertFalse("the first waiter follows the restarted attempt", first.isCompleted)
+        assertFalse(second.isCompleted)
+
+        newGate.complete(Unit)
+        settle()
+        assertTrue(first.getCompleted())
+        assertTrue(second.getCompleted())
+    }
+
+    @Test
+    fun `a replaced attempt's own error does not overwrite the new attempt`() = runTest {
+        val oldGate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.HeldUntil(oldGate)
+        store.ensureDownloaded(zh, DownloadTrigger.ENTER_CONVERSATION)
+        settle()
+        stateFlow().value = mapOf(zh to ModelState.Downloading(0L, -1L, stuck = true))
+
+        val newGate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(newGate)
+        store.ensureDownloaded(zh, DownloadTrigger.MANUAL_TRANSLATE)
+        settle()
+        assertEquals(2, backend.downloadCount)
+        assertTrue(store.state.value[zh] is ModelState.Downloading)
+
+        // The dropped row surfaces as an SDK error on the replaced attempt, after the new one started.
+        oldGate.completeExceptionally(TranslateBackendException(TranslateBackendException.Kind.OTHER))
+        settle()
+        assertTrue("new attempt still downloading", store.state.value[zh] is ModelState.Downloading)
+
+        newGate.complete(Unit)
+        settle()
+        assertTrue(store.state.value[zh] is ModelState.Ready)
+    }
+
+    @Test
+    fun `a replaced attempt's own success does not overwrite the new attempt`() = runTest {
+        val oldGate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.HeldUntil(oldGate)
+        store.ensureDownloaded(zh, DownloadTrigger.ENTER_CONVERSATION)
+        settle()
+        stateFlow().value = mapOf(zh to ModelState.Downloading(0L, -1L, stuck = true))
+
+        val newGate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(newGate)
+        store.ensureDownloaded(zh, DownloadTrigger.MANUAL_TRANSLATE)
+        settle()
+        assertEquals(2, backend.downloadCount)
+
+        // The replaced Task finishes late; only the attempt that owns the slot may publish Ready.
+        oldGate.complete(Unit)
+        settle()
+        assertTrue("new attempt still downloading", store.state.value[zh] is ModelState.Downloading)
+        assertFalse(store.isReady(TranslateLang.ZH))
+
+        newGate.complete(Unit)
+        settle()
+        assertTrue(store.state.value[zh] is ModelState.Ready)
+    }
+
+    @Test
+    fun `awaitReady keeps waiting on a slow download and succeeds when it lands`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        backend.downloadOutcome = FakeTranslateBackend.Outcome.Gated(gate)
+        val ready = storeScope.async { store.awaitReady(TranslateLang.ZH) }
+        settle()
+
+        // Far past any plausible wall-clock cap: only progress, not elapsed time, ends the wait.
+        storeScheduler.advanceTimeBy(SLOW_DOWNLOAD_MS)
+        settle()
+        assertFalse("still waiting on the in-flight download", ready.isCompleted)
+        assertTrue(store.state.value[zh] is ModelState.Downloading)
+
+        gate.complete(Unit)
+        settle()
+
+        assertTrue(ready.isCompleted)
+        assertTrue(ready.getCompleted())
+        assertEquals(1, backend.downloadCount)
+    }
+
     // --- logout -------------------------------------------------------------
 
     @Test
@@ -369,6 +599,12 @@ class TranslateModelStoreTest {
     }
 
     @Suppress("UNCHECKED_CAST")
+    private fun stateFlow(): MutableStateFlow<Map<ModelId, ModelState>> {
+        val field = TranslateModelStore::class.java.getDeclaredField("_state").apply { isAccessible = true }
+        return field.get(store) as MutableStateFlow<Map<ModelId, ModelState>>
+    }
+
+    @Suppress("UNCHECKED_CAST")
     private fun requiredCache(): Set<ModelId> {
         val field = TranslateModelStore::class.java.getDeclaredField("requiredCache")
             .apply { isAccessible = true }
@@ -379,5 +615,6 @@ class TranslateModelStoreTest {
         const val MODEL_COUNT = 200
         const val THREAD_COUNT = 8
         const val JOIN_MS = 10_000L
+        const val SLOW_DOWNLOAD_MS = 5 * 60_000L
     }
 }

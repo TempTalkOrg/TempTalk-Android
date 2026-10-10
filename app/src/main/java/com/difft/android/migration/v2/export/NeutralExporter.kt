@@ -416,12 +416,11 @@ class NeutralExporterImpl @Inject constructor(
     }
 
     /**
-     * The addressable identity of an attachment row: its `id`, or its `authorityId` (the re-download
-     * id) when the row has none. Null when the row has NEITHER — such a row cannot be addressed by a
-     * byte frame at all, so it must travel pointer-only rather than as a phantom carried attachment.
+     * The addressable identity of an attachment row (see [NeutralProjections.attachmentStableRef]).
+     * Null when the row has NEITHER `id` nor `authorityId` — such a row cannot be addressed by a byte
+     * frame at all, so it must travel pointer-only rather than as a phantom carried attachment.
      */
-    private fun stableAttachmentRef(am: AttachmentModel): String? =
-        am.id?.takeIf { it.isNotEmpty() } ?: am.authorityId?.takeIf { it != 0L }?.toString()
+    private fun stableAttachmentRef(am: AttachmentModel): String? = NeutralProjections.attachmentStableRef(am)
 
     /**
      * Project a forward-owned attachment row and record its byte plan. A row with no `id` still has a

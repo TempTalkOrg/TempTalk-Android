@@ -43,11 +43,26 @@ data class RoomViewData(
     val draftPreview: String? = null,
     val sortTime: Long = 0L,
     val groupMembersNumber: Int = 0, //群成员数量
+    /**
+     * The user marked this room unread and nothing newer has happened since (see
+     * `isManualUnreadActive`). Never stored in [unreadMessageNum]: the real count stays 0, the
+     * row shows a dot, and the tab / launcher badges do not count it (#1332; they show a tab dot
+     * when no real unread exists).
+     */
+    val isManualUnread: Boolean = false,
 ) {
     sealed class Type {
         data object OneOnOne : Type()
         data object Group : Type()
     }
+
+    /**
+     * Row-level "has something unread" value for the list and its gestures: the real unread
+     * count, or 1 for a manual-unread mark. Not a tab or launcher count — those sum
+     * [unreadMessageNum] only.
+     */
+    val displayUnreadNum: Int
+        get() = if (unreadMessageNum > 0) unreadMessageNum else if (isManualUnread) 1 else 0
 
     val isMuted: Boolean
         get() = muteStatus == MuteStatus.MUTED.value

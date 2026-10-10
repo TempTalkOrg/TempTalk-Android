@@ -369,6 +369,10 @@ class LCallViewModel @AssistedInject constructor(
         initCameraProvider(application)
         audioSetup.start()
         contactorCacheManager.startParticipantObservation(viewModelScope)
+        // The foreground service renders the ongoing-call notification from this status.
+        viewModelScope.launch {
+            roomCtl.callStatus.collect { onGoingCallStateManager.updateCallStatus(it) }
+        }
     }
 
     /** Phase B: create [room] off-main (LiveKit.create) then wire all room-dependent collaborators; call once. */
@@ -518,7 +522,15 @@ class LCallViewModel @AssistedInject constructor(
     }
 
     fun startCallDurationTimer() {
-        timerManager.startCallTimer { show -> roomId?.let { onGoingCallStateManager.updateCallingTime(it, show) } }
+        // Stamped from the same point the on-screen duration starts counting, so the notification's
+        // `when` — and the system call chip the shell derives from it — agree with the call UI.
+        onGoingCallStateManager.markCallConnected()
+        // Same instant drives both clocks: the timer recomputes the on-screen duration from it and
+        // the notification publishes it as `when`, so the call UI, the conversation-list call bar
+        // and the system call chip cannot drift apart.
+        timerManager.startCallTimer(onGoingCallStateManager.callConnectedAt()) { show ->
+            roomId?.let { onGoingCallStateManager.updateCallingTime(it, show) }
+        }
     }
 
     /** See [CallTypeCoordinator.applyInviteUpgrade]. */

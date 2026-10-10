@@ -23,18 +23,32 @@ enum class MigrationFailureKind {
     PEER_TIMEOUT,
     /** One end is too old for the other's protocol; the fix is an update, not a retry. */
     UPDATE_NEEDED,
+
+    /** The computer is too old to reverse-pair; only its own user can update it. */
+    PEER_UPDATE_NEEDED,
+
+    /** The computer confirmed but never connected back within the window it asked for. */
+    DESKTOP_NOT_CONNECTED,
+
+    /** The pairing this device registered is gone — cancelled or superseded by a re-scan. */
+    PAIR_TOKEN,
+
+    /** This device ran out of storage, so the transfer stopped. */
+    STORAGE_FULL,
     ;
 
     val tone: MigrationResultTone
         get() = when (this) {
-            TARGET_NOT_EMPTY, HANDOFF_DISABLED, LOCKED, PEER_CANCELLED, UPDATE_NEEDED -> MigrationResultTone.WARNING
+            TARGET_NOT_EMPTY, HANDOFF_DISABLED, LOCKED, PEER_CANCELLED, UPDATE_NEEDED,
+            PEER_UPDATE_NEEDED, DESKTOP_NOT_CONNECTED, PAIR_TOKEN -> MigrationResultTone.WARNING
             else -> MigrationResultTone.ERROR
         }
 
     val titleRes: Int
         get() = when (this) {
-            UPDATE_NEEDED -> R.string.migration_m3_title
-            TARGET_NOT_EMPTY, HANDOFF_DISABLED, LOCKED, PEER_CANCELLED -> R.string.migration_p3_blocked_title
+            UPDATE_NEEDED, PEER_UPDATE_NEEDED -> R.string.migration_m3_title
+            TARGET_NOT_EMPTY, HANDOFF_DISABLED, LOCKED, PEER_CANCELLED,
+            DESKTOP_NOT_CONNECTED, PAIR_TOKEN -> R.string.migration_p3_blocked_title
             else -> R.string.migration_p3_failed_title
         }
 
@@ -56,6 +70,10 @@ enum class MigrationFailureKind {
             EXPIRED -> R.string.migration_p3_reason_expired
             PEER_TIMEOUT -> R.string.migration_p3_reason_peer_timeout
             UPDATE_NEEDED -> R.string.migration_m3_body
+            PEER_UPDATE_NEEDED -> R.string.migration_p3_reason_update_desktop
+            DESKTOP_NOT_CONNECTED -> R.string.migration_p3_reason_desktop_not_connected
+            PAIR_TOKEN -> R.string.migration_p3_reason_pair_token
+            STORAGE_FULL -> R.string.migration_p3_reason_storage_full
         }
 
     /** Whether the sentence carries the app-name placeholder. */
@@ -98,6 +116,13 @@ internal fun classifyFailure(reason: String): MigrationFailureKind = when {
     // Desktop link, account switch.
     reason.contains(PrepareUploadReasons.PEER_CANCELLED) -> MigrationFailureKind.PEER_CANCELLED
     reason.contains(PrepareUploadReasons.PEER_CONFIRM_TIMEOUT) -> MigrationFailureKind.PEER_TIMEOUT
+    // Reverse pairing: only the computer's own user can update or confirm it, so none of these is a
+    // "check this device" failure.
+    reason.contains(PrepareUploadReasons.UNSUPPORTED_PROTOCOL) -> MigrationFailureKind.PEER_UPDATE_NEEDED
+    reason.contains(PrepareUploadReasons.DESKTOP_CANCELLED) -> MigrationFailureKind.PEER_CANCELLED
+    reason.contains(PrepareUploadReasons.DESKTOP_NOT_CONNECTED) -> MigrationFailureKind.DESKTOP_NOT_CONNECTED
+    reason.contains(MigrationRejectReason.PAIR_TOKEN.wire) -> MigrationFailureKind.PAIR_TOKEN
+    reason.contains(MigrationRejectReason.INSUFFICIENT_STORAGE.wire) -> MigrationFailureKind.STORAGE_FULL
     // The peer said it left (its `/cancel`, or nobody claimed the code); a stream that stops before
     // its end is the link — iOS draws the same line. Neither is a verdict on the data.
     reason.contains(MigrationError.SourceUnavailable.code) -> MigrationFailureKind.SOURCE
@@ -111,7 +136,7 @@ internal fun classifyFailure(reason: String): MigrationFailureKind = when {
     reason.contains(MigrationError.KeystoreUnavailable.code) -> MigrationFailureKind.INTEGRITY
     reason.contains(MigrationError.SnapshotFailed.code) ||
     reason.contains(MigrationError.EncryptionFailed.code) -> MigrationFailureKind.READ
-    reason.contains(MigrationError.DiskSpaceInsufficient.code) -> MigrationFailureKind.INTEGRITY
+    reason.contains(MigrationError.DiskSpaceInsufficient.code) -> MigrationFailureKind.STORAGE_FULL
     reason.contains(MigrationError.SignInFailed.code) ||
     reason.contains(HANDOFF_NOT_ACKNOWLEDGED) -> MigrationFailureKind.SWITCH
     reason.contains(MigrationError.Cancelled.code) -> MigrationFailureKind.SOURCE

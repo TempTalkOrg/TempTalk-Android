@@ -33,7 +33,7 @@ class WebSocketManager @Inject constructor(
     @Synchronized
     fun start() {
         if (isStarted) {
-            L.w { "[ws] Already started, ignoring duplicate call" }
+            L.d { "[ws] Already started, ignoring duplicate call" }
             return
         }
 

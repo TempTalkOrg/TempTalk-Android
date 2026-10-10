@@ -8,6 +8,7 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.IMessageNotificationUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallToChatController
@@ -34,7 +35,9 @@ class IncomingCallServiceManager @Inject constructor(
     private val callDataManager: CallDataManager,
     private val ringtoneManager: CallRingtoneManager,
     private val vibrationManager: CallVibrationManager,
-    private val callTimeoutManager: CallTimeoutManager
+    private val callTimeoutManager: CallTimeoutManager,
+    private val ringtoneSource: CallRingtoneSource,
+    private val messageNotificationUtil: IMessageNotificationUtil,
 ) {
 
     /**
@@ -64,7 +67,7 @@ class IncomingCallServiceManager @Inject constructor(
         if (shouldSkipIncomingCall(callInfo)) return
         
         val shownAsActivity = showIncomingCallUI(context, callInfo)
-        startIncomingCallNotifications(callInfo)
+        startIncomingCallNotifications(callInfo, notificationPosted = !shownAsActivity)
         enableIncomingCallTimeout(context, callInfo.roomId)
         // Only temporarily bypass the app lock when a foreground incoming-call Activity is actually
         // shown (the user is already past the lock). On the notification-only / background path there
@@ -200,13 +203,29 @@ class IncomingCallServiceManager @Inject constructor(
      *
      * @param callInfo 来电信息
      */
-    private fun startIncomingCallNotifications(callInfo: IncomingCallInfo) {
+    private fun startIncomingCallNotifications(callInfo: IncomingCallInfo, notificationPosted: Boolean) {
         val shouldStartRinging = !callDataManager.hasCallDataNotifying()
         callDataManager.setCallNotifyStatus(callInfo.roomId, true)
         if (shouldStartRinging) {
-            ringtoneManager.startRingTone(callInfo.intent)
+            if (userChannelSoundWillRing(notificationPosted)) {
+                L.i { "[call] IncomingCallServiceManager skip app ringtone, user call-channel sound rings instead" }
+            } else {
+                ringtoneManager.startRingTone(callInfo.intent)
+            }
             vibrationManager.startVibration()
         }
+    }
+
+    /**
+     * The system plays the CALL channel sound only when the call notification is actually posted
+     * (background path); the foreground path shows LIncomingCallActivity without a notification.
+     * Only a user-picked channel sound replaces the app ringtone; the stock default and "None"
+     * leave it in place.
+     */
+    private fun userChannelSoundWillRing(notificationPosted: Boolean): Boolean {
+        if (!notificationPosted) return false
+        val policy = ringtoneSource.channelSoundPolicy(messageNotificationUtil.getNotificationChannelName())
+        return policy == ChannelSoundPolicy.CUSTOM
     }
 
     /**

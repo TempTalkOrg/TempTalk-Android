@@ -91,6 +91,7 @@ class MessageContentProcessorWeakContactTest {
             groupUtil = mockk(relaxed = true),
             weakContactReconciler = weakContactReconciler,
             gson = Gson(),
+            conversationUnreadMarker = mockk(relaxed = true),
         )
     }
 

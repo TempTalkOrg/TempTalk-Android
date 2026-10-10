@@ -97,6 +97,7 @@ class MessageContentProcessor @Inject constructor(
     private val groupUtil: com.difft.android.chat.group.GroupUtil,
     private val weakContactReconciler: WeakContactReconciler,
     private val gson: Gson,
+    private val conversationUnreadMarker: com.difft.android.chat.message.ConversationUnreadMarker,
 ) {
 
     /**
@@ -185,9 +186,10 @@ class MessageContentProcessor @Inject constructor(
                 } else if (serviceContent.syncMessage.hasForwardNoticeSync()) {
                     L.i { "[Message][${tag}] process forward notice sync -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                     return handleForwardNoticeSync(content, serviceContent.syncMessage.forwardNoticeSync, tag)
-                } else return null
+                }
+                return if (serviceContent.syncMessage.hasMarkAsUnread()) handleMarkAsUnreadSync(content, serviceContent.syncMessage.markAsUnread, tag) else null
             } else if (serviceContent.hasReceiptMessage()) {
-                L.i { "[Message][${tag}] process receipt message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
+                L.d { "[Message][${tag}] process receipt message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 receiptMessageHelper.handleReceiptMessage(serviceContent.receiptMessage, content)
             } else if (serviceContent.hasCallMessage()) {
                 L.i { "[Message][${tag}] process call message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
@@ -298,6 +300,34 @@ class MessageContentProcessor @Inject constructor(
             timestamp = envelop.timestamp,
             sourceDevice = envelop.sourceDevice
         )
+    }
+
+    /**
+     * Handle a self-sync `SyncMessage.markAsUnread`: the manual mark-unread state from another
+     * device of this account. The mark time is the server time of this envelope, the same value
+     * the sending device stored once its send succeeded. Never produces a message.
+     */
+    private suspend fun handleMarkAsUnreadSync(
+        content: SignalServiceDataClass,
+        markAsUnread: SignalServiceProtos.SyncMessage.MarkAsUnread,
+        tag: String
+    ): Message? {
+        // A payload without a well-formed conversation must be dropped: the upstream conversation
+        // lazy would fall back to For.Account(myId) and mark Note-to-Self instead.
+        val conv = markAsUnread.takeIf { it.hasConversation() }?.conversation
+        val hasValidConv = conv != null &&
+            (conv.hasGroupId() || (conv.hasNumber() && conv.number.isNotEmpty()))
+        if (!hasValidConv) {
+            L.w { "[Message][${tag}] markAsUnread sync without conversation, dropping -> timestamp:${content.signalServiceEnvelope.timestamp}" }
+            return null
+        }
+        L.i { "[Message][${tag}] process markAsUnread sync -> timestamp:${content.signalServiceEnvelope.timestamp} flag:${markAsUnread.flag.number} conversationId:${content.conversation.id}" }
+        // Same fallback as the other sync handlers: a missing server time reads as 0, which the
+        // ordering guard would reject forever.
+        val envelope = content.signalServiceEnvelope
+        val markedAt = envelope.systemShowTimestamp.takeIf { it > 0 } ?: envelope.timestamp
+        conversationUnreadMarker.onIncomingSync(content.conversation, markAsUnread.flag.number, markedAt)
+        return null
     }
 
     /**

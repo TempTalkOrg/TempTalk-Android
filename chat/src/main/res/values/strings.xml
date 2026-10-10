@@ -119,8 +119,13 @@
     <string name="chat_group_name_too_long">Group name must less than or equal 64 chars.</string>
     <string name="chat_took_a_screen_shot">%s took a screenshot!</string>
     <string name="chat_contact_info">Contact Info</string>
-    <string name="chat_stick">Stick</string>
-    <string name="chat_unstick">UnStick</string>
+    <string name="chat_stick">Pin</string>
+    <string name="chat_unstick">Unpin</string>
+    <string name="chat_toast_pinned">Pinned</string>
+    <string name="chat_toast_unpinned">Unpinned</string>
+    <string name="chat_toast_deleted">Deleted</string>
+    <string name="chat_delete_chat_title">Delete chat</string>
+    <string name="chat_delete_chat_message">Chat history with \"%1$s\" will be cleared from this device.</string>
     <string name="chat_group_group">Group</string>
     <string name="chat_group_groups">Groups</string>
     <string name="chat_at_group_members">Group Members</string>
@@ -414,6 +419,8 @@
     <string name="chat_settings_mute">Mute</string>
     <string name="chat_action_unmute">Unmute</string>
     <string name="chat_action_mute">Mute</string>
+    <string name="chat_action_mark_unread">Unread</string>
+    <string name="chat_action_mark_read">Read</string>
     <string name="chat_end_meeting">End Meeting</string>
     <string name="chat_end_live">End Live</string>
     <string name="chat_leave_meeting">Leave Meeting</string>

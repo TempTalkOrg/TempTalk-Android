@@ -21,6 +21,7 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.recent.ListItem
 import com.difft.android.chat.recent.RecentChatAdapter
 import com.difft.android.chat.recent.RoomViewData
+import difft.android.messageserialization.model.isManualUnreadActive
 import com.difft.android.chat.search.SearchChatHistoryAdapter
 import com.difft.android.chat.search.SearchChatHistoryViewData
 import com.difft.android.chat.search.SearchMessageActivity
@@ -252,6 +253,7 @@ class SearchActivity : BaseActivity() {
                     lastDisplayContent = room.lastDisplayContent,
                     lastActiveTime = room.lastActiveTime,
                     unreadMessageNum = room.unreadMessageNum,
+                    isManualUnread = isManualUnreadActive(room.markUnreadFlag, room.markUnreadAt, room.lastActiveTime, room.readPosition),
                     muteStatus = room.muteStatus,
                     pinnedTime = room.pinnedTime,
                     mentionType = room.mentionType,

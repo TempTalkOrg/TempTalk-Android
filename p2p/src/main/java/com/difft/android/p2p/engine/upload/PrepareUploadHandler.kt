@@ -5,6 +5,7 @@ import com.difft.android.p2p.engine.model.PrepareUploadRequest
 import com.difft.android.p2p.engine.model.PrepareUploadResponse
 import com.difft.android.p2p.engine.model.ProtocolError
 import com.difft.android.p2p.engine.model.ReceiverCaps
+import com.difft.android.p2p.engine.session.PairingSessionRegistry
 import com.difft.android.p2p.engine.session.PinPolicy
 import com.difft.android.p2p.engine.session.SessionManager
 
@@ -27,6 +28,12 @@ import com.difft.android.p2p.engine.session.SessionManager
  *   carry a handshake, so the environment gate can never be silently skipped.
  * @param caps what this receiver advertises; see [ReceiverCaps]. A peer reads capabilities only from
  *   this list, never from a version number.
+ * @param pairingRegistry the pending reverse-pairing session, non-null only while this receiver asked
+ *   a peer to connect back. When one is registered it replaces the PIN policy for this request: the
+ *   PIN is bound to the pairing session rather than to a TTL, so a long confirmation hang cannot turn
+ *   into a 401 here.
+ * @param storagePrecheck the receiver's free-space answer, checked after the gate and before the
+ *   session is created so a transfer that cannot fit is refused while nothing exists yet.
  */
 class PrepareUploadHandler(
     private val sessionManager: SessionManager,
@@ -34,6 +41,8 @@ class PrepareUploadHandler(
     private val requirePin: Boolean,
     private val migrationValidator: MigrationHandshakeValidator? = null,
     private val caps: List<String> = listOf(ReceiverCaps.STATUS_V1, ReceiverCaps.BEAT_V1),
+    private val pairingRegistry: PairingSessionRegistry? = null,
+    private val storagePrecheck: StoragePrecheck? = null,
 ) {
     fun handle(request: PrepareUploadRequest, sourceIp: String, pin: String?): PrepareUploadResponse {
         if (request.files.isEmpty()) throw ProtocolError.NoContent
@@ -45,12 +54,7 @@ class PrepareUploadHandler(
             }
         }
 
-        if (requirePin && !pinPolicy.validateAndConsume(pin)) {
-            // Source IP only — never the PIN candidate. Repeated lines from one IP are the
-            // brute-force signal; the PIN self-invalidates after PinPolicy.MAX_PIN_ATTEMPTS.
-            L.w { "[P2P][Receiver] pin rejected from=$sourceIp" }
-            throw ProtocolError.Unauthorized
-        }
+        authorizeCredentials(request, sourceIp, pin)
 
         // Migration gate — runs only when a validator is wired. The authoritative env/account/version
         // check, before any session is created and so before any container byte is accepted. The
@@ -69,6 +73,16 @@ class PrepareUploadHandler(
             }
         }
 
+        // Free space last among the checks, so a device that is out of room still answers the gate's
+        // reason first, and still before a session exists to leak.
+        storagePrecheck?.let { precheck ->
+            val declaredBytes = request.files.values.sumOf { it.size.coerceAtLeast(0L) }
+            if (!precheck.hasRoomFor(declaredBytes)) {
+                L.w { "[P2P][Receiver] prepare-upload refused — no room for declaredBytes=$declaredBytes" }
+                throw ProtocolError.Forbidden(MigrationRejectReason.INSUFFICIENT_STORAGE.wire)
+            }
+        }
+
         val prepared = sessionManager.createSession(sourceIp, request.files)
         return PrepareUploadResponse(
             sessionId = prepared.sessionId,
@@ -76,5 +90,40 @@ class PrepareUploadHandler(
             sessionToken = prepared.sessionToken,
             caps = caps,
         )
+    }
+
+    /**
+     * The credential check, in one of two shapes. With a pending reverse-pairing session the token
+     * comes first and the PIN second, because only a caller that already holds the 256-bit token may
+     * spend a PIN attempt; without one, a request that still carries a token is a stale generation
+     * and is refused, and everything else takes the unchanged PIN path.
+     */
+    private fun authorizeCredentials(request: PrepareUploadRequest, sourceIp: String, pin: String?) {
+        val registry = pairingRegistry?.takeIf { it.isActive() }
+        if (registry != null) {
+            when (registry.authorizePrepareUpload(request.pairToken, pin)) {
+                PairingSessionRegistry.Decision.Accept -> Unit
+                PairingSessionRegistry.Decision.RejectPairToken -> {
+                    L.w { "[P2P][Receiver] prepare-upload rejected from=$sourceIp reason=${MigrationRejectReason.PAIR_TOKEN.wire}" }
+                    throw ProtocolError.Forbidden(MigrationRejectReason.PAIR_TOKEN.wire)
+                }
+                PairingSessionRegistry.Decision.RejectPin -> {
+                    L.w { "[P2P][Receiver] pin rejected from=$sourceIp" }
+                    throw ProtocolError.Unauthorized
+                }
+            }
+            return
+        }
+        if (request.pairToken != null) {
+            // The pairing this token belongs to was cancelled or superseded; there is nothing to match.
+            L.w { "[P2P][Receiver] prepare-upload rejected from=$sourceIp reason=${MigrationRejectReason.PAIR_TOKEN.wire}" }
+            throw ProtocolError.Forbidden(MigrationRejectReason.PAIR_TOKEN.wire)
+        }
+        if (requirePin && !pinPolicy.validateAndConsume(pin)) {
+            // Source IP only — never the PIN candidate. Repeated lines from one IP are the
+            // brute-force signal; the PIN self-invalidates after PinPolicy.MAX_PIN_ATTEMPTS.
+            L.w { "[P2P][Receiver] pin rejected from=$sourceIp" }
+            throw ProtocolError.Unauthorized
+        }
     }
 }

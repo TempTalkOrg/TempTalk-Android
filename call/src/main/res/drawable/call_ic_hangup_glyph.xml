@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tintable hang-up glyph at its natural 31x24 box (the design's icon size); no background. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="31dp"
+    android:height="24dp"
+    android:viewportWidth="31.2"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M26.6877,13.7798L23.731,16.9947L18.5568,14.5836L19.296,11.3687C16.8992,10.4841 14.301,10.4841 11.9042,11.3687L12.6434,14.5836L7.46916,16.9947L4.51245,13.7798C4.12037,13.3535 3.9001,12.7753 3.9001,12.1724C3.9001,11.5695 4.12037,10.9913 4.51245,10.565C7.571,7.62038 11.5149,5.99473 15.6001,5.99473C19.6853,5.99473 23.6292,7.62038 26.6877,10.565C27.0798,10.9913 27.3001,11.5695 27.3001,12.1724C27.3001,12.7753 27.0798,13.3535 26.6877,13.7798Z"
+        android:strokeWidth="2.025"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

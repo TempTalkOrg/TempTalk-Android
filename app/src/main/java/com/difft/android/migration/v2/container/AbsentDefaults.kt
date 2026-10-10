@@ -17,14 +17,25 @@ import java.util.concurrent.ConcurrentHashMap
 internal annotation class AbsentStaysNull
 
 /**
+ * Restores an absent non-null `String` field to `""`, for the identity fields a sender may omit.
+ *
+ * Gson leaves such a field `null` with no Kotlin check in between, and the first non-null setter it
+ * reaches throws and drops the whole record. Reflection cannot see Kotlin nullability, so the opt-in
+ * is explicit. Same `@field:` placement rule as [AbsentStaysNull].
+ */
+@Retention(AnnotationRetention.RUNTIME)
+@Target(AnnotationTarget.FIELD)
+internal annotation class AbsentIsEmpty
+
+/**
  * Restores the empty collections that Gson drops for absent JSON fields.
  *
  * Gson builds objects through `Unsafe.allocateInstance`, so a field the JSON omits keeps `null` even
  * when its declared type is non-null with an `emptyList()` constructor default, and Kotlin emits no
  * null check to catch it. The container format lets any sender omit a field it has no data for, so
  * the importer must read that as "none". The sweep is reflective because the record types nest and
- * keep growing. Only collections are substituted — a null object field stays null, since inventing
- * one would turn "no quote" into a phantom empty quote.
+ * keep growing. Only collections, and strings opted in with [AbsentIsEmpty], are substituted — a
+ * null object field stays null, since inventing one would turn "no quote" into a phantom empty quote.
  */
 internal object AbsentDefaults {
 
@@ -45,6 +56,7 @@ internal object AbsentDefaults {
 
     private fun emptyFor(field: Field): Any? = when {
         field.isAnnotationPresent(AbsentStaysNull::class.java) -> null
+        field.isAnnotationPresent(AbsentIsEmpty::class.java) && field.type == String::class.java -> ""
         List::class.java.isAssignableFrom(field.type) -> emptyList<Any>()
         Set::class.java.isAssignableFrom(field.type) -> emptySet<Any>()
         Map::class.java.isAssignableFrom(field.type) -> emptyMap<Any, Any>()

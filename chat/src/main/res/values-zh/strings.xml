@@ -116,6 +116,11 @@
     <string name="chat_contact_info">联系人信息</string>
     <string name="chat_stick">置顶</string>
     <string name="chat_unstick">取消置顶</string>
+    <string name="chat_toast_pinned">已置顶</string>
+    <string name="chat_toast_unpinned">已取消置顶</string>
+    <string name="chat_toast_deleted">已删除</string>
+    <string name="chat_delete_chat_title">删除聊天</string>
+    <string name="chat_delete_chat_message">删除后将清空与「%1$s」的本机聊天记录。</string>
     <string name="chat_group_group">群组</string>
     <string name="chat_group_groups">群组</string>
     <string name="chat_at_group_members">群组成员</string>
@@ -407,6 +412,8 @@
     <string name="chat_settings_mute">免打扰</string>
     <string name="chat_action_unmute">取消免打扰</string>
     <string name="chat_action_mute">免打扰</string>
+    <string name="chat_action_mark_unread">未读</string>
+    <string name="chat_action_mark_read">已读</string>
     <string name="chat_end_meeting">结束会议</string>
     <string name="chat_leave_meeting">离开会议</string>
     <string name="switch_camera">切换相机</string>

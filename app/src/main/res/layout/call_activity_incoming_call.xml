@@ -5,6 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg1"
+    android:filterTouchesWhenObscured="true"
     tools:ignore="Overdraw">
 
     <androidx.appcompat.widget.AppCompatImageView
@@ -49,30 +50,37 @@
             android:textSize="14sp" />
     </LinearLayout>
 
-    <LinearLayout
+    <!--
+        Unlocked phone in use: reject / accept tap buttons, each a fixed 72dp circle centred in its
+        half of the row (the hit area used to be the whole half-width slot, which a pocket brush could
+        land on anywhere).
+    -->
+    <com.difft.android.call.ui.incoming.IncomingCallControlsView
+        android:id="@+id/answer_controls"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="40dp"
-        android:gravity="center_horizontal"
-        android:orientation="horizontal"
+        app:icc_acceptIcon="@mipmap/chat_ic_call_accept"
+        app:icc_rejectIcon="@mipmap/chat_ic_call_reject"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintStart_toStartOf="parent" />
 
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/reject_call_btn"
-            android:layout_width="0dp"
-            android:layout_height="64dp"
-            android:layout_weight="1"
-            android:src="@mipmap/chat_ic_call_reject" />
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/accept_call_btn"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:src="@mipmap/chat_ic_call_accept" />
-    </LinearLayout>
-
+    <!--
+        Screen lit by the call itself (display was off or keyguard up): single-track slider, drag
+        right to answer / left to decline (design: track 28dp from the sides, 72dp from the bottom).
+        Shown instead of answer_controls, never alongside it.
+    -->
+    <com.difft.android.call.ui.incoming.IncomingCallSliderView
+        android:id="@+id/answer_slider"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="28dp"
+        android:layout_marginBottom="72dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

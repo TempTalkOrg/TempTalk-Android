@@ -1,34 +1,35 @@
 package com.difft.android.chat.ui.messageaction
 
-import android.annotation.SuppressLint
 import android.graphics.Rect
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.fragment.app.FragmentActivity
+import androidx.recyclerview.widget.RecyclerView
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.chat.message.TextChatMessage
-import com.difft.android.base.utils.dp as dpToPx
+
+/**
+ * The only window-to-root conversion for the message action menu (#1294): [this] comes from
+ * `getGlobalVisibleRect` (window space) and [root] is `android.R.id.content`'s, so the window
+ * offset cancels (split-screen / freeform safe).
+ */
+internal fun Rect.toRootRelative(root: Rect): PopupRect =
+    PopupRect(left - root.left, top - root.top, right - root.left, bottom - root.top)
+
+/** Selection rows are already overlay-local (== root-relative), so this is an identity copy. */
+internal fun Rect.toPopupRect(): PopupRect = PopupRect(left, top, right, bottom)
 
 /**
  * Message action popup that displays emoji reactions and quick actions
@@ -72,7 +73,7 @@ class MessageActionPopup(
         fun onSelectAll()
     }
     
-    private var overlayContainer: FrameLayout? = null
+    private var overlayContainer: MessageActionOverlayLayout? = null
     private var composeView: ComposeView? = null
     private var currentConfig: MessageActionConfigBuilder.Config? = null
     private var callbacks: Callbacks? = null
@@ -81,26 +82,37 @@ class MessageActionPopup(
     
     // Menu mode state - mutable state for Compose
     private var menuModeState = mutableStateOf(MenuMode.FULL)
-    
-    // Touch passthrough support
-    private var textViewBounds: Rect? = null
-    private var popupBounds: Rect? = null
-    private var currentTextView: View? = null
+
+    // Visible selection-edge rows the menu anchors to; NONE means anchor to the bubble (#1294).
+    private val selectionRowsState = mutableStateOf(SelectionRowRects.NONE)
+
+    // Root-relative bubble and visible content area; refreshed when a list scroll settles (#1294).
+    private val bubbleBoundsState = mutableStateOf(PopupRect(0, 0, 0, 0))
+    private val contentBoundsState = mutableStateOf(PopupRect(0, 0, 0, 0))
+
+    // A show request is applied from a SideEffect of the composition that carries the latest
+    // bounds and rows (#1294). Flipping the View VISIBLE right away draws one frame at the stale
+    // placement when the request comes from a frame callback (a fling settling), since the state
+    // writes above only land on the next recomposition. The counter forces that recomposition.
+    private val showRequestState = mutableIntStateOf(0)
+    private var showPending = false
+
+    /** Called after every UP or CANCEL that ends a gesture on the overlay. */
+    var onGestureEnd: (() -> Unit)? = null
     
     /**
      * Show the message action popup
      * 
      * @param anchorView The view to anchor the popup to
      * @param config Configuration built by MessageActionConfigBuilder
-     * @param containerView Optional container view to determine available bounds (e.g., RecyclerView)
-     * @param textView Optional text view that should remain interactive for text selection
+     * @param containerView Optional container view to determine available bounds (e.g., RecyclerView).
+     *        A RecyclerView is also scrolled by touches outside the menu and handles (#1294).
      * @param callbacks Callbacks for user interactions
      */
     fun show(
         anchorView: View,
         config: MessageActionConfigBuilder.Config,
         containerView: View? = null,
-        textView: View? = null,
         callbacks: Callbacks
     ) {
         // Dismiss any existing popup
@@ -109,51 +121,41 @@ class MessageActionPopup(
         this.currentConfig = config
         this.callbacks = callbacks
         this._isShowing = true
-        this.currentTextView = textView
         
         val rootView = activity.findViewById<ViewGroup>(android.R.id.content)
-        val anchorBounds = config.anchorBounds
-        
-        // Get rootView bounds to calculate relative positions
-        val rootBounds = Rect()
-        rootView.getGlobalVisibleRect(rootBounds)
-        
-        // Save textView bounds (relative to rootView) for touch passthrough
-        textView?.let { tv ->
-            val tvBounds = Rect()
-            tv.getGlobalVisibleRect(tvBounds)
-            textViewBounds = Rect(
-                tvBounds.left - rootBounds.left,
-                tvBounds.top - rootBounds.top,
-                tvBounds.right - rootBounds.left,
-                tvBounds.bottom - rootBounds.top
-            )
-        } ?: run {
-            textViewBounds = null
+        val rootBounds = Rect().also { rootView.getGlobalVisibleRect(it) }
+        // Visible content area from the container (e.g., RecyclerView), falling back to rootView
+        val contentBounds = Rect().also { (containerView ?: rootView).getGlobalVisibleRect(it) }.toRootRelative(rootBounds)
+        val bubbleBounds = config.anchorBounds.toRootRelative(rootBounds)
+
+        menuModeState.value = MenuMode.FULL
+        selectionRowsState.value = SelectionRowRects.NONE
+        bubbleBoundsState.value = bubbleBounds
+        contentBoundsState.value = contentBounds
+        showPending = false
+        L.i {
+            "[MessageAction] show outgoing=${config.isOutgoing} " +
+                "content=${contentBounds.width}x${contentBounds.height} bubbleH=${bubbleBounds.height}"
         }
-        
-        // Get the actual visible content area from container or fallback to rootView
-        val contentBounds = Rect()
-        (containerView ?: rootView).getGlobalVisibleRect(contentBounds)
-        
-        // Convert anchor bounds to be relative to rootView
-        val relativeAnchorBounds = Rect(
-            anchorBounds.left - rootBounds.left,
-            anchorBounds.top - rootBounds.top,
-            anchorBounds.right - rootBounds.left,
-            anchorBounds.bottom - rootBounds.top
-        )
-        
-        // Convert content bounds to be relative to rootView
-        val relativeContentBounds = Rect(
-            contentBounds.left - rootBounds.left,
-            contentBounds.top - rootBounds.top,
-            contentBounds.right - rootBounds.left,
-            contentBounds.bottom - rootBounds.top
-        )
-        
-        val isOutgoing = config.isOutgoing
-        
+
+        val menuView = createComposeView(config, callbacks)
+        composeView = menuView
+        overlayContainer = MessageActionOverlayLayout(activity, menuView, onDismissRequest = ::dismiss).also {
+            it.recyclerView = containerView as? RecyclerView
+            it.onGestureEnd = { onGestureEnd?.invoke() }
+            rootView.addView(it, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+
+        // Cancel any ongoing touch sequence on the anchor view to prevent swipe gestures
+        // This is needed because the long-press that triggered the popup may still have
+        // an active touch sequence that could trigger swipe-to-reply or other gestures
+        cancelOngoingTouch(anchorView)
+    }
+
+    private fun createComposeView(
+        config: MessageActionConfigBuilder.Config,
+        callbacks: Callbacks,
+    ): ComposeView {
         // Capture callbacks for use in lambdas
         val onDismissCallback = { notifyDismiss(callbacks) }
         val onReactionCallback = { emoji: String, isRemove: Boolean -> 
@@ -168,14 +170,6 @@ class MessageActionPopup(
             callbacks.onActionSelected(action.type)
             notifyDismiss(callbacks)
         }
-        
-        // Callback to update popup bounds when measured
-        val onPopupMeasured = { bounds: Rect ->
-            popupBounds = bounds
-        }
-        
-        // Reset menu mode to full
-        menuModeState.value = MenuMode.FULL
         
         // Selection menu actions
         val selectionActions = listOf(
@@ -194,15 +188,18 @@ class MessageActionPopup(
             }
         }
         
-        // Create ComposeView with full-screen overlay
-        composeView = ComposeView(activity).apply {
+        return ComposeView(activity).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             
             setContent {
                 DifftTheme(applyWindowBackground = false) {
                     var showPopup by remember { mutableStateOf(true) }
                     val menuMode by menuModeState
-                    
+                    val selectionRows by selectionRowsState
+                    val bubbleBounds by bubbleBoundsState
+                    val contentBounds by contentBoundsState
+                    val showRequest = showRequestState.intValue
+
                     // Handle back press
                     BackHandler(enabled = showPopup) {
                         showPopup = false
@@ -211,13 +208,17 @@ class MessageActionPopup(
                     
                     if (showPopup) {
                         MessageActionPopupOverlay(
-                            anchorBounds = relativeAnchorBounds,
-                            contentBounds = relativeContentBounds,
-                            isOutgoing = isOutgoing,
+                            bubbleBounds = bubbleBounds,
+                            contentBounds = contentBounds,
+                            selectionRows = selectionRows,
+                            isOutgoing = config.isOutgoing,
                             config = config,
                             menuMode = menuMode,
                             selectionActions = selectionActions,
-                            onPopupMeasured = onPopupMeasured,
+                            onMenuBoundsChanged = { overlayContainer?.menuBounds = it },
+                            onPlaced = { placement, popupHeight ->
+                                onMenuPlaced(placement, menuMode, popupHeight, contentBounds.height)
+                            },
                             onReactionClick = { emoji, isRemove ->
                                 showPopup = false
                                 onReactionCallback(emoji, isRemove)
@@ -232,95 +233,81 @@ class MessageActionPopup(
                             },
                             onSelectionActionClick = onSelectionActionClick
                         )
+                        // Runs after each recomposition of this scope is applied, before the frame
+                        // draws; onShowComposed acts only on the latest pending request.
+                        SideEffect { onShowComposed(showRequest) }
                     }
                 }
             }
         }
-        
-        // Create overlay container that passes through touch events in textView area
-        @SuppressLint("ClickableViewAccessibility")
-        overlayContainer = object : FrameLayout(activity) {
-            // Flag to ignore the first touch sequence (which is the continuation of the long-press that triggered the popup)
-            private var waitingForNewTouchSequence = true
-            
-            // Track if a child view (like selection handles) is handling the touch
-            private var childHandlingTouch = false
-            
-            override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-                val x = ev.x.toInt()
-                val y = ev.y.toInt()
-                
-                // Wait for the first ACTION_DOWN to start accepting touch events
-                if (waitingForNewTouchSequence) {
-                    if (ev.action == MotionEvent.ACTION_DOWN) {
-                        waitingForNewTouchSequence = false
-                    } else {
-                        return true
-                    }
-                }
-                
-                // On ACTION_DOWN, check if any child view wants to handle the touch
-                if (ev.action == MotionEvent.ACTION_DOWN) {
-                    childHandlingTouch = false
-                    
-                    // Let super try to dispatch to children first (handles, etc.)
-                    // If a child handles it, super returns true and that child gets subsequent events
-                    val handled = super.dispatchTouchEvent(ev)
-                    if (handled) {
-                        // Check if it was handled by a child (not just the ComposeView background)
-                        // Selection handles will return true for ACTION_DOWN
-                        childHandlingTouch = true
-                        return true
-                    }
-                }
-                
-                // If a child is handling this touch sequence, continue dispatching to it
-                if (childHandlingTouch) {
-                    val result = super.dispatchTouchEvent(ev)
-                    if (ev.action == MotionEvent.ACTION_UP || ev.action == MotionEvent.ACTION_CANCEL) {
-                        childHandlingTouch = false
-                    }
-                    return result
-                }
-                
-                // Check if touch is in textView/content area
-                // Don't forward to textView - this would trigger long click callbacks
-                // Handle dragging is managed by overlay's child views directly
-                val tvBounds = textViewBounds
-                val inTextView = tvBounds != null && tvBounds.contains(x, y)
-                
-                // Consume touches in textView area and dismiss on tap
-                if (inTextView) {
-                    if (ev.action == MotionEvent.ACTION_UP) {
-                        // Touch ended in textView area - dismiss the popup
-                        dismiss()
-                    }
-                    return true
-                }
-                
-                // Check if touch is outside popup bounds - if so, dismiss on ACTION_UP
-                val pBounds = popupBounds
-                if (pBounds != null && !pBounds.contains(x, y)) {
-                    if (ev.action == MotionEvent.ACTION_UP) {
-                        dismiss()
-                    }
-                    return true
-                }
-                
-                return super.dispatchTouchEvent(ev)
-            }
-        }.apply {
-            addView(composeView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-        }
-        
-        // Full-screen overlay
-        rootView.addView(overlayContainer, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-
-        // Cancel any ongoing touch sequence on the anchor view to prevent swipe gestures
-        // This is needed because the long-press that triggered the popup may still have
-        // an active touch sequence that could trigger swipe-to-reply or other gestures
-        cancelOngoingTouch(anchorView)
     }
+
+    private fun onShowComposed(request: Int) {
+        if (!showPending || request != showRequestState.intValue) return
+        showPending = false
+        overlayContainer?.setMenuVisible(true)
+    }
+
+    private fun onMenuPlaced(placement: PopupPlacement, menuMode: MenuMode, popupHeight: Int, contentHeight: Int) {
+        L.i {
+            "[MessageAction] placed anchor=${placement.anchor.mode} placement=${placement.placementMode} " +
+                "below=${placement.isBelow} menu=$menuMode h=$popupHeight contentH=$contentHeight"
+        }
+    }
+
+    /**
+     * Re-anchor the menu to the visible selection-edge rows (overlay-local). [SelectionRowRects.NONE]
+     * anchors to the bubble. No-op when not showing: late calls can arrive while the overlay is removed.
+     */
+    fun updateSelectionRows(rows: SelectionRowRects) {
+        if (_isShowing) selectionRowsState.value = rows
+    }
+
+    /**
+     * Hide the menu during a handle drag or list scroll (composition kept) and show it again
+     * afterwards. Hiding is immediate; showing waits for the next composition so the menu is never
+     * drawn at a placement older than the bounds and rows written before the request (a size change
+     * in the same dispatch re-measures first, so that frame shows nothing). A hide cancels a pending show.
+     */
+    fun setMenuVisible(visible: Boolean) {
+        val container = overlayContainer?.takeIf { _isShowing } ?: return
+        if (!visible) {
+            showPending = false
+            container.setMenuVisible(false)
+        } else if (!container.isMenuVisible && !showPending) {
+            showPending = true
+            showRequestState.intValue++
+        }
+    }
+
+    /**
+     * Refresh the bubble and visible content area from window rects (`getGlobalVisibleRect`) after
+     * the list moved (#1294). No-op when not showing.
+     */
+    fun updateBounds(bubble: Rect, content: Rect) {
+        if (!_isShowing) return
+        val rootBounds = Rect().also { activity.findViewById<ViewGroup>(android.R.id.content).getGlobalVisibleRect(it) }
+        bubbleBoundsState.value = bubble.toRootRelative(rootBounds)
+        contentBoundsState.value = content.toRootRelative(rootBounds)
+    }
+
+    /** Hide the menu, highlight and handles at once, ahead of a deferred dismiss; cancels a pending show. */
+    fun hideAll() {
+        showPending = false
+        if (_isShowing) overlayContainer?.hideAllChildren()
+    }
+
+    /** True while a gesture that started on the overlay is still down. */
+    val isGestureActive: Boolean
+        get() = overlayContainer?.isGestureActive == true
+
+    /** Current bubble bounds (root-relative), for tests. */
+    internal val bubbleBounds: PopupRect
+        get() = bubbleBoundsState.value
+
+    /** Current selection rows, for tests. */
+    internal val selectionRows: SelectionRowRects
+        get() = selectionRowsState.value
     
     /**
      * Send ACTION_CANCEL to the view and its parent chain to cancel any ongoing touch/gesture
@@ -359,10 +346,6 @@ class MessageActionPopup(
             rootView?.removeView(container)
         }
         overlayContainer = null
-        
-        textViewBounds = null
-        popupBounds = null
-        currentTextView = null
     }
     
     /**
@@ -444,152 +427,6 @@ class MessageActionPopup(
     private fun cleanup() {
         currentConfig = null
         callbacks = null
-    }
-}
-
-/**
- * Popup content positioned using Box + offset
- * Touch events are handled at the View level (see overlayContainer in MessageActionPopup)
- * This composable does NOT use pointerInput to allow touch passthrough
- */
-@Composable
-private fun MessageActionPopupOverlay(
-    anchorBounds: Rect,
-    contentBounds: Rect,
-    isOutgoing: Boolean,
-    config: MessageActionConfigBuilder.Config,
-    menuMode: MessageActionPopup.MenuMode,
-    selectionActions: List<MessageAction>,
-    onPopupMeasured: (Rect) -> Unit,
-    onReactionClick: (emoji: String, isRemove: Boolean) -> Unit,
-    onMoreEmojiClick: () -> Unit,
-    onActionClick: (MessageAction) -> Unit,
-    onSelectionActionClick: (MessageAction) -> Unit
-) {
-    val density = LocalDensity.current
-    // Re-measure width when menu mode changes to keep popup close to bubble
-    // Height measurement doesn't need to reset - Y position stays stable
-    var popupWidth by remember(menuMode) { mutableIntStateOf(0) }
-    var popupHeight by remember { mutableIntStateOf(0) }
-    val isMeasured = popupWidth > 0 && popupHeight > 0
-    
-    // Constants (pixels)
-    val edgePaddingPx = 8.dpToPx
-    val arrowGapPx = 2.dpToPx
-
-    // Panel width guard (decision #11) — same value passed to both measure and display phases (INV-1)
-    val maxPanelWidth = remember(contentBounds, edgePaddingPx) {
-        computeMaxPanelWidth(contentBounds.width(), edgePaddingPx, density)
-    }
-
-    // Use actual content area bounds
-    val minY = contentBounds.top + edgePaddingPx
-    val maxY = contentBounds.bottom - edgePaddingPx
-    
-    // Determine content based on menu mode
-    val isFullMode = menuMode == MessageActionPopup.MenuMode.FULL
-    val reactions = if (isFullMode) config.reactions else emptyList()
-    val selectedEmojis = if (isFullMode) config.selectedEmojis else emptySet()
-    val showReactionBar = isFullMode && config.showReactionBar
-    val quickActions = if (isFullMode) config.quickActions else selectionActions
-    val actionClickHandler: (MessageAction) -> Unit = if (isFullMode) onActionClick else onSelectionActionClick
-    
-    // Container for positioned content - NO pointerInput here, touch is handled at View level
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Measure phase: invisible content to get dimensions
-        if (!isMeasured) {
-            Box(
-                modifier = Modifier
-                    .offset { IntOffset(-9999, -9999) }
-                    .onGloballyPositioned { coordinates ->
-                        if (coordinates.size.width > 0 && coordinates.size.height > 0) {
-                            popupWidth = coordinates.size.width
-                            popupHeight = coordinates.size.height
-                        }
-                    }
-            ) {
-                MessageActionContent(
-                    actions = quickActions,
-                    showReactionBar = showReactionBar,
-                    reactions = reactions,
-                    selectedEmojis = selectedEmojis,
-                    maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(isBelow = true, arrowOffsetX = with(density) { 100.toDp() }),
-                    onReactionClick = { _, _ -> },
-                    onMoreEmojiClick = { },
-                    onActionClick = { }
-                )
-            }
-        }
-        
-        // Display phase: positioned content
-        if (isMeasured) {
-            val x = calculatePopupX(contentBounds, popupWidth, edgePaddingPx, isOutgoing)
-            val (y, isBelow) = calculatePopupY(
-                anchorBounds, popupHeight, minY, maxY, arrowGapPx
-            )
-            
-            // Report popup bounds for View-level touch handling
-            onPopupMeasured(Rect(x, y, x + popupWidth, y + popupHeight))
-            
-            // Calculate arrow position
-            val anchorCenterX = (anchorBounds.left + anchorBounds.right) / 2
-            val minArrowOffsetPx = 16.dpToPx
-            val maxArrowOffsetPx = (popupWidth - 16.dpToPx).coerceAtLeast(minArrowOffsetPx)
-            val arrowOffsetXPx = (anchorCenterX - x).coerceIn(minArrowOffsetPx, maxArrowOffsetPx)
-            val arrowOffsetX: Dp = with(density) { arrowOffsetXPx.toDp() }
-            
-            Box(
-                modifier = Modifier.offset { IntOffset(x, y) }
-            ) {
-                MessageActionContent(
-                    actions = quickActions,
-                    showReactionBar = showReactionBar,
-                    reactions = reactions,
-                    selectedEmojis = selectedEmojis,
-                    maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(isBelow = isBelow, arrowOffsetX = arrowOffsetX),
-                    onReactionClick = onReactionClick,
-                    onMoreEmojiClick = onMoreEmojiClick,
-                    onActionClick = actionClickHandler
-                )
-            }
-        }
-    }
-}
-
-private fun calculatePopupX(contentBounds: Rect, popupWidth: Int, edgePaddingPx: Int, isOutgoing: Boolean): Int {
-    return if (isOutgoing) {
-        contentBounds.right - popupWidth - edgePaddingPx
-    } else {
-        contentBounds.left + edgePaddingPx
-    }
-}
-
-private fun calculatePopupY(
-    anchorBounds: Rect,
-    popupHeight: Int,
-    minY: Int,
-    maxY: Int,
-    arrowGapPx: Int
-): Pair<Int, Boolean> {
-    val idealYBelow = anchorBounds.bottom + arrowGapPx
-    val idealYAbove = anchorBounds.top - popupHeight - arrowGapPx
-    
-    val canFitBelow = (idealYBelow + popupHeight) <= maxY
-    val canFitAbove = idealYAbove >= minY
-    
-    return when {
-        canFitBelow -> idealYBelow to true
-        canFitAbove -> idealYAbove to false
-        else -> {
-            val spaceBelow = maxY - anchorBounds.bottom
-            val spaceAbove = anchorBounds.top - minY
-            if (spaceBelow >= spaceAbove) {
-                idealYBelow.coerceAtMost(maxY - popupHeight) to true
-            } else {
-                idealYAbove.coerceAtLeast(minY) to false
-            }
-        }
+        onGestureEnd = null
     }
 }

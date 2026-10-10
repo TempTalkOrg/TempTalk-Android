@@ -210,6 +210,8 @@ class NeutralExporterForwardAttachmentTest {
 
         assertFalse(neutral.pointerOnly, "null-id forward row with a real file must still carry bytes")
         assertEquals("123456", neutral.stableId, "stableId falls back to authorityId.toString()")
+        // The forward node's preview meta must name this same record, or the receiver cannot pair them.
+        assertEquals(neutral.stableId, NeutralProjections.attachmentMeta(am).stableId, "meta stableId == record stableId")
         // The byte-source key MATCHES the record stableId → bytes resolve.
         assertBytesEqual(bytes, bytesFor(exporter, "123456"))
     }

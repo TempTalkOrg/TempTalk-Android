@@ -12,14 +12,11 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.ui.smoothScrollToPositionWithHelper
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.TextSizeUtil
@@ -32,7 +29,6 @@ import com.difft.android.call.manager.CallDataManager
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatBinding
 import com.difft.android.chat.group.CreateGroupActivity
-import com.difft.android.chat.group.GROUP_ROLE_OWNER
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.invite.InviteCodeActivity
 import com.difft.android.chat.invite.InviteUtils
@@ -45,25 +41,16 @@ import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheet
 import com.difft.android.network.UrlManager
 import com.difft.android.network.config.GlobalConfigsManager
-import com.difft.android.network.group.AddOrRemoveMembersReq
-import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
 import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
-import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
 import kotlinx.coroutines.withContext
 import org.difft.app.database.cache.OfficialAccountCache
-import org.difft.app.database.members
-import org.difft.app.database.models.DBGroupModel
-import org.difft.app.database.models.GroupModel
-import org.difft.app.database.wcdb
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.websocket.WebSocketManager
@@ -71,10 +58,15 @@ import javax.inject.Inject
 import dagger.Lazy
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import com.difft.android.base.migration.LegacyMigrationGate
 import com.difft.android.base.migration.PeerApps
 import com.difft.android.base.ui.theme.DifftTheme
+import androidx.lifecycle.flowWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.difft.android.base.ui.smoothScrollToPositionWithHelper
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.launch
 
 @ExperimentalCoroutinesApi
 @AndroidEntryPoint
@@ -82,9 +74,6 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
     @Inject
     lateinit var userManager: UserManager
-
-    @Inject
-    lateinit var groupRepo: GroupRepo
 
     @Inject
     lateinit var globalConfigsManager: GlobalConfigsManager
@@ -121,6 +110,12 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
     private val mAdapter: RecentChatAdapter by lazy {
         object : RecentChatAdapter(requireActivity()) {
+            override fun onReadToggle(roomViewData: RoomViewData) = toggleRead(roomViewData)
+
+            override fun onPinToggle(roomViewData: RoomViewData) = togglePin(roomViewData)
+
+            override fun onDeleteRequested(roomViewData: RoomViewData) = confirmDelete(roomViewData)
+
             override fun onItemClicked(
                 roomViewData: RoomViewData,
                 position: Int
@@ -135,7 +130,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
                 when (roomViewData.type) {
                     is Type.OneOnOne -> {
-                        L.i { "onItemClicked - OneOnOne ChattingRoom" }
+                        L.d { "[ChatList] onItemClicked - OneOnOne ChattingRoom" }
                         if (navigationCallback != null) {
                             navigationCallback.onOneOnOneConversationSelected(roomViewData.roomId)
                             if (navigationCallback.isDualPaneMode) {
@@ -150,7 +145,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     }
 
                     is Type.Group -> {
-                        L.i { "onItemClicked - Group ChattingRoom" }
+                        L.d { "[ChatList] onItemClicked - Group ChattingRoom" }
                         if (navigationCallback != null) {
                             navigationCallback.onGroupConversationSelected(roomViewData.roomId)
                             if (navigationCallback.isDualPaneMode) {
@@ -384,7 +379,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         recentChatViewModel.allRecentRoomsStateFlow
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
             .onEach { list ->
-                L.i { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
+                L.d { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
                 sortingChatRooms(list)
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
@@ -398,7 +393,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 val firstVisible = layoutManager.findFirstVisibleItemPosition()
 
                 val firstUnreadItemPosition = mAdapter.currentList.indexOfFirst { data ->
-                    data.chatItemData()?.isMuted == false && (data.chatItemData()?.unreadMessageNum ?: 0) > 0
+                    data.chatItemData()?.isMuted == false && (data.chatItemData()?.displayUnreadNum ?: 0) > 0
                 }
 
                 val canScrollDown = binding.recyclerViewRecentMessage.canScrollVertically(1)
@@ -409,7 +404,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                     mAdapter.currentList
                         .drop(firstVisible + 1)
                         .indexOfFirst { data ->
-                            data.chatItemData()?.isMuted == false && (data.chatItemData()?.unreadMessageNum ?: 0) > 0
+                            data.chatItemData()?.isMuted == false && (data.chatItemData()?.displayUnreadNum ?: 0) > 0
                         }
                         .let { if (it != -1) it + firstVisible + 1 else firstUnreadItemPosition }
                 }
@@ -624,152 +619,77 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
-    private fun leaveGroup(group: GroupModel) {
-        ComposeDialogManager.showMessageDialog(
-            context = requireActivity(),
-            title = getString(R.string.group_leave),
-            message = getString(R.string.group_leave_notice),
-            confirmText = getString(R.string.group_leave_leave),
-            cancelText = getString(R.string.group_leave_cancel),
-            cancelable = false,
-            onConfirm = {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    ComposeDialogManager.showWait(requireActivity())
-                    try {
-                        val response = withContext(Dispatchers.IO) {
-                            groupRepo.leaveGroup(group.gid ?: "", AddOrRemoveMembersReq(mutableListOf(globalServices.myId)))
-                        }
-                        if (!response.isSuccess()) {
-                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        L.w { "[RecentChatFragment] leaveGroup error: ${e.stackTraceToString()}" }
-                        ToastUtil.show(R.string.chat_net_error)
-                    } finally {
-                        ComposeDialogManager.dismissWait()
-                    }
-                }
-            }
-        )
-    }
-
-    private fun disbandGroup(group: GroupModel) {
-        ComposeDialogManager.showMessageDialog(
-            context = requireActivity(),
-            title = getString(R.string.group_disband),
-            message = getString(R.string.group_disband_tips),
-            confirmText = getString(R.string.group_disband_disband),
-            cancelText = getString(R.string.group_leave_cancel),
-            cancelable = false,
-            onConfirm = {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    ComposeDialogManager.showWait(requireActivity())
-                    try {
-                        val response = withContext(Dispatchers.IO) {
-                            groupRepo.deleteGroup(group.gid ?: "")
-                        }
-                        if (!response.isSuccess()) {
-                            ToastUtil.show(response.reason ?: getString(R.string.operation_failed))
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        L.w { "[RecentChatFragment] disbandGroup error: ${e.stackTraceToString()}" }
-                        ToastUtil.show(R.string.chat_net_error)
-                    } finally {
-                        ComposeDialogManager.dismissWait()
-                    }
-                }
-            }
-        )
-    }
-
+    /**
+     * Long-press menu (chat-list gesture design): Read/Unread → Pin/Unpin → Delete. Mute and
+     * leave/disband live in the chat settings only; Note-to-Self cannot be deleted.
+     */
     private fun showItemActionsPop(rootView: View, data: RoomViewData, touchX: Int, touchY: Int) {
-        viewLifecycleOwner.lifecycleScope.launch {
-        val groupData = if (data.type is Type.Group) {
-            withContext(Dispatchers.IO) {
-                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.roomId))
-                if (group != null && group.status == 0) {
-                    val role = group.members.find { it.id == globalServices.myId }?.groupRole
-                    if (role != null) Pair(group, role) else null
-                } else null
-            }
-        } else null
-
         val itemList = mutableListOf<ChativePopupView.Item>().apply {
+            if (data.displayUnreadNum > 0) {
+                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_mark_read), getString(R.string.chat_action_mark_read)) {
+                    recentChatViewModel.markAsRead(data)
+                    popupWindow?.dismiss()
+                })
+            } else {
+                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_mark_unread), getString(R.string.chat_action_mark_unread)) {
+                    recentChatViewModel.markAsUnread(data)
+                    popupWindow?.dismiss()
+                })
+            }
 
             if (data.isPinned) {
-                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_unstick), requireActivity().getString(R.string.chat_unstick)) {
-                    recentChatViewModel.pinChattingRoom(false, data)
+                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_unstick), getString(R.string.chat_unstick)) {
+                    togglePin(data)
                     popupWindow?.dismiss()
                 })
             } else {
-                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_stick), requireActivity().getString(R.string.chat_stick)) {
-                    recentChatViewModel.pinChattingRoom(true, data)
+                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_stick), getString(R.string.chat_stick)) {
+                    togglePin(data)
                     popupWindow?.dismiss()
                 })
             }
 
-
-            val channelId: String = data.roomId
-
-            if (data.isMuted) {
+            if (data.roomId != globalServices.myId) {
+                val destructive = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)
                 add(
                     ChativePopupView.Item(
-                        ResUtils.getDrawable(R.drawable.chat_icon_unmute),
-                        requireActivity().getString(R.string.chat_action_unmute)
+                        drawable = ResUtils.getDrawable(R.drawable.chat_message_action_delete),
+                        label = getString(R.string.me_delete),
+                        iconColor = destructive,
+                        textColor = destructive,
                     ) {
-                        recentChatViewModel.muteChannel(
-                            context = requireContext(),
-                            channelId = channelId,
-                            muteStatus = 0
-                        )
+                        confirmDelete(data)
                         popupWindow?.dismiss()
-                    })
-            } else {
-                add(
-                    ChativePopupView.Item(
-                        ResUtils.getDrawable(R.drawable.chat_icon_mute),
-                        requireActivity().getString(R.string.chat_action_mute)
-                    ) {
-                        recentChatViewModel.muteChannel(
-                            context = requireContext(),
-                            channelId = channelId!!,
-                            muteStatus = 1
-                        )
-                        popupWindow?.dismiss()
-                    })
+                    }
+                )
             }
-
-            if (groupData != null) {
-                val (group, role) = groupData
-                if (role == GROUP_ROLE_OWNER) {
-                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_disband_new), requireActivity().getString(R.string.group_disband), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
-                        disbandGroup(group)
-                        popupWindow?.dismiss()
-                    })
-                } else {
-                    add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_group_leave), requireActivity().getString(R.string.group_leave), ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)) {
-                        leaveGroup(group)
-                        popupWindow?.dismiss()
-                    })
-                }
-            }
-            add(
-                ChativePopupView.Item(
-                    ResUtils.getDrawable(R.drawable.chat_message_action_delete),
-                    requireActivity().getString(R.string.me_delete),
-                    ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)
-                ) {
-                    ApplicationDependencies.getMessageStore()
-                        .removeRoomAndMessages(data.roomId)
-                    popupWindow?.dismiss()
-                })
         }
         popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, itemList, touchX, touchY)
-        }
+    }
+
+    private fun toggleRead(data: RoomViewData) {
+        if (data.displayUnreadNum > 0) recentChatViewModel.markAsRead(data) else recentChatViewModel.markAsUnread(data)
+    }
+
+    /** The ViewModel toasts "Pinned" / "Unpinned" once the write succeeded. */
+    private fun togglePin(data: RoomViewData) {
+        recentChatViewModel.pinChattingRoom(!data.isPinned, data)
+    }
+
+    private fun confirmDelete(data: RoomViewData) {
+        val name = data.roomName?.toString()?.takeIf { it.isNotBlank() } ?: data.roomId
+        ComposeDialogManager.showMessageDialog(
+            context = requireActivity(),
+            title = getString(R.string.chat_delete_chat_title),
+            message = getString(R.string.chat_delete_chat_message, name),
+            confirmText = getString(R.string.me_delete),
+            cancelText = getString(R.string.group_leave_cancel),
+            confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)),
+            onConfirm = {
+                ApplicationDependencies.getMessageStore().removeRoomAndMessages(data.roomId)
+                ToastUtil.show(R.string.chat_toast_deleted)
+            }
+        )
     }
 
     /**

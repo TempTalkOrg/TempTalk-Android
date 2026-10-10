@@ -48,27 +48,6 @@ class CallServiceManager(
     }
 
     /**
-     * 更新通话通知
-     * @param useCallStyle 是否使用通话样式通知（通常在后台时使用）
-     */
-    fun updateOngoingCallNotification(useCallStyle: Boolean) {
-        L.i { "[Call] CallServiceManager updateOngoingCallNotification" }
-        if (!ForegroundService.isServiceRunning) {
-            L.i { "[Call] CallServiceManager updateOngoingCallNotification - ForegroundService is not running" }
-            return
-        }
-        try {
-            val intent = Intent(context, ForegroundService::class.java).apply {
-                action = ForegroundService.ACTION_UPDATE_NOTIFICATION
-                putExtra(ForegroundService.EXTRA_USE_CALL_STYLE, useCallStyle)
-            }
-            callToChatController.startForegroundService(context, intent)
-        } catch (e: Exception) {
-            L.e { "[Call] CallServiceManager Failed to update ongoing call notification: ${e.message}" }
-        }
-    }
-
-    /**
      * 更新前台服务类型
      * 当权限授予后更新服务类型，确保服务可以在后台使用麦克风/摄像头
      * 仅在 Android R (API 30) 及以上版本有效

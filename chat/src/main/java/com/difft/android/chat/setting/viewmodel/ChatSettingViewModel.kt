@@ -329,7 +329,7 @@ class ChatSettingViewModel @AssistedInject constructor(
             // Step 1: 从数据库加载缓存配置
             val cachedConfig = loadCachedConfig(conversationId)
             if (cachedConfig != null) {
-                L.i { "[ChatSettings] Loaded cached config: $cachedConfig" }
+                L.i { "[ChatSettings] cached config ${cachedConfig.toLogString()}" }
                 updateConversationSetResponseBody(cachedConfig)
             }
 
@@ -359,7 +359,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                             withContext(Dispatchers.IO) {
                                 updateCachedConfig(conversationId, finalSet)
                             }
-                            L.i { "[ChatSettings] Updated config from server: $finalSet (raw messageExpiry: ${set.messageExpiry})" }
+                            L.i { "[ChatSettings] server config ${finalSet.toLogString()} rawExpiry=${set.messageExpiry}" }
                             // 再次更新 UI
                             updateConversationSetResponseBody(finalSet)
                         }

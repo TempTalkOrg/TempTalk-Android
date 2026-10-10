@@ -30,6 +30,7 @@ import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -37,6 +38,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowStatFs
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -78,6 +80,14 @@ class RestoreOrchestratorTest {
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        // Robolectric reports 0 available bytes for an unregistered volume, which the restore's free-space
+        // guard would correctly read as a full disk. Give it room so these cases exercise what they mean to.
+        ShadowStatFs.registerStats(context.filesDir, ROOMY_BLOCKS, ROOMY_BLOCKS, ROOMY_BLOCKS)
+    }
+
+    @After
+    fun resetStatFs() {
+        ShadowStatFs.reset()
     }
 
     // ── happy path → ReadyForSignIn (engine runs; NO signIn / restart) ─────────────────────────
@@ -540,6 +550,7 @@ class RestoreOrchestratorTest {
             stagingDbPath = File(work, "staging.db").absolutePath,
             attachmentsStagingDir = File(work, "att-staging").absolutePath,
             containerWorkFile = File(work, "container.ttmig").absolutePath,
+            spoolDir = File(work, "spool").absolutePath,
         )
     }
 
@@ -573,5 +584,10 @@ class RestoreOrchestratorTest {
             sourceAppVersion = "test-1.0",
         )
         return out
+    }
+
+    private companion object {
+        /** ~4 GiB of 4 KiB blocks: more than any of these fixtures could ever need. */
+        const val ROOMY_BLOCKS = 1_000_000
     }
 }

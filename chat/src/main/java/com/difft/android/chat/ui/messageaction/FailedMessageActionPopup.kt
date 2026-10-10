@@ -16,13 +16,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
@@ -75,33 +77,11 @@ class FailedMessageActionPopup(
         
         val rootView = activity.findViewById<ViewGroup>(android.R.id.content)
         
-        // Get anchor bounds
-        val anchorBounds = Rect()
-        anchorView.getGlobalVisibleRect(anchorBounds)
-        
-        // Get the actual visible content area from container or fallback to rootView
-        val contentBounds = Rect()
-        (containerView ?: rootView).getGlobalVisibleRect(contentBounds)
-        
-        // Get rootView bounds to calculate relative positions
-        val rootBounds = Rect()
-        rootView.getGlobalVisibleRect(rootBounds)
-        
-        // Convert anchor bounds to be relative to rootView
-        val relativeAnchorBounds = Rect(
-            anchorBounds.left - rootBounds.left,
-            anchorBounds.top - rootBounds.top,
-            anchorBounds.right - rootBounds.left,
-            anchorBounds.bottom - rootBounds.top
-        )
-        
-        // Convert content bounds to be relative to rootView
-        val relativeContentBounds = Rect(
-            contentBounds.left - rootBounds.left,
-            contentBounds.top - rootBounds.top,
-            contentBounds.right - rootBounds.left,
-            contentBounds.bottom - rootBounds.top
-        )
+        val rootBounds = Rect().also { rootView.getGlobalVisibleRect(it) }
+        val relativeAnchorBounds = Rect().also { anchorView.getGlobalVisibleRect(it) }.toRootRelative(rootBounds)
+        // Actual visible content area from the container, falling back to rootView
+        val relativeContentBounds = Rect().also { (containerView ?: rootView).getGlobalVisibleRect(it) }
+            .toRootRelative(rootBounds)
         
         composeView = ComposeView(activity).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
@@ -194,8 +174,8 @@ class FailedMessageActionPopup(
  */
 @Composable
 private fun FailedMessagePopupOverlay(
-    anchorBounds: Rect,
-    contentBounds: Rect,
+    anchorBounds: PopupRect,
+    contentBounds: PopupRect,
     onResendClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onOutsideClick: () -> Unit
@@ -204,15 +184,13 @@ private fun FailedMessagePopupOverlay(
     var popupWidth by remember { mutableIntStateOf(0) }
     var popupHeight by remember { mutableIntStateOf(0) }
     val isMeasured = popupWidth > 0 && popupHeight > 0
-
-    // Constants (pixels)
-    val edgePaddingPx = 8.dpToPx
-    val arrowHeightPx = 6.dpToPx
-    val arrowGapPx = 2.dpToPx
+    val metrics = remember { PopupMetrics(edgePaddingPx = 8.dpToPx, arrowGapPx = 2.dpToPx, arrowMinInsetPx = 16.dpToPx) }
+    // Laid-out popup bounds (root == overlay space); null until the first placement.
+    var menuRect by remember { mutableStateOf<ComposeRect?>(null) }
 
     // Panel width guard (decision #11) — same value for measure and display phases (INV-1)
-    val maxPanelWidth = remember(contentBounds, edgePaddingPx) {
-        computeMaxPanelWidth(contentBounds.width(), edgePaddingPx, density)
+    val maxPanelWidth = remember(contentBounds) {
+        computeMaxPanelWidth(contentBounds.width, metrics.edgePaddingPx, density)
     }
 
     // Failed-state action set (Master Order B5): Resend -> Delete(red)
@@ -223,33 +201,16 @@ private fun FailedMessagePopupOverlay(
         failedActionDispatch(action.type, onResendClick, onDeleteClick)
     }
 
-    // Use actual content area bounds
-    val minY = contentBounds.top + edgePaddingPx
-    val maxY = contentBounds.bottom - edgePaddingPx
-
     // Full screen transparent overlay to catch outside clicks
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Transparent)
             .pointerInput(Unit) {
+                // Reads menuRect through its State delegate, so the hit-test always sees the
+                // current laid-out bounds; a tap before the first placement dismisses (#1294).
                 detectTapGestures { offset ->
-                    // Check if tap is outside popup bounds
-                    if (isMeasured) {
-                        val x = calculatePopupX(contentBounds, popupWidth, edgePaddingPx)
-                        val (y, _) = calculatePopupY(
-                            anchorBounds, popupHeight, minY, maxY, arrowGapPx, arrowHeightPx
-                        )
-                        
-                        val isInsidePopup = offset.x >= x && offset.x <= x + popupWidth &&
-                                offset.y >= y && offset.y <= y + popupHeight
-                        
-                        if (!isInsidePopup) {
-                            onOutsideClick()
-                        }
-                    } else {
-                        onOutsideClick()
-                    }
+                    if (menuRect?.contains(offset) != true) onOutsideClick()
                 }
             }
     ) {
@@ -277,24 +238,18 @@ private fun FailedMessagePopupOverlay(
                     onActionClick = { }
                 )
             }
-        }
-        
-        // Display phase: positioned content
-        if (isMeasured) {
-            val x = calculatePopupX(contentBounds, popupWidth, edgePaddingPx)
-            val (y, isBelow) = calculatePopupY(
-                anchorBounds, popupHeight, minY, maxY, arrowGapPx, arrowHeightPx
-            )
-            
-            // Calculate arrow position
-            val anchorCenterX = (anchorBounds.left + anchorBounds.right) / 2
-            val minArrowOffsetPx = 16.dpToPx
-            val maxArrowOffsetPx = (popupWidth - 16.dpToPx).coerceAtLeast(minArrowOffsetPx)
-            val arrowOffsetXPx = (anchorCenterX - x).coerceIn(minArrowOffsetPx, maxArrowOffsetPx)
-            val arrowOffsetX: Dp = with(density) { arrowOffsetXPx.toDp() }
-            
+        } else {
+            // Display phase: anchored to the bubble only; failed messages are always outgoing, so right-aligned.
+            val placement = remember(anchorBounds, contentBounds, popupWidth, popupHeight) {
+                MessageActionPopupPositioner.place(
+                    SelectionAnchorInput(anchorBounds), contentBounds, popupWidth, popupHeight, isOutgoing = true, metrics
+                )
+            }
             Box(
-                modifier = Modifier.offset { IntOffset(x, y) }
+                modifier = Modifier
+                    .offset { IntOffset(placement.x, placement.y) }
+                    .onGloballyPositioned { menuRect = it.boundsInRoot() }
+                    .testTag(FAILED_POPUP_MENU_TAG)
             ) {
                 MessageActionContent(
                     actions = failedActions,
@@ -302,7 +257,10 @@ private fun FailedMessagePopupOverlay(
                     reactions = emptyList(),
                     selectedEmojis = emptySet(),
                     maxPanelWidth = maxPanelWidth,
-                    arrowConfig = ArrowConfig(isBelow = isBelow, arrowOffsetX = arrowOffsetX),
+                    arrowConfig = ArrowConfig(
+                        isBelow = placement.isBelow,
+                        arrowOffsetX = with(density) { placement.arrowOffsetXPx.toDp() },
+                    ),
                     onReactionClick = { _, _ -> },
                     onMoreEmojiClick = { },
                     onActionClick = onActionClick
@@ -312,39 +270,8 @@ private fun FailedMessagePopupOverlay(
     }
 }
 
-private fun calculatePopupX(contentBounds: Rect, popupWidth: Int, edgePaddingPx: Int): Int {
-    // Outgoing messages: align right within content area
-    return contentBounds.right - popupWidth - edgePaddingPx
-}
-
-private fun calculatePopupY(
-    anchorBounds: Rect,
-    popupHeight: Int,
-    minY: Int,
-    maxY: Int,
-    arrowGapPx: Int,
-    arrowHeightPx: Int
-): Pair<Int, Boolean> {
-    val idealYBelow = anchorBounds.bottom + arrowGapPx
-    val idealYAbove = anchorBounds.top - popupHeight - arrowGapPx
-    
-    val canFitBelow = (idealYBelow + popupHeight) <= maxY
-    val canFitAbove = idealYAbove >= minY
-    
-    return when {
-        canFitBelow -> idealYBelow to true
-        canFitAbove -> idealYAbove to false
-        else -> {
-            val spaceBelow = maxY - anchorBounds.bottom
-            val spaceAbove = anchorBounds.top - minY
-            if (spaceBelow >= spaceAbove) {
-                idealYBelow.coerceAtMost(maxY - popupHeight) to true
-            } else {
-                idealYAbove.coerceAtLeast(minY) to false
-            }
-        }
-    }
-}
+/** Test tag on the laid-out failed-message popup (#1294). */
+internal const val FAILED_POPUP_MENU_TAG = "failed_popup_menu"
 
 /** Failed-state action set (Master Order B5): Resend -> Delete(red). */
 internal fun buildFailedActions(): List<MessageAction> =

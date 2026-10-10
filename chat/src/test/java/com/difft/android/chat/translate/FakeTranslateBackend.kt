@@ -3,7 +3,10 @@ package com.difft.android.chat.translate
 import com.difft.android.chat.translate.backend.TranslateBackend
 import com.difft.android.chat.translate.backend.TranslateBackendException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withContext
 
 /**
  * Scriptable [TranslateBackend] for `:chat` tests.
@@ -52,11 +55,21 @@ class FakeTranslateBackend : TranslateBackend {
         data object Success : Outcome
         data class Fails(val kind: TranslateBackendException.Kind) : Outcome
 
+        /** Resolves when [gate] does: completing it succeeds, completing it exceptionally fails. */
+        data class Gated(val gate: CompletableDeferred<Unit>) : Outcome
+
         /**
          * The engine abandoned the attempt. Surfaces as a coroutine cancellation, which is exactly
          * how the ML Kit backend reports a cancelled Task.
          */
         data object Cancelled : Outcome
+
+        /**
+         * Ignores coroutine cancellation and ends only when [gate] does — a backend Task that outlives
+         * the attempt that awaited it. Complete the gate exceptionally to end in that error (a
+         * [CancellationException] ends it as cancelled).
+         */
+        data class HeldUntil(val gate: CompletableDeferred<Unit>) : Outcome
     }
 
     override suspend fun identifyLanguage(text: String): String? {
@@ -83,6 +96,8 @@ class FakeTranslateBackend : TranslateBackend {
             Outcome.Success -> Unit
             Outcome.Cancelled -> throw CancellationException("backend abandoned the download")
             is Outcome.Fails -> throw TranslateBackendException(outcome.kind)
+            is Outcome.Gated -> outcome.gate.await()
+            is Outcome.HeldUntil -> withContext(NonCancellable) { outcome.gate.await() }
         }
     }
 

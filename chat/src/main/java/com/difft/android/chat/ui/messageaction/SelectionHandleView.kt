@@ -53,9 +53,18 @@ class SelectionHandleView(
     // Visual dimensions (what gets drawn)
     private val visualWidth: Float
     private var visualHeight: Float
-    
+
+    /** Drawn height (circle + line), excluding touch padding; the knob extent of a selection row (#1294). */
+    val visualExtentPx: Float
+        get() = visualHeight
+
+    /** Distance from this view's top edge to the top of the drawn part (the touch padding). */
+    val visualTopInset: Float
+        get() = touchPadding
+
     // Total view dimensions (includes touch padding)
-    private var totalWidth: Float
+    var totalWidth: Float
+        private set
     var totalHeight: Float
         private set
     
@@ -83,6 +92,7 @@ class SelectionHandleView(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
     private var isDragging = false
+    private var activePointerId = MotionEvent.INVALID_POINTER_ID
     
     private val density = context.resources.displayMetrics.density
     
@@ -154,8 +164,9 @@ class SelectionHandleView(
     
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
+        when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                activePointerId = event.getPointerId(0)
                 lastTouchX = event.rawX
                 lastTouchY = event.rawY
                 isDragging = true
@@ -165,23 +176,40 @@ class SelectionHandleView(
             }
             MotionEvent.ACTION_MOVE -> {
                 if (isDragging) {
-                    val deltaX = event.rawX - lastTouchX
-                    val deltaY = event.rawY - lastTouchY
-                    lastTouchX = event.rawX
-                    lastTouchY = event.rawY
+                    // Follow only the pointer that started the drag (#1294).
+                    val index = event.findPointerIndex(activePointerId)
+                    if (index < 0) return true
+                    val rawX = event.getX(index) + (event.rawX - event.x)
+                    val rawY = event.getY(index) + (event.rawY - event.y)
+                    val deltaX = rawX - lastTouchX
+                    val deltaY = rawY - lastTouchY
+                    lastTouchX = rawX
+                    lastTouchY = rawY
                     onDrag?.invoke(deltaX, deltaY)
+                    return true
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> if (isDragging) return true
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (isDragging) {
+                    if (event.getPointerId(event.actionIndex) == activePointerId) endDrag()
                     return true
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (isDragging) {
-                    isDragging = false
-                    onDragEnd?.invoke()
-                    parent?.requestDisallowInterceptTouchEvent(false)
+                    endDrag()
                     return true
                 }
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    private fun endDrag() {
+        isDragging = false
+        activePointerId = MotionEvent.INVALID_POINTER_ID
+        onDragEnd?.invoke()
+        parent?.requestDisallowInterceptTouchEvent(false)
     }
 }

@@ -120,9 +120,10 @@ class MigrationP2pReceiveViewModel(
     }
 
     /**
-     * A Desktop export QR (`dir = "download"`) hands the waiting receiver over to a pull; anything else
-     * — a plain link code, a receive code from another phone, a code without a key — is refused here
-     * with a hint, before the service is involved. The raw payload is never logged.
+     * A scanned Desktop export QR (`dir = "download"`) is carried by reverse pairing: this device
+     * keeps its listener up and asks the computer to connect back and upload. Anything else — a plain
+     * link code, a receive code from another phone, a code without a key — is refused here with a
+     * hint, before the service is involved. The raw payload is never logged.
      */
     private fun onPeerQrScanned(raw: String) {
         val payload = QrPayloadCodec.decode(raw)
@@ -131,8 +132,8 @@ class MigrationP2pReceiveViewModel(
             _effects.trySend(MigrationP2pReceiveEffect.Toast(appContext.getString(R.string.migration_p2p_receive_scan_not_export_code)))
             return
         }
-        L.i { "[MigrationV2][P2P][Rx] Desktop export code scanned → pulling from ${payload.alias}" }
-        MigrationTransferService.startPull(appContext, raw)
+        L.i { "[MigrationV2][P2P][Rx] Desktop export code scanned → reverse pairing" }
+        MigrationTransferService.startReversePair(appContext, raw)
     }
 
     /**
@@ -165,9 +166,9 @@ class MigrationP2pReceiveViewModel(
         // Holder must reflect the chooser's account; the Activity passed it via the start intent.
         ownsPairing = true
         MigrationTransferService.startReceiver(appContext, account, sameDevice, credentialHandoff)
-        // Desktop source: the receiver role is what carries the pull, so it comes up regardless; the
-        // Desktop shows the code, this device scans it, and the scan turns the listener into a pull.
-        // Its own code is never shown here (see mapToUiState).
+        // Desktop source: the receiver role is what the computer connects back to, so it comes up
+        // regardless; the Desktop shows the code, this device scans it, and the scan starts reverse
+        // pairing on that same listener. Its own code is never shown here (see mapToUiState).
         if (scanDesktop) _effects.trySend(MigrationP2pReceiveEffect.LaunchScanner)
     }
 
@@ -232,6 +233,10 @@ class MigrationP2pReceiveViewModel(
                     refreshed = refreshed,
                 )
             }
+            is TransferState.AwaitingDesktopConfirm ->
+                MigrationP2pReceiveState.AwaitingDesktopConfirm(transfer.peerAlias)
+            is TransferState.AwaitingDesktopConnect ->
+                MigrationP2pReceiveState.AwaitingDesktopConnect(transfer.peerAlias)
             // Carry the byte progress while transferring; the staging-to-promote phase has none, since its
             // size is already on disk, so it falls back to indeterminate.
             is TransferState.Transferring -> MigrationP2pReceiveState.Receiving(transfer.progress, transfer.peerAlias, transfer.totalBytes)
@@ -253,6 +258,9 @@ class MigrationP2pReceiveViewModel(
                 L.w { "[MigrationV2][P2P][Rx] receive failed reason=${transfer.reason}" }
                 MigrationP2pReceiveState.Error(transfer.reason)
             }
+            // Committed, tail unconfirmed: never Promoted, so no in-process sign-in is started — the
+            // Activity cold-starts instead and the promote finishes there.
+            TransferState.CommittedUnconfirmed -> MigrationP2pReceiveState.CommittedUnconfirmed
             TransferState.Cancelled -> MigrationP2pReceiveState.Skipped
             // Sender-only terminal — not reachable on the receive screen; treat as a benign no-op.
             TransferState.Sent, TransferState.AwaitingVerdict, TransferState.VerdictStalled, TransferState.Unknown,

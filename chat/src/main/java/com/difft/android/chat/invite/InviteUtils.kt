@@ -343,6 +343,7 @@ class InviteBottomSheetFragment() : BaseBottomSheetDialogFragment() {
         val avatarView: AvatarView = view.findViewById(R.id.imageview_avatar)
         val tvName: AppCompatTextView = view.findViewById(R.id.tv_name)
         val tvContent: AppCompatTextView = view.findViewById(R.id.tv_content)
+        InviteQrFit.attach(view)
 
         lifecycleScope.launch {
             val myInfo = withContext(Dispatchers.IO) {

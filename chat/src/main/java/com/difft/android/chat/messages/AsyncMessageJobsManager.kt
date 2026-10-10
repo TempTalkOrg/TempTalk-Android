@@ -109,7 +109,7 @@ class AsyncMessageJobsManager @Inject constructor(
         val groupsNotInCache = groupsToProcess.filter { it !in confirmedGroupIds }
         if (groupsNotInCache.isEmpty()) {
             if (groupsToProcess.isNotEmpty()) {
-                L.i { "[AsyncMessageJobsManager] All ${groupsToProcess.size} groups already in memory cache, skipping" }
+                L.d { "[AsyncMessageJobsManager] All ${groupsToProcess.size} groups already in memory cache, skipping" }
             }
             return
         }

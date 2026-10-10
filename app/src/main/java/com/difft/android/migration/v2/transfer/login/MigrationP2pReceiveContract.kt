@@ -31,6 +31,15 @@ sealed interface MigrationP2pReceiveState {
     data class Receiving(val progress: Float, val peerAlias: String? = null, val totalBytes: Long = 0L) : MigrationP2pReceiveState
 
     /**
+     * Reverse pairing: the computer's user has to confirm the transfer before anything moves. This
+     * device is already listening for the connect-back.
+     */
+    data class AwaitingDesktopConfirm(val peerAlias: String? = null) : MigrationP2pReceiveState
+
+    /** Reverse pairing: confirmed on the computer, which is now connecting back to this phone. */
+    data class AwaitingDesktopConnect(val peerAlias: String? = null) : MigrationP2pReceiveState
+
+    /**
      * Everything has arrived; the container is being verified and written (staging → promote), and
      * in the handoff case the session is being activated. Not cancellable.
      */
@@ -46,6 +55,12 @@ sealed interface MigrationP2pReceiveState {
      * logged-out snapshot has to be rebuilt.
      */
     data object Activated : MigrationP2pReceiveState
+
+    /**
+     * The import committed but its tail is unconfirmed: the data is on disk and the only exit is a
+     * cold start, which finishes the promote before anything else runs.
+     */
+    data object CommittedUnconfirmed : MigrationP2pReceiveState
 
     /** A gate, guard or tamper reject; the reason is shown and the user can start over or leave. */
     data class Error(val reason: String) : MigrationP2pReceiveState
@@ -64,7 +79,7 @@ sealed interface MigrationP2pReceiveIntent {
     /** The old device is a Desktop showing an export QR: open the scanner instead of waiting to be scanned. */
     data object ScanPeerQr : MigrationP2pReceiveIntent
 
-    /** The scanner returned [raw]; a `dir = "download"` payload switches this screen to pulling from the Desktop. */
+    /** The scanner returned [raw]; a `dir = "download"` payload starts reverse pairing with that computer. */
     data class PeerQrScanned(val raw: String) : MigrationP2pReceiveIntent
 
     /** The scanner was dismissed without a code. */

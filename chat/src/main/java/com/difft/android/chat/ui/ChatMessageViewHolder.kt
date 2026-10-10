@@ -351,6 +351,13 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         private val containerWidth: Int
             get() = parentView.width
 
+        /**
+         * The item this row currently shows. The translate-only partial bind swaps in a new instance
+         * without re-running [bindClickEvents], so the row listeners read this instead of the
+         * instance they captured.
+         */
+        private var boundMessage: ChatMessage? = null
+
         override fun bind(
             message: ChatMessage,
             callbacks: MessageCallbacks,
@@ -364,6 +371,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
 
             resetViewDefaults()
 
+            boundMessage = message
             if (message !is TextChatMessage) return
 
             // Check if this message is currently playing audio and show speed button
@@ -413,12 +421,12 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
             onItemLongClick: (rootView: View, message: ChatMessage) -> Unit
         ) {
             contentContainer.setOnLongClickListener {
-                onItemLongClick(it.parent as ConstraintLayout, message)
+                onItemLongClick(it.parent as ConstraintLayout, boundMessage ?: message)
                 true
             }
 
             contentContainer.setOnClickListener {
-                onItemClick(it, message)
+                onItemClick(it, boundMessage ?: message)
             }
         }
 
@@ -593,6 +601,7 @@ abstract class ChatMessageViewHolder(itemView: View) : ViewHolder(itemView) {
         /** Update the translate block only — `ChatMessageAdapter.PAYLOAD_TRANSLATE`. */
         fun bindTranslateOnly(message: ChatMessage, onTranslateRetry: (TextChatMessage) -> Unit) {
             if (message !is TextChatMessage) return
+            boundMessage = message
             bindTranslateBlock(translateViews, message, onTranslateRetry)
         }
 

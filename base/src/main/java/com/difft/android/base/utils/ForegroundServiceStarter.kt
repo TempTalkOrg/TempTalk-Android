@@ -124,7 +124,7 @@ object ForegroundServiceStarter {
      * On HyperOS / GMS-unavailable cohorts the alarm fires every 5 min in
      * steady-state BG, so without throttling each user generates ~288
      * `L.w "startForeground refused"` lines per day with full stacktrace.
-     * Threshold check in `.claude/rules/logging-standards.md` puts that
+     * Threshold check in `docs/agents/logging-standards-full.md` puts that
      * over the noise budget. We keep the FIRST occurrence with full trace
      * (still needed for offline forensics) and downgrade subsequent
      * occurrences to a one-line `L.i` reference.

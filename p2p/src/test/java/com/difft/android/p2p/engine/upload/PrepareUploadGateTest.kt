@@ -5,6 +5,7 @@ import com.difft.android.p2p.engine.model.FileMetadata
 import com.difft.android.p2p.engine.model.MigrationHandshake
 import com.difft.android.p2p.engine.model.PrepareUploadRequest
 import com.difft.android.p2p.engine.model.ProtocolError
+import com.difft.android.p2p.engine.session.PairingSessionRegistry
 import com.difft.android.p2p.engine.session.PinPolicy
 import com.difft.android.p2p.engine.session.SessionManager
 import org.junit.Assert.assertEquals
@@ -34,10 +35,11 @@ class PrepareUploadGateTest {
         sourceFormatVersion = "1.0",
     )
 
-    private fun request(withHandshake: Boolean) = PrepareUploadRequest(
+    private fun request(withHandshake: Boolean, pairToken: String? = null, size: Long = 10L) = PrepareUploadRequest(
         info = info,
-        files = mapOf("f1" to fileMeta("f1")),
+        files = mapOf("f1" to fileMeta("f1").copy(size = size)),
         migration = if (withHandshake) handshake else null,
+        pairToken = pairToken,
     )
 
     @Test
@@ -123,5 +125,124 @@ class PrepareUploadGateTest {
         val handler = PrepareUploadHandler(sm, PinPolicy(), requirePin = false)
         val resp = handler.handle(request(withHandshake = true), "1.1.1.1", null)
         assertTrue(resp.sessionId.isNotBlank())
+    }
+
+    // ── Reverse pairing: the pending session replaces the PIN policy ─────────────────────────────
+
+    @Test
+    fun `a pairing session accepts a matching token and PIN without touching the PIN policy`() {
+        val sm = SessionManager()
+        val pinPolicy = PinPolicy()
+        val issued = pinPolicy.issue()
+        val registry = PairingSessionRegistry()
+        registry.register(pin = SCANNED_PIN, transferKey = "k", pairToken = TOKEN)
+        val handler = handler(sm, pinPolicy, registry)
+
+        val resp = handler.handle(request(withHandshake = true, pairToken = TOKEN), "1.1.1.1", SCANNED_PIN)
+
+        assertTrue(resp.sessionId.isNotBlank())
+        // The pairing PIN is bound to the session, so the listener's own one-time PIN is untouched —
+        // a five-minute confirmation hang can therefore never turn into a 401 here.
+        assertEquals(issued, pinPolicy.current())
+    }
+
+    @Test
+    fun `a pairToken with no pairing session is a stale generation and is refused`() {
+        val sm = SessionManager()
+        val handler = handler(sm, PinPolicy(), PairingSessionRegistry())
+
+        val ex = assertThrows(ProtocolError.Forbidden::class.java) {
+            handler.handle(request(withHandshake = true, pairToken = TOKEN), "1.1.1.1", SCANNED_PIN)
+        }
+
+        assertEquals(MigrationRejectReason.PAIR_TOKEN.wire, ex.detailBody())
+        assertNull(sm.activeSessionId())
+    }
+
+    @Test
+    fun `with no pairing session and no token the PIN path is unchanged`() {
+        val sm = SessionManager()
+        val pinPolicy = PinPolicy()
+        val issued = pinPolicy.issue()
+        val handler = PrepareUploadHandler(
+            sm, pinPolicy, requirePin = true,
+            migrationValidator = { MigrationGateDecision.Accept },
+            pairingRegistry = PairingSessionRegistry(),
+        )
+
+        assertThrows(ProtocolError.Unauthorized::class.java) {
+            handler.handle(request(withHandshake = true), "1.1.1.1", "000000")
+        }
+        val resp = handler.handle(request(withHandshake = true), "1.1.1.1", issued)
+        assertTrue(resp.sessionId.isNotBlank())
+    }
+
+    // ── Storage precheck: after the gate, before the session ─────────────────────────────────────
+
+    @Test
+    fun `a gate reject wins over a full disk and the storage precheck is never consulted`() {
+        val sm = SessionManager()
+        var precheckCalled = false
+        val handler = PrepareUploadHandler(
+            sm, PinPolicy(), requirePin = false,
+            migrationValidator = { MigrationGateDecision.Reject(MigrationRejectReason.ENV_MISMATCH) },
+            storagePrecheck = { precheckCalled = true; false },
+        )
+
+        val ex = assertThrows(ProtocolError.Forbidden::class.java) {
+            handler.handle(request(withHandshake = true), "1.1.1.1", null)
+        }
+
+        assertEquals(MigrationRejectReason.ENV_MISMATCH.wire, ex.detailBody())
+        assertTrue("the gate's reason must not be masked by a storage answer", !precheckCalled)
+    }
+
+    @Test
+    fun `no room refuses with insufficient-storage and creates no session`() {
+        val sm = SessionManager()
+        var seenBytes = -1L
+        val handler = PrepareUploadHandler(
+            sm, PinPolicy(), requirePin = false,
+            migrationValidator = { MigrationGateDecision.Accept },
+            storagePrecheck = { declared -> seenBytes = declared; false },
+        )
+
+        val ex = assertThrows(ProtocolError.Forbidden::class.java) {
+            handler.handle(request(withHandshake = true, size = DECLARED_BYTES), "1.1.1.1", null)
+        }
+
+        assertEquals(MigrationRejectReason.INSUFFICIENT_STORAGE.wire, ex.detailBody())
+        assertEquals(DECLARED_BYTES, seenBytes)
+        assertNull(sm.activeSessionId())
+    }
+
+    @Test
+    fun `room enough proceeds, and an unknown size reaches the precheck as zero`() {
+        val sm = SessionManager()
+        var seenBytes = -1L
+        val handler = PrepareUploadHandler(
+            sm, PinPolicy(), requirePin = false,
+            migrationValidator = { MigrationGateDecision.Accept },
+            storagePrecheck = { declared -> seenBytes = declared; true },
+        )
+
+        val resp = handler.handle(request(withHandshake = true, size = 0L), "1.1.1.1", null)
+
+        assertTrue(resp.sessionId.isNotBlank())
+        assertEquals(0L, seenBytes)
+    }
+
+    private fun handler(sm: SessionManager, pinPolicy: PinPolicy, registry: PairingSessionRegistry) =
+        PrepareUploadHandler(
+            sm, pinPolicy, requirePin = true,
+            migrationValidator = { MigrationGateDecision.Accept },
+            pairingRegistry = registry,
+        )
+
+    private companion object {
+        /** The PIN the phone read off the computer's code, not one it issued. */
+        const val SCANNED_PIN = "482913"
+        const val TOKEN = "dG9rZW4"
+        const val DECLARED_BYTES = 600L * 1024 * 1024
     }
 }

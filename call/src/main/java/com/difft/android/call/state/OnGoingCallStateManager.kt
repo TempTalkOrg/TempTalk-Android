@@ -2,6 +2,7 @@ package com.difft.android.call.state
 
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
+import com.difft.android.call.data.CallStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -149,6 +150,35 @@ class OnGoingCallStateManager @Inject constructor() {
         return _callingTime.value?.takeIf { it.first == roomId }?.second
     }
 
+    /**
+     * Wall-clock instant the duration timer started, i.e. when the call counts as connected;
+     * 0 while still connecting. The ongoing-call notification publishes it as `when`, which is
+     * what the system status-bar call chip counts up from — left at its default, `when` is
+     * re-stamped on every rebuild and the chip restarts from zero. Shared through this singleton
+     * because the notification is built inside ForegroundService, outside the call's UI scope.
+     */
+    private val _callConnectedAt = MutableStateFlow(0L)
+    val callConnectedAt: StateFlow<Long> = _callConnectedAt.asStateFlow()
+
+    /** Idempotent: reconnects and server switches must not re-stamp a connected call. */
+    fun markCallConnected() {
+        if (_callConnectedAt.value == 0L) _callConnectedAt.value = System.currentTimeMillis()
+    }
+
+    fun callConnectedAt(): Long = _callConnectedAt.value
+
+    /**
+     * Mirrors the active call's status into singleton scope. The foreground service builds the
+     * ongoing-call notification and lives outside the call screen's ViewModel, so this is how it
+     * learns which state to render without being poked by Activity lifecycle callbacks.
+     */
+    private val _callStatus = MutableStateFlow(CallStatus.UNKNOWN)
+    val callStatus: StateFlow<CallStatus> = _callStatus.asStateFlow()
+
+    fun updateCallStatus(status: CallStatus) {
+        _callStatus.value = status
+    }
+
     // 聊天头部通话视图可见性
     private val _chatHeaderCallVisibility = MutableStateFlow(false)
     val chatHeaderCallVisibility: StateFlow<Boolean> = _chatHeaderCallVisibility.asStateFlow()
@@ -206,6 +236,8 @@ class OnGoingCallStateManager @Inject constructor() {
         _isInScreenSharing.value = false
         _callType.value = ""
         _callingTime.value = null
+        _callConnectedAt.value = 0L
+        _callStatus.value = CallStatus.UNKNOWN
         _chatHeaderCallVisibility.value = false
         _controlMessage.value = null
     }

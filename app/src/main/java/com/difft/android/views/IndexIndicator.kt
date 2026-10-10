@@ -3,6 +3,7 @@ package com.difft.android.views
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.ViewGroup
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
 import android.util.TypedValue
@@ -85,5 +86,42 @@ class IndexIndicator @JvmOverloads constructor(
         tvBadge.visibility = if (text.isNullOrEmpty()) GONE else VISIBLE
         tvBadge.text = text.orEmpty()
         tvBadge.setBackgroundResource(backgroundColorRes)
+        applyBadgeSize(dot = false)
+    }
+
+    /**
+     * A plain dot with no number (#1332): shown when the only unread state is a manual "mark as
+     * unread", which is not counted. Same view as the count badge, so the geometry is switched
+     * explicitly and restored for the next count.
+     */
+    fun setBadgeDot(backgroundColorRes: Int = com.difft.android.chat.R.drawable.chat_missing_number_bg) {
+        tvBadge.visibility = VISIBLE
+        tvBadge.text = ""
+        tvBadge.setBackgroundResource(backgroundColorRes)
+        applyBadgeSize(dot = true)
+    }
+
+    private var badgeIsDot = false
+
+    private fun applyBadgeSize(dot: Boolean) {
+        if (dot == badgeIsDot) return // the rooms flow emits often; only relayout on a real switch
+        badgeIsDot = dot
+        val density = resources.displayMetrics.density
+        val minPx = ((if (dot) BADGE_DOT_DP else BADGE_COUNT_MIN_DP) * density).toInt()
+        val paddingPx = ((if (dot) 0 else BADGE_COUNT_PADDING_DP) * density).toInt()
+        tvBadge.minWidth = minPx
+        tvBadge.minHeight = minPx
+        tvBadge.setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+        tvBadge.layoutParams = tvBadge.layoutParams.apply {
+            width = if (dot) minPx else ViewGroup.LayoutParams.WRAP_CONTENT
+            height = if (dot) minPx else ViewGroup.LayoutParams.WRAP_CONTENT
+        }
     }
 }
+
+/** XML geometry of tv_badge (layout_index_indicator.xml), restored after a dot render. */
+private const val BADGE_COUNT_MIN_DP = 16
+private const val BADGE_COUNT_PADDING_DP = 2
+
+/** Tab dot for a manual-unread-only state (design: 10dp). */
+private const val BADGE_DOT_DP = 10

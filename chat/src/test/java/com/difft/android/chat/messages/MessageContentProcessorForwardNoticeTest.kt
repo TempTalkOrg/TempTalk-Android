@@ -96,6 +96,7 @@ class MessageContentProcessorForwardNoticeTest {
             groupUtil = mockk(relaxed = true),
             weakContactReconciler = mockk(relaxed = true),
             gson = Gson(),
+            conversationUnreadMarker = mockk(relaxed = true),
         )
     }
 

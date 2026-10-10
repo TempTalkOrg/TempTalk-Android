@@ -8,7 +8,8 @@ import org.junit.Test
 /**
  * Pins the `dir` contract (统一由手机扫码 §4.1): absent or unknown means upload — the behaviour every
  * scanner had before the field existed — and a payload carrying `dir` still round-trips through the
- * same codec, so an older scanner decodes it and simply ignores the field.
+ * same codec, so an older scanner decodes it and simply ignores the field. `download` now selects
+ * reverse pairing, but the wire value is unchanged so codes minted by earlier releases still decode.
  */
 class TransferDirectionTest {
 
@@ -22,7 +23,7 @@ class TransferDirectionTest {
     }
 
     @Test
-    fun `dir download selects the pull direction`() {
+    fun `dir download selects the reverse-pairing direction`() {
         val payload = P2pJson.decodeFromString<QrPayload>(base.dropLast(1) + ""","dir":"download"}""")
         assertEquals("download", payload.dir)
         assertEquals(TransferDirection.DOWNLOAD, payload.direction)
@@ -41,18 +42,5 @@ class TransferDirectionTest {
         val payload = P2pJson.decodeFromString<QrPayload>(base)
         val encoded = P2pJson.encodeToString(payload)
         assertEquals(false, encoded.contains("\"dir\""))
-    }
-
-    @Test
-    fun `prepare-download response tolerates upstream extras and missing tokens`() {
-        val json = """{"info":{"alias":"x","fingerprint":"f"},"sessionId":"s1","files":{"f1":{"id":"f1","fileName":"c.ttmig","size":123,"fileType":"application/octet-stream"}},"tokens":{"f1":"t1"},"migration":{"env":"e","account":"a","appVersion":"1","formatVersion":"1.0"}}"""
-        val resp = P2pJson.decodeFromString<PrepareDownloadResponse>(json)
-        assertEquals("s1", resp.sessionId)
-        assertEquals(123L, resp.files.getValue("f1").size)
-        assertEquals("t1", resp.tokens["f1"])
-        assertEquals("a", resp.migration?.sourceAccount)
-        val bare = P2pJson.decodeFromString<PrepareDownloadResponse>("""{"sessionId":"s2"}""")
-        assertEquals(0, bare.files.size)
-        assertNull(bare.migration)
     }
 }

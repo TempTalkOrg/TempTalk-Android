@@ -547,6 +547,8 @@ class ChatMessageListFragment : Fragment() {
             val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.RIGHT, ItemTouchHelper.RIGHT) {
 
                 override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int {
+                    // No swipe-to-reply while the action menu forwards list scrolls (#1294)
+                    if (messageActionCoordinator?.isShowing == true) return makeMovementFlags(0, 0)
                     val swipeFlags = ItemTouchHelper.END
                     return makeMovementFlags(0, swipeFlags)
                 }
@@ -639,6 +641,8 @@ class ChatMessageListFragment : Fragment() {
 
             binding.recyclerViewMessage.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
                 override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                    // Touches forwarded by the action menu overlay only scroll the list (#1294)
+                    if (messageActionCoordinator?.isShowing == true) return false
                     return gestureDetector.onTouchEvent(e)
                 }
 
@@ -734,7 +738,7 @@ class ChatMessageListFragment : Fragment() {
                     else -> globalSaveToPhotos // Follow global
                 }
                 chatMessageAdapter.shouldSaveToPhotos = shouldSaveToPhotos
-                L.i { "[SaveToPhotos] conversationSetting: ${conversationSet?.saveToPhotos}, globalSetting: $globalSaveToPhotos, result: $shouldSaveToPhotos" }
+                L.d { "[SaveToPhotos] conversationSetting: ${conversationSet?.saveToPhotos}, globalSetting: $globalSaveToPhotos, result: $shouldSaveToPhotos" }
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
     }
@@ -795,7 +799,7 @@ class ChatMessageListFragment : Fragment() {
 
     private fun handleChatMessageListState(state: ChatMessageListUIState) {
         L.i {
-            "[${chatViewModel.forWhat.id}] handleChatMessageListState: size=${state.chatMessages.size}, " +
+            "[Chat][${chatViewModel.forWhat.id}] handleChatMessageListState: size=${state.chatMessages.size}, " +
                 "window=${state.windowSize}, scrollAction=${state.scrollAction}, " +
                 "reachedLatest=${state.hasReachedLatest}, reachedHistoryStart=${state.hasReachedHistoryStart}"
         }
@@ -871,7 +875,7 @@ class ChatMessageListFragment : Fragment() {
                 doAfterFirstRender()
             }
             isFirstShow = false
-            L.i { "[${chatViewModel.forWhat.id}] First time render messages cost ${System.currentTimeMillis() - chatViewModel.viewModelCreateTime}" }
+            L.i { "[Chat][${chatViewModel.forWhat.id}] First time render messages cost ${System.currentTimeMillis() - chatViewModel.viewModelCreateTime}" }
         }
     }
 

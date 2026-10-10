@@ -281,6 +281,20 @@
     </issue>
 
     <!--
+        DiscouragedApi on android:screenOrientation — every opaque activity declares
+        `locked` on purpose: it stops the window manager from consulting the sensor in
+        the gap before OrientationPolicy writes the real orientation in onCreate (a phone
+        held landscape used to cold-start in landscape and snap to portrait). The policy,
+        not the manifest, decides the final orientation, and Android 16's large-screen
+        exemption ignoring the manifest value is exactly the behaviour we want there.
+        ManifestOrientationLockInvariantTest pins the manifests. Scoped to the
+        orientation message so other DiscouragedApi findings stay active.
+    -->
+    <issue id="DiscouragedApi">
+        <ignore regexp="Fixed screen orientations will be ignored" />
+    </issue>
+
+    <!--
         Aligned16KB — the app ships on Google Play with all RELEASED ABIs
         (arm64-v8a + armeabi-v7a) 16 KB-aligned. The only Aligned16KB warnings
         come from x86 / x86_64 native libs in dependencies (e.g. JNA's

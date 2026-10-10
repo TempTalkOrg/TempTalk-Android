@@ -1258,15 +1258,32 @@ class ChatMessageInputFragment : Fragment() {
 
     private fun updateViewByFriendCheck() {
         if (chatViewModel.forWhat is For.Account) {
-            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                isFriend = wcdb.contactor.getFirstObject(DBContactorModel.id.eq(chatViewModel.forWhat.id)) != null
-                withContext(Dispatchers.Main) {
-                    if (!isAdded || view == null) return@withContext
+            // Until the first lookup lands, the input row keeps its space but stays invisible, so a
+            // non-friend chat never flashes the friend-only actions and then collapses them.
+            if (!isFriendResolved) binding.clSendMessage.alpha = 0f
+            val lookupBinding = binding
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    isFriend = withContext(Dispatchers.IO) {
+                        wcdb.contactor.getFirstObject(DBContactorModel.id.eq(chatViewModel.forWhat.id)) != null
+                    }
+                    if (!isAdded || view == null) return@launch
                     updateSubmitButtonView()
                     updateBottomView()
                     updateConfidential()
                     if (!isFriend) {
                         checkAndUpdateFriendRequestStatus()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.e { "[ChatMessageInputFragment] friend check failed: ${e.stackTraceToString()}" }
+                } finally {
+                    // Always reveal the input, even if the lookup failed. Only for the view this lookup
+                    // started on: a late finally from a destroyed view must not reveal a re-created one.
+                    if (isAdded && view != null && binding === lookupBinding) {
+                        isFriendResolved = true
+                        binding.clSendMessage.alpha = 1f
                     }
                 }
             }
@@ -1859,6 +1876,7 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     private var isFriend = false
+    private var isFriendResolved = false
 
     private fun updateBottomView() {
         if (!isGroup) {
@@ -3268,6 +3286,8 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        // The next view inflates with the friend-layout defaults, so it must be gated again.
+        isFriendResolved = false
         // Remove OnGlobalLayoutListener to prevent memory leak
         // The OnAttachStateChangeListener should have already removed it when view detached,
         // but we also try to remove here as a safety measure

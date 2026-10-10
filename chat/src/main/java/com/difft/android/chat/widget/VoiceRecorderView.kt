@@ -443,7 +443,7 @@ class VoiceRecorderView @JvmOverloads constructor(
                         pickedFile == null || pickedLength == 0L -> {
                             L.w {
                                 "[VoiceRecorder] picked candidate not usable " +
-                                    "(file=${pickedFile?.absolutePath} length=$pickedLength)"
+                                    "(ext=${pickedFile?.extension} length=$pickedLength)"
                             }
                             candidates.forEach { it.file?.let(::deleteCandidateFile) }
                             RecordingState.RecordFailed(RecordingState.Reason.RECORDER_INIT_FAILED)

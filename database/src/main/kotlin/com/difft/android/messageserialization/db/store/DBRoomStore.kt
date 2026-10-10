@@ -13,6 +13,8 @@ import org.difft.app.database.updateRoomUnreadState
 import org.difft.app.database.wcdb
 import difft.android.messageserialization.For
 import difft.android.messageserialization.RoomStore
+import difft.android.messageserialization.model.MARK_UNREAD_FLAG_CLEAR
+import difft.android.messageserialization.model.MARK_UNREAD_FLAG_UNREAD
 import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.MENTIONS_TYPE_ALL
 import difft.android.messageserialization.model.MENTIONS_TYPE_ME
@@ -48,8 +50,10 @@ class DBRoomStore @Inject constructor(
 
     fun createRoomIfNotExist(forWhat: For): RoomModel {
         val startTime = System.currentTimeMillis()
+        var created = false
         val room =
             wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id)) ?: (RoomModel().apply {
+                created = true
                 this.roomId = forWhat.id
                 this.roomType = forWhat.typeValue
                 if (forWhat is For.Group) {
@@ -92,8 +96,11 @@ class DBRoomStore @Inject constructor(
         // way (a migration importing local state) stays invisible forever: Saved Messages has no
         // server-side counterpart to refill it and no messages to trigger a message-path update.
         if (forWhat.id == globalServices.myId) repairSavedMessages(room)
-        val endTime = System.currentTimeMillis()
-        L.i { "[Message] createRoomIfNotExist took ${endTime - startTime}ms for room ${forWhat.id}" }
+        val cost = System.currentTimeMillis() - startTime
+        // Called for every incoming message; only a creation or a slow lookup is worth a line.
+        if (created || cost > SLOW_ROOM_LOOKUP_MS) {
+            L.i { "[Message] createRoomIfNotExist created=$created cost=${cost}ms room=${forWhat.id}" }
+        }
         return room
     }
 
@@ -175,6 +182,26 @@ class DBRoomStore @Inject constructor(
 
     override suspend fun getPinnedTime(forWhat: For): Optional<Long> {
         return findRoom(forWhat)?.let { Optional.ofNullable(it.pinnedTime) } ?: Optional.empty()
+    }
+
+    override suspend fun getMarkUnread(forWhat: For): Pair<Int, Long> {
+        val room = findRoom(forWhat) ?: return MARK_UNREAD_FLAG_CLEAR to 0L
+        return room.markUnreadFlag to room.markUnreadAt
+    }
+
+    override suspend fun updateMarkUnread(forWhat: For, markUnreadFlag: Int, markUnreadAt: Long) {
+        L.i { "[DBRoomStore] updateMarkUnread id:${forWhat.id} flag:$markUnreadFlag at:$markUnreadAt" }
+        createRoomIfNotExist(forWhat)
+        writeMarkUnread(forWhat, markUnreadFlag, markUnreadAt)
+    }
+
+    private fun writeMarkUnread(forWhat: For, markUnreadFlag: Int, markUnreadAt: Long) {
+        wcdb.room.updateRow(
+            arrayOf(Value(markUnreadFlag), Value(markUnreadAt)),
+            arrayOf(DBRoomModel.markUnreadFlag, DBRoomModel.markUnreadAt),
+            DBRoomModel.roomId.eq(forWhat.id)
+        )
+        RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
     }
 
     fun getConfidentialMode(roomId: String): Int {
@@ -376,6 +403,11 @@ class DBRoomStore @Inject constructor(
                 room.updateRoomUnreadState(readPosition)
                 L.i { "[Message] Read position advanced from ${room.readPosition} to $readPosition for ${room.roomId}, clearing notifications" }
                 messageNotificationUtil.cancelNotificationsByConversation(room.roomId)
+                // Reading past the mark time supersedes a manual "unread" mark (Desktop onReadPosition rule).
+                if (room.markUnreadFlag == MARK_UNREAD_FLAG_UNREAD && readPosition >= room.markUnreadAt) {
+                    L.i { "[DBRoomStore] readPosition passed markUnreadAt=${room.markUnreadAt}, clearing manual unread id:${forWhat.id}" }
+                    writeMarkUnread(forWhat, MARK_UNREAD_FLAG_CLEAR, room.markUnreadAt)
+                }
 
                 // ✅ 触发会话列表刷新，更新未读徽章
                 RoomChangeTracker.trackRoom(forWhat.id, RoomChangeType.REFRESH)
@@ -459,3 +491,6 @@ class DBRoomStore @Inject constructor(
         return mentionType to mentionTimeStamps
     }
 }
+
+/** Room lookups slower than this are logged even when the room already existed. */
+private const val SLOW_ROOM_LOOKUP_MS = 50L

@@ -60,6 +60,7 @@ class DBMessageStoreTranslateGuardTest {
         TranslateStatus.SameLanguage,
         TranslateStatus.Failed,
         TranslateStatus.FailedTooLong,
+        TranslateStatus.FailedModel,
     )
 
     @Before

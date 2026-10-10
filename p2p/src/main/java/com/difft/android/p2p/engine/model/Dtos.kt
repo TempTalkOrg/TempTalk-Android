@@ -63,6 +63,12 @@ data class PrepareUploadRequest(                          // prepare-upload body
      * server passes it to a validator; a generic file receiver ignores it.
      */
     @SerialName("migration") val migration: MigrationHandshake? = null,
+    /**
+     * Reverse pairing only: the single-use token the receiving device registered before it asked this
+     * peer to connect back. Matched before the PIN, so a stale generation is refused with 403
+     * `pair-token`. Omitted when null, so a phone-to-phone `prepare-upload` stays byte-identical.
+     */
+    @SerialName("pairToken") val pairToken: String? = null,
 )
 
 /**
@@ -214,9 +220,9 @@ data class QrPayload(
     @SerialName("appVersion") val appVersion: String? = null,    // receiver app version
     @SerialName("formatVersion") val formatVersion: String? = null, // receiver supported container MAJOR.MINOR
     /**
-     * Which way the bytes flow, from the scanner's point of view: `"upload"` — the scanner sends via
-     * `prepare-upload`/`upload`; `"download"` — the scanner pulls the displayer's export via
-     * `prepare-download`/`download`. Absent or unknown means upload. See [TransferDirection].
+     * Which way the bytes flow: `"upload"` — the scanner sends via `prepare-upload`/`upload`;
+     * `"download"` — the displayer holds the data and the scanner reverse-pairs so the displayer
+     * uploads it here. Absent or unknown means upload. See [TransferDirection].
      */
     @SerialName("dir") val dir: String? = null,
     /**
@@ -229,26 +235,6 @@ data class QrPayload(
     /** The addresses to try, never empty. */
     val candidates: List<String> get() = ips.ifEmpty { listOf(ip) }
 }
-
-/** `prepare-download` body: the puller's identity and handshake; the displayer owns the file list. */
-@Serializable
-data class PrepareDownloadRequest(
-    @SerialName("info") val info: DeviceInfo,
-    @SerialName("migration") val migration: MigrationHandshake? = null,
-)
-
-/**
- * `prepare-download` 200 body. [files] is the upstream shape (fileId → metadata, with the real byte
- * size), [tokens] the per-file download tokens and [migration] the displayer's own handshake so the
- * puller can run the same gate the receiver runs at `prepare-upload`.
- */
-@Serializable
-data class PrepareDownloadResponse(
-    @SerialName("sessionId") val sessionId: String,
-    @SerialName("files") val files: Map<String, FileMetadata> = emptyMap(),
-    @SerialName("tokens") val tokens: Map<String, String> = emptyMap(),
-    @SerialName("migration") val migration: MigrationHandshake? = null,
-)
 
 /**
  * `link-intent` body: sent by the phone before it links a Desktop that showed a compound login QR,
@@ -298,13 +284,6 @@ enum class LinkPeerState(val wire: String) {
         fun of(wire: String?): LinkPeerState? = entries.firstOrNull { it.wire == wire?.trim()?.lowercase() }
     }
 }
-
-/** `download-result` body: the puller's import verdict; [error] is a wire reason token. */
-@Serializable
-data class DownloadResultRequest(
-    @SerialName("ok") val ok: Boolean,
-    @SerialName("error") val error: String? = null,
-)
 
 /**
  * Single JSON codec for the whole module.

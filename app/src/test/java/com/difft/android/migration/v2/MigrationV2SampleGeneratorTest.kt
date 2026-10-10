@@ -228,9 +228,9 @@ class MigrationV2SampleGeneratorTest {
             )
         )
         // Byte-carrying attachment, populated exactly as NeutralProjections.attachment(bytesPresent=true):
-        // the byte frame is named by stableId; serverAttachmentId/encryptionKey ALWAYS
-        // travel (they are the attachment's identity/credentials, which the destination reads
-        // unconditionally — AttachmentModel.authorityId!!), independent of byte presence;
+        // the byte frame is named by stableId; serverAttachmentId/encryptionKey travel whenever
+        // the source has them (they are the attachment's identity/credentials), independent of
+        // byte presence;
         // pointerOnly = false. width/height come from the real PNG (8×8); durationMs = null (image).
         out += NeutralRecord.Attachment(
             NeutralAttachment(

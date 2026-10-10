@@ -315,7 +315,7 @@ class MainPageWithTopStatusViewTest {
         val callIntent = CallVmTestHarness.buildCallIntent(CallIntent.Action.JOIN_CALL, CallType.GROUP.type)
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.GROUP.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
-        vm.timerManager.startCallTimer { }
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = false)
         composeTestRule.waitForIdle()
@@ -401,7 +401,7 @@ class MainPageWithTopStatusViewTest {
         val vm = CallVmTestHarness.buildViewModel(callIntent, contactorCacheManager = contactorCacheManager)
         vm.participantManager.setParticipants(listOf(remote))
         // Mid-call: the timer started while CONNECTED and keeps running through the reconnect.
-        vm.timerManager.startCallTimer { }
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = true, contactorCacheManager = contactorCacheManager)
         composeTestRule.waitUntil(timeoutMillis = 5_000) {
@@ -438,7 +438,7 @@ class MainPageWithTopStatusViewTest {
         // LCallViewModel's onConnected handling) — callTimerRunning gates the duration text
         // (develop commit 67edad0d1, "gate 1v1 timer on media readiness"), so the harness must
         // start it too or the duration slot renders the encrypted text instead.
-        vm.timerManager.startCallTimer { }
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = true, contactorCacheManager = contactorCacheManager)
         composeTestRule.waitUntil(timeoutMillis = 5_000) {
@@ -461,7 +461,7 @@ class MainPageWithTopStatusViewTest {
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.GROUP.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
         // See T5-9's comment: callTimerRunning must be started explicitly in this harness.
-        vm.timerManager.startCallTimer { }
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = false)
         composeTestRule.waitForIdle()
@@ -564,7 +564,7 @@ class MainPageWithTopStatusViewTest {
         val callIntent = CallVmTestHarness.buildCallIntent(CallIntent.Action.JOIN_CALL, CallType.GROUP.type)
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.GROUP.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
-        vm.timerManager.startCallTimer { }
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
         return vm to callIntent
     }
 
@@ -607,7 +607,7 @@ class MainPageWithTopStatusViewTest {
         val callIntent = CallVmTestHarness.buildCallIntent(CallIntent.Action.START_CALL, CallType.ONE_ON_ONE.type)
         CallVmTestHarness.stubCallStatus(CallStatus.CONNECTED, CallType.ONE_ON_ONE.type)
         val vm = CallVmTestHarness.buildViewModel(callIntent)
-        vm.timerManager.startCallTimer { }
+        vm.timerManager.startCallTimer(System.currentTimeMillis()) { }
         // The headcount — local + one peer — is what turns a bad remote into a banner instead of a
         // tile badge. The list the production wiring publishes is exactly local + the room's remotes.
         vm.participantManager.setParticipants(listOf(localParticipant(), remoteParticipant("alice")))

@@ -51,7 +51,7 @@ fun AttachmentModel.synthesizedLocalId(): String =
 /**
  * The attachment shape used INSIDE a quote. Intentionally NOT [AttachmentModel.toAttachment]:
  *  - `thumbnail` normalises an empty byte array to null (mirrors how quotes are written)
- *  - `id` / `authorityId` fall back to `""` / `0L` instead of `!!`
+ *  - `contentType` falls back to `""`, not [GENERIC_CONTENT_TYPE]: a quote preview never opens the file
  *  - `totalTime` / `amplitudes` are not carried
  *
  * Merging the two is a behaviour regression on quote thumbnails.

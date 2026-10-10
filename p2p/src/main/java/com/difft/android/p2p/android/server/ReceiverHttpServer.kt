@@ -3,6 +3,7 @@ package com.difft.android.p2p.android.server
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.p2p.android.tls.SelfSignedCert
 import com.difft.android.p2p.engine.io.FileSink
+import com.difft.android.p2p.engine.io.TransferCommittedUnconfirmed
 import com.difft.android.p2p.engine.model.CancelResponse
 import com.difft.android.p2p.engine.model.ClaimRequest
 import com.difft.android.p2p.engine.model.DeviceInfo
@@ -11,12 +12,14 @@ import com.difft.android.p2p.engine.model.PrepareUploadRequest
 import com.difft.android.p2p.engine.model.ProtocolError
 import com.difft.android.p2p.engine.model.TransferStages
 import com.difft.android.p2p.engine.model.TransferTerminal
+import com.difft.android.p2p.engine.session.PairingSessionRegistry
 import com.difft.android.p2p.engine.session.PinPolicy
 import com.difft.android.p2p.engine.session.SessionManager
 import com.difft.android.p2p.engine.upload.CancelHandler
 import com.difft.android.p2p.engine.upload.MigrationHandshakeValidator
 import com.difft.android.p2p.engine.upload.PrepareUploadHandler
 import com.difft.android.p2p.engine.upload.StatusHandler
+import com.difft.android.p2p.engine.upload.StoragePrecheck
 import com.difft.android.p2p.engine.upload.UploadHandler
 import com.difft.android.p2p.engine.upload.UploadResult
 import java.net.ServerSocket
@@ -71,6 +74,13 @@ class ReceiverHttpServer(
      * [InterimResponseHeartbeat]. Overridable so a test can observe several beats in well under a second.
      */
     private val verdictHeartbeatIntervalMs: Long = InterimResponseHeartbeat.INTERVAL_MS,
+    /**
+     * The pending reverse-pairing session, non-null only while this device asked a peer to connect
+     * back — see [PrepareUploadHandler]. Null on every phone-to-phone and same-device receive.
+     */
+    private val pairingRegistry: PairingSessionRegistry? = null,
+    /** Receiver-side free-space answer for `prepare-upload`; null where no storage rule applies. */
+    storagePrecheck: StoragePrecheck? = null,
 ) {
     /**
      * Our advertised DeviceInfo, served from `/info` + `/register`. Mutable because the bound port is
@@ -106,7 +116,14 @@ class ReceiverHttpServer(
         data object Stopped : ServerEvent
     }
 
-    private val prepareHandler = PrepareUploadHandler(sessionManager, pinPolicy, requirePin, migrationValidator)
+    private val prepareHandler = PrepareUploadHandler(
+        sessionManager = sessionManager,
+        pinPolicy = pinPolicy,
+        requirePin = requirePin,
+        migrationValidator = migrationValidator,
+        pairingRegistry = pairingRegistry,
+        storagePrecheck = storagePrecheck,
+    )
     private val uploadHandler = UploadHandler(sessionManager, fileSink)
     private val cancelHandler = CancelHandler(sessionManager)
     private val statusHandler = StatusHandler(sessionManager)
@@ -227,6 +244,9 @@ class ReceiverHttpServer(
                 body = body,
                 onAuthorized = {
                     authorized = true
+                    // Past this point a reverse pairing can no longer be failed by its own request:
+                    // the upload it was arranging has started.
+                    pairingRegistry?.markUploading()
                     sessionManager.stage(TransferStages.RECEIVING)
                     onEvent(ServerEvent.UploadStarted(sessionId, fileId))
                 },
@@ -237,6 +257,14 @@ class ReceiverHttpServer(
                 },
             )
         } catch (e: Exception) {
+            if (e is TransferCommittedUnconfirmed) {
+                // No terminal, ever: the sender must read "unknown" from /status, never "failed" or
+                // "cancelled". markUnconfirmed also keeps clear() from retiring the session as
+                // CANCELLED when this listener is torn down later.
+                L.w { "[MigrationV2][P2P][Rx] committed but unconfirmed — no response, no terminal" }
+                sessionManager.markUnconfirmed(sessionId)
+                throw e
+            }
             // A session the sender already cancelled is retained as such; this is a no-op then.
             if (authorized) sessionManager.markTerminal(sessionId, TransferTerminal.FAILED)
             throw e

@@ -23,7 +23,7 @@ class AppIconBadgeManager @Inject constructor(
     }
 
     private fun setSamsungBadgeCount(context: Context, badgeCount: Int) {
-        L.i { "setSamsungBadgeCount badgeCount=$badgeCount" }
+        L.d { "[AppIconBadge] samsung badgeCount=$badgeCount" }
         val intent = Intent("android.intent.action.BADGE_COUNT_UPDATE")
         intent.putExtra("badge_count", badgeCount)
         intent.putExtra("badge_count_package_name", context.packageName)
@@ -40,7 +40,7 @@ class AppIconBadgeManager @Inject constructor(
     }
 
     private fun setXiaomiBadgeCount(context: Context, badgeCount: Int) {
-        L.i { "setXiaomiBadgeCount badgeCount=$badgeCount" }
+        L.d { "[AppIconBadge] xiaomi badgeCount=$badgeCount" }
         val intent = Intent("android.intent.action.APPLICATION_MESSAGE_UPDATE")
         intent.putExtra("android.intent.extra.update_application_component_name", "${context.packageName}/${getLauncherClassName(context)}")
         intent.putExtra("android.intent.extra.update_application_message_text", badgeCount.toString())
@@ -48,7 +48,7 @@ class AppIconBadgeManager @Inject constructor(
     }
 
     private fun setHuaweiBadgeCount(context: Context, badgeCount: Int) {
-        L.i { "setHuaweiBadgeCount badgeCount=$badgeCount" }
+        L.d { "[AppIconBadge] huawei badgeCount=$badgeCount" }
         val bundle = Bundle().apply {
             putString("package", context.packageName)
             putString("class", getLauncherClassName(context))
@@ -63,7 +63,7 @@ class AppIconBadgeManager @Inject constructor(
     }
 
     private fun setOppoBadgeCount(context: Context, badgeCount: Int) {
-        L.i { "setOppoBadgeCount badgeCount=$badgeCount" }
+        L.d { "[AppIconBadge] oppo badgeCount=$badgeCount" }
         val intent = Intent("com.oppo.unsettledevent")
         intent.putExtra("pakeageName", context.packageName)
         intent.putExtra("number", badgeCount)

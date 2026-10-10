@@ -76,4 +76,16 @@ enum class MigrationRejectReason(val wire: String) {
      * fail-fast front line: on this path the receiver's entire premise is "I have nothing here".
      */
     TARGET_NOT_EMPTY("target-not-empty"),
+
+    /**
+     * Reverse pairing: the `pairToken` does not match the pending pairing session, or the request
+     * carries one when no session is pending. The sender re-scans the code.
+     */
+    PAIR_TOKEN("pair-token"),
+
+    /**
+     * The receiving device does not have room for this transfer, or ran out of it before its commit
+     * boundary. Nothing was committed; the sender may retry once space is free.
+     */
+    INSUFFICIENT_STORAGE("insufficient-storage"),
 }

@@ -340,6 +340,11 @@ object DifftColorAccessor {
         @Composable @ReadOnlyComposable
         get() = extended.bg5
 
+    /** Library `bgwhite`: a fixed light surface in both themes, e.g. the incoming-call slider handle. */
+    val bgWhite: Color
+        @Composable @ReadOnlyComposable
+        get() = extended.bgWhite
+
     val line: Color
         @Composable @ReadOnlyComposable
         get() = extended.line

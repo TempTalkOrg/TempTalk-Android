@@ -171,13 +171,14 @@ class MessageActionConfigBuilder(
 
             // ② Transform — Translate (text)
             if (translateSupported && hasTextContent(message)) {
-                // "Turn off" is only meaningful while a translation is actually on screen. The
-                // transient states (translating / same language / failed) render nothing, so
-                // offering "off" there would be a button that does nothing.
+                // "Turn off" whenever the translate block is on screen: a result, the translating
+                // placeholder, or an error row (which "off" is the only way to dismiss). Invisible and
+                // SameLanguage render no block, so they offer "translate" instead.
                 val translateStatus = message.translateData?.translateStatus
-                val showingTranslation =
-                    translateStatus == TranslateStatus.ShowCN || translateStatus == TranslateStatus.ShowEN
-                if (showingTranslation) {
+                val blockOnScreen = translateStatus != null &&
+                    translateStatus != TranslateStatus.Invisible &&
+                    translateStatus != TranslateStatus.SameLanguage
+                if (blockOnScreen) {
                     actions.add(MessageAction.translateOff())
                 } else {
                     actions.add(MessageAction.translate())

@@ -25,6 +25,7 @@
         android:textColor="@color/t.primary"
         android:textSize="@dimen/login_title_size"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_goneMarginTop="52dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/iv_logo" />
 
@@ -34,6 +35,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:gravity="center"
+        android:minLines="2"
         android:paddingHorizontal="16dp"
         android:textColor="@color/t.error"
         android:textSize="14sp"
@@ -87,7 +89,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="56dp"
         android:layout_marginEnd="56dp"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="20dp"
         android:layout_marginBottom="16dp"
         android:visibility="gone"
         app:layout_constrainedWidth="true"
@@ -105,7 +107,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
-        android:layout_marginBottom="50dp"
+        android:layout_marginBottom="@dimen/screen_lock_options_bottom_margin"
         android:gravity="center"
         android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="parent"

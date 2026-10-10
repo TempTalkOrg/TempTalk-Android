@@ -225,6 +225,12 @@ class SignalServiceDataClass(
                         For.Account(payloadConv.number)
                     else -> For.Account(senderId) // defensive: NTS fallback
                 }
+            } else if (signalServiceContent.syncMessage.hasMarkAsUnread()) {
+                // Self-sync of the manual mark-unread state: the payload carries the
+                // ConversationId inline (peer uid for 1v1, group id for groups).
+                val conv = signalServiceContent.syncMessage.markAsUnread
+                    .takeIf { it.hasConversation() }?.conversation
+                conv?.parseToFor(signalServiceEnvelope.timestamp) ?: For.Account(senderId)
             } else {
                 throw IllegalArgumentException("syncMessage doesn't have sent or read or topicMark or topicAction")
             }

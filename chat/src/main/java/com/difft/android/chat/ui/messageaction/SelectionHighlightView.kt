@@ -75,6 +75,10 @@ class SelectionHighlightView(
         
         val textView = targetTextView ?: return
         val layout = textView.layout ?: return
+        // The text can shrink before the next setSelection (a rebind re-truncates it, #1294).
+        val length = textView.text.length
+        val selectionStart = selectionStart.coerceIn(0, length)
+        val selectionEnd = selectionEnd.coerceIn(0, length)
         
         if (selectionStart >= selectionEnd) return
         

@@ -17,7 +17,7 @@
             android:exported="false"
             android:launchMode="singleInstance"
             android:resizeableActivity="true"
-            android:screenOrientation="portrait"
+            android:screenOrientation="locked"
             android:showOnLockScreen="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
@@ -29,6 +29,7 @@
 
         <activity
             android:name=".node.LCallServerNodeActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
             android:exported="false"
             android:resizeableActivity="true"

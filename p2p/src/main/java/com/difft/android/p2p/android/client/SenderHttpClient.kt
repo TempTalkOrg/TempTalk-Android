@@ -2,13 +2,11 @@ package com.difft.android.p2p.android.client
 
 import androidx.annotation.VisibleForTesting
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.p2p.android.tls.FingerprintTrustManager
 import com.difft.android.p2p.engine.io.FileSource
 import com.difft.android.p2p.engine.model.ClaimRequest
 import com.difft.android.p2p.engine.model.CancelResponse
 import com.difft.android.p2p.engine.model.StatusResponse
 import com.difft.android.p2p.engine.model.DeviceInfo
-import com.difft.android.p2p.engine.model.DownloadResultRequest
 import com.difft.android.p2p.engine.model.FileMetadata
 import com.difft.android.p2p.engine.model.LinkIntentRequest
 import com.difft.android.p2p.engine.model.LinkPeerState
@@ -16,41 +14,27 @@ import com.difft.android.p2p.engine.model.LinkPeerStateResponse
 import com.difft.android.p2p.engine.model.LinkPrecheckRequest
 import com.difft.android.p2p.engine.model.MigrationHandshake
 import com.difft.android.p2p.engine.model.P2pJson
-import com.difft.android.p2p.engine.model.PrepareDownloadRequest
-import com.difft.android.p2p.engine.model.PrepareDownloadResponse
 import com.difft.android.p2p.engine.model.PrepareUploadRequest
 import com.difft.android.p2p.engine.model.PrepareUploadResponse
 import com.difft.android.p2p.engine.model.QrPayload
-import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import okio.BufferedSink
 import okio.buffer
 
 /**
- * Sender side of the transfer: builds an [OkHttpClient] whose TLS is pinned to the QR's `fp` via
- * [FingerprintTrustManager] (that fingerprint only — MITM defense), then drives `register` /
- * `prepare-upload?pin=` / `upload` / `cancel`.
+ * Sender side of the transfer: takes an [OkHttpClient] pinned to the QR's `fp` from
+ * [PinnedHttpClients] (that fingerprint only — MITM defense), re-times it per endpoint, then drives
+ * `register` / `prepare-upload?pin=` / `upload` / `cancel`.
  *
  * The upload streams the [FileSource] as a streaming [RequestBody], no full-file buffering.
- * `hostnameVerifier { _, _ -> true }` is deliberate: the connection is to a raw LAN IP that cannot
- * match the self-signed CN, and trust comes from the fingerprint pin, not the hostname.
  */
 class SenderHttpClient(
     private val ip: String,
@@ -66,18 +50,8 @@ class SenderHttpClient(
     /** Our own extension endpoints live under a separate prefix so upstream LocalSend additions cannot collide. */
     private val migrationBaseUrl = "https://$ip:$port/api/migration/v1"
 
-    private val defaultClient: OkHttpClient by lazy {
-        val tm = FingerprintTrustManager(fingerprint)
-        val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), SecureRandom()) }
-        OkHttpClient.Builder()
-            .sslSocketFactory(ssl.socketFactory, tm)
-            .hostnameVerifier { _, _ -> true } // see kdoc — the pin is the trust, not the hostname
-            // A LAN peer answers within milliseconds; 5 s already covers a Wi-Fi power-save wake.
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(0, TimeUnit.SECONDS) // control calls carry no body worth timing; the upload sets its own
-            .build()
-    }
+    /** The pinned base every client here is re-timed from; see [PinnedHttpClients]. */
+    private val defaultClient: OkHttpClient by lazy { PinnedHttpClients.pinned(fingerprint) }
 
     /**
      * Test-only override for [client]: lets a test inject a mocked client whose `newCall` returns a
@@ -171,95 +145,11 @@ class SenderHttpClient(
                 .post(P2pJson.encodeToString(request).jsonBody())
                 .build()
             client.newCall(req).await().use { resp ->
-                if (!resp.isSuccessful) throwRejection("prepare-upload", resp)
+                if (!resp.isSuccessful) PrepareRejection.throwRejection("prepare-upload", resp)
                 L.i { "[P2P][Sender] prepared sessionId via ${resp.code} files=${files.size}" }
                 P2pJson.decodeFromString(resp.body.string())
             }
         }
-
-    /**
-     * `prepare-download`, the pull-direction twin of [prepareUpload]: the displayer owns the file
-     * list, so the body carries only this device's [DeviceInfo] and [MigrationHandshake]. The
-     * displayer may hold the request for minutes while it writes the container, beating
-     * `102 Processing` every 10 s (each interim response restarts the read deadline); cancelling the
-     * calling coroutine hangs up, which is how the displayer learns the phone left.
-     */
-    suspend fun prepareDownload(self: DeviceInfo, pin: String?, handshake: MigrationHandshake): PrepareDownloadResponse =
-        withContext(Dispatchers.IO) {
-            val request = PrepareDownloadRequest(info = self, migration = handshake)
-            val pinQuery = if (pin != null) "?pin=$pin" else ""
-            val req = Request.Builder()
-                .url("$baseUrl/prepare-download$pinQuery")
-                .post(P2pJson.encodeToString(request).jsonBody())
-                .build()
-            clientForUpload.newCall(req).await().use { resp ->
-                if (!resp.isSuccessful) throwRejection("prepare-download", resp)
-                val prepared = P2pJson.decodeFromString<PrepareDownloadResponse>(resp.body.string())
-                L.i { "[P2P][Sender] prepare-download accepted files=${prepared.files.size} handshake=${prepared.migration != null}" }
-                prepared
-            }
-        }
-
-    /**
-     * `download`: opens the container stream. The caller owns the returned [Response] and must close
-     * it; the body carries a known `Content-Length` when the displayer knows the size. Cancelling the
-     * calling coroutine cancels the call.
-     */
-    suspend fun download(sessionId: String, fileId: String, token: String): Response {
-        val req = Request.Builder()
-            .url("$baseUrl/download?sessionId=$sessionId&fileId=$fileId&token=$token")
-            .get()
-            .build()
-        val response = client.newCall(req).await()
-        if (!response.isSuccessful) {
-            val code = response.code
-            response.close()
-            throw IllegalStateException("download failed $code")
-        }
-        L.i { "[P2P][Sender] download opened contentLength=${response.body.contentLength()}" }
-        return response
-    }
-
-    /**
-     * `download-result` — the pull direction's verdict, sent by the puller because only it knows
-     * whether the import succeeded. Best-effort: the displayer times its session out on its own.
-     * [error] is a wire reason token from the shared set, or null on success.
-     */
-    suspend fun postDownloadResult(sessionId: String, fileId: String, token: String, ok: Boolean, error: String?) =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val req = Request.Builder()
-                    .url("$migrationBaseUrl/download-result?sessionId=$sessionId&fileId=$fileId&token=$token")
-                    .post(P2pJson.encodeToString(DownloadResultRequest(ok = ok, error = error)).jsonBody())
-                    .build()
-                client.newCall(req).await().use { resp ->
-                    L.i { "[P2P][Sender] download-result posted ok=$ok error=$error status=${resp.code}" }
-                }
-            }.onFailure { e -> L.w { "[P2P][Sender] download-result post failed: ${e.message}" } }
-            Unit
-        }
-
-    /**
-     * Maps a non-2xx `prepare-*` response to a typed [PrepareUploadRejectedException]. A 403 carries
-     * the receiver's gate-reject token as a plain-text body (env/account/version/direction mismatch);
-     * 401 / 409 / 400 carry a JSON `{"error": "<token>"}` body — each maps to its own token so a stale
-     * PIN, a busy peer and a malformed request never collapse into "network error".
-     */
-    private fun throwRejection(endpoint: String, resp: Response): Nothing {
-        val body = runCatching { resp.body.string() }.getOrNull().orEmpty()
-        val reason = when (resp.code) {
-            HTTP_FORBIDDEN -> body.trim().takeIf { it.isNotBlank() }
-            HTTP_UNAUTHORIZED -> errorToken(body) ?: PrepareUploadReasons.PIN_REQUIRED
-            HTTP_CONFLICT -> errorToken(body) ?: PrepareUploadReasons.TOO_MANY_SESSIONS
-            HTTP_BAD_REQUEST -> errorToken(body) ?: PrepareUploadReasons.INVALID_BODY
-            else -> null
-        }
-        if (reason != null) {
-            L.w { "[P2P][Sender] $endpoint rejected code=${resp.code} reason=$reason" }
-            throw PrepareUploadRejectedException(reason)
-        }
-        error("$endpoint failed ${resp.code}")
-    }
 
     /**
      * Streams [source] to `upload`. [onProgress] receives (bytesSent, total) as the body streams;
@@ -326,7 +216,7 @@ class SenderHttpClient(
                 .post(P2pJson.encodeToString(LinkPrecheckRequest(info = self, migration = handshake)).jsonBody())
                 .build()
             clientForLinkIntent.newCall(req).await().use { resp ->
-                if (!resp.isSuccessful) throwRejection("link-precheck", resp)
+                if (!resp.isSuccessful) PrepareRejection.throwRejection("link-precheck", resp)
                 val state = peerState(resp.body.string()) ?: LinkPeerState.CLEAN
                 L.i { "[P2P][Sender] link-precheck state=${state.wire}" }
                 state
@@ -349,7 +239,7 @@ class SenderHttpClient(
                 .post(P2pJson.encodeToString(LinkIntentRequest(info = self, migration = handshake, sync = sync)).jsonBody())
                 .build()
             clientForLinkIntent.newCall(req).await().use { resp ->
-                if (!resp.isSuccessful) throwRejection("link-intent", resp)
+                if (!resp.isSuccessful) PrepareRejection.throwRejection("link-intent", resp)
                 val state = peerState(resp.body.string())
                 L.i { "[P2P][Sender] link-intent accepted sync=$sync state=${state?.wire}" }
                 state
@@ -375,7 +265,7 @@ class SenderHttpClient(
         try {
             clientForLinkIntent.newCall(req).await().use { resp ->
                 val claim = when (resp.code) {
-                    HTTP_UNAUTHORIZED -> PairingClaim.EXPIRED
+                    PrepareRejection.HTTP_UNAUTHORIZED -> PairingClaim.EXPIRED
                     else -> PairingClaim.ACCEPTED
                 }
                 L.i { "[P2P][Sender] claim code=${resp.code} → $claim" }
@@ -406,7 +296,7 @@ class SenderHttpClient(
             .build()
         statusClient.newCall(req).await().use { resp ->
             when {
-                resp.code == HTTP_NOT_FOUND -> null
+                resp.code == PrepareRejection.HTTP_NOT_FOUND -> null
                 resp.isSuccessful -> P2pJson.decodeFromString<StatusResponse>(resp.body.string())
                 else -> error("status failed ${resp.code}")
             }
@@ -434,26 +324,6 @@ class SenderHttpClient(
                 if (body.isBlank()) null else P2pJson.decodeFromString<CancelResponse>(body).state
             }
         }.onFailure { e -> L.w { "[P2P][Sender] cancel notice failed: ${e.message}" } }.getOrNull()
-    }
-
-    /**
-     * Runs the call so that cancelling the coroutine cancels the call: `Call.cancel()` closes the
-     * socket and the peer sees the hang-up at once. A blocking `execute()` under `withContext` cannot
-     * give that — cancellation would land only after the read returns, minutes later for a request
-     * the peer holds open, with the peer believing all that time that this device is still waiting.
-     * The caller owns the returned [Response].
-     */
-    private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
-        cont.invokeOnCancellation { runCatching { cancel() } }
-        enqueue(object : Callback {
-            override fun onFailure(call: Call, e: java.io.IOException) {
-                if (cont.isActive) cont.resumeWithException(e)
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                if (cont.isActive) cont.resume(response) else response.close()
-            }
-        })
     }
 
     private fun String.jsonBody(): RequestBody =
@@ -503,11 +373,6 @@ class SenderHttpClient(
     }
 
     companion object {
-        private const val HTTP_BAD_REQUEST = 400
-        private const val HTTP_UNAUTHORIZED = 401
-        private const val HTTP_FORBIDDEN = 403
-        private const val HTTP_CONFLICT = 409
-        private const val HTTP_NOT_FOUND = 404
         private const val STATUS_CALL_TIMEOUT_SECONDS = 8L
 
         /** Login-path calls must not make a sign-in wait for an unreachable LAN. */
@@ -519,12 +384,6 @@ class SenderHttpClient(
 
         /** Upper bound on the receiver's verify → import → promote work; see [uploadClient]. */
         private const val UPLOAD_VERDICT_TIMEOUT_MINUTES = 15L
-
-        /** The `error` token of a JSON `{"error": "..."}` body, or null when the body is not that shape. */
-        @VisibleForTesting
-        internal fun errorToken(body: String): String? = runCatching {
-            P2pJson.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.content
-        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 }
 
@@ -556,4 +415,16 @@ object PrepareUploadReasons {
 
     /** Sender-side: the Desktop never answered `prepare-upload` within the account-switch wait budget. */
     const val PEER_CONFIRM_TIMEOUT = "peer-confirm-timeout"
+
+    /** The peer does not speak this reverse-pairing protocol generation, or has no such endpoint. */
+    const val UNSUPPORTED_PROTOCOL = "unsupported-protocol"
+
+    /** Reverse pairing: the computer's user refused the transfer while its response was hanging. */
+    const val DESKTOP_CANCELLED = "desktop-cancelled"
+
+    /**
+     * Reverse pairing, synthesized here: the computer confirmed but never opened `/prepare-upload`
+     * within the window it asked for. No wire answer exists for this — only the missing connection.
+     */
+    const val DESKTOP_NOT_CONNECTED = "desktop-not-connected"
 }

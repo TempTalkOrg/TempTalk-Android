@@ -87,6 +87,42 @@ class MigrationP2pReceiveViewModelTest {
         }
     }
 
+    /** T34 — the two reverse-pairing waits reach the screen as their own pages. */
+    @Test
+    fun `the reverse-pairing waits map one to one onto the receive states`() = runTest {
+        val vm = newVm()
+
+        MigrationTransferStateHolder.update(TransferState.AwaitingDesktopConfirm("desk"))
+        assertEquals(MigrationP2pReceiveState.AwaitingDesktopConfirm("desk"), vm.state.value)
+
+        MigrationTransferStateHolder.update(TransferState.AwaitingDesktopConnect("desk", 30_000L))
+        assertEquals(MigrationP2pReceiveState.AwaitingDesktopConnect("desk"), vm.state.value)
+    }
+
+    /**
+     * T45 — a committed-but-unconfirmed import must NOT look promoted: the Activity's in-process
+     * sign-in hangs off [MigrationP2pReceiveState.Promoted], and the promote tail is not proven done.
+     */
+    @Test
+    fun `a committed but unconfirmed import is its own state, never Promoted`() = runTest {
+        val vm = newVm()
+
+        MigrationTransferStateHolder.update(TransferState.CommittedUnconfirmed)
+        assertEquals(MigrationP2pReceiveState.CommittedUnconfirmed, vm.state.value)
+    }
+
+    /** T34 — a code that is not a computer export code never reaches the service. */
+    @Test
+    fun `a scan that is not an export code is refused with a toast`() = runTest {
+        val vm = newVm()
+        vm.effects.test {
+            vm.onIntent(MigrationP2pReceiveIntent.PeerQrScanned("not-a-migration-code"))
+            val effect = awaitItem()
+            assertTrue(effect is MigrationP2pReceiveEffect.Toast)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test
     fun `Error reason mapping resolves the gate rejects to the shared failure kinds`() {
         // Directly assert the screen's deterministic reason→kind mapping (the second half of GAP 1).

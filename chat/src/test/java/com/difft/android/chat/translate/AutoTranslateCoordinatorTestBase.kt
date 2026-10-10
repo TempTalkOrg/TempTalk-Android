@@ -118,6 +118,8 @@ abstract class AutoTranslateCoordinatorTestBase {
         every { modelStore.state } returns modelState
         every { modelStore.isReady(any<TranslateLang>()) } returns true
         every { modelStore.requiredModels(any()) } returns setOf(ModelId("zh"))
+        coEvery { modelStore.awaitReady(any<TranslateLang>()) } returns true
+        coEvery { modelStore.awaitReady(any<Set<ModelId>>()) } returns true
 
         backend = FakeTranslateBackend()
         dbMessageStore = mockk(relaxed = true)

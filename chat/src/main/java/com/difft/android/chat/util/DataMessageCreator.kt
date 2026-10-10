@@ -2,6 +2,8 @@ package com.difft.android.chat.util
 
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.crypto.GroupCryptoRepo
+import org.difft.app.database.GENERIC_CONTENT_TYPE
+import org.difft.app.database.NO_SERVER_ATTACHMENT_ID
 import org.difft.app.database.wcdb
 import com.difft.android.chat.message.createForward
 import difft.android.messageserialization.For
@@ -167,8 +169,8 @@ class DataMessageCreator @Inject constructor(
         val signalServiceAttachment: AttachmentPointer? = attachment?.let {
             attachmentPointer {
                 cdnNumber = 0
-                id = attachment.authorityId!!
-                contentType = attachment.contentType!!
+                id = attachment.authorityId ?: NO_SERVER_ATTACHMENT_ID
+                contentType = attachment.contentType ?: GENERIC_CONTENT_TYPE
                 key = ByteString.copyFrom(attachment.key)
                 size = attachment.size
                 width = attachment.width

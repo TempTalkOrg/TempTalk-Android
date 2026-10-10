@@ -143,7 +143,7 @@ class ContactorCacheManager @Inject constructor(
             } else {
                 AvatarData.FromNameOrUid(name, userId)
             }
-            L.i { "[ContactorCacheManager] getParticipantDisplayInfo uid=$uid hasContactor=${contactor != null}" }
+            L.d { "[ContactorCacheManager] getParticipantDisplayInfo uid=$uid hasContactor=${contactor != null}" }
             CallUserDisplayInfo(uid, name, avatarData)
         }
 

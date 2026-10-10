@@ -38,7 +38,10 @@ import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSo
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketResponseMessage
 import org.whispersystems.signalservice.internal.websocket.webSocketMessage
+import java.io.EOFException
 import java.io.IOException
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -143,7 +146,6 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     internal fun connect() {
         startConnectTime = System.currentTimeMillis()
-        L.i { "$name connect()" }
 
         if (currentWebsocket == null) {
             val filledUri = webSocketUrlGetter()
@@ -165,8 +167,6 @@ class WebSocketConnection @AssistedInject constructor(
                 currentWebsocketListener = it
             }
             currentWebsocket = okHttpClient.newWebSocket(requestBuilder.build(), websocketListener)
-
-            L.i { "$name Really start connecting in code" }
         }
     }
 
@@ -279,7 +279,7 @@ class WebSocketConnection @AssistedInject constructor(
             throw IOException("$name Write failed!")
         }
         if ("ping" == json) {
-            L.i { "$name Sending keep alive..." }
+            L.d { "$name Sending keep alive..." }
         }
     }
 
@@ -355,7 +355,14 @@ class WebSocketConnection @AssistedInject constructor(
 
     @Synchronized
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        L.w(t) { "$name onFailure()" }
+        // Plain connection drops are expected and frequent (server idle timeout, network
+        // change): one line with the cause and the connection age is enough to diagnose
+        // them. Anything else keeps the full stack trace.
+        if (t.isPlainConnectionDrop()) {
+            L.w { "$name onFailure() ${t.javaClass.simpleName}: ${t.message} httpCode=${response?.code} alive=${System.currentTimeMillis() - startConnectTime}ms" }
+        } else {
+            L.w(t) { "$name onFailure() httpCode=${response?.code} alive=${System.currentTimeMillis() - startConnectTime}ms" }
+        }
         if (webSocketConnectionState.value is WebSocketConnectionState.DISCONNECTED
             || webSocketConnectionState.value is WebSocketConnectionState.FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.UNKNOWN_HOST_FAILED
@@ -389,6 +396,9 @@ class WebSocketConnection @AssistedInject constructor(
         }
     }
 
+    private fun Throwable.isPlainConnectionDrop(): Boolean =
+        this is EOFException || this is SocketException || this is SocketTimeoutException || this is UnknownHostException
+
     @Synchronized
     private fun cleanupAfterShutdown() {
         // Snapshot + clear first, then iterate the snapshot to fire onError.
@@ -400,7 +410,7 @@ class WebSocketConnection @AssistedInject constructor(
         currentWebsocket = null // Allow garbage collection
         currentWebsocketListener?.invalidate()
         currentWebsocketListener = null
-        L.i { "$name WebSocket connection cleaned up and set to null." }
+        L.d { "$name WebSocket connection cleaned up and set to null." }
         val error = IOException("$name Closed unexpectedly")
         for ((requestId, request) in pending) {
             try {

@@ -15,6 +15,7 @@ object JobManagerFactories {
         PushReactionSendJob.KEY to PushReactionSendJob.Factory(),
         DownloadAttachmentJob.KEY to DownloadAttachmentJob.Factory(),
         PushReadReceiptSendJob.KEY to PushReadReceiptSendJob.Factory(),
+        PushMarkAsUnreadSendJob.KEY to PushMarkAsUnreadSendJob.Factory(),
         PushGroupKeySendJob.KEY to PushGroupKeySendJob.Factory(),
         PushForwardNoticeSendJob.KEY to PushForwardNoticeSendJob.Factory(),
         PushActivityNoticeSendJob.KEY to PushActivityNoticeSendJob.Factory(),

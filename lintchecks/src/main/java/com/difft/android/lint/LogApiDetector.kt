@@ -20,7 +20,7 @@ import org.jetbrains.uast.UCallExpression
  *     handled separately in the quick-fix. Direct calls mean:
  *       - is not written to the local log file (only INFO+ via L.x is)
  *       - bypasses UID masking (`L.replaceUid`)
- *     See .claude/rules/logging-standards.md §"日志工具约束".
+ *     See docs/agents/logging-standards-full.md §"日志工具约束".
  *
  *  2. `timber.log.Timber.{v,d,i,w,e,wtf,log}` and `Timber.tag(...).{v,d,i,w,...}` —
  *     L is implemented on top of Timber. Calling Timber directly (static
@@ -55,7 +55,7 @@ class LogApiDetector : Detector(), Detector.UastScanner {
                 scope = node,
                 location = context.getLocation(node),
                 message = "Using `android.util.Log.${method.name}` instead of `L.$lMethodName` " +
-                    "(see .claude/rules/logging-standards.md)",
+                    "(see docs/agents/logging-standards-full.md)",
                 quickfixData = quickFixToL(
                     node,
                     lMethodName = lMethodName,
@@ -244,7 +244,7 @@ class LogApiDetector : Detector(), Detector.UastScanner {
                   - do not reach the local log file (FileLoggingTree filters at INFO+)
                   - skip `L.replaceUid` UID masking, leaking phone-number prefixes to \
                     logcat in release builds
-                See `.claude/rules/logging-standards.md` for the full rule.
+                See `docs/agents/logging-standards-full.md` for the full rule.
             """.trimIndent(),
             category = Category.MESSAGES,
             priority = 6,
@@ -260,7 +260,7 @@ class LogApiDetector : Detector(), Detector.UastScanner {
                 skips `L.replaceUid`, which masks phone-number-style UIDs before they \
                 reach the log file or logcat.
                 Use `L.{d,i,w,e,...} { "..." }` instead.
-                See `.claude/rules/logging-standards.md`.
+                See `docs/agents/logging-standards-full.md`.
             """.trimIndent(),
             category = Category.MESSAGES,
             priority = 6,

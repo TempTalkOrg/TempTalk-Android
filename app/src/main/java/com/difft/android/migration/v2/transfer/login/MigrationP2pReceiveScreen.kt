@@ -60,7 +60,8 @@ fun MigrationP2pReceiveScreen(
     val committed = state is MigrationP2pReceiveState.Receiving ||
         state == MigrationP2pReceiveState.Verifying ||
         state == MigrationP2pReceiveState.Activated ||
-        state == MigrationP2pReceiveState.Promoted
+        state == MigrationP2pReceiveState.Promoted ||
+        state == MigrationP2pReceiveState.CommittedUnconfirmed
     BackHandler(enabled = committed) {
         // Deliberately swallowed: see the class comment.
     }
@@ -68,6 +69,26 @@ fun MigrationP2pReceiveScreen(
         MigrationP2pReceiveState.Starting -> PreparingPage(sameDevice = false, onIntent = onIntent)
         is MigrationP2pReceiveState.WaitingForPeer ->
             if (state.sameDevice) PreparingPage(sameDevice = true, onIntent = onIntent) else PairingPage(state, onIntent)
+        // Reverse pairing: the computer has to confirm, then connect back. Same shape as the
+        // preparing page — indeterminate progress and one line of what to do — with a cancel.
+        is MigrationP2pReceiveState.AwaitingDesktopConfirm -> DesktopWaitPage(
+            title = stringResource(R.string.migration_r2_desktop_confirm_title),
+            hint = stringResource(R.string.migration_r2_desktop_confirm_hint),
+            onIntent = onIntent,
+        )
+        is MigrationP2pReceiveState.AwaitingDesktopConnect -> DesktopWaitPage(
+            title = stringResource(R.string.migration_r2_desktop_connect_title),
+            hint = stringResource(R.string.migration_r2_desktop_connect_hint),
+            onIntent = onIntent,
+        )
+        // The data is already this device's primary database; the Activity restarts at once so the
+        // promote tail finishes on the next cold start. Nothing to act on here.
+        MigrationP2pReceiveState.CommittedUnconfirmed -> MigrationResultPage(
+            tone = MigrationResultTone.INFO,
+            title = stringResource(R.string.migration_r2_finishing_restart),
+        ) {
+            MigrationProgressBlock(progress = null, metric = null)
+        }
         is MigrationP2pReceiveState.Receiving -> ReceivingPage(state, sameDevice, onIntent)
         MigrationP2pReceiveState.Verifying, MigrationP2pReceiveState.Activated -> MigrationResultPage(
             tone = MigrationResultTone.INFO,
@@ -121,6 +142,38 @@ private fun PreparingPage(sameDevice: Boolean, onIntent: (MigrationP2pReceiveInt
             onGo = {
                 confirmCancel = false
                 onIntent(MigrationP2pReceiveIntent.Leave)
+            },
+        )
+    }
+}
+
+/**
+ * The reverse-pairing waits: the computer's user confirming, then the computer connecting back.
+ * Nothing is on the wire yet, so cancelling stops the pairing and returns to the source chooser.
+ */
+@Composable
+private fun DesktopWaitPage(title: String, hint: String, onIntent: (MigrationP2pReceiveIntent) -> Unit) {
+    var confirmCancel by remember { mutableStateOf(false) }
+    MigrationResultPage(
+        tone = MigrationResultTone.INFO,
+        title = title,
+        secondary = MigrationAction(stringResource(R.string.migration_p1_cancel), danger = true) { confirmCancel = true },
+    ) {
+        MigrationProgressBlock(progress = null, metric = null)
+        MigrationGap()
+        MigrationResultBody(hint)
+    }
+    if (confirmCancel) {
+        MigrationConfirmDialog(
+            title = stringResource(R.string.migration_m1_title),
+            message = stringResource(R.string.migration_m1_body),
+            keepText = stringResource(R.string.migration_m1_keep),
+            goText = stringResource(R.string.migration_m1_go),
+            goDanger = true,
+            onKeep = { confirmCancel = false },
+            onGo = {
+                confirmCancel = false
+                onIntent(MigrationP2pReceiveIntent.Cancel)
             },
         )
     }

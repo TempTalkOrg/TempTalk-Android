@@ -204,7 +204,7 @@ object AudioMessageManager {
                     FileDecryptionUtil.decryptToBytes(encryptFile, message.attachment?.key)
                 } else {
                     if (!File(filePath).exists()) {
-                        L.e { "[AudioMessageManager] playOrPauseAudio: file not exists $filePath" }
+                        L.e { "[AudioMessageManager] playOrPauseAudio: file not exists messageId=${message.id}" }
                         releasePlayer()
                         return@launch
                     }
@@ -248,7 +248,7 @@ object AudioMessageManager {
     // 开始播放音频
     private fun startPlaying(message: TextChatMessage, filePath: String, decryptedBytes: ByteArray? = null) {
         if (decryptedBytes == null && (filePath.isEmpty() || !File(filePath).exists())) {
-            L.e { "[AudioMessageManager] startPlaying: file not exists $filePath" }
+            L.e { "[AudioMessageManager] startPlaying: file not exists messageId=${message.id}" }
             releasePlayer()
             return
         }
@@ -468,7 +468,7 @@ object AudioMessageManager {
             try {
                 FileDecryptionUtil.decryptFile(encryptedFile, targetFile, message.attachment?.key)
             } catch (e: Exception) {
-                L.e { "[AudioMessageManager] decryptIfNeeded failed path=$attachmentPath: ${e.stackTraceToString()}" }
+                L.e { "[AudioMessageManager] decryptIfNeeded failed messageId=${message.id}: ${e.stackTraceToString()}" }
                 targetFile.delete()
                 throw e
             }

@@ -94,7 +94,7 @@ object RoomChangeTracker {
     }
 
     fun trackRoom(roomId: String, type: RoomChangeType) {
-        L.i { "[Message][RoomChangeTracker] trackRoom:$roomId type:$type" }
+        L.d { "[Message][RoomChangeTracker] trackRoom:$roomId type:$type" }
         // 直接发送到 Channel，无需加锁
         changeChannel.trySend(roomId to type)
     }
@@ -111,7 +111,7 @@ object RoomChangeTracker {
     }
 
     suspend fun trackRoomReadInfoUpdate(roomId: String) {
-        L.i { "[Message][RoomChangeTracker] Emitting read info update for room: $roomId" }
+        L.d { "[Message][RoomChangeTracker] Emitting read info update for room: $roomId" }
         _readInfoUpdates.emit(roomId)
     }
 

@@ -215,7 +215,7 @@ class MessageServiceManager @Inject constructor(
         if (!wasRunning) {
             L.w { "[MessageService] Service not running, recovering..." }
         } else {
-            L.i { "[MessageService] Service running, sending wakeup/check intent (may be frozen in Doze)" }
+            L.d { "[MessageService] Service running, sending wakeup/check intent (may be frozen in Doze)" }
         }
 
         // Unified start logic (with fallback retry strategy)
@@ -245,7 +245,7 @@ class MessageServiceManager @Inject constructor(
         try {
             // Step 1: Try direct start
             ForegroundServiceUtil.start(context, intent)
-            L.i { "[MessageService] Service started successfully" }
+            L.d { "[MessageService] Service started successfully" }
         } catch (e: Exception) {
             // Start failed, handle all exceptions uniformly
             // Possible exceptions: UnableToStartException, SecurityException, IllegalStateException, etc.
@@ -292,6 +292,7 @@ class MessageServiceManager @Inject constructor(
             val hasExactAlarmPermission = hasExactAlarmPermission()
             val interval = if (hasExactAlarmPermission) EXACT_ALARM_INTERVAL_MS else NON_EXACT_ALARM_INTERVAL_MS
             val triggerTime = SystemClock.elapsedRealtime() + interval
+            var armedExact = hasExactAlarmPermission
 
             if (hasExactAlarmPermission) {
                 // Has permission: use exact alarm
@@ -303,11 +304,12 @@ class MessageServiceManager @Inject constructor(
                         triggerTime,
                         pendingIntent
                     )
-                    L.i { "[MessageService] Exact alarm scheduled (5 min, Doze extends to ~15 min)" }
+                    L.d { "[MessageService] Exact alarm scheduled (5 min, Doze extends to ~15 min)" }
                 } catch (e: SecurityException) {
                     // TOCTOU: SCHEDULE_EXACT_ALARM revoked between the permission check and
                     // the set call — degrade to the inexact alarm instead.
                     L.w { "[MessageService] Exact alarm rejected (permission revoked?), falling back to inexact: ${e.message}" }
+                    armedExact = false
                     alarmManager.setAndAllowWhileIdle(
                         AlarmManager.ELAPSED_REALTIME_WAKEUP,
                         triggerTime,
@@ -321,8 +323,10 @@ class MessageServiceManager @Inject constructor(
                     triggerTime,
                     pendingIntent
                 )
-                L.i { "[MessageService] Non-exact alarm scheduled (5 min, Doze may extend to 30min-2hr)" }
+                L.d { "[MessageService] Non-exact alarm scheduled (5 min, Doze may extend to 30min-2hr)" }
             }
+            // The scheduled/fired pair is the evidence for vendor-swallowed alarms (#1157).
+            L.i { "[MessageService] alarm armed exact=$armedExact intervalMs=$interval" }
             lastAlarmChainActivityElapsed = SystemClock.elapsedRealtime()
         } catch (e: Exception) {
             L.e { "[MessageService] Failed to arm keep-alive alarm: ${e.stackTraceToString()}" }
