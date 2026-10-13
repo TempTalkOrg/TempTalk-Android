@@ -20,8 +20,7 @@ class PictureInPictureManager(
     private val activity: Activity,
     private val lifecycle: Lifecycle,
     private val scope: CoroutineScope,
-    private val onPipModeChanged: (Boolean) -> Unit,
-    private val onPipClosed: (() -> Unit)?
+    private val onPipModeChanged: (Boolean) -> Unit
 ) {
     private lateinit var pipBuilderParams: PictureInPictureParams.Builder
     private var isInitialized = false
@@ -95,36 +94,34 @@ class PictureInPictureManager(
     /**
      * 处理 PIP 模式变化
      * 应在 Activity 的 onPictureInPictureModeChanged 中调用
-     * 
+     *
+     * The window going away never ends the call. The callback carries no reason, so a window the
+     * user dismissed is indistinguishable from one the shell took away — a vendor gesture, another
+     * app claiming the PiP slot, a screen the system brought forward. Treating any of those as a
+     * hang-up ends calls the user meant to keep, and the ones that read as deliberate are already
+     * served by an explicit control: the ongoing-call notification, which carries a hang-up action
+     * while the call UI is backgrounded, or the call UI itself once restored.
+     *
      * @param isInPictureInPictureMode 是否在 PIP 模式
      * @param newConfig 新的配置
-     * @param isScreenLocked 屏幕是否锁定（由调用方提供）
      */
     fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
-        newConfig: Configuration,
-        isScreenLocked: Boolean = false
+        newConfig: Configuration
     ) {
         L.i { "[Call] PictureInPictureManager onPictureInPictureModeChanged isInPictureInPictureMode:$isInPictureInPictureMode" }
-        
+
         // 通知 PIP 模式变化
         activity.runOnUiThread {
             onPipModeChanged(isInPictureInPictureMode)
         }
 
-        // 处理 PIP 关闭事件
-        if (lifecycle.currentState == Lifecycle.State.CREATED) {
-            if (!isInPictureInPictureMode) {
-                if (isScreenLocked) {
-                    L.i { "[Call] PictureInPictureManager: Screen is locked, ignoring PIP close" }
-                } else {
-                    L.i { "[Call] PictureInPictureManager: PIP closed, handling exit" }
-                    onPipClosed?.invoke()
-                }
-            }
-        } else if (lifecycle.currentState == Lifecycle.State.STARTED) {
-            // PIP 最大化时触发
-            L.d { "[Call] PictureInPictureManager: PIP maximized" }
+        if (!isInPictureInPictureMode) {
+            // CREATED = the Activity merely stopped, so the window is gone while the call runs on.
+            // STARTED = it was restored to full screen. Logged apart because a field report of
+            // "the call vanished" needs to say which of the two happened.
+            val stopped = lifecycle.currentState == Lifecycle.State.CREATED
+            L.i { "[Call] PictureInPictureManager: PIP window gone, stopped=$stopped, call continues" }
         }
     }
 

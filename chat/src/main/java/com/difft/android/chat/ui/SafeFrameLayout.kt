@@ -31,7 +31,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
  * (scroll, new message bind, text input change, etc.) will redraw correctly.
  *
  * **Reporting:** each catch is reported as a NON_FATAL via `FirebaseCrashlytics.recordException`
- * and logged via `L.e` (per `.claude/rules/logging-standards.md`). A 10-second per-instance
+ * and logged via `L.e` (per `docs/agents/logging-standards-full.md`). A 10-second per-instance
  * throttle prevents runaway flooding if the catch path hits every layout pass on a
  * sustained re-entrant condition.
  */

@@ -52,8 +52,27 @@ sealed interface TransferState {
      */
     data object AwaitingPeerConfirm : TransferState
 
+    /**
+     * Receiver, reverse pairing: the `/reverse-pair` request is hanging while the computer's user
+     * confirms. Nothing moves until they do; this device is already listening for the connect-back.
+     */
+    data class AwaitingDesktopConfirm(val peerAlias: String? = null) : TransferState
+
+    /**
+     * Receiver, reverse pairing: the computer confirmed and has [deadlineMs] to open
+     * `/prepare-upload` on this device's listener before the pairing is given up on.
+     */
+    data class AwaitingDesktopConnect(val peerAlias: String? = null, val deadlineMs: Long) : TransferState
+
     /** Receiver: verified and promoted on disk (ReadyForSignIn). Terminal success. */
     data object Promoted : TransferState
+
+    /**
+     * Receiver, terminal: the primary database was switched, but the tail after it could not be
+     * completed in this process. The data is kept and the only exit is a cold start, which runs the
+     * promote recovery before anything else. Never reported to the peer.
+     */
+    data object CommittedUnconfirmed : TransferState
 
     /** Sender: the receiver's delayed 200 arrived, confirming the upload. Terminal success. */
     data object Sent : TransferState
@@ -78,10 +97,11 @@ sealed interface TransferState {
 /** True once the transfer is terminal; the service tears down on the first terminal state. */
 fun TransferState.isTerminal(): Boolean = when (this) {
     TransferState.Promoted, TransferState.Sent, is TransferState.Failed, TransferState.Cancelled,
-    TransferState.Unknown -> true
+    TransferState.Unknown, TransferState.CommittedUnconfirmed -> true
     TransferState.Idle, TransferState.Starting, is TransferState.WaitingForPeer,
     is TransferState.Transferring, TransferState.Promoting, TransferState.AwaitingVerdict,
-    TransferState.VerdictStalled, TransferState.AwaitingPeerConfirm -> false
+    TransferState.VerdictStalled, TransferState.AwaitingPeerConfirm,
+    is TransferState.AwaitingDesktopConfirm, is TransferState.AwaitingDesktopConnect -> false
 }
 
 /**

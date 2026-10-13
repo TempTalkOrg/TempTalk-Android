@@ -24,6 +24,7 @@ import com.google.gson.Gson
 import com.difft.android.migration.v2.export.NeutralProjections
 import com.difft.android.migration.v2.model.deriveContentKind
 import com.difft.android.migration.v2.model.fkOrNull
+import org.difft.app.database.NO_SERVER_ATTACHMENT_ID
 import org.difft.app.database.models.AttachmentModel
 import org.difft.app.database.models.ForwardModel
 import org.difft.app.database.models.MessageModel
@@ -219,7 +220,7 @@ object TargetReProjector {
             fileName = a.fileName?.takeIf { s -> s.isNotEmpty() },
             // Identity/credentials ALWAYS travel (mirror NeutralProjections.attachment); only
             // pointerOnly tracks byte-frame presence (bytes keyed by stableId).
-            serverAttachmentId = a.authorityId,
+            serverAttachmentId = a.authorityId?.takeIf { it != NO_SERVER_ATTACHMENT_ID },
             encryptionKey = a.key?.takeIf { it.isNotEmpty() }?.let { Base64.encodeToString(it, Base64.NO_WRAP) },
             // digest ALWAYS travels (mirror NeutralProjections.attachment); empty ByteArray(0) → null.
             digestBase64 = a.digest?.takeIf { it.isNotEmpty() }?.let { Base64.encodeToString(it, Base64.NO_WRAP) },
@@ -232,7 +233,7 @@ object TargetReProjector {
     }
 
     private fun metaOf(a: AttachmentModel): NeutralAttachmentMeta =
-        NeutralAttachmentMeta(stableId = a.id ?: "", contentType = a.contentType, fileName = a.fileName?.takeIf { it.isNotEmpty() })
+        NeutralAttachmentMeta(stableId = NeutralProjections.attachmentStableRef(a) ?: "", contentType = a.contentType, fileName = a.fileName?.takeIf { it.isNotEmpty() })
 
     private fun forwardOf(t: InMemoryWcdbWriteTarget, fm: ForwardModel): NeutralForward {
         // parentForwardModelDatabaseId is Long?; fm.databaseId is Int post-#913 — widen to compare.

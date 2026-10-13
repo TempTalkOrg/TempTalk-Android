@@ -62,7 +62,7 @@ class ReceiptMessageHelper @Inject constructor(
     }
 
     private suspend fun processReceiptMessage(receiptMessage: SignalServiceProtos.ReceiptMessage, signalService: SignalServiceDataClass) {
-        L.i { "[ReceiptMessageHelper] Processing receipt message -> ${receiptMessage.readPosition}" }
+        L.i { "[ReceiptMessageHelper] receipt type=${receiptMessage.type} hasReadPosition=${receiptMessage.hasReadPosition()} readAt=${receiptMessage.readPosition.readAt} maxServerTime=${receiptMessage.readPosition.maxServerTime}" }
         var readPosition: ReadPosition? = null
         if (receiptMessage.readPosition != null) {
             readPosition = ReadPosition(

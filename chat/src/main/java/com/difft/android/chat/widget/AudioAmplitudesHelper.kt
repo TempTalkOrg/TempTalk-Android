@@ -41,7 +41,7 @@ object AudioAmplitudesHelper {
                 AudioMessageManager.decryptIfNeeded(filePath, message)
 
                 if (!File(filePath).exists()) {
-                    L.e { "[AudioAmplitudesHelper] File does not exist: $filePath" }
+                    L.e { "[AudioAmplitudesHelper] file does not exist messageId=${message.id}" }
                     return@launch
                 }
 

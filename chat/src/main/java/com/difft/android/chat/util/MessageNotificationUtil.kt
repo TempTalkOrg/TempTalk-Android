@@ -74,7 +74,6 @@ import com.difft.android.call.receiver.InComingCallNotificationReceiver
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.FlashLightBlinker
 import com.difft.android.call.util.FullScreenPermissionHelper
-import com.difft.android.chat.common.StopCriticalAlertSoundReceiver
 import com.difft.android.chat.messages.MessageForegroundService
 import util.AppForegroundObserver
 
@@ -90,6 +89,7 @@ class MessageNotificationUtil @Inject constructor(
     private val criticalAlertManager: CriticalAlertManager,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val groupUtil: dagger.Lazy<GroupUtil>,
+    private val criticalAlertNotificationBuilder: CriticalAlertNotificationBuilder,
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -780,29 +780,26 @@ class MessageNotificationUtil @Inject constructor(
                 .setOngoing(true)
 
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val person = Person.Builder().setName(title).setKey(roomId).build()
-                val callStyle = NotificationCompat.CallStyle.forIncomingCall(
-                    person,
-                    rejectPendingIntent,
-                    acceptPendingIntent
-                )
-                builder.setStyle(callStyle)
-            } else {
-                builder.addAction(
-                    R.mipmap.chat_ic_call_reject,
-                    ResUtils.getString(R.string.call_reject),
-                    rejectPendingIntent
-                )
-                builder.addAction(
-                    R.mipmap.chat_ic_call_accept,
-                    ResUtils.getString(R.string.call_accept),
-                    acceptPendingIntent
-                )
-                builder.setStyle(NotificationCompat.InboxStyle())
-            }
+            // Plain actions on every API level rather than CallStyle. An incoming call earns no
+            // status-bar chip even on AOSP — SystemUI's OngoingCallController only raises one for
+            // EXTRA_CALL_TYPE == CALL_TYPE_ONGOING — so CallStyle buys nothing here but its own
+            // layout, while vendor templates that ignore it (MIUI/HyperOS) drop reject and accept
+            // from the shade altogether.
+            builder.addAction(
+                R.mipmap.chat_ic_call_reject,
+                ResUtils.getString(R.string.call_reject),
+                rejectPendingIntent
+            )
+            builder.addAction(
+                R.mipmap.chat_ic_call_accept,
+                ResUtils.getString(R.string.call_accept),
+                acceptPendingIntent
+            )
+            builder.setStyle(NotificationCompat.InboxStyle())
 
-            L.i { "[Call] showCallNotificationNew notificationID:$notificationID roomId:$roomId" }
+            // style= is here so a log from a tester identifies which notification build produced
+            // it; the incoming notification's layout is exactly what is under test.
+            L.i { "[Call] showCallNotificationNew notificationID:$notificationID roomId:$roomId style=inbox+2actions" }
             if (!isActive) return@launch
             try {
                 nm.notify(notificationID, builder.build())
@@ -829,6 +826,8 @@ class MessageNotificationUtil @Inject constructor(
             .withConversationId(conversationId)
             .withCallRole(CallRole.CALLEE.type)
             .withNeedAppLock(isNeedAppLock)
+            // Only ever used as the incoming-call notification's full-screen intent.
+            .withFullScreenLaunch(true)
             .build()
     }
 
@@ -1115,7 +1114,6 @@ class MessageNotificationUtil @Inject constructor(
 
     @Synchronized
     fun showCriticalAlert(forWhat: For, alertTitle: String, alertContent: String, timestamp: Long, roomId: String?) {
-        val title = "🚨$alertTitle"
         val notificationId = timestamp.hashCode()
         L.i { "[CriticalAlert] showCriticalAlert for ${forWhat.id}, timestamp=$timestamp, notificationId=$notificationId, roomId=$roomId "}
 
@@ -1150,103 +1148,37 @@ class MessageNotificationUtil @Inject constructor(
             }
         }
 
+        val payload = CriticalAlertPayload(forWhat.id, alertTitle, alertContent, notificationId, timestamp, roomId)
         if (AppForegroundObserver.isForegrounded() && !VoiceRecordingTracker.isRecording) {
             // App已经在前台，直接显示CriticalAlertActivity
             L.i { "[CriticalAlert] App is in foreground, starting CriticalAlertActivity"}
+            postCriticalAlertNotification(payload, CriticalAlertPresentation.SILENT_COMPANION)
             criticalAlertManager.startCriticalAlertActivity(forWhat.id, alertTitle, alertContent, notificationId, roomId)
         } else {
             // App is in background, or in foreground while recording. Launching CriticalAlertActivity
             // while recording would cover ChatFragment and detach VoiceRecorderView (shipping a
-            // partial voice note). The setFullScreenIntent below is OS-suppressed to heads-up only
+            // partial voice note). The full-screen intent is OS-suppressed to heads-up only
             // when the app is in foreground, so falling through here is the correct system behavior.
             if (VoiceRecordingTracker.isRecording) {
                 L.i { "[CriticalAlert] suppress Activity launch due to voice recording, fall back to notification notificationId=$notificationId" }
             }
             L.i { "[CriticalAlert] App is in background, show critical alert notification" }
-            val clickIntent = Intent(context, activityProvider.getActivityClass(ActivityType.CRITICAL_ALERT)).apply {
-                action = LCallConstants.CRITICAL_ALERT_ACTION_CLICKED
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, forWhat.id)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, alertTitle)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, alertContent)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, notificationId)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, true)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID, roomId)
-            }
-
-            val pendingIntent: PendingIntent = PendingIntent.getActivity(
-                context,
-                notificationId,
-                clickIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-
-            val fullScreenIntent = Intent(context, activityProvider.getActivityClass(ActivityType.CRITICAL_ALERT)).apply {
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION, forWhat.id)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE, alertTitle)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE, alertContent)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_NOTIFICATION_ID, notificationId)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, true)
-                putExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID, roomId)
-            }
-
-            val fullScreenPendingIntent: PendingIntent = PendingIntent.getActivity(
-                context,
-                notificationId,
-                fullScreenIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-
-            // 使用 BigTextStyle 固定通知样式，避免锁屏时布局跳动
-            val bigTextStyle = NotificationCompat.BigTextStyle()
-                .bigText(alertContent)
-                .setBigContentTitle(title)
-
-            val builder = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
-                .setContentTitle(title)
-                .setContentText(alertContent)
-                .setContentIntent(pendingIntent)
-                .setFullScreenIntent(fullScreenPendingIntent, true)
-                .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
-                .setAutoCancel(true)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setBadgeIconType(NotificationCompat.BADGE_ICON_NONE)
-                .setOnlyAlertOnce(false)
-                .setDeleteIntent(createStopSoundIntent(context, notificationId))
-                .setStyle(bigTextStyle) // 固定通知样式，避免布局跳动
-                .setWhen(timestamp) // 使用固定的时间戳，避免时间变化导致重新排序
-                .setShowWhen(true) // 显示时间，但使用固定时间戳
-                .setUsesChronometer(false) // 不使用计时器，避免时间变化
-                .setOngoing(true)
-
-
-            try {
-                val notification = builder.build()
-                L.i { "[CriticalAlert] Notifying critical alert: notificationId=$notificationId timestamp=$timestamp"}
-                nm.notify(notificationId, notification)
-                L.d { "[CriticalAlert] Critical alert notification posted successfully: notificationId=$notificationId"}
+            if (postCriticalAlertNotification(payload, CriticalAlertPresentation.FULL_SCREEN)) {
                 criticalAlertManager.playSoundAndFlashLight(forWhat.id, notificationId)
-            } catch (e: Exception) {
-                L.e(e) { "[CriticalAlert] showCriticalAlert failed: notificationId=$notificationId, error:" }
             }
         }
-
     }
 
-    fun createStopSoundIntent(context: Context, notificationID: Int): PendingIntent {
-        val intent = Intent(context, StopCriticalAlertSoundReceiver::class.java).apply {
-            action = STOP_CRITICAL_ALERT_SOUND
-            `package` = context.packageName
-            putExtra("notification_id", notificationID)
+    private fun postCriticalAlertNotification(payload: CriticalAlertPayload, presentation: CriticalAlertPresentation): Boolean =
+        try {
+            val notification = criticalAlertNotificationBuilder.build(payload, CHANNEL_CONFIG_NAME_CRITICAL_ALERT, presentation)
+            L.i { "[CriticalAlert] Notifying critical alert: notificationId=${payload.notificationId} timestamp=${payload.timestamp} presentation=$presentation" }
+            nm.notify(payload.notificationId, notification)
+            true
+        } catch (e: Exception) {
+            L.e(e) { "[CriticalAlert] showCriticalAlert notify failed: notificationId=${payload.notificationId} presentation=$presentation" }
+            false
         }
-        return PendingIntent.getBroadcast(
-            context,
-            notificationID,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-    }
 
     fun cancelCriticalAlertNotification(conversationId: String? = null) {
         val shouldCancelAll = conversationId == null
@@ -1280,7 +1212,7 @@ class MessageNotificationUtil @Inject constructor(
                                 // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
                                 // 移除 isNotificationShowing() 检查以避免阻塞主线程
                                 nm.cancel(notificationId)
-                                L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
+                                L.d { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
                                 // 停止匹配的声音
                                 criticalAlertManager.stopSoundIfMatch(notificationId)
                                 canceledIds.add(notificationId)
@@ -1298,7 +1230,7 @@ class MessageNotificationUtil @Inject constructor(
                                 // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
                                 // 移除 isNotificationShowing() 检查以避免阻塞主线程
                                 nm.cancel(notificationId)
-                                L.i { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
+                                L.d { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
                                 // 停止匹配的声音
                                 criticalAlertManager.stopSoundIfMatch(notificationId)
                                 canceledIds.add(notificationId)

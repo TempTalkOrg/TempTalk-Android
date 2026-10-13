@@ -1,5 +1,8 @@
 package com.difft.android.migration.model
 
+import com.difft.android.p2p.engine.io.TransferCommittedUnconfirmed
+import com.difft.android.p2p.engine.io.TransferStorageFault
+
 /**
  * Sealed throwable hierarchy for migration-internal failures the caller may want to
  * discriminate. Generic platform exceptions (`IOException`, `SecurityException`,
@@ -55,4 +58,25 @@ sealed class MigrationException(message: String, cause: Throwable? = null) : Exc
      * discarding staging is safe. The caller re-prompts restore rather than retrying.
      */
     class RestoreAbortedCleanState(message: String, cause: Throwable? = null) : MigrationException(message, cause)
+
+    /**
+     * A write ran out of storage before the restore's commit boundary. Nothing was committed, so the
+     * transfer can be refused honestly and retried once space is free.
+     *
+     * A [MigrationException] rather than an [java.io.IOException] on purpose: `ContainerReader` wraps
+     * every `IOException` into [StreamInterrupted] (which classifies as a lost connection) and passes
+     * a `MigrationException` through untouched, so the "out of space" classification survives the
+     * container layer with no edit to it.
+     */
+    class OutOfSpace(message: String, cause: Throwable? = null) :
+        MigrationException(message, cause), TransferStorageFault
+
+    /**
+     * The primary database was already switched when the failure happened, and the tail after it is
+     * not proven complete. The data is kept and no terminal may be published in either direction:
+     * neither "succeeded" nor "failed" would be true, so the peer is left at "result unknown" and
+     * this device finishes the promote on its next cold start.
+     */
+    class CommittedUnconfirmed(message: String, cause: Throwable? = null) :
+        MigrationException(message, cause), TransferCommittedUnconfirmed
 }

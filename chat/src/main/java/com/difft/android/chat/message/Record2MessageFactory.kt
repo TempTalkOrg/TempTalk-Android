@@ -295,7 +295,7 @@ fun getRecordMessageContentTwo(record: Message?, isGroup: Boolean, messageSender
                 } else if (record.forwardContext != null) {
                     senderName + "[" + ResUtils.getString(R.string.chat_history) + "]"
                 } else {
-                    senderName + record.text
+                    senderName + record.text.orEmpty()
                 }
             }
 

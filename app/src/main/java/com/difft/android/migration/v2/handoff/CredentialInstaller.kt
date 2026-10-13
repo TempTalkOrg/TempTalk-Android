@@ -25,13 +25,21 @@ class CredentialInstaller @Inject constructor(private val userManager: UserManag
 
         /** An account appeared while the restore was running — nothing was written. */
         data object SkippedNotFresh : Result
+
+        /** This same credential is already on disk from an earlier attempt — nothing to write. */
+        data object AlreadyInstalled : Result
     }
 
     fun install(credential: NeutralCredential): Result {
         var result: Result = Result.SkippedNotFresh
         userManager.update(commit = true) {
             // Re-read inside the block: this is the freshness test, not a convenience.
-            if (!account.isNullOrEmpty()) return@update
+            if (!account.isNullOrEmpty()) {
+                if (account == credential.account && migrationHandoffCompletedId == credential.handoffId) {
+                    result = Result.AlreadyInstalled
+                }
+                return@update
+            }
             account = credential.account
             baseAuth = credential.baseAuth
             microToken = credential.microToken
@@ -41,10 +49,10 @@ class CredentialInstaller @Inject constructor(private val userManager: UserManag
             migrationHandoffCompletedId = credential.handoffId
             result = Result.Installed
         }
-        if (result is Result.SkippedNotFresh) {
-            L.w { "[MigrationV2][Handoff] credential install skipped — an account appeared during promote" }
-        } else {
-            L.i { "[MigrationV2][Handoff] credential installed — this device is now signed in" }
+        when (result) {
+            Result.SkippedNotFresh -> L.w { "[MigrationV2][Handoff] credential install skipped — an account appeared during promote" }
+            Result.AlreadyInstalled -> L.i { "[MigrationV2][Handoff] credential already installed by an earlier attempt" }
+            Result.Installed -> L.i { "[MigrationV2][Handoff] credential installed — this device is now signed in" }
         }
         return result
     }

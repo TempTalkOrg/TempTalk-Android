@@ -446,7 +446,7 @@ class ChatNormalPaginationController @AssistedInject constructor(
                 ?: Long.MAX_VALUE
         // null upper bound == the unbounded `ge(min)` branch, which keeps absorbing newer rows.
         val windowUpperBound: Long? = if (lastMessageId == null || lastMessageId in existMessageIds) {
-            L.i { "[${forWhat.id}] observerMessagesChanges, include new incoming messages" }
+            L.d { "[Chat][${forWhat.id}] observerMessagesChanges, include new incoming messages" }
             null
         } else {
             L.i { "[${forWhat.id}] observerMessagesChanges, not include new incoming messages" }

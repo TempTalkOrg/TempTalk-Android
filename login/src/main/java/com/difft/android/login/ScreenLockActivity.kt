@@ -120,6 +120,7 @@ class ScreenLockActivity : BaseActivity() {
 
         // Pattern模式的事件
         setupPatternView()
+        ScreenLockLogoPolicy(mBinding).attach()
 
         mBinding.tvForgetPasscode.setOnClickListener {
             ComposeDialogManager.showMessageDialog(
@@ -230,7 +231,7 @@ class ScreenLockActivity : BaseActivity() {
             layoutParams.topToBottom = ConstraintLayout.LayoutParams.UNSET
             layoutParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
             layoutParams.topMargin = 0
-            layoutParams.bottomMargin = (50 * resources.displayMetrics.density).toInt()
+            layoutParams.bottomMargin = resources.getDimensionPixelSize(R.dimen.screen_lock_options_bottom_margin)
         } else {
             // Passcode模式：跟随btn_submit，距离20dp
             layoutParams.topToBottom = mBinding.btnSubmit.id

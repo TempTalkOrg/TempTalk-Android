@@ -195,6 +195,16 @@ class MigrationP2pReceiveActivity : BaseActivity() {
                     if (activated) restartApp()
                 }
 
+                // The database was switched but the tail after it is not proven done, so the in-process
+                // sign-in must not run: a cold start finishes the promote before anything else.
+                val committedUnconfirmed = state == MigrationP2pReceiveState.CommittedUnconfirmed
+                LaunchedEffect(committedUnconfirmed) {
+                    if (committedUnconfirmed) {
+                        L.w { "[MigrationV2][P2P][Rx] import committed; tail unconfirmed — cold start to finish it" }
+                        restartApp()
+                    }
+                }
+
                 // The history is on disk: finish the sign-in here without waiting for a tap, so the
                 // completion page can come after it rather than before. Guarded by the phase, which
                 // leaves Idle for good on the first start.

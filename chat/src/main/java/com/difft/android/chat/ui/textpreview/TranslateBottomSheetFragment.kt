@@ -5,6 +5,7 @@ import android.view.View
 import androidx.annotation.StringRes
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import com.difft.android.chat.R
@@ -13,8 +14,11 @@ import com.difft.android.chat.translate.TranslateLang
 import com.difft.android.chat.translate.TranslateMode
 import com.difft.android.chat.translate.TranslateQueue
 import com.difft.android.chat.translate.TranslateResult
+import com.difft.android.chat.translate.submitWaitingForPacks
+import com.difft.android.chat.translate.model.TranslateModelStore
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
@@ -28,6 +32,9 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
 
     @Inject
     lateinit var translateQueue: TranslateQueue
+
+    @Inject
+    lateinit var modelStore: TranslateModelStore
 
     private var _binding: LayoutTranslateBottomSheetContentBinding? = null
     private val binding get() = _binding!!
@@ -129,15 +136,33 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
         // A selection preview has no message id, so the text has to be part of the dedup key —
         // otherwise a second selection joins the first one's result.
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = translateQueue.submit(
-                owner = OWNER,
-                key = "preview#${target.name}#${originalText.hashCode()}",
-                messageId = "",
-                priority = TranslateQueue.Priority.NEW_INCOMING,
-                text = originalText,
-                target = target,
-                mode = TranslateMode.MANUAL,
-            ).await()
+            val result = try {
+                // The loading state stays up while a missing pack downloads, instead of failing at once.
+                val ready = modelStore.awaitReady(target)
+                if (_binding == null || targetLanguage != target) return@launch
+                if (!ready) {
+                    showError(R.string.chat_translate_model_failed)
+                    return@launch
+                }
+                // A missing source-language pack is waited for too, then the translation runs once more.
+                submitWaitingForPacks(modelStore, { _binding != null && targetLanguage == target }) {
+                    translateQueue.submit(
+                        owner = OWNER,
+                        key = "preview#${target.name}#${originalText.hashCode()}",
+                        messageId = "",
+                        priority = TranslateQueue.Priority.NEW_INCOMING,
+                        text = originalText,
+                        target = target,
+                        mode = TranslateMode.MANUAL,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[Translate] preview translate failed target=${target.name}: ${e.stackTraceToString()}" }
+                if (_binding != null && targetLanguage == target) showError(R.string.chat_translate_model_failed)
+                return@launch
+            }
             if (_binding == null || targetLanguage != target) return@launch
             render(result)
         }
@@ -146,9 +171,9 @@ class TranslateBottomSheetFragment : BaseBottomSheetDialogFragment() {
     private fun render(result: TranslateResult) {
         when (result) {
             is TranslateResult.Translated -> showResult(result.text)
-            // Already in the target language: the original is the best thing to show.
+            // AUTO-only answer; MANUAL (this sheet) gets the original as a Translated result instead.
             TranslateResult.SameLanguage -> showResult(originalText)
-            TranslateResult.ModelNotReady -> showError(R.string.chat_translate_model_not_ready_short)
+            is TranslateResult.ModelNotReady -> showError(R.string.chat_translate_model_not_ready_short)
             is TranslateResult.Unsupported -> showError(
                 if (result.reason == TranslateResult.Reason.TOO_LONG) {
                     R.string.chat_translate_too_long

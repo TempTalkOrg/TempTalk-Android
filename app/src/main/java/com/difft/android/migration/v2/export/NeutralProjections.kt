@@ -28,6 +28,7 @@ import com.difft.android.migration.v2.model.NeutralSharedContact
 import com.difft.android.migration.v2.model.NeutralSharedContactPhone
 import com.difft.android.migration.v2.readtime.AndroidExpiryAnchor
 import com.difft.android.migration.v2.readtime.ReadLadder
+import org.difft.app.database.NO_SERVER_ATTACHMENT_ID
 import org.difft.app.database.models.AttachmentModel
 import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBForwardContextModel
@@ -178,7 +179,8 @@ internal object NeutralProjections {
         // Identity and credentials always travel; the destination reads them unconditionally. Byte
         // frames are tracked by `pointerOnly` below, keyed by `stableId` and paired positionally on
         // read, so there is no separate contentRef.
-        serverAttachmentId = am.authorityId,
+        // 0 is the local "never uploaded" sentinel, which the wire carries as absent (iOS does the same).
+        serverAttachmentId = am.authorityId?.takeIf { it != NO_SERVER_ATTACHMENT_ID },
         encryptionKey = encodeKey(am.key),
         // The destination's download gate needs both key and digest, so a pointer-only attachment
         // cannot be re-downloaded or verified without this.
@@ -189,9 +191,18 @@ internal object NeutralProjections {
         ownerSentAt = ownerSentAt,
     )
 
+    /**
+     * The addressable identity of an attachment row: its `id`, or its `authorityId` (the re-download
+     * id) when the row has none. Null when the row has neither. Forward rows that arrived from
+     * another platform routinely have no `id`, so the byte record and the preview meta must both
+     * derive their stableId from this one rule or the meta cannot name its record.
+     */
+    fun attachmentStableRef(am: AttachmentModel): String? =
+        am.id?.takeIf { it.isNotEmpty() } ?: am.authorityId?.takeIf { it != 0L }?.toString()
+
     /** Preview meta for a forward/quote attachment row; ties to its byte record by stableId. */
     fun attachmentMeta(am: AttachmentModel): NeutralAttachmentMeta = NeutralAttachmentMeta(
-        stableId = am.id ?: "",
+        stableId = attachmentStableRef(am) ?: "",
         contentType = am.contentType,
         fileName = am.fileName?.takeIf { it.isNotEmpty() },
     )

@@ -38,13 +38,22 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // message, here is where that should be initiated. See sendNotification method below.
 
         try {
-            L.i { "[fcm] onMessageReceived notification:${remoteMessage.notification?.title} ${remoteMessage.notification?.body} data:${remoteMessage.data.keys.joinToString(",")}" }
+            // Metadata only: notification title/body and the encrypted payload are never logged.
+            L.i {
+                "[fcm] onMessageReceived priority=${remoteMessage.priority} originalPriority=${remoteMessage.originalPriority}" +
+                    " sentTime=${remoteMessage.sentTime} hasNotification=${remoteMessage.notification != null}" +
+                    " dataKeys=${remoteMessage.data.keys.joinToString(",")}"
+            }
             val customContent = remoteMessage.data["custom_content"]
             if (!TextUtils.isEmpty(customContent)) {
                 val pushCustomContent = entryPoint.gson.fromJson(customContent, PushCustomContent::class.java)
 
-                L.d { "[fcm] onMessageReceived pushCustomContent:${pushCustomContent}" }
-                L.i { "[fcm] onMessageReceived locKey:${pushCustomContent?.locKey}" }
+                L.i {
+                    "[fcm] onMessageReceived locKey=${pushCustomContent.locKey} critical=${pushCustomContent.critical}" +
+                        " notifyType=${pushCustomContent.notifyType} uid=${pushCustomContent.uid} gid=${pushCustomContent.gid}" +
+                        " roomId=${pushCustomContent.roomId} timestamp=${pushCustomContent.timestamp}" +
+                        " msgLen=${pushCustomContent.msg?.length ?: 0} hasPassthrough=${pushCustomContent.passthrough != null}"
+                }
 
                 when(pushCustomContent.critical) {
                     0 -> handleNormalMessage(entryPoint, pushCustomContent)

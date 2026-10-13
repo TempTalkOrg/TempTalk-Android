@@ -297,7 +297,7 @@ class VoiceMessageView @JvmOverloads constructor(
 
     private fun downloadAndSetupMediaPlayer(audioMessage: TextChatMessage, attachmentPath: String) {
         val attachment = audioMessage.attachment ?: return
-        val key = attachment.key ?: return
+        val key = attachment.key?.takeIf { it.isNotEmpty() } ?: return
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
                 attachment.localId,

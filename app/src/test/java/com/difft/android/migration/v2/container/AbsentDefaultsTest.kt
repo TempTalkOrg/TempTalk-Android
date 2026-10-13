@@ -76,6 +76,19 @@ class AbsentDefaultsTest {
     }
 
     @Test
+    fun `a quote or forward node missing its author decodes with an empty author`() {
+        // Desktop writes the author key only when it has one; without this the first non-null
+        // setter threw and the whole message was dropped.
+        val message = decodeMessage(
+            """{"type":"message","value":{$REQUIRED_MESSAGE_FIELDS,"quote":{"sentAt":7},""" +
+                """"forwardContext":{"roots":[{"sentAt":8}]}}}"""
+        )
+
+        assertEquals("", message.quote!!.author)
+        assertEquals("", message.forwardContext!!.roots.single().author)
+    }
+
+    @Test
     fun `present collections survive the sweep untouched`() {
         val message = decodeMessage(
             """{"type":"message","value":{$REQUIRED_MESSAGE_FIELDS,"recipients":["+1","+2"]}}"""

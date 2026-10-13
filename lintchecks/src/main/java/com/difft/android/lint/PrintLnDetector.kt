@@ -164,7 +164,7 @@ class PrintLnDetector : Detector(), Detector.UastScanner {
                 "— it never reaches the local log file (`FileLoggingTree`) and is " +
                 "not UID-masked.\n\n" +
                 "Use `L.d { \"...\" }` for transient debug output (cleaned up pre-PR " +
-                "per .claude/rules/logging-standards.md) or `L.i` for permanent logging.",
+                "per docs/agents/logging-standards-full.md) or `L.i` for permanent logging.",
             category = Category.MESSAGES,
             priority = 5,
             severity = Severity.ERROR,

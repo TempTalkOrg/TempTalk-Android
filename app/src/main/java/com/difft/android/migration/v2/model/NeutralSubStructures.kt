@@ -1,5 +1,7 @@
 package com.difft.android.migration.v2.model
 
+import com.difft.android.migration.v2.container.AbsentIsEmpty
+
 /**
  * Sub-structures embedded inside a [NeutralMessage]: pure canonical shapes, with no WCDB and no
  * serialization logic, that each platform projects into and expands back out of.
@@ -20,7 +22,7 @@ const val MENTIONS_ALL_UID = "MENTIONS_ALL"
  * @param messageMode confidential-mode flag of the quoted message; null when not carried.
  */
 data class NeutralQuote(
-    val author: String,
+    @field:AbsentIsEmpty val author: String,
     val sentAt: Long,
     val textPreview: String?,
     val attachmentsMeta: List<NeutralAttachmentMeta> = emptyList(),
@@ -102,7 +104,7 @@ data class NeutralSharedContactPhone(
  *   model cannot round-trip a multi-entry combined forward.
  */
 data class NeutralForward(
-    val author: String,
+    @field:AbsentIsEmpty val author: String,
     val sentAt: Long,
     val body: String?,
     val attachmentsMeta: List<NeutralAttachmentMeta> = emptyList(),

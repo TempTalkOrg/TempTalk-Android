@@ -23,6 +23,7 @@ data class RestorePaths(
     val stagingDbPath: String,
     val attachmentsStagingDir: String,
     val containerWorkFile: String,
+    val spoolDir: String,
 ) {
     companion object {
         /** Sub-directory name that holds all transient restore working files. */
@@ -30,6 +31,9 @@ data class RestorePaths(
 
         /** Attachment staging sub-directory inside [WORK_DIR_NAME]. */
         const val ATTACHMENTS_DIR_NAME = "attachments"
+
+        /** Receive-spool sub-directory inside the attachment [WORK_DIR_NAME]. */
+        const val SPOOL_DIR_NAME = "spool"
 
         /**
          * Production paths, with the staging products under a dedicated working directory the
@@ -45,6 +49,7 @@ data class RestorePaths(
                 stagingDbPath = File(work, "staging_$STAGING_DB_FILE").absolutePath,
                 attachmentsStagingDir = File(attachmentWork, ATTACHMENTS_DIR_NAME).absolutePath,
                 containerWorkFile = File(work, "container.ttmig").absolutePath,
+                spoolDir = File(attachmentWork, SPOOL_DIR_NAME).absolutePath,
             )
         }
 

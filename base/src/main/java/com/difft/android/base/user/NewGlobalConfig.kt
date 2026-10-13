@@ -46,7 +46,7 @@ data class MigrationConfig(
  * routing: while the proxy is active, [TunnelDomains] is the single source of
  * truth for BOTH the tunnel-host whitelist (which hosts go through the proxy
  * vs direct) AND the domains each client module is forced onto. See
- * `docs/claude/self-hosted-proxy-design.md` §7.3.
+ * `docs/agents/self-hosted-proxy-design.md` §7.3.
  */
 data class ProxyConfigData(
     val tunnelDomains: TunnelDomains? = null

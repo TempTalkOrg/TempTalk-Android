@@ -3,10 +3,8 @@ package com.difft.android
 import android.Manifest
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -21,7 +19,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.core.animation.doOnEnd
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -35,7 +32,6 @@ import com.difft.android.base.android.permission.PermissionUtil.registerPermissi
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
-import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DualPaneCollapseUtil
 import com.difft.android.base.utils.DualPaneRailUtil
 import com.difft.android.base.utils.DualPaneRatioUtil
@@ -44,7 +40,6 @@ import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.utils.PackageUtil
-import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
@@ -389,7 +384,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         checkRoot()
 
-        registerUpgradeDownloadCompleteReceiver()
+        updateManager.attach(this)
 
         checkUpdate()
 
@@ -433,22 +428,31 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
     }
 
+    /** Last logged (notMuted, muted, dotNotMuted, dotMuted) so the badge log only fires on change. */
+    private var lastLoggedBadgeState: List<Int>? = null
+
     private fun observeAndUpdateUnreadMessageCountBadge() {
         recentChatViewModel.allRecentRoomsStateFlow
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
-            .onEach {
-                val unreadNotMuteMessageCount =
-                    it.filter { it.isMuted.not() }.sumOf { room -> room.unreadMessageNum }
-                val unreadMuteMessageCount =
-                    it.filter { it.isMuted }.sumOf { room -> room.unreadMessageNum }
-                L.i { "[IndexActivity] observeAndUpdateUnreadMessageCountBadge:$unreadNotMuteMessageCount unreadMuteMessageCount:$unreadMuteMessageCount " }
-                if (unreadNotMuteMessageCount != 0) {
-                    displayBadge(
-                        R.drawable.chat_missing_number_bg,
-                        unreadNotMuteMessageCount
-                    )
-                } else {
-                    displayBadge(R.drawable.chat_missing_number_bg_muted, unreadMuteMessageCount)
+            .onEach { rooms ->
+                // A manual "mark as unread" is never counted (#1332, chat-list gesture design); it
+                // only earns a dot on the tab when no real unread exists in that mute group.
+                val (notMuted, muted) = rooms.partition { room -> room.isMuted.not() }
+                val unreadNotMuteMessageCount = notMuted.sumOf { room -> room.unreadMessageNum }
+                val unreadMuteMessageCount = muted.sumOf { room -> room.unreadMessageNum }
+                val manualNotMuted = notMuted.any { room -> room.isManualUnread && room.unreadMessageNum == 0 }
+                val manualMuted = muted.any { room -> room.isManualUnread && room.unreadMessageNum == 0 }
+                val badgeState = listOf(unreadNotMuteMessageCount, unreadMuteMessageCount, if (manualNotMuted) 1 else 0, if (manualMuted) 1 else 0)
+                if (badgeState != lastLoggedBadgeState) {
+                    lastLoggedBadgeState = badgeState
+                    L.i { "[IndexActivity] unread badge notMuted=$unreadNotMuteMessageCount muted=$unreadMuteMessageCount dotNotMuted=$manualNotMuted dotMuted=$manualMuted" }
+                }
+                when {
+                    unreadNotMuteMessageCount > 0 -> displayBadge(R.drawable.chat_missing_number_bg, unreadNotMuteMessageCount)
+                    manualNotMuted -> binding.indicatorviewChats.setBadgeDot(R.drawable.chat_missing_number_bg)
+                    unreadMuteMessageCount > 0 -> displayBadge(R.drawable.chat_missing_number_bg_muted, unreadMuteMessageCount)
+                    manualMuted -> binding.indicatorviewChats.setBadgeDot(R.drawable.chat_missing_number_bg_muted)
+                    else -> displayBadge(R.drawable.chat_missing_number_bg, 0)
                 }
                 userManager.update { unreadMsgNum = unreadNotMuteMessageCount }
                 appIconBadgeManager.updateAppIconBadgeNum(unreadNotMuteMessageCount)
@@ -586,18 +590,25 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         pushUtil.initFCMPush()
     }
 
+    /** Last FcmInitResult logged; the StateFlow replays its value on every STARTED. */
+    private var loggedFcmResult: FcmInitResult? = null
+
     private fun observeFcmInitResult() {
         pushUtil.fcmInitResult
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .onEach { result ->
+                // The recovery in handleFcmUnavailable() is idempotent and still runs on each
+                // replay; only the warning is written once per result instance.
+                val replay = result === loggedFcmResult
+                loggedFcmResult = result
                 when (result) {
                     is FcmInitResult.PlayServicesUnavailable -> {
-                        L.w { "[Push][fcm] Google Play Services not available, status:${result.statusCode}" }
+                        if (!replay) L.w { "[Push][fcm] Google Play Services not available, status:${result.statusCode}" }
                         handleFcmUnavailable()
                     }
 
                     is FcmInitResult.Failure -> {
-                        L.w { "[Push][fcm] FCM initialization failed: ${result.reason}" }
+                        if (!replay) L.w { "[Push][fcm] FCM initialization failed: ${result.reason}" }
                         handleFcmUnavailable()
                     }
 
@@ -726,7 +737,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private fun handleFcmUnavailable() {
         // 1. 服务已运行，不处理
         if (MessageForegroundService.isRunning) {
-            L.i { "[MessageService] Service already running, no action needed" }
+            L.d { "[MessageService] Service already running, no action needed" }
             return
         }
 
@@ -928,62 +939,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         paneAnimator = null
         paneReconciler.detach()
         super.onDestroy()
-        unregisterReceiver(upgradeDownloadCompleteReceiver)
-    }
-
-    private val upgradeDownloadCompleteReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.let {
-                if (it.`package` == ApplicationHelper.instance.packageName) {
-                    if (UpdateManager.ACTION_APK_DOWNLOAD_COMPLETED == intent.action) {
-                        val status = intent.getIntExtra(UpdateManager.INTENT_PARAM_APK_DOWNLOAD_STATUS, -1)
-                        val path = intent.getStringExtra(UpdateManager.INTENT_PARAM_APK_STORE_PATH) ?: ""
-                        val isForce = intent.getBooleanExtra(UpdateManager.INTENT_PARAM_APK_FORCE_UPGRADE, false)
-                        handleApkDownloadStatus(status, path, isForce)
-                    }
-                }
-            }
-        }
-    }
-
-    @SuppressLint("WrongConstant")
-    private fun registerUpgradeDownloadCompleteReceiver() {
-        val filter = IntentFilter()
-        filter.addAction(UpdateManager.ACTION_APK_DOWNLOAD_COMPLETED)
-        filter.priority = IntentFilter.SYSTEM_HIGH_PRIORITY
-        ContextCompat.registerReceiver(this, upgradeDownloadCompleteReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-    }
-
-    private fun handleApkDownloadStatus(status: Int, apkFilePath: String, isForce: Boolean = false) {
-        when (status) {
-            UpdateManager.STATUS_DOWNLOAD_SUCCESS -> {
-                if (!TextUtils.isEmpty(apkFilePath)) {
-                    val file = File(apkFilePath)
-                    if (isForce) {
-                        updateManager.closeForceUpdateDialog()
-                        updateManager.showInstallDialog(this, file, true)
-                    } else {
-                        updateManager.showInstallDialog(this, file, false)
-                    }
-                } else {
-                    ToastUtil.showLong(ResUtils.getString(com.difft.android.R.string.status_upgrade_install_failed))
-                }
-            }
-
-            UpdateManager.STATUS_DOWNLOAD_FAILED -> {
-                if (!TextUtils.isEmpty(apkFilePath) && File(apkFilePath).exists()) {
-                    File(apkFilePath).delete()
-                }
-                ToastUtil.showLong(ResUtils.getString(com.difft.android.R.string.status_upgrade_downolad_failed))
-            }
-
-            UpdateManager.STATUS_VERIFY_FAILED -> {
-                if (!TextUtils.isEmpty(apkFilePath) && File(apkFilePath).exists()) {
-                    File(apkFilePath).delete()
-                }
-                ToastUtil.showLong(ResUtils.getString(com.difft.android.R.string.status_upgrade_verify_failed))
-            }
-        }
     }
 
     private fun setUserProfile() {
@@ -992,7 +947,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                 withContext(Dispatchers.IO) {
                     loginRepo.setProfile()
                 }
-                L.i { "setUserProfile success" }
+                L.d { "[IndexActivity] setUserProfile success" }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

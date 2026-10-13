@@ -268,6 +268,30 @@ class MessageActionConfigBuilderTest {
         )
     }
 
+    @Test fun `C28b translate slot follows every translate status`() {
+        val expected = mapOf(
+            null to Type.TRANSLATE,
+            TranslateStatus.Invisible to Type.TRANSLATE,
+            // Every status that puts the translate block on screen offers "off"; an error row
+            // has no other way to be dismissed.
+            TranslateStatus.Translating to Type.TRANSLATE_OFF,
+            TranslateStatus.ShowCN to Type.TRANSLATE_OFF,
+            TranslateStatus.ShowEN to Type.TRANSLATE_OFF,
+            TranslateStatus.SameLanguage to Type.TRANSLATE,
+            TranslateStatus.Failed to Type.TRANSLATE_OFF,
+            TranslateStatus.FailedTooLong to Type.TRANSLATE_OFF,
+            TranslateStatus.FailedModel to Type.TRANSLATE_OFF,
+        )
+        assertEquals("every status must have an expectation", TranslateStatus.entries.toSet(), expected.keys.filterNotNull().toSet())
+        expected.forEach { (status, slot) ->
+            val msg = text(mine = true).apply {
+                translateData = status?.let { TranslateData(it, "cn", "en") }
+            }
+            val actual = types(msg).filter { it == Type.TRANSLATE || it == Type.TRANSLATE_OFF }
+            assertEquals("status=$status", listOf(slot), actual)
+        }
+    }
+
     @Test fun `C29 voice own speech showing yields SPEECH_TO_TEXT_OFF in slot`() {
         val msg = voice(mine = true).apply {
             speechToTextData = SpeechToTextData(SpeechToTextStatus.Show, "text")

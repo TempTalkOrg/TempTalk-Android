@@ -8,6 +8,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import okio.Buffer
 import org.junit.After
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -31,6 +33,9 @@ import kotlin.test.assertTrue
 @Config(application = android.app.Application::class, sdk = [33])
 class P2pContainerReceiveSinkProgressTest {
 
+    @get:Rule
+    val tmp = TemporaryFolder()
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @After
@@ -46,6 +51,7 @@ class P2pContainerReceiveSinkProgressTest {
         val reported = CopyOnWriteArrayList<Float>()
         val sink = P2pContainerReceiveSink<Long>(
             scope = scope,
+            spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
             onProgress = { reported.add(it) },
         ) { input -> input.readBytes().size.toLong() }
 
@@ -68,6 +74,7 @@ class P2pContainerReceiveSinkProgressTest {
         val reported = CopyOnWriteArrayList<Float>()
         val sink = P2pContainerReceiveSink<Long>(
             scope = scope,
+            spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
             onProgress = { reported.add(it) },
         ) { input -> input.readBytes().size.toLong() }
 
@@ -87,6 +94,7 @@ class P2pContainerReceiveSinkProgressTest {
         val reported = CopyOnWriteArrayList<Float>()
         val sink = P2pContainerReceiveSink<Long>(
             scope = scope,
+            spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
             onProgress = { reported.add(it) },
         ) { input -> input.readBytes().size.toLong() }
 
@@ -110,6 +118,7 @@ class P2pContainerReceiveSinkProgressTest {
         val calls = AtomicInteger()
         val sink = P2pContainerReceiveSink<Long>(
             scope = scope,
+            spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
             onBodyComplete = {
                 calls.incrementAndGet()
                 bodyComplete.countDown()
@@ -132,6 +141,7 @@ class P2pContainerReceiveSinkProgressTest {
     fun `a failing body-complete callback leaves the verdict intact`() = runBlocking {
         val sink = P2pContainerReceiveSink<Long>(
             scope = scope,
+            spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
             onBodyComplete = { error("callback boom") },
         ) { input -> input.readBytes().size.toLong() }
 

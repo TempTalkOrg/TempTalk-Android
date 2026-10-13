@@ -111,6 +111,7 @@ sealed class MigrationError(val code: String) {
             is MigrationException.SinkInterrupted -> ConnectionLost
             is MigrationException.EncryptionFailed -> EncryptionFailed
             // More specific RestoreAbortedCleanState BEFORE the broader RestoreFailed bucket.
+            is MigrationException.OutOfSpace -> DiskSpaceInsufficient
             is MigrationException.RestoreAbortedCleanState -> RestoreAbortedCleanState
             is MigrationException.RestoreFailed -> AtomicWriteFailed
             is MigrationException.SignInFailed -> SignInFailed

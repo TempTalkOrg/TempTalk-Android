@@ -4,6 +4,7 @@ import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import com.difft.android.chat.R
+import com.difft.android.chat.message.TextChatMessage
 
 /**
  * Represents a message action item
@@ -157,5 +158,28 @@ data class MessageAction(
             tintRes = com.difft.android.base.R.color.error,
             isDestructive = true
         )
+    }
+}
+
+/** Routes a full-menu action to its [MessageActionCoordinator.ActionListener] method. */
+internal fun MessageAction.Type.dispatchTo(listener: MessageActionCoordinator.ActionListener, message: TextChatMessage) {
+    when (this) {
+        MessageAction.Type.QUOTE -> listener.onQuote(message)
+        MessageAction.Type.COPY -> listener.onCopy(message)
+        MessageAction.Type.TRANSLATE -> listener.onTranslate(message)
+        MessageAction.Type.TRANSLATE_OFF -> listener.onTranslateOff(message)
+        MessageAction.Type.FORWARD -> listener.onForward(message)
+        MessageAction.Type.SPEECH_TO_TEXT -> listener.onSpeechToText(message)
+        MessageAction.Type.SPEECH_TO_TEXT_OFF -> listener.onSpeechToTextOff(message)
+        MessageAction.Type.SAVE -> listener.onSave(message)
+        MessageAction.Type.MULTISELECT -> listener.onMultiSelect(message)
+        MessageAction.Type.SAVE_TO_NOTE -> listener.onSaveToNote(message)
+        MessageAction.Type.DELETE_SAVED -> listener.onDeleteSaved(message)
+        MessageAction.Type.RECALL -> listener.onRecall(message)
+        MessageAction.Type.MORE_INFO -> listener.onMoreInfo(message)
+        MessageAction.Type.FAVORITE_GIF -> listener.onFavoriteGif(message)
+        MessageAction.Type.SELECT_ALL -> { /* Via SelectionMenuCallbacks.onSelectAll(); never dispatched here */ }
+        MessageAction.Type.RESEND,
+        MessageAction.Type.DELETE -> { /* Handled by FailedMessageActionPopup */ }
     }
 }

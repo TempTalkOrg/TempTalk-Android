@@ -259,7 +259,7 @@ object ContactorUtil {
                 emptyList()
             }
         } catch (throwable: Exception) {
-            L.e(throwable) { "[ContactorUtil] fetch contactors data fail:" }
+            L.e { "[ContactorUtil] fetch contactors data fail: ${throwable.stackTraceToString()}" }
             emptyList()
         }
     }

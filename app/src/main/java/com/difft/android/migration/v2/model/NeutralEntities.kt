@@ -138,13 +138,15 @@ enum class AttachmentOwner {
  *   `isVoice`, so the GIF bit survives migration.
  * @param amplitudes decoded voice-waveform data; null when absent or the source platform has none.
  * @param serverAttachmentId the server-side attachment id, letting the destination re-download bytes
- *   that were not present at export time. Always travels, independent of byte presence.
+ *   that were not present at export time. Travels whenever the source has one, independent of byte
+ *   presence; null when it never did (never uploaded, or a Desktop row with no numeric id).
  * @param encryptionKey base64 of the attachment's at-rest / transit key (32 AES ‖ 32 HMAC), paired
- *   with [serverAttachmentId] so a re-downloaded blob can be decrypted. Always travels.
+ *   with [serverAttachmentId] so a re-downloaded blob can be decrypted. Travels whenever the source
+ *   has one; a pointer-only row missing either imports as unavailable.
  * @param digestBase64 base64 of the ciphertext digest, length-self-describing: 16 bytes is MD5, 32
  *   bytes is SHA-256. It digests the carried blob when bytes travel and the server blob when
  *   [pointerOnly]. The destination's download gate requires it alongside [serverAttachmentId] and
- *   [encryptionKey], so it always travels.
+ *   [encryptionKey], so it travels whenever they do.
  * @param pointerOnly true when the bytes are not carried — the source file was absent, or the
  *   exporter cannot produce the contract blob form. The destination re-downloads when the message is
  *   next viewed; a past-retention failure renders as "attachment unavailable", not an error.

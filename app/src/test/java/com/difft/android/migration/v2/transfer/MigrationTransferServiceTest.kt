@@ -18,6 +18,7 @@ import com.difft.android.migration.v2.handoff.MigrationHandoffReconciler
 import com.difft.android.migration.v2.transfer.send.HANDOFF_NOT_ACKNOWLEDGED
 import com.difft.android.migration.v2.transfer.send.MigrationP2pSendController
 import com.difft.android.p2p.engine.upload.UploadReplyHeaders
+import com.difft.android.p2p.android.qr.QrPayloadCodec
 import com.difft.android.p2p.engine.model.QrPayload
 import com.difft.android.p2p.engine.upload.MigrationRejectReason
 import io.mockk.clearAllMocks
@@ -150,6 +151,60 @@ class MigrationTransferServiceTest {
         val raw = "java.net.SocketTimeoutException: connect timed out"
         assertEquals(raw, service.localizedFailureReason(raw), "the only diagnostic must not be swallowed")
     }
+
+    // ── T35: the reverse-pair request's guards ──────────────────────────────────────────────
+
+    private fun startReversePair(raw: String) {
+        service.onStartCommand(
+            Intent(MigrationTransferService.ACTION_START_REVERSE_PAIR)
+                .putExtra(MigrationTransferService.EXTRA_QR_PAYLOAD, raw),
+            0,
+            1,
+        )
+    }
+
+    /** A code with no transfer key is not a migration code at all: ignored, with no state written. */
+    @Test
+    fun `a reverse-pair request carrying no migration payload is ignored`() {
+        startReversePair("not-a-migration-code")
+
+        assertEquals(TransferState.Idle, MigrationTransferStateHolder.state.value)
+    }
+
+    /**
+     * Nothing would ever consume the request with no receiver up, so the screen is told rather than
+     * left on "preparing" for ever.
+     */
+    @Test
+    fun `a reverse-pair request with no receiver up fails the transfer`() {
+        startReversePair(QrPayloadCodec.encodeText(desktopExportQr()))
+
+        assertEquals(
+            TransferState.Failed(MigrationTransferService.REASON_NO_RECEIVER),
+            MigrationTransferStateHolder.state.value,
+        )
+    }
+
+    /** A receiver that is up consumes it: the holder is left alone for the pairing controller. */
+    @Test
+    fun `a reverse-pair request while a receiver is listening writes no failure`() {
+        val listening = TransferState.WaitingForPeer("192.168.1.5", 53317, "123456")
+        MigrationTransferStateHolder.update(listening)
+
+        startReversePair(QrPayloadCodec.encodeText(desktopExportQr()))
+
+        assertEquals(listening, MigrationTransferStateHolder.state.value)
+    }
+
+    private fun desktopExportQr() = QrPayload(
+        ip = "192.168.1.9",
+        port = 53317,
+        fp = "ab".repeat(32),
+        pin = "654321",
+        alias = "desk",
+        // A real 32-byte key: the QR codec refuses anything else.
+        transferKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
 
     @Test
     fun `ACTION_CANCEL sets Cancelled and tears down without throwing`() {

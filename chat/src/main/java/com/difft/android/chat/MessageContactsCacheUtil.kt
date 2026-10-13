@@ -71,7 +71,7 @@ class MessageContactsCacheUtil {
             cache[contactor.id] = contactor
         }
 
-        L.i { "MessageContactsCacheUtil: Loaded ${contactors.size} contactors, total cache size: ${cache.size}" }
+        L.d { "[MessageContactsCache] loaded=${contactors.size} cacheSize=${cache.size}" }
     }
 
     /**

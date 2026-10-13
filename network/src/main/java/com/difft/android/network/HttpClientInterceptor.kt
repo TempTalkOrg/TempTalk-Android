@@ -64,7 +64,9 @@ class HttpClientInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response = try {
         proceedWithFailover(chain)
     } catch (e: Exception) {
-        L.w { "[HttpClientInterceptor] error: ${e.stackTraceToString()}" }
+        // Callers log their own failure; for I/O errors one line with host and cause is enough,
+        // anything else is unexpected and keeps its stack.
+        L.w { "[HttpClientInterceptor] request failed host=${chain.request().url.host} ${e.describeForLog()}" }
         handleException(e, chain.request())
         throw e.asNetworkException()
     }
@@ -78,6 +80,10 @@ class HttpClientInterceptor(
             is ResponseResult.Failed -> throw result.exception
         }
     }
+
+    /** I/O failures are routine and get one line; anything else keeps its stack for location. */
+    private fun Exception.describeForLog(): String =
+        if (this is IOException) "${javaClass.simpleName}: $message" else stackTraceToString()
 
     private fun Exception.asNetworkException(): Exception = when (this) {
         is NetworkException -> this
@@ -132,7 +138,7 @@ class HttpClientInterceptor(
                 }
             } catch (e: Exception) {
                 lastError = e
-                L.w { "[HttpClientInterceptor] error: ${e.stackTraceToString()}" }
+                L.w { "[HttpClientInterceptor] failover request failed host=${newRequest.url.host} ${e.describeForLog()}" }
                 handleException(e, newRequest)
             }
         }

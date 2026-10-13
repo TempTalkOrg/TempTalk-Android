@@ -138,10 +138,10 @@ class NeutralRoundTripTest {
         records += msg("m-text", conv, body = "hello world", kind = ContentKind.TEXT, sentAt = 1000)
 
         // (2) image message + attachment with real bytes. A byte-carrying attachment still carries
-        // its identity/credentials (serverAttachmentId/encryptionKey ALWAYS travel) because the
-        // destination reads them unconditionally (AttachmentModel.authorityId!!). These non-null
-        // values are the regression guard: if a future change re-introduces the
-        // "byte-carrying → null serverAttachmentId/encryptionKey" bug, the lossless round-trip fails.
+        // its identity/credentials (serverAttachmentId/encryptionKey travel whenever the source has
+        // them, independent of byte presence). These non-null values are the regression guard: if a
+        // future change re-introduces the "byte-carrying → null serverAttachmentId/encryptionKey"
+        // bug, the lossless round-trip fails.
         records += msg("m-image", conv, body = null, kind = ContentKind.FILE, sentAt = 2000, attachmentRefs = listOf("att-image"))
         records += NeutralRecord.Attachment(
             NeutralAttachment(

@@ -6,9 +6,12 @@ import com.difft.android.chat.translate.model.ModelState
 import difft.android.messageserialization.model.TranslateData
 import difft.android.messageserialization.model.TranslateStatus
 import difft.android.messageserialization.model.TranslateTargetLanguage
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -16,6 +19,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * [AutoTranslateCoordinator] delivery: batching, persistence filtering, target changes, the manual
@@ -34,6 +38,9 @@ import org.junit.Test
  *  - a user action's write and the close-time drain both survive the scope cancel that precedes
  *    close(), and both drop themselves when the queue's epoch moved (logout)
  *  - a build with no translate backend reads a stored target as off and submits nothing
+ *  - a manual translation keeps its placeholder while the model downloads, then translates; a
+ *    failed or throwing download (or a model-not-ready result) ends in FailedModel; leaving the
+ *    page while waiting rolls the placeholder back; turning it off while waiting is final
  */
 /** Shorter than the incoming budget, so a wait that was wrongly opened is caught while still pending. */
 private const val STALE_SETTLE_MS = 150L
@@ -73,7 +80,7 @@ class AutoTranslateCoordinatorTest : AutoTranslateCoordinatorTestBase() {
         completeAuto("same", result = TranslateResult.SameLanguage)
         completeAuto("failed", result = TranslateResult.Failed(IllegalStateException()))
         completeAuto("long", result = TranslateResult.Unsupported(TranslateResult.Reason.TOO_LONG))
-        completeAuto("notReady", result = TranslateResult.ModelNotReady)
+        completeAuto("notReady", result = TranslateResult.ModelNotReady(setOf(ModelId("zh"))))
 
         awaitOverlay("only the successful id") { it.keys == setOf("ok") }
         coVerify(timeout = BARRIER_MS) {
@@ -187,6 +194,7 @@ class AutoTranslateCoordinatorTest : AutoTranslateCoordinatorTestBase() {
         coordinator.translateManually(target, TranslateTargetLanguage.ZH)
 
         assertEquals(TranslateStatus.Translating, coordinator.overlay.value.getValue("m0").translateStatus)
+        awaitCondition("the manual job to be submitted once the model is ready") { submissions.size == 1 }
         val manual = submissions.single()
         assertEquals("$ROOM#manual", manual.owner)
         // The manual key is distinct from the automatic one, so a manual request can never join an
@@ -213,6 +221,102 @@ class AutoTranslateCoordinatorTest : AutoTranslateCoordinatorTestBase() {
 
         awaitOverlay("the too-long error state") {
             it["m0"]?.translateStatus == TranslateStatus.FailedTooLong
+        }
+    }
+
+    @Test
+    fun `a manual translation waits for the model, then translates`() = coordinatorTest {
+        val download = CompletableDeferred<Boolean>()
+        coEvery { modelStore.awaitReady(TranslateLang.ZH) } coAnswers { download.await() }
+        startApplied()
+        answeringSubmit()
+        val target = message("m0")
+        coordinator.onWindowAssembled(listOf(target))
+
+        coordinator.translateManually(target, TranslateTargetLanguage.ZH)
+        delay(STALE_SETTLE_MS)
+
+        assertEquals(TranslateStatus.Translating, coordinator.overlay.value.getValue("m0").translateStatus)
+        assertEquals("nothing may reach the queue while the model is missing", 0, submissions.size)
+
+        download.complete(true)
+
+        awaitOverlay("the translation once the model is ready") {
+            it["m0"]?.translateStatus == TranslateStatus.ShowCN
+        }
+        assertEquals("m0#ZH#manual", submissions.single().key)
+    }
+
+    @Test
+    fun `a manual translation whose model download fails reports a model failure`() = coordinatorTest {
+        val download = CompletableDeferred<Boolean>()
+        coEvery { modelStore.awaitReady(TranslateLang.ZH) } coAnswers { download.await() }
+        startApplied()
+        val target = message("m0")
+        coordinator.onWindowAssembled(listOf(target))
+
+        coordinator.translateManually(target, TranslateTargetLanguage.ZH)
+        delay(STALE_SETTLE_MS)
+        assertEquals(TranslateStatus.Translating, coordinator.overlay.value.getValue("m0").translateStatus)
+
+        download.complete(false)
+
+        awaitOverlay("the model failure state") {
+            it["m0"]?.translateStatus == TranslateStatus.FailedModel
+        }
+        assertEquals(0, submissions.size)
+    }
+
+    @Test
+    fun `turning translation off while waiting for the model is final, whatever the download does`() =
+        coordinatorTest {
+            val downloads = ConcurrentLinkedQueue(listOf(CompletableDeferred<Boolean>(), CompletableDeferred()))
+            val (succeeds, fails) = downloads.toList()
+            coEvery { modelStore.awaitReady(TranslateLang.ZH) } coAnswers { downloads.remove().await() }
+            startApplied()
+            answeringSubmit()
+            val messages = listOf(message("m0"), message("m1"))
+            coordinator.onWindowAssembled(messages)
+            messages.forEach { coordinator.translateManually(it, TranslateTargetLanguage.ZH) }
+            awaitCondition("both manual waits to start") { downloads.isEmpty() }
+
+            messages.forEach { coordinator.translateOff(it) }
+            succeeds.complete(true)
+            fails.complete(false)
+            delay(STALE_SETTLE_MS)
+
+            messages.forEach {
+                assertEquals(TranslateStatus.Invisible, coordinator.overlay.value.getValue(it.id).translateStatus)
+            }
+            assertEquals("nothing is submitted after the user turned it off", 0, submissions.size)
+        }
+
+    @Test
+    fun `a manual wait that throws reports a model failure instead of crashing`() = coordinatorTest {
+        coEvery { modelStore.awaitReady(TranslateLang.ZH) } throws IllegalStateException("datastore read")
+        startApplied()
+        val target = message("m0")
+        coordinator.onWindowAssembled(listOf(target))
+
+        coordinator.translateManually(target, TranslateTargetLanguage.ZH)
+
+        awaitOverlay("the model failure state") { it["m0"]?.translateStatus == TranslateStatus.FailedModel }
+        assertEquals(0, submissions.size)
+    }
+
+    @Test
+    fun `leaving the page while waiting for the model rolls the placeholder back`() = coordinatorTest {
+        coEvery { modelStore.awaitReady(TranslateLang.ZH) } coAnswers { awaitCancellation() }
+        startApplied()
+        val target = message("m0")
+        coordinator.onWindowAssembled(listOf(target))
+        coordinator.translateManually(target, TranslateTargetLanguage.ZH)
+        assertEquals(TranslateStatus.Translating, coordinator.overlay.value.getValue("m0").translateStatus)
+
+        scope.cancel()
+
+        awaitOverlay("the placeholder rolled back") {
+            it["m0"]?.translateStatus == TranslateStatus.Invisible
         }
     }
 

@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-val appVersionName = "2.4.4"
+val appVersionName = "2.4.6"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -179,6 +179,17 @@ android {
             getByName("test${channel.replaceFirstChar { it.uppercase() }}")
                 .kotlin.srcDir("src/testGms/java")
         }
+
+        // In-app APK self-update (download service, notifications, installer, their manifest
+        // entries). Only channels allowed to install their own APK map it; google opens Play and
+        // fdroid opens F-Droid through the UpdateDeliveryModule in src/google/java and src/fdroid/java.
+        // manifest.srcFile replaces src/<channel>/AndroidManifest.xml for these two channels.
+        listOf("official", "insider").forEach { channel ->
+            getByName(channel).kotlin.srcDir("src/sideload/java")
+            getByName(channel).manifest.srcFile("src/sideload/AndroidManifest.xml")
+            getByName("test${channel.replaceFirstChar { it.uppercase() }}")
+                .kotlin.srcDir("src/testSideload/java")
+        }
     }
 
     signingConfigs {
@@ -301,14 +312,18 @@ roborazzi {
 }
 
 // The root project's detekt source set is src/main/** + src/test/** only, so the per-channel
-// translate-backend trees would go unscanned. Add them here — new production code must be linted.
+// source trees would go unscanned. Add them here — new production code must be linted.
 extensions.configure<dev.detekt.gradle.extensions.DetektExtension> {
     source.from(
         files(
             "src/gms/java",
             "src/fdroid/java",
+            "src/google/java",
+            "src/sideload/java",
             "src/testGms/java",
             "src/testFdroid/java",
+            "src/testGoogle/java",
+            "src/testSideload/java",
         )
     )
 }

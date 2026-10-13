@@ -22,6 +22,7 @@
     <application android:supportsRtl="true">
         <activity
             android:name=".ui.ChatActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustNothing|stateHidden" />
@@ -51,75 +52,91 @@
 
         <activity
             android:name=".group.GroupChatContentActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustNothing|stateHidden" />
 
         <activity
             android:name=".contacts.contactsdetail.ContactDetailActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".group.CreateGroupActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".group.GroupInfoActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".group.GroupGlobalNotificationSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".group.GroupNotificationSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".group.GroupMembersSearchActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
         <activity
             android:name=".group.GroupManagementActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".group.GroupModeratorsManagementActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".group.GroupSelectMemberActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.ChatArchiveSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop" />
         <activity
             android:name=".setting.SaveToPhotosSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop" />
         <activity
             android:name=".setting.translate.TranslateSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop" />
         <activity
             android:name=".ui.SingleChatSettingActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".ui.GroupInCommonActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".ui.EmojiReactionActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
@@ -129,28 +146,33 @@
             android:theme="@style/Theme.TextPreview" />
         <activity
             android:name=".ui.MessageDetailActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".mediasend.v2.MediaSelectionActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize|stateHidden" />
         <activity
             android:name=".presend.FilePreSendActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <activity
             android:name=".search.SearchMessageActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
         <activity
             android:name=".invite.InviteCodeActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop"

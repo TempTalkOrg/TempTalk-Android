@@ -10,7 +10,7 @@ import kotlin.coroutines.CoroutineContext
  * Test Application used by [ForegroundServiceIntegrationTest] to drive
  * `ForegroundService` lifecycle through `Robolectric.buildService`.
  *
- * `ForegroundService.buildForegroundNotification()` calls `PackageUtil.getAppName()`
+ * `ForegroundService.buildStartingNotification()` calls `PackageUtil.getAppName()`
  * which dereferences `ApplicationHelper.instance` (lateinit). This Application
  * initializes it in `onCreate` so the lateinit is set before any service
  * lifecycle methods run.

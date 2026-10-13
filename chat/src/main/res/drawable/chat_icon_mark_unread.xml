@@ -1,0 +1,32 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+  <!-- Tabler "message-circle-exclamation" (chat-list gesture design: Unread). -->
+  <group
+      android:scaleX="0.833333"
+      android:scaleY="0.833333">
+  <path
+      android:pathData="M15.02,19.52c-2.34,0.736 -5,0.606 -7.32,-0.52l-4.7,1l1.3,-3.9c-2.324,-3.437 -1.426,-7.872 2.1,-10.374c3.526,-2.501 8.59,-2.296 11.845,0.48c1.96,1.671 2.898,3.963 2.755,6.227"
+      android:strokeLineJoin="round"
+      android:strokeWidth="1.8"
+      android:fillColor="@color/transparent"
+      android:strokeColor="@color/gray_200"
+      android:strokeLineCap="round"/>
+  <path
+      android:pathData="M19,16v3"
+      android:strokeLineJoin="round"
+      android:strokeWidth="1.8"
+      android:fillColor="@color/transparent"
+      android:strokeColor="@color/gray_200"
+      android:strokeLineCap="round"/>
+  <path
+      android:pathData="M19,22v0.01"
+      android:strokeLineJoin="round"
+      android:strokeWidth="1.8"
+      android:fillColor="@color/transparent"
+      android:strokeColor="@color/gray_200"
+      android:strokeLineCap="round"/>
+  </group>
+</vector>

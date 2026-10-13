@@ -108,6 +108,7 @@ class P2pContainerFusionTest {
                 alias = "rx",
                 attachmentTarget = consumer.target(),
                 onRecord = { consumer.records.add(it) },
+                spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
                 port = 0, // ephemeral free port (avoid 53317 collisions on the build host)
             )
             server = receiverServerOf(receiver)
@@ -155,6 +156,7 @@ class P2pContainerFusionTest {
                 alias = "rx",
                 attachmentTarget = consumer.target(),
                 onRecord = { consumer.records.add(it) },
+                spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
                 port = 0,
             )
             server = receiverServerOf(receiver)
@@ -199,6 +201,7 @@ class P2pContainerFusionTest {
             val transferKey = "fixed-fusion-transfer-key-256bit-b64=="
             val receiveSink = P2pContainerReceiveSink<com.difft.android.migration.v2.container.ContainerManifest>(
                 scope = scope,
+                spoolDir = tmp.newFolder("spool-${System.nanoTime()}"),
             ) { input ->
                 reader.readStreaming(input, transferKey, consumer.target()) { consumer.records.add(it) }
             }

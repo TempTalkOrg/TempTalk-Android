@@ -73,6 +73,18 @@ class CredentialInstallerTest {
     }
 
     @Test
+    fun `the same credential already on disk reads as installed and writes nothing`() {
+        val userManager = FakeUserManager(
+            UserData(account = credential.account, migrationHandoffCompletedId = credential.handoffId),
+        )
+
+        val result = CredentialInstaller(userManager).install(credential)
+
+        assertEquals(CredentialInstaller.Result.AlreadyInstalled, result)
+        assertEquals(0, userManager.commits)
+    }
+
+    @Test
     fun `the credential never carries app lock material`() {
         val userManager = FakeUserManager()
         CredentialInstaller(userManager).install(credential)

@@ -31,8 +31,10 @@ value class ModelId(val code: String)
 /**
  * AUTO is the per-conversation setting acting on incoming messages; MANUAL is an explicit user
  * action (long-press translate, text-selection translate). The two differ in what they are allowed
- * to do: MANUAL may translate from any detected source language and may pull a model, AUTO is
- * restricted to zh/en and never downloads on the message path.
+ * to do: MANUAL may translate from any detected source language, may pull a model, treats
+ * undetermined text as English and shows same-language text as-is (the user asked for a result);
+ * AUTO is restricted to zh/en, skips same-language and undetermined text, and never downloads on
+ * the message path.
  */
 enum class TranslateMode { AUTO, MANUAL }
 
@@ -40,14 +42,14 @@ enum class TranslateMode { AUTO, MANUAL }
 sealed interface TranslateResult {
     data class Translated(val text: String, val sourceCode: String) : TranslateResult
 
-    /** Source and target are the same language — nothing to show. */
+    /** AUTO only: source and target are the same language, nothing to show. MANUAL returns [Translated]. */
     data object SameLanguage : TranslateResult
 
     /** The text itself is out of scope; [reason] says why. */
     data class Unsupported(val reason: Reason) : TranslateResult
 
-    /** The model this pair needs is not on the device yet. */
-    data object ModelNotReady : TranslateResult
+    /** [missing] — the target's models or the detected source's — are not on the device yet. */
+    data class ModelNotReady(val missing: Set<ModelId>) : TranslateResult
 
     data class Failed(val cause: Throwable) : TranslateResult
 

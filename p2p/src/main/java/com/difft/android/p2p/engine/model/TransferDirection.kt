@@ -8,7 +8,11 @@ enum class TransferDirection(val wire: String) {
     /** The scanner sends: `prepare-upload` / `upload`. The default when a payload carries no `dir`. */
     UPLOAD("upload"),
 
-    /** The scanner pulls the displayer's export: `prepare-download` / `download` / `download-result`. */
+    /**
+     * The displayer holds the data: the scanner reverse-pairs (`reverse-pair`) and receives it as an
+     * ordinary upload. Still exchanged as `"download"` for compatibility with codes minted by
+     * releases that pulled instead.
+     */
     DOWNLOAD("download");
 
     companion object {

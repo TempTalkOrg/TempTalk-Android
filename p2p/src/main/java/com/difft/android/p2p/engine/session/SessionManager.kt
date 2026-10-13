@@ -83,6 +83,8 @@ class SessionManager(
         var committing: Boolean = false
         /** An `upload` was authorized: bytes may have landed, so a cancel is a roll-back, not a no-op. */
         var bodyStarted: Boolean = false
+        /** Committed past the point of no return, with no way to prove the tail finished. */
+        var unconfirmed: Boolean = false
     }
 
     private var active: Session? = null
@@ -218,6 +220,9 @@ class SessionManager(
         val state = when (record.terminal) {
             TransferTerminal.SUCCEEDED -> CancelState.TOO_LATE
             TransferTerminal.FAILED -> CancelState.ROLLED_BACK
+            // Committed without a verdict: the import is past its commit point, so a cancel can undo
+            // nothing — the same answer a promoting session gets.
+            null -> CancelState.TOO_LATE
             else -> CancelState.STOPPED
         }
         CancelOutcome(state, tornDown = false)
@@ -236,13 +241,29 @@ class SessionManager(
     }
 
     /**
+     * The active session committed its import but cannot prove the tail after it finished. No
+     * terminal may ever be published for it, so it is flagged here and [clear] retires it without
+     * one instead of calling the teardown a cancellation.
+     */
+    fun markUnconfirmed(sessionId: String) {
+        synchronized(lock) {
+            active?.takeIf { it.sessionId == sessionId }?.unconfirmed = true
+        }
+    }
+
+    /**
      * Unconditional teardown (receiver stop). A session still live at this point was ended by this
      * side — the receiver going away — which for the sender is a cancel, so it is retained as one; a
      * session that already reached its terminal is untouched.
      */
     fun clear() {
         synchronized(lock) {
-            active?.let { retire(it, TransferTerminal.CANCELLED) }
+            active?.let { s ->
+                // A committed-but-unconfirmed session must not be retired as CANCELLED: that publishes
+                // a definite, false terminal — and persists it for the whole retention window —
+                // minutes after the data was already promoted.
+                if (s.unconfirmed) retire(s, terminal = null) else retire(s, TransferTerminal.CANCELLED)
+            }
         }
     }
 
@@ -287,11 +308,16 @@ class SessionManager(
         }
     }
 
-    /** Under [lock]: end [s] with [terminal], retain its record, persist, and drop it as active. */
-    private fun retire(s: Session, terminal: String) {
+    /**
+     * Under [lock]: end [s] with [terminal], retain its record, persist, and drop it as active. A null
+     * [terminal] retires the session with no verdict at all, leaving `/status` answering
+     * "still promoting, no result" for the retention window.
+     */
+    private fun retire(s: Session, terminal: String?) {
         s.stage = when (terminal) {
             TransferTerminal.SUCCEEDED -> TransferStages.DONE
             TransferTerminal.FAILED -> TransferStages.FAILED
+            null -> TransferStages.PROMOTING
             else -> TransferStages.CANCELLED
         }
         s.progressRevision++

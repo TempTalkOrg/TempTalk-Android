@@ -9,6 +9,7 @@ import com.difft.android.chat.message.TextChatMessage
 import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.translate.backend.TranslateBackend
 import com.difft.android.chat.translate.model.DownloadTrigger
+import com.difft.android.chat.translate.model.ModelState
 import com.difft.android.chat.translate.model.TranslateModelStore
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.messageserialization.db.store.DBRoomStore
@@ -89,6 +90,11 @@ class AutoTranslateCoordinator @AssistedInject constructor(
     /** Target language of the last manual request per message, so an inline retry can repeat it. */
     private val manualTargets = ConcurrentHashMap<String, TranslateTargetLanguage>()
 
+    /** Latest manual attempt per message; an older wait that outlives it must not write its outcome. */
+    private val manualAttempt = ConcurrentHashMap<String, Any>()
+
+    private val pendingManual = PendingManualTranslations()
+
     /** The current window, kept so a visible-range report can resolve ids to bodies. */
     private val windowMessages = ConcurrentHashMap<String, TextChatMessage>()
 
@@ -165,6 +171,11 @@ class AutoTranslateCoordinator @AssistedInject constructor(
             .distinctUntilChanged()
             .filter { it }
             .onEach { onVisibleRange(lastVisibleIds, VisibleReason.FIRST_SCREEN) }
+            .launchIn(scope)
+
+        // ...and the moment a manual request that gave up on the pack can run without another tap.
+        modelStore.state
+            .onEach { resumePendingManual(it) }
             .launchIn(scope)
     }
 
@@ -243,26 +254,50 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         if (text.isNullOrBlank()) return
         val previous = currentData(message.id) ?: EMPTY_TRANSLATE_DATA
         manualTargets[message.id] = targetLanguage
+        pendingManual.remove(message.id)
         userDisabled.remove(message.id)
         _overlay.update { it + (message.id to previous.copy(translateStatus = TranslateStatus.Translating)) }
+        val attempt = Any().also { manualAttempt[message.id] = it }
 
-        val handle = queue.submit(
-            owner = manualOwnerKey,
-            key = "${message.id}#${lang.name}#manual",
-            messageId = message.id,
-            priority = TranslateQueue.Priority.NEW_INCOMING,
-            text = text,
-            target = lang,
-            mode = TranslateMode.MANUAL,
-        )
         scope.launch {
+            // The user may turn translation off, leave the page, or start a newer attempt (retry,
+            // pack-ready resume) while the pack downloads; only the latest attempt owns the row.
+            fun stillWanted() = !closed && message.id !in userDisabled && manualAttempt[message.id] === attempt
+            val failedModel = previous.copy(translateStatus = TranslateStatus.FailedModel)
             try {
-                handle.await()
+                // Waited for here rather than in the queue worker, so a pack download never
+                // stalls the serial queue for every other conversation.
+                val ready = modelStore.awaitReady(lang)
+                if (!stillWanted()) return@launch
+                // A pack the engine found missing (the source's) is waited for once more here; every
+                // other result reaches the page through the completions collector.
+                val result = if (ready) {
+                    submitWaitingForPacks(modelStore, ::stillWanted) {
+                        queue.submit(
+                            owner = manualOwnerKey,
+                            key = "${message.id}#${lang.name}#manual",
+                            messageId = message.id,
+                            priority = TranslateQueue.Priority.NEW_INCOMING,
+                            text = text,
+                            target = lang,
+                            mode = TranslateMode.MANUAL,
+                        )
+                    }
+                } else {
+                    TranslateResult.ModelNotReady(emptySet())
+                }
+                if (result is TranslateResult.ModelNotReady && stillWanted()) {
+                    pendingManual.record(message, targetLanguage, modelStore.requiredModels(lang) + result.missing)
+                    _overlay.update { it + (message.id to failedModel) }
+                }
             } catch (e: CancellationException) {
-                // The queue cancels a pending handle when this page goes away; roll the optimistic
-                // placeholder back so a surviving observer never sees a frozen spinner.
-                _overlay.update { it + (message.id to previous) }
+                // The page going away cancels both the wait and the queued handle; roll the
+                // optimistic placeholder back so a surviving observer never sees a frozen spinner.
+                if (manualAttempt[message.id] === attempt) _overlay.update { it + (message.id to previous) }
                 throw e
+            } catch (e: Exception) {
+                L.e { "[Translate] manual failed room=${forWhat.id} msg=${message.id}: ${e.stackTraceToString()}" }
+                if (stillWanted()) _overlay.update { it + (message.id to failedModel) }
             }
         }
     }
@@ -273,6 +308,7 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         val off = current.copy(translateStatus = TranslateStatus.Invisible)
         _overlay.update { it + (message.id to off) }
         userDisabled.add(message.id)
+        pendingManual.remove(message.id)
         persistOne(message.id, off)
     }
 
@@ -301,6 +337,7 @@ class AutoTranslateCoordinator @AssistedInject constructor(
                 .also { pendingResults.clear() }
         }
         windowMessages.clear()
+        pendingManual.clear()
         releaseDeliveries()
         if (leftover.isNotEmpty()) {
             appScope.launch(Dispatchers.IO) { persistBatch(leftover) }
@@ -342,6 +379,17 @@ class AutoTranslateCoordinator @AssistedInject constructor(
     private fun releaseDeliveries() {
         deliveries.values.forEach { it.complete(Unit) }
         deliveries.clear()
+    }
+
+    // Reads the emitted snapshot: the store publishes state before refreshing the cache isReady() reads.
+    private fun resumePendingManual(models: Map<ModelId, ModelState>) {
+        if (closed) return
+        pendingManual.takeReady { models[it] == ModelState.Ready }
+            .filterNot { it.message.id in userDisabled }
+            .forEach {
+                L.i { "[Translate] manual resume room=${forWhat.id} msg=${it.message.id}" }
+                translateManually(it.message, it.targetLanguage)
+            }
     }
 
     private fun selectNewIncoming(behavior: ChatMessageListBehavior): List<MessageModel> {
@@ -394,10 +442,12 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         // A result for a target the conversation has since moved away from is stale; a manual
         // result is what the user explicitly asked for, so it is never filtered.
         if (!isManual && completion.target != target) return
+        // A manual one is owned by translateManually, which waits for the pack and retries.
+        if (isManual && completion.result is TranslateResult.ModelNotReady) return
 
         val data = mapResult(completion, isManual)
         if (data == null) {
-            if (!isManual && completion.result is TranslateResult.ModelNotReady) {
+            if (completion.result is TranslateResult.ModelNotReady) {
                 // Release the claim: the model-ready subscription will sweep this message again.
                 attempted.remove(completion.key)
             }
@@ -405,10 +455,10 @@ class AutoTranslateCoordinator @AssistedInject constructor(
         }
 
         if (isManual) {
+            // Turned off while the translation was queued: the Invisible row the user chose stands.
+            if (completion.messageId in userDisabled) return
+            pendingManual.remove(completion.messageId)
             _overlay.update { it + (completion.messageId to data) }
-            if (completion.result is TranslateResult.ModelNotReady) {
-                modelStore.ensureDownloaded(completion.target, DownloadTrigger.MANUAL_TRANSLATE)
-            }
             persistOne(completion.messageId, data)
             return
         }
@@ -445,11 +495,13 @@ class AutoTranslateCoordinator @AssistedInject constructor(
                 )
             }
 
+            // AUTO skips it. The engine answers MANUAL with the original as a Translated result, so
+            // the manual arm is defensive: it must still replace the placeholder, never leave it up.
             TranslateResult.SameLanguage ->
                 if (isManual) previous.copy(translateStatus = TranslateStatus.SameLanguage) else null
 
-            TranslateResult.ModelNotReady ->
-                if (isManual) previous.copy(translateStatus = TranslateStatus.Failed) else null
+            // Manual: handled by translateManually before delivery. Auto: silently re-swept.
+            is TranslateResult.ModelNotReady -> null
 
             is TranslateResult.Unsupported -> when {
                 !isManual -> null

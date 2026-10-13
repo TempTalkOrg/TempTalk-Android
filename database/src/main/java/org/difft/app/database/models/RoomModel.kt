@@ -67,6 +67,21 @@ class RoomModel {
     var unreadMessageNum: Int = 0
 
     /**
+     * Manual "mark as unread / read" state, synced across devices via SyncMessage.markAsUnread.
+     * Values: [difft.android.messageserialization.model.MARK_UNREAD_FLAG_CLEAR] (0, default) /
+     * UNREAD (1) / READ (2). Display rule: `isManualUnreadActive` — the mark is superseded by
+     * any activity newer than [markUnreadAt], so [unreadMessageNum] is never touched by it.
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var markUnreadFlag: Int = 0
+
+    /** Server timestamp (ms) of the sync that produced [markUnreadFlag]; 0 when never marked. */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var markUnreadAt: Long = 0
+
+    /**
      * const val MENTIONS_TYPE_NONE = -1
      * const val MENTIONS_TYPE_ALL = 1
      * const val MENTIONS_TYPE_ME = 2
@@ -154,6 +169,8 @@ class RoomModel {
                 blockStatus == other.blockStatus &&
                 readPosition == other.readPosition &&
                 unreadMessageNum == other.unreadMessageNum &&
+                markUnreadFlag == other.markUnreadFlag &&
+                markUnreadAt == other.markUnreadAt &&
                 mentionType == other.mentionType &&
                 lastActiveTime == other.lastActiveTime &&
                 groupMembersNumber == other.groupMembersNumber &&
@@ -186,6 +203,8 @@ class RoomModel {
         blockStatus,
         readPosition,
         unreadMessageNum,
+        markUnreadFlag,
+        markUnreadAt,
         mentionType,
         lastActiveTime,
         groupMembersNumber,
@@ -213,6 +232,8 @@ class RoomModel {
                 ", blockStatus=" + blockStatus +
                 ", readPosition=" + readPosition +
                 ", unreadMessageNum=" + unreadMessageNum +
+                ", markUnreadFlag=" + markUnreadFlag +
+                ", markUnreadAt=" + markUnreadAt +
                 ", mentionType=" + mentionType +
                 ", lastActiveTime=" + lastActiveTime +
                 ", groupMembersNumber=" + groupMembersNumber +

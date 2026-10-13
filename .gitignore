@@ -25,3 +25,7 @@ org.difft.*.txt
 .claude/current-task
 CLAUDE.local.md
 tmp/
+
+# Python bytecode from .agents/.codex helper scripts and their tests
+__pycache__/
+*.pyc

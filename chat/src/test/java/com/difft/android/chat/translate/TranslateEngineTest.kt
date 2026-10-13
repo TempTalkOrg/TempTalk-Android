@@ -31,12 +31,15 @@ import java.io.IOException
  * What each case asserts:
  *  - T8   AUTO rejects a source outside the zh/en whitelist without calling the translator
  *  - T8b  MANUAL accepts any source language the backend can handle
- *  - T9   source == target short-circuits to SameLanguage before the translator
- *  - T10  a backend that echoes the input back is also SameLanguage
+ *  - T9   AUTO: source == target short-circuits to SameLanguage before the translator
+ *  - T9b  MANUAL: source == target returns the original text as Translated, without the translator
+ *  - T10  AUTO: a backend that echoes the input back is also SameLanguage
+ *  - T10b MANUAL: an echo is Translated carrying the original text
  *  - T11  a missing model answers ModelNotReady BEFORE identification runs
  *  - T12  blank and over-cap bodies map to Unsupported(EMPTY) / Unsupported(TOO_LONG)
  *  - T13  a backend exception maps to Failed carrying the cause
  *  - T13b "no conclusion" from the backend falls back to the character ratio
+ *  - T13c text with no conclusion at all: AUTO skips it, MANUAL assumes the pivot language (en)
  *  - T57  warmUp asks the backend for exactly the pair the target needs
  */
 class TranslateEngineTest {
@@ -95,7 +98,7 @@ class TranslateEngineTest {
 
         val result = engine.translate("hello", TranslateLang.ZH, TranslateMode.AUTO)
 
-        assertEquals(TranslateResult.ModelNotReady, result)
+        assertEquals(TranslateResult.ModelNotReady(setOf(ModelId(TranslateLanguageCodes.ZH))), result)
         assertEquals(0, backend.identifyCount)
         assertTrue(backend.translatedPairs.isEmpty())
     }
@@ -141,14 +144,16 @@ class TranslateEngineTest {
     }
 
     @Test
-    fun `a non-english source whose model is missing is ModelNotReady`() = runTest {
-        backend.identifyResult = "de"
-        every { modelStore.isReady(ModelId("de")) } returns false
+    fun `a non-english source whose model is missing is ModelNotReady naming the source model`() = runTest {
+        backend.identifyResult = "ja"
+        every { modelStore.isReady(ModelId("ja")) } returns false
 
-        val result = engine.translate("guten tag", TranslateLang.ZH, TranslateMode.MANUAL)
+        val result = engine.translate("こんにちは", TranslateLang.ZH, TranslateMode.MANUAL)
 
-        assertEquals(TranslateResult.ModelNotReady, result)
+        // The caller waits for exactly this set before retrying, so it must be the source, not the target.
+        assertEquals(TranslateResult.ModelNotReady(setOf(ModelId("ja"))), result)
         assertTrue(backend.translatedPairs.isEmpty())
+        verify(exactly = 1) { modelStore.ensureDownloaded(ModelId("ja"), any()) }
     }
 
     @Test
@@ -183,6 +188,46 @@ class TranslateEngineTest {
         val result = engine.translate("hello", TranslateLang.ZH, TranslateMode.AUTO)
 
         assertEquals(TranslateResult.SameLanguage, result)
+    }
+
+    @Test
+    fun `T9b MANUAL english into EN returns the original without calling the translator`() = runTest {
+        backend.identifyResult = TranslateLanguageCodes.EN
+
+        val result = engine.translate("hello", TranslateLang.EN, TranslateMode.MANUAL)
+
+        assertEquals(TranslateResult.Translated("hello", TranslateLanguageCodes.EN), result)
+        assertTrue(backend.translatedPairs.isEmpty())
+    }
+
+    @Test
+    fun `T9b MANUAL chinese into ZH returns the original without calling the translator`() = runTest {
+        backend.identifyResult = TranslateLanguageCodes.ZH
+
+        val result = engine.translate("你好", TranslateLang.ZH, TranslateMode.MANUAL)
+
+        assertEquals(TranslateResult.Translated("你好", TranslateLanguageCodes.ZH), result)
+        assertTrue(backend.translatedPairs.isEmpty())
+    }
+
+    @Test
+    fun `T9 AUTO english into EN is still SameLanguage`() = runTest {
+        backend.identifyResult = TranslateLanguageCodes.EN
+
+        val result = engine.translate("hello", TranslateLang.EN, TranslateMode.AUTO)
+
+        assertEquals(TranslateResult.SameLanguage, result)
+        assertTrue(backend.translatedPairs.isEmpty())
+    }
+
+    @Test
+    fun `T10b MANUAL a backend echo is Translated carrying the original text`() = runTest {
+        backend.identifyResult = TranslateLanguageCodes.EN
+        backend.translateResult = "  hello  "
+
+        val result = engine.translate("hello", TranslateLang.ZH, TranslateMode.MANUAL)
+
+        assertEquals(TranslateResult.Translated("hello", TranslateLanguageCodes.EN), result)
     }
 
     // --- T13 ----------------------------------------------------------------
@@ -220,16 +265,52 @@ class TranslateEngineTest {
         assertEquals(TranslateResult.Translated("hi", TranslateLanguageCodes.ZH), result)
     }
 
+    // --- T13c ---------------------------------------------------------------
+
     @Test
-    fun `T13b text with no zh or en letter has no conclusion`() = runTest {
+    fun `T13c AUTO skips text with no zh or en letter`() = runTest {
         backend.identifyResult = null
 
-        val result = engine.translate("12345 !!!", TranslateLang.ZH, TranslateMode.MANUAL)
+        val result = engine.translate("12345 !!!", TranslateLang.ZH, TranslateMode.AUTO)
 
         assertEquals(
             TranslateResult.Unsupported(TranslateResult.Reason.LANGUAGE_NOT_SUPPORTED),
             result,
         )
+        assertTrue(backend.translatedPairs.isEmpty())
+    }
+
+    @Test
+    fun `T13c MANUAL treats undetermined text as the pivot language`() = runTest {
+        backend.identifyResult = null
+        backend.translateResult = "一二三"
+        // The pivot needs no source pack, so an absent source model must not gate it.
+        every { modelStore.isReady(any<ModelId>()) } returns false
+
+        val result = engine.translate("123", TranslateLang.ZH, TranslateMode.MANUAL)
+
+        assertEquals(TranslateResult.Translated("一二三", TranslateLanguageCodes.PIVOT), result)
+        assertEquals(listOf("${TranslateLanguageCodes.PIVOT}-zh"), backend.translatedPairs)
+    }
+
+    @Test
+    fun `T13c MANUAL digits the backend echoes back still show as Translated`() = runTest {
+        backend.identifyResult = null
+        backend.translateResult = "12345"
+
+        val result = engine.translate("12345", TranslateLang.ZH, TranslateMode.MANUAL)
+
+        assertEquals(TranslateResult.Translated("12345", TranslateLanguageCodes.PIVOT), result)
+        assertEquals(listOf("${TranslateLanguageCodes.PIVOT}-zh"), backend.translatedPairs)
+    }
+
+    @Test
+    fun `T13c MANUAL digits into EN show the original without calling the translator`() = runTest {
+        backend.identifyResult = null
+
+        val result = engine.translate("12345", TranslateLang.EN, TranslateMode.MANUAL)
+
+        assertEquals(TranslateResult.Translated("12345", TranslateLanguageCodes.PIVOT), result)
         assertTrue(backend.translatedPairs.isEmpty())
     }
 

@@ -150,7 +150,7 @@ object FileDecryptionUtil {
             }
         }
 
-        L.i { "[FileDecryptionUtil] 解密完成，文件大小: ${targetFile.length()}" }
+        L.i { "[FileDecryptionUtil] decrypted size=${targetFile.length()}" }
     }
 
     /**

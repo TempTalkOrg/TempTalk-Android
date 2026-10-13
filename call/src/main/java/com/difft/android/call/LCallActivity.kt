@@ -46,7 +46,6 @@ import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.difft.android.call.util.ScreenDeviceUtil
 import com.difft.android.base.utils.hideNavigationBar
 import com.difft.android.network.config.GlobalConfigsManager
 import dagger.Lazy
@@ -207,14 +206,22 @@ class LCallActivity : AppCompatActivity() {
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         L.i { "[Call] LCallActivity: onCreate" }
+        // Pre-super, like BaseActivity: the manifest `locked` keeps the rotation the call was
+        // launched over (a landscape app, say) only until this writes the real target, so the
+        // write must land before the first frame. Safe here — this activity is opaque.
+        policyAppliedOrientation = OrientationPolicy.applyTo(this)
+        // Created inside a pending unfold (an incoming call as the device opens): applyTo held
+        // this screen open, so it needs the same delayed re-lock BaseActivity's screens get in
+        // case no display switch follows.
+        val heldForUnfold = OrientationPolicy.isUnfoldPending()
         super.onCreate(savedInstanceState)
+        if (heldForUnfold) OrientationPolicy.scheduleUnfoldRelock(this) { reapplyOrientationPolicyIfOwned() }
 
-        // After process death (e.g. native crash), the system may restore this
-        // Activity from the separate call task. All in-memory call state
-        // (OnGoingCallStateManager, LiveKit Room) is gone, so continuing would
-        // start a ghost ForegroundService with no real call behind it.
+        // Restored from the call task with no call behind it — typically after process death, which
+        // wipes all in-memory call state; continuing would start a ghost ForegroundService. The log
+        // states the observed condition, not process death: a config-change recreation lands here too.
         if (savedInstanceState != null && !onGoingCallStateManager.isInCalling()) {
-            L.w { "[Call] LCallActivity: Restored after process death with no active call, finishing" }
+            L.w { "[Call] LCallActivity: restored with savedInstanceState but no active call, finishing" }
             finish()
             return
         }
@@ -279,14 +286,14 @@ class LCallActivity : AppCompatActivity() {
     }
 
     /**
-     * Activity teardown.
-     *
-     * Delegates to [CallCleanupManager] for the unified resource-release
-     * pass and then nulls out local references to prevent leaks.
+     * Activity teardown. Delegates to [CallCleanupManager] and then nulls out local references to
+     * prevent leaks. A configuration-change recreation releases only Activity-scoped resources.
      */
     override fun onDestroy() {
+        // `!isFinishing`: a hang-up racing a configuration change must still tear the call down.
+        val isConfigurationChange = isChangingConfigurations && !isFinishing
         super.onDestroy()
-        L.i { "[Call] LCallActivity onDestroy start." }
+        L.i { "[Call] LCallActivity onDestroy start. isConfigurationChange:$isConfigurationChange" }
 
         callCleanupManager?.cleanup(
             lifecycleObserver = callLifecycleObserver,
@@ -303,7 +310,8 @@ class LCallActivity : AppCompatActivity() {
             contactorCacheManager = contactorCacheManager,
             callControlMessageManager = onGoingCallStateManager,
             viewModel = viewModel,
-            backPressedCallback = if (::backPressedCallback.isInitialized) backPressedCallback else null
+            backPressedCallback = if (::backPressedCallback.isInitialized) backPressedCallback else null,
+            isConfigurationChange = isConfigurationChange
         )
 
         callLifecycleObserver = null
@@ -352,9 +360,6 @@ class LCallActivity : AppCompatActivity() {
         super.onPause()
         L.i { "[Call] LCallActivity onPause" }
         onGoingCallStateManager.setIsInForeground(false)
-        if (!onGoingCallStateManager.isInCallEnding()) {
-            callServiceManager?.updateOngoingCallNotification(true)
-        }
         screenshotController?.stopListening()
     }
 
@@ -366,7 +371,6 @@ class LCallActivity : AppCompatActivity() {
         }
 
         onGoingCallStateManager.setIsInForeground(true)
-        callServiceManager?.updateOngoingCallNotification(false)
 
         if (viewModel.isRequestingPermission()) {
             viewModel.callUiController.setRequestPermissionStatus(false)
@@ -384,8 +388,7 @@ class LCallActivity : AppCompatActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pictureInPictureManager?.onPictureInPictureModeChanged(
             isInPictureInPictureMode,
-            newConfig,
-            isScreenLocked = ScreenDeviceUtil.isScreenLocked(this)
+            newConfig
         )
         updateScreenshotListeningState()
         // Backstop for the PiP skips in onConfigurationChanged and the display watcher: a fold

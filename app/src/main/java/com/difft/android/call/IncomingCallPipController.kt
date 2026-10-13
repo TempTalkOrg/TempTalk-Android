@@ -76,13 +76,11 @@ internal class IncomingCallPipController(
         }
 
         binding.windowZoomOut.isVisible = !isInPictureInPictureMode
-        if (isInPictureInPictureMode) {
-            binding.acceptCallBtn.visibility = View.INVISIBLE
-            binding.rejectCallBtn.visibility = View.INVISIBLE
-        } else {
-            binding.acceptCallBtn.visibility = View.VISIBLE
-            binding.rejectCallBtn.visibility = View.VISIBLE
-        }
+        // INVISIBLE, not GONE, for whichever row the answer mode shows: it keeps its layout slot and
+        // the mode chosen at onCreate survives the PiP round trip; the other row stays GONE.
+        val controlsVisibility = if (isInPictureInPictureMode) View.INVISIBLE else View.VISIBLE
+        if (binding.answerControls.visibility != View.GONE) binding.answerControls.visibility = controlsVisibility
+        if (binding.answerSlider.visibility != View.GONE) binding.answerSlider.visibility = controlsVisibility
     }
 
     /**

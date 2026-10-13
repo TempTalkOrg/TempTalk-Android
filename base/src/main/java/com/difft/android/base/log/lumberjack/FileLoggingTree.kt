@@ -109,9 +109,13 @@ class FileLoggingTree(
     override fun log(priority: Int, prefix: String, message: String, t: Throwable?, stackData: StackData) {
         // 获取调用时捕获的时间戳（如果有），否则使用当前时间
         val timestamp = getLogTimestamp() ?: System.currentTimeMillis()
-        val formattedTime = dateFormatter.format(Date(timestamp))
+        // SimpleDateFormat is not thread-safe and SDK passthrough (LiveKit) logs from its own
+        // threads; a garbled prefix would also corrupt the day key of the daily budget.
+        val formattedTime = synchronized(dateFormatter) { dateFormatter.format(Date(timestamp)) }
 
-        val logMessage = formatLine(prefix, message)
+        // Backstop redaction on the persisted line: covers Timber-appended throwable text and
+        // SDK passthrough that never went through L.replaceUid.
+        val logMessage = formatLine(prefix, LogScrubber.scrub(message))
         // 在 message 前添加调用时的时间戳，保证时间准确性
         val logMessageWithTime = "$formattedTime $logMessage"
 
@@ -121,11 +125,25 @@ class FileLoggingTree(
 
     private val WTF_MARKER = MarkerFactory.getMarker("WTF-")
 
+    private val dailyBudget = DailyLogBudget(DAILY_INFO_BUDGET_BYTES)
+
+    @Synchronized
     private fun doRealLog(priority: Int, logMessage: String) {
         // slf4j:   TRACE   <   DEBUG < INFO < WARN < ERROR < FATAL
         // Android: VERBOSE <   DEBUG < INFO < WARN < ERROR < ASSERT
 
         if (priority == Log.VERBOSE || priority == Log.DEBUG) return
+
+        // logMessage starts with the formatted call-time timestamp (yyyy-MM-dd …).
+        val day = logMessage.take(DAY_PREFIX_LENGTH)
+        when (dailyBudget.admit(day, priority, logMessage.length + 1)) {
+            DailyLogBudget.Admission.WRITE -> Unit
+            DailyLogBudget.Admission.DROP -> return
+            DailyLogBudget.Admission.WRITE_EXHAUSTED_MARKER -> {
+                mLogger.warn("${logMessage.take(TIME_PREFIX_LENGTH)} [FileLoggingTree] daily INFO budget of ${DAILY_INFO_BUDGET_BYTES / 1024 / 1024} MB exhausted, dropping INFO until the next day")
+                return
+            }
+        }
 
         when (priority) {
 //            Log.VERBOSE -> mLogger.trace(logMessage)
@@ -138,6 +156,11 @@ class FileLoggingTree(
     }
 
     companion object {
+
+        /** INFO bytes allowed per calendar day; WARN/ERROR are exempt (see DailyLogBudget). */
+        private const val DAILY_INFO_BUDGET_BYTES = 10L * 1024 * 1024
+        private const val DAY_PREFIX_LENGTH = "yyyy-MM-dd".length
+        private const val TIME_PREFIX_LENGTH = "yyyy-MM-dd HH:mm:ss,SSS".length
 
         const val DATE_FILE_NAME_PATTERN = "%s_\\d{8}.%s"
         const val NUMBERED_FILE_NAME_PATTERN = "%s\\d*.%s"

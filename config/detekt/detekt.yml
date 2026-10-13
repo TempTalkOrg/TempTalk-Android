@@ -4,7 +4,7 @@
 # Style, naming, comments rulesets are intentionally OFF — we rely on Claude
 # review + future ktlint integration for those.
 #
-# See docs/claude/detekt-coroutine-rules.md for the full rationale.
+# See docs/agents/detekt-coroutine-rules.md for the full rationale.
 # Update config/detekt/baseline-README.md when adding new baselined violations.
 
 # ────────────────────────────────────────────────────────────────────

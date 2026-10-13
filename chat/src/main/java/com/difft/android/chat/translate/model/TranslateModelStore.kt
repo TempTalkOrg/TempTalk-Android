@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -106,6 +107,7 @@ class TranslateModelStore @Inject constructor(
     @Volatile
     private var inFlight: ModelId? = null
 
+    @Volatile
     private var inFlightJob: Job? = null
 
     @Volatile
@@ -160,6 +162,50 @@ class TranslateModelStore @Inject constructor(
         appScope.launch { dispatchDownload(model, trigger, ignoreBackoff = false) }
     }
 
+    /** [awaitReady] over the models [target] needs. */
+    suspend fun awaitReady(target: TranslateLang): Boolean = awaitReady(requiredModels(target))
+
+    /**
+     * Makes [models] available and suspends until they are, for an explicit user action that must
+     * not fail just because a pack is still downloading. The device is asked directly rather than
+     * trusting [readyCache], which is empty after a cold start with no auto-translate room even when
+     * the pack is installed. An in-flight download is joined, not duplicated, until it completes,
+     * fails or is flagged stuck (no wall-clock cap: progress, not elapsed time, decides); one that
+     * is already stuck is restarted first, so a retry waits again rather than failing at once. It
+     * runs on [appScope], so it outlives us. Returns whether every model is ready afterwards.
+     */
+    suspend fun awaitReady(models: Set<ModelId>): Boolean {
+        if (!backend.isSupported) return false
+        requiredCache.updateAndGet { it + models }
+        var gaveUp: DownloadWaitOutcome? = null
+        for (model in models) {
+            if (isReady(model)) continue
+            if (isModelOnDevice(model)) {
+                failureState.ensureLoaded()
+                failureState.onSuccess(model)
+                setState(model, ModelState.Ready)
+                continue
+            }
+            dispatchDownload(model, DownloadTrigger.MANUAL_TRANSLATE, ignoreBackoff = true)
+            var waited = DownloadWaitOutcome.COMPLETED
+            while (true) {
+                val job = downloadLock.withLock { inFlightJob.takeIf { inFlight == model } } ?: break
+                waited = awaitDownload(job, model, state)
+                // A replaced attempt (stuck restart) joins as completed without the pack arriving;
+                // follow whichever attempt now holds the slot instead of reporting a failure.
+                if (waited != DownloadWaitOutcome.COMPLETED || !job.isCancelled) break
+            }
+            if (waited != DownloadWaitOutcome.COMPLETED) {
+                gaveUp = waited
+                break
+            }
+        }
+        val ready = models.all { isReady(it) }
+        val outcome = if (ready) "ready" else gaveUp?.name?.lowercase() ?: "failed"
+        L.i { "[TranslateModel] awaitReady models=${models.joinToString { it.code }} outcome=$outcome" }
+        return ready
+    }
+
     /**
      * Settings-screen retry. Clears the backoff and, when the current attempt is wedged, tears the
      * wedged attempt down first — otherwise the button would be a no-op exactly when the user needs
@@ -178,15 +224,20 @@ class TranslateModelStore @Inject constructor(
             withContext(NonCancellable) {
                 downloadLock.withLock {
                     if (inFlight != model) return@withLock
-                    probe.snapshot()?.let { probe.remove(it.downloadId) }
-                    inFlightJob?.cancel()
-                    inFlight = null
-                    inFlightJob = null
+                    tearDownInFlight()
                 }
             }
             stopWatchdog()
             setState(model, ModelState.NotStarted)
         }
+    }
+
+    /** Drops the in-flight attempt and its DownloadManager row. Caller holds [downloadLock]. */
+    private fun tearDownInFlight() {
+        probe.snapshot()?.let { probe.remove(it.downloadId) }
+        inFlightJob?.cancel()
+        inFlight = null
+        inFlightJob = null
     }
 
     fun onForeground() {
@@ -269,13 +320,16 @@ class TranslateModelStore @Inject constructor(
         failureState.ensureLoaded()
         downloadLock.withLock {
             if (inFlight != null) {
-                val stuckBypass = trigger == DownloadTrigger.SETTINGS_RETRY &&
+                // A user retry on a stuck attempt starts over with a fresh no-progress window
+                // instead of failing at once. The stalled system download row is dropped too;
+                // stuck means it moved no bytes for a minute, so nothing of value is discarded.
+                val stuckBypass = trigger in STUCK_RESTART_TRIGGERS &&
                     (_state.value[model] as? ModelState.Downloading)?.stuck == true
                 if (!stuckBypass) return
-                probe.snapshot()?.let { probe.remove(it.downloadId) }
-                inFlightJob?.cancel()
-                inFlight = null
-                inFlightJob = null
+                tearDownInFlight()
+                // Published now, not when the cancelled job unwinds, so a wait started right after
+                // cannot mistake the old stuck state for the new attempt's outcome.
+                setState(model, ModelState.NotStarted)
             }
             if (isModelOnDevice(model)) {
                 failureState.onSuccess(model)
@@ -310,35 +364,49 @@ class TranslateModelStore @Inject constructor(
                 "failCount=${failureState.failCount(model)}"
         }
         failureState.onAttempt(model)
+        // A stuck-restart replaces this attempt with a new one for the same model; the replaced job
+        // unwinds afterwards and must not clear the slot, the state or the watchdog it no longer owns.
+        val me = coroutineContext[Job]
+        val owns = { inFlightJob === me }
+        var released = false
         try {
             setState(model, ModelState.Downloading(0, 0, stuck = false))
             startWatchdog(model)
             backend.downloadModel(model)
-            failureState.onSuccess(model)
-            setState(model, ModelState.Ready)
-            L.i { "[TranslateModel] download done model=${model.code} ok=true reason=null nextRetryInMs=0" }
+            if (owns()) {
+                failureState.onSuccess(model)
+                setState(model, ModelState.Ready)
+                L.i { "[TranslateModel] download done model=${model.code} ok=true reason=null nextRetryInMs=0" }
+            } else {
+                // The new attempt finds the pack on the device and reports Ready itself.
+                L.i { "[TranslateModel] replaced attempt ended model=${model.code} ok=true" }
+            }
         } catch (e: CancellationException) {
-            setState(model, ModelState.NotStarted)
+            if (owns()) setState(model, ModelState.NotStarted)
             throw e
         } catch (e: Exception) {
             val reason = classifyFailure(e)
-            val nextRetryAtMs = failureState.onFailure(model, reason)
-            setState(model, ModelState.Failed(reason, nextRetryAtMs))
-            L.w {
-                "[TranslateModel] download done model=${model.code} ok=false reason=$reason " +
-                    "nextRetryInMs=${nextRetryAtMs - System.currentTimeMillis()}"
-            }
-        } finally {
-            stopWatchdog()
-            withContext(NonCancellable) {
-                downloadLock.withLock {
-                    if (inFlight == model) {
-                        inFlight = null
-                        inFlightJob = null
-                    }
+            if (!owns()) {
+                // The backend may surface the dropped download row as an error; it is not this
+                // model's failure and must not overwrite the new attempt or bump its backoff.
+                L.i { "[TranslateModel] replaced attempt ended model=${model.code} reason=$reason" }
+            } else {
+                val nextRetryAtMs = failureState.onFailure(model, reason)
+                setState(model, ModelState.Failed(reason, nextRetryAtMs))
+                L.w {
+                    "[TranslateModel] download done model=${model.code} ok=false reason=$reason " +
+                        "nextRetryInMs=${nextRetryAtMs - System.currentTimeMillis()}"
                 }
             }
+        } finally {
+            withContext(NonCancellable) {
+                released = downloadLock.withLock {
+                    owns().also { if (it) { inFlight = null; inFlightJob = null } }
+                }
+                if (released) stopWatchdog()
+            }
         }
+        if (!released) return
         updateNetworkWatcher()
         // Only reachable when this model finished (success or failure, not cancellation). With more
         // than one required model the slot is free now, so pick the next unmet one up immediately
@@ -351,8 +419,8 @@ class TranslateModelStore @Inject constructor(
      * Polls DownloadManager for byte progress while a download is in flight, and flags it stuck
      * after [STUCK_NO_PROGRESS_MS] without a single new byte (which also covers the
      * PAUSED_WAITING_TO_RETRY / PAUSED_WAITING_FOR_NETWORK cases, since a paused row transfers
-     * nothing). A stuck download is NOT cancelled — it may still recover, and the user gets an
-     * explicit retry affordance in the settings screen instead.
+     * nothing). A stuck download is NOT cancelled on its own — it may still recover; only an
+     * explicit user retry (settings screen, or a manual translate) restarts it.
      */
     private fun startWatchdog(model: ModelId) {
         stopWatchdog()
@@ -456,6 +524,7 @@ class TranslateModelStore @Inject constructor(
             DownloadTrigger.VPN_UP,
             DownloadTrigger.MANUAL_TRANSLATE,
         )
+        val STUCK_RESTART_TRIGGERS = setOf(DownloadTrigger.SETTINGS_RETRY, DownloadTrigger.MANUAL_TRANSLATE)
         const val WATCHDOG_POLL_MS = 1_000L
         const val STUCK_NO_PROGRESS_MS = 60_000L
     }

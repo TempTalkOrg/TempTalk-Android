@@ -10,30 +10,34 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okio.Buffer
 import okio.ForwardingSink
-import okio.Pipe
 import okio.Sink
-import okio.buffer
+import java.io.File
 import java.io.InputStream
 
 /**
- * Receiver-side push-to-pull bridge that streams an upload body straight into a container consumer,
- * never writing it to disk. `UploadHandler` pushes the socket body into the [Sink] from [openWrite];
- * a coroutine launched there pulls the same [okio.Pipe] as an `InputStream` into [consume]. The
- * pipe's bounded buffer keeps memory constant for a GB-scale container.
+ * Receiver-side push-to-pull bridge between an upload body and a container consumer.
+ * `UploadHandler` pushes the socket body into the [Sink] from [openWrite]; a coroutine launched
+ * there pulls the same [ReceiveSpool] as an `InputStream` into [consume]. The spool is on disk, so a
+ * slow import never back-pressures the socket and memory stays constant for a GB-scale container.
  *
  * The consumer's failures are not swallowed: [result] carries them, and [finalizeFile] awaits that
  * verdict so the HTTP 200 is written only once [consume] reports success. Single-use — one instance
  * handles one upload body.
  *
  * @param scope the scope the consumer is launched under; its cancellation still governs the consumer.
+ * @param spoolDir the directory the body's segment files land in. Wiped by the spool on teardown.
+ * @param onWriteProgress `(totalWritten, backlogBytes)` from the spool writer, on the socket thread:
+ *   the free-space monitor's hook. Throwing from it stops the receive with that failure.
  * @param isSuccess whether a consumed [R] should fire the 200. A rejection returned normally must
  *   still surface as a non-200, so the sender is never told a migration completed when it did not.
- * @param consume reads the forward-only body; the bridge, not the consumer, closes the pipe source.
+ * @param consume reads the forward-only body; the bridge, not the consumer, closes the spool reader.
  * @param onProgress approximate receive progress in `[0, 1]`, counted against the sender's advisory
  *   size. Nothing is emitted when that size is unknown, leaving the UI indeterminate.
  */
 class P2pContainerReceiveSink<R>(
     private val scope: CoroutineScope,
+    private val spoolDir: File,
+    private val onWriteProgress: (Long, Long) -> Unit = { _, _ -> },
     private val isSuccess: (R) -> Boolean = { true },
     private val onProgress: (Float) -> Unit = {},
     /**
@@ -49,7 +53,7 @@ class P2pContainerReceiveSink<R>(
     private val consume: suspend (InputStream) -> R,
 ) : FileSink {
 
-    private val pipe = Pipe(DEFAULT_PIPE_BUFFER)
+    private val spool = ReceiveSpool(spoolDir, onWriteProgress = onWriteProgress)
 
     /**
      * Completes with the consumed [R], or with the consumer's failure (HMAC mismatch, decryption
@@ -68,7 +72,7 @@ class P2pContainerReceiveSink<R>(
         // the transfer. The consumer's own blocking IO still runs on the IO pool inside the consumer.
         scope.launch(Dispatchers.Default) {
             runCatching {
-                pipe.source.buffer().inputStream().use { input -> consume(input) }
+                spool.openInput().use { input -> consume(input) }
             }.onSuccess { outcome ->
                 result.complete(outcome)
             }.onFailure { e ->
@@ -76,14 +80,15 @@ class P2pContainerReceiveSink<R>(
                 result.completeExceptionally(e)
             }
         }
-        // Count the bytes pushed into the pipe so progress reflects bytes actually arriving, throttled.
+        // Count the bytes pushed into the spool so progress reflects bytes actually arriving, throttled.
         // With no estimate there is no progress to report, leaving the UI indeterminate.
-        if (estimatedTotal <= 0L) return pipe.sink
-        return ProgressCountingSink(pipe.sink, estimatedTotal, onProgress)
+        val sink = spool.openSink()
+        if (estimatedTotal <= 0L) return sink
+        return ProgressCountingSink(sink, estimatedTotal, onProgress)
     }
 
     /**
-     * Forwards every write to the pipe sink while counting bytes, reporting [onProgress] against
+     * Forwards every write to the spool sink while counting bytes, reporting [onProgress] against
      * [estimatedTotal] in ~[PROGRESS_DELTA] steps. Approximate: the estimate may undershoot the real
      * byte count, so the ratio is always coerced into `[0, 1]`.
      */
@@ -107,7 +112,7 @@ class P2pContainerReceiveSink<R>(
     }
 
     /**
-     * Called by `UploadHandler` once the whole body is pushed. Closing the pipe sink signals EOF, the
+     * Called by `UploadHandler` once the whole body is pushed. Closing the spool sink signals EOF, the
      * consumer finalizes its HMAC, and this awaits its verdict. A consume failure or a non-[isSuccess]
      * outcome returns a failed [Result], so the HTTP layer answers non-200.
      */
@@ -115,10 +120,12 @@ class P2pContainerReceiveSink<R>(
     // consumer, which runs on a different pool, reports its verdict.
     @Suppress("BanRunBlockingOutsideTests")
     override fun finalizeFile(meta: FileMetadata, expectedSha256: String?): Result<String> {
-        // Before the pipe closes and the verdict is awaited: a callback failure must not fail the body.
+        // Before the spool closes and the verdict is awaited: a callback failure must not fail the body.
         runCatching { onBodyComplete() }
             .onFailure { e -> L.w { "[MigrationV2][P2P][Rx] body-complete callback failed: ${e.message}" } }
-        runCatching { pipe.sink.close() } // EOF → consumer finalizes the trailing-HMAC check
+        // openSink() is idempotent, so the writer can be sealed without holding the reference the
+        // transport was handed. EOF → the consumer finalizes the trailing-HMAC check.
+        runCatching { spool.openSink().close() }
         return runCatching {
             // Blocks the HTTP-connection IO thread until the consumer reports its verdict. Deadlock-free
             // because the consumer runs on Dispatchers.Default (see openWrite), a different pool.
@@ -133,15 +140,24 @@ class P2pContainerReceiveSink<R>(
         }
     }
 
+    /** `FileSink.discard`: this body will never complete, so the spool is torn down with it. */
+    override fun discard(meta: FileMetadata) = abort()
+
+    /**
+     * Lifecycle-level teardown with no [FileMetadata] in hand — called by the owning session's
+     * `stop()`, which can fire before any upload started or between files. Deliberately distinct
+     * from [discard]: that is the override the transport calls, this is the owner's.
+     */
+    fun abort() {
+        spool.abort(null)
+    }
+
     @Volatile
     private var replyHeaders: Map<String, String> = emptyMap()
 
     override fun successHeaders(meta: FileMetadata): Map<String, String> = replyHeaders
 
     companion object {
-        /** 1 MiB pipe high-water mark, matching the sender's [P2pContainerPipe]. */
-        const val DEFAULT_PIPE_BUFFER: Long = 1L * 1024 * 1024
-
         /** Throttles the progress callback to ~1% steps so a GB-scale transfer does not flood it. */
         private const val PROGRESS_DELTA = 0.01f
     }

@@ -1,8 +1,10 @@
 package com.difft.android.p2p.android.client
 
 import com.difft.android.p2p.engine.io.FileSource
-import com.difft.android.p2p.engine.model.DeviceInfo
-import com.difft.android.p2p.engine.model.MigrationHandshake
+import com.difft.android.p2p.engine.model.ReversePairDevice
+import com.difft.android.p2p.engine.model.ReversePairListen
+import com.difft.android.p2p.engine.model.ReversePairPrecheck
+import com.difft.android.p2p.engine.model.ReversePairRequest
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -21,7 +23,7 @@ import kotlin.test.assertTrue
 
 /**
  * I5 F4 — deterministic test for the coroutine-cancel → `Call.cancel()` bridge every [SenderHttpClient]
- * call goes through (`Call.await()`), pinned on [SenderHttpClient.upload] and [SenderHttpClient.prepareDownload]
+ * call goes through (`Call.await()`), pinned on [SenderHttpClient.upload] and [ReversePairClient.reversePair]
  * (`suspendCancellableCoroutine { cont.invokeOnCancellation { call.cancel() } ; call.enqueue(...) }`).
  *
  * The bridge exists because a cancelled coroutine (the FGS tearing down on user-cancel, I5 §5 sender
@@ -83,13 +85,13 @@ class SenderHttpClientCancelTest {
     }
 
     /**
-     * The displayer holds `prepare-download` open until the person at the Desktop confirms, and learns
-     * that the phone left ONLY from that connection closing. A cancel on the waiting page must
-     * therefore reach `Call.cancel()` at once — a blocking `execute()` would keep the connection up
-     * until the 15-minute read deadline, with the Desktop still showing the phone as waiting.
+     * The computer holds `/reverse-pair` open until the person at it confirms, and learns that the
+     * phone left ONLY from that connection closing. A cancel during the hang must therefore reach
+     * `Call.cancel()` at once — a blocking `execute()` would keep the connection up until the
+     * 5-minute deadline, with the computer still showing the phone as waiting.
      */
     @Test
-    fun `coroutine cancel hangs up a held prepare-download via Call cancel`() = runBlocking {
+    fun `coroutine cancel hangs up a held reverse-pair via Call cancel`() = runBlocking {
         val enqueued = CountDownLatch(1)
         val cancelInvoked = CountDownLatch(1)
 
@@ -99,25 +101,24 @@ class SenderHttpClientCancelTest {
         val okHttp = mockk<OkHttpClient>()
         every { okHttp.newCall(any<Request>()) } returns call
 
-        val sender = SenderHttpClient(ip = "10.0.0.2", port = 53317, fingerprint = "fp")
-        sender.clientOverride = okHttp
+        val pairing = ReversePairClient(ip = "10.0.0.2", port = 53317, fingerprint = "fp")
+        pairing.clientOverride = okHttp
 
-        val job = launch(Dispatchers.IO) {
-            sender.prepareDownload(
-                DeviceInfo(alias = "phone", fingerprint = "fp"),
-                pin = "123456",
-                handshake = MigrationHandshake(
-                    sourceEnvironment = "test", sourceAccount = "u_a", sourceAppVersion = "1.0.0", sourceFormatVersion = "1.0",
-                ),
-            )
-        }
+        val job = launch(Dispatchers.IO) { pairing.reversePair(reversePairBody(), pin = "123456") }
 
-        assertTrue(enqueued.await(5, TimeUnit.SECONDS), "prepare-download must enqueue the call")
+        assertTrue(enqueued.await(5, TimeUnit.SECONDS), "reverse-pair must enqueue the call")
         job.cancel()
-        assertTrue(cancelInvoked.await(5, TimeUnit.SECONDS), "cancelling the wait must hang up on the displayer")
+        assertTrue(cancelInvoked.await(5, TimeUnit.SECONDS), "cancelling the wait must hang up on the computer")
         job.join()
         verify { call.cancel() }
     }
+
+    private fun reversePairBody() = ReversePairRequest(
+        device = ReversePairDevice(alias = "phone", appVersion = "1.0.0", fingerprint = "fp"),
+        listen = ReversePairListen(addresses = listOf("10.0.0.3"), port = 53317),
+        pairToken = "token",
+        precheck = ReversePairPrecheck(env = "test", formatVersion = "1.0", account = "u_a"),
+    )
 
     /** Minimal known-length source — `writeTo` is never reached (the call never completes). */
     private object EmptyFileSource : FileSource {

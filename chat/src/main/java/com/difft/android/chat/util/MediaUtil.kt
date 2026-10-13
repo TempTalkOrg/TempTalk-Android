@@ -13,6 +13,7 @@ import android.text.TextUtils
 import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
 import com.difft.android.base.log.lumberjack.L
+import java.io.File
 import difft.android.messageserialization.model.Attachment
 import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.chat.mms.PartAuthority
@@ -570,6 +571,13 @@ object MediaUtil {
         return width to height
     }
 
+    /**
+     * Exception class plus the top frames, without the message: framework messages here carry the
+     * full file path, which must not reach the log file.
+     */
+    private fun Throwable.locationForLog(): String =
+        "${javaClass.simpleName} at ${stackTrace.take(3).joinToString(" <- ")}"
+
     fun getMediaWidthAndHeight(filePath: String, mimeType: String): Pair<Int, Int> {
         var width = 0
         var height = 0
@@ -602,7 +610,7 @@ object MediaUtil {
                 }
             } catch (e: Exception) {
                 // 如果读取EXIF失败，使用原始尺寸
-                L.w { "Failed to read EXIF orientation for $filePath, error:${e.stackTraceToString()}" }
+                L.w { "[MediaUtil] exif orientation read failed ext=${File(filePath).extension} ${e.locationForLog()}" }
             }
         } else if (isVideoType(mimeType)) {
             val mmr = MediaMetadataRetriever()
@@ -614,7 +622,7 @@ object MediaUtil {
                     height = bitmap.height
                 }
             } catch (e: Exception) {
-                L.w { "[MediaUtil] error: ${e.stackTraceToString()}" }
+                L.w { "[MediaUtil] video size read failed ext=${File(filePath).extension} exists=${File(filePath).exists()} ${e.locationForLog()}" }
             } finally {
                 mmr.release()
             }

@@ -12,16 +12,13 @@ import java.util.concurrent.TimeUnit
 abstract class PushSendJob(parameters: Parameters) : com.difft.android.chat.jobs.BaseJob(parameters) {
 
     final override suspend fun onRun() {
-        L.i { "Starting message send attempt" }
+        L.d { "[PushSendJob] send attempt=$runAttempt" }
         onPushSend()
-        L.i { "Message send completed" }
+        L.d { "[PushSendJob] send completed" }
     }
 
     override fun onRetry() {
-        L.i { "onRetry()" }
-        if (runAttempt > 1) {
-            L.i { "Scheduling service outage detection job." }
-        }
+        L.i { "[PushSendJob] retry attempt=$runAttempt" }
     }
 
     override fun onShouldRetry(exception: Exception): Boolean {

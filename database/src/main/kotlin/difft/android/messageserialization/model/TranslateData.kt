@@ -25,14 +25,20 @@ enum class TranslateStatus(val status: Int) {
     ShowCN(2),
     ShowEN(3),
 
-    /** Source text is already in the target language. Transient, never persisted. */
+    /**
+     * Source text is already in the target language; renders no block. Transient, never persisted.
+     * A manual translate shows the original as a result instead, so this is reached only defensively.
+     */
     SameLanguage(4),
 
     /** Translation failed and can be retried. Transient, never persisted. */
     Failed(5),
 
     /** Source text exceeds the engine length limit. Transient, never persisted. */
-    FailedTooLong(6);
+    FailedTooLong(6),
+
+    /** The translation model could not be made available on the device. Transient, never persisted. */
+    FailedModel(7);
 
     /**
      * Whether this state may be written to the `translate` table. Transient states are session

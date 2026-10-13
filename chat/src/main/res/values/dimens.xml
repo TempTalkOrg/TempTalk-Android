@@ -29,4 +29,9 @@
          Above every phone width, so phone rendering is unchanged. Consumed by
          View.chatContentWidthPx() (widget/ContentSize.kt). -->
     <dimen name="chat_content_max_width">560dp</dimen>
+    <!-- Chat-list swipe action button width (chat-list gesture design); ChatListSwipeLayout reads it too. -->
+    <dimen name="chat_list_swipe_action_width">72dp</dimen>
+    <dimen name="chat_list_swipe_action_icon">24dp</dimen>
+    <dimen name="chat_list_swipe_action_label">12sp</dimen>
+    <dimen name="chat_list_swipe_action_label_gap">2dp</dimen>
 </resources>

@@ -81,7 +81,9 @@ constructor(
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
             }
             val tookTime = System.currentTimeMillis() - startTime
-            L.i { "[Message] putWhenNonExist batch took ${tookTime}ms for ${messages.size} messages" }
+            if (tookTime > SLOW_INSERT_MS || messages.size > 1) {
+                L.i { "[Message] putWhenNonExist batch took ${tookTime}ms for ${messages.size} messages" }
+            }
         } catch (e: Exception) {
             L.e { "[Message] Failed to put messages: ${e.stackTraceToString()}" }
             FirebaseCrashlytics.getInstance().recordException(Exception("[putMessageException] ${e.stackTraceToString()}"))
@@ -461,7 +463,7 @@ constructor(
             DBMessageModel.readTime,
             expression
         )
-        L.i { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp} readAt:${readAt}" }
+        L.d { "[Message] updateMessageReadTime conversationId:${conversationId} readMaxTimestamp:${readMaxTimestamp} readAt:${readAt}" }
     }
 
     override fun savePendingMessage(messageId: String, originalMessageTimeStamp: Long, messageEnvelopBytes: ByteArray) {
@@ -478,3 +480,6 @@ constructor(
         }
     }
 }
+
+/** Insert batches slower than this are logged even when they hold a single message. */
+private const val SLOW_INSERT_MS = 100L

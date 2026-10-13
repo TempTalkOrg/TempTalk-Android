@@ -16,8 +16,16 @@ import kotlinx.serialization.Serializable
 data class TerminalRecord(
     @SerialName("sessionId") val sessionId: String,
     @SerialName("tokenSha256") val tokenSha256: String,
-    /** One of [TransferTerminal]. */
-    @SerialName("terminal") val terminal: String,
+    /**
+     * One of [TransferTerminal], or null for a session that reached its commit point but could not
+     * prove its tail finished: no verdict may be published for it, in either direction.
+     *
+     * The explicit default is load-bearing, not decoration. `P2pJson` sets `explicitNulls = false`,
+     * so a null is omitted from the encoded JSON; without a default, decoding that file would throw
+     * `MissingFieldException` and the store's own `runCatching` would silently drop **every**
+     * retained record, degrading `/status` to a 404 the sender cannot tell from "session forgotten".
+     */
+    @SerialName("terminal") val terminal: String? = null,
     @SerialName("stage") val stage: String,
     @SerialName("records") val records: Long,
     @SerialName("attachmentBytes") val attachmentBytes: Long,

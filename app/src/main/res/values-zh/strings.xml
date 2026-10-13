@@ -218,7 +218,7 @@
 
     <!-- 旧包：迁移到新版 App 指引 -->
     <string name="legacy_migration_title">迁移到「%1$s」</string>
-    <string name="legacy_migration_why">因 Google 政策变更，当前 App 将停止更新。「%1$s」的功能和账号体系与当前 App 完全相同，账号与聊天记录可以一并迁移。迁移成功后，当前 App 将退出登录。</string>
+    <string name="legacy_migration_why">受 Google 对 Android 应用分发规则的调整影响，Quicall 后续将通过独立的新版 App 提供更新。我们正在积极应对，并尽量减少此次调整带来的影响。\n\n迁移到「%1$s」后，可以继续使用原账号，好友和群组也会保留。如需保留聊天记录，请在卸载当前 App 前完成迁移。迁移完成后，当前 App 将退出登录。</string>
     <string name="legacy_migration_download">前往获取「%1$s」</string>
     <string name="legacy_migration_later">稍后</string>
     <string name="legacy_migration_open_failed">无法打开，请重试。</string>
@@ -251,6 +251,11 @@
     <string name="migration_r2_scan_body">在电脑上打开 Quicall，进入「设置 → 数据迁移」。</string>
     <string name="migration_r2_locked">此迁移已在另一台设备上开始。</string>
     <string name="migration_r2_desktop_cancelled">已在电脑上取消。</string>
+    <string name="migration_r2_desktop_confirm_title">请在电脑上确认</string>
+    <string name="migration_r2_desktop_confirm_hint">请在电脑上确认迁移，两台设备请保持在同一网络。</string>
+    <string name="migration_r2_desktop_connect_title">正在等待电脑连接</string>
+    <string name="migration_r2_desktop_connect_hint">电脑正在连接，请保持本页面打开。</string>
+    <string name="migration_r2_finishing_restart">正在完成收尾，即将重启…</string>
     <string name="migration_s1_target">将此账号的聊天记录迁移到「%1$s」</string>
     <string name="migration_s1_current_account">当前账号</string>
     <string name="migration_s1_calculating">正在计算迁移大小…</string>
@@ -302,6 +307,10 @@
     <string name="migration_p3_reason_space">请在这台设备上释放至少 %1$s，或返回并关闭附件迁移。</string>
     <string name="migration_p3_reason_expired">二维码已过期，请在另一台设备上刷新后重新扫描。</string>
     <string name="migration_p3_reason_peer_timeout">等待电脑确认超时，请重新扫码。</string>
+    <string name="migration_p3_reason_update_desktop">请在电脑上更新 Quicall，然后重新扫描二维码。</string>
+    <string name="migration_p3_reason_desktop_not_connected">未收到电脑连接，可能已在电脑上取消，可重新扫码。</string>
+    <string name="migration_p3_reason_pair_token">配对已失效，请重新扫描电脑上的二维码。</string>
+    <string name="migration_p3_reason_storage_full">这台设备存储空间不足，迁移已停止。请释放空间后重试。</string>
     <string name="migration_p3_reason_target_not_empty">「%1$s」中已有账号或聊天数据，因此没有迁移任何内容。</string>
     <string name="migration_p3_reason_handoff_disabled">暂不支持从旧版 App 迁移。</string>
     <string name="migration_p3_retry">重新开始</string>

@@ -13,6 +13,34 @@ object ScreenDeviceUtil {
 
     private const val WAKE_LOCK_TIMEOUT_MS = 3000L
 
+    /**
+     * Display and keyguard state at one instant, read when the ring screen is created.
+     *
+     * [wokenByCall] is true when the incoming-call screen brought itself up — display off or keyguard
+     * up — rather than being opened by a person already using an unlocked phone. Only that path can
+     * put live accept/reject controls under a pocket or palm.
+     */
+    data class ScreenState(val interactive: Boolean, val keyguardLocked: Boolean) {
+        val wokenByCall: Boolean get() = !interactive || keyguardLocked
+    }
+
+    /**
+     * Two Binder getters on the caller's thread. This deliberately differs from [wakeUpDevice],
+     * which moved off the main thread because acquiring a wake lock is heavy: `isInteractive` and
+     * `isKeyguardLocked` are cheap reads, and the ring screen needs them synchronously in onCreate
+     * to pick its controls before the first layout. The other keyguard reader, [isScreenLocked], is
+     * no precedent either way: its only callers are LCallToChatControllerImpl's incoming-call
+     * restore paths, which already run on Dispatchers.IO and need no synchronous answer.
+     */
+    fun readScreenState(context: Context): ScreenState {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        return ScreenState(
+            interactive = powerManager.isInteractive,
+            keyguardLocked = keyguardManager.isKeyguardLocked,
+        ).also { L.i { "[Call] ScreenUtil screenState interactive=${it.interactive} keyguardLocked=${it.keyguardLocked}" } }
+    }
+
     fun isScreenLocked(context: Context): Boolean {
         val keyguardManager =
             context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
@@ -36,8 +64,9 @@ object ScreenDeviceUtil {
             val context = application.applicationContext
             val powerManager =
                 context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!powerManager.isInteractive) {
-                L.d { "[Call] ScreenUtil wakeUpDevice (async)" }
+            val interactive = powerManager.isInteractive
+            L.i { "[Call] ScreenUtil wakeUpDevice interactive=$interactive acquire=${!interactive}" }
+            if (!interactive) {
                 // if screen is not already on, turn it on (get wake_lock)
                 val wl: PowerManager.WakeLock = powerManager.newWakeLock(
                     PowerManager.ACQUIRE_CAUSES_WAKEUP or

@@ -21,8 +21,11 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,6 +39,27 @@ import javax.inject.Singleton
 
 /** What the monitor should do about a state, split out so the branch matrix is unit-testable. */
 internal enum class ReconnectPolicy { RECONNECT_SWITCH_HOST, RECONNECT_KEEP_HOST, CONNECTED, IGNORE }
+
+/**
+ * Why a monitor wait ended before its uptime timeout. [KEEP_ALIVE_ALARM] is the routine
+ * background cadence (see [KeepAliveWakeAlarm]); [CONNECTED] comes from the connection state
+ * and only re-enters the wait so the wake alarm covers the new socket; the rest are genuine
+ * external events.
+ */
+internal enum class WakeReason { SERVICE_ALARM, NETWORK, FOREGROUND, KEEP_ALIVE_ALARM, CONNECTED }
+
+private const val RECONNECT_BACKOFF_CAP_FOREGROUND_MS = 5_000L
+private const val RECONNECT_BACKOFF_CAP_BACKGROUND_MS = 30_000L
+
+/**
+ * Cap for the exponential reconnect backoff. Foreground keeps 5 s: someone is watching the
+ * connection state, and iOS / Desktop retry on a fixed 5 s timer. Background uses
+ * Signal-Android's 30 s cap, so a network that is present but unusable (Doze restriction,
+ * dead Wi-Fi) costs a handful of attempts per 5-minute alarm period instead of one every ~15 s.
+ * Any wake event still cuts the wait short and the attempt count resets on CONNECTED.
+ */
+internal fun reconnectBackoffCapMs(isForegrounded: Boolean): Long =
+    if (isForegrounded) RECONNECT_BACKOFF_CAP_FOREGROUND_MS else RECONNECT_BACKOFF_CAP_BACKGROUND_MS
 
 /**
  * Auth-level rejections keep the host: the server answered correctly, it rejected the *credential*.
@@ -69,6 +93,7 @@ class WebSocketHealthMonitor
     private val context: Context,
     private val urlManager: UrlManager,
     private val coordinator: DomainSpeedTestCoordinator,
+    private val keepAliveWakeAlarm: KeepAliveWakeAlarm,
 ) : HealthMonitor, CoroutineScope by appScope {
 
     @Volatile
@@ -83,11 +108,17 @@ class WebSocketHealthMonitor
     @Volatile
     private var lastHeartbeatSendTime: Long = System.currentTimeMillis()
 
+    /** Count of keep-alives sent; drives the sampled keep-alive log line. */
+    @Volatile
+    private var keepAliveTicks = 0L
+
     /**
-     * 用于广播外部事件通知（网络变化、前台切换、Alarm 触发等）
-     * 多个等待点可以同时收到通知
+     * Broadcasts wake events (network change, foreground, service alarm, keep-alive alarm)
+     * to every suspended wait point in the monitor. A shared flow drops emissions
+     * that find no collector, which is what every wait point wants: a wake is only meaningful
+     * while someone is waiting.
      */
-    private val notificationFlow = MutableSharedFlow<Unit>(
+    private val notificationFlow = MutableSharedFlow<WakeReason>(
         replay = 0,
         extraBufferCapacity = 1
     )
@@ -115,24 +146,28 @@ class WebSocketHealthMonitor
 
     private var networkMonitor: NetworkMonitor? = null
 
-    // 添加前台观察者监听器引用，用于清理
+    // Kept so stopMonitoring() can unregister it.
     private var foregroundListener: AppForegroundObserver.Listener? = null
 
     private suspend fun waitForNetworkFine(websocketName: String) {
+        var waitStart = 0L
         while (!NetworkConstraint.isNetworkAvailable(context)) {
-            L.i { "$websocketName [ws]monitor Network is not fine, waiting..." }
-            // 使用超时作为安全机制，防止在 first() 开始收集前网络已恢复导致错过通知
-            // 超时后会重新检查网络状态，避免永远等待
+            if (waitStart == 0L) {
+                waitStart = SystemClock.elapsedRealtime()
+                L.i { "$websocketName [ws]monitor network unavailable, waiting" }
+            }
+            // Timeout guards against a network change that lands before first() collects.
             try {
                 withTimeout(NETWORK_WAIT_TIMEOUT) {
-                    notificationFlow.first()  // 等待网络变化通知
+                    notificationFlow.first()
                 }
             } catch (_: TimeoutCancellationException) {
-                // 超时后重新检查网络状态
-                L.i { "$websocketName [ws]monitor Network wait timeout, rechecking..." }
+                // Re-check the network state.
             }
         }
-        L.i { "$websocketName [ws]monitor Network is fine now" }
+        if (waitStart != 0L) {
+            L.i { "$websocketName [ws]monitor network available after ${SystemClock.elapsedRealtime() - waitStart}ms" }
+        }
     }
 
     override fun onKeepAliveResponse() {
@@ -149,12 +184,11 @@ class WebSocketHealthMonitor
         isMonitoring = true
         L.i { "${webSocketConnection.name} [ws]monitor: Starting monitoring" }
 
-        // 创建前台观察者监听器并保存引用
         foregroundListener = object : AppForegroundObserver.Listener {
             override fun onForeground() {
                 if (isMonitoring) {
                     L.i { "[ws]monitor: App to foreground, notifying all receivers" }
-                    notificationFlow.tryEmit(Unit)  // 使用 tryEmit 避免阻塞
+                    notificationFlow.tryEmit(WakeReason.FOREGROUND)
                 }
             }
         }
@@ -163,7 +197,7 @@ class WebSocketHealthMonitor
         networkMonitor = NetworkMonitor(context) {
             if (isMonitoring) {
                 L.i { "[ws]monitor: Network changed, notifying all receivers" }
-                notificationFlow.tryEmit(Unit)  // 使用 tryEmit 避免阻塞
+                notificationFlow.tryEmit(WakeReason.NETWORK)
             }
         }.also { it.register() }
 
@@ -181,20 +215,19 @@ class WebSocketHealthMonitor
         L.i { "[ws]monitor: Stopping monitoring" }
         isMonitoring = false
 
-        // 取消所有监控任务
         monitoringJobs.forEach { it.cancel() }
         monitoringJobs.clear()
 
         staleProbeJob?.cancel()
         staleProbeJob = null
 
-        // 移除前台观察者监听器
+        keepAliveWakeAlarm.cancel()
+
         foregroundListener?.let {
             AppForegroundObserver.removeListener(it)
             foregroundListener = null
         }
 
-        // 停止网络监控
         networkMonitor?.unregister()
         networkMonitor = null
 
@@ -209,25 +242,18 @@ class WebSocketHealthMonitor
     }
 
     /**
-     * 当 AlarmManager 触发时调用，用于加速 WebSocket 重连和健康检查
-     *
-     * 作用：
-     * 1. 重置重试次数，下次重连时跳过 backoff delay
-     * 2. 发送通知信号，打断以下等待：
-     *    - checkConnectedStateHealthy 中的健康检查等待（检测僵尸连接）
-     *    - delayWhenRetry 中的 backoff 等待（加速重连）
-     *    - waitForNetworkFine 中的等待
-     *
-     * 注意：
-     * - 无条件发送通知，不依赖 isMonitoring 状态
-     * - 闹钟的目的是确保后台连接活跃，即使监控状态异常也应该尝试触发检查
-     * - 使用 tryEmit 不会阻塞，如果没有收集者通知会被缓冲或丢弃
+     * Called on every `ServiceCheckReceiver` alarm. Resets the retry count so the next reconnect
+     * skips its backoff, and wakes every waiting point (health check, backoff, network wait).
+     * Runs regardless of [isMonitoring]: the alarm exists to keep the background connection
+     * alive even when the monitor state is off; `tryEmit` never blocks.
      */
     fun onAlarmTriggered() {
-        L.i { "[ws]monitor: Alarm triggered (monitoring=$isMonitoring), resetting retry attempts and notifying all receivers" }
-        attempts = 0  // 重置重试次数，即使未启动也能在后续启动时生效
+        // The normal case is visible through the externally triggered keep-alive line;
+        // an alarm arriving while nothing monitors is the anomaly worth a line.
+        if (isMonitoring) L.d { "[ws]monitor: alarm" } else L.w { "[ws]monitor: alarm fired while not monitoring" }
+        attempts = 0
 
-        notificationFlow.tryEmit(Unit)
+        notificationFlow.tryEmit(WakeReason.SERVICE_ALARM)
     }
 
     private fun handleConnectingTimeout(connection: WebSocketConnection) {
@@ -238,22 +264,19 @@ class WebSocketHealthMonitor
             if (state is WebSocketConnectionState.CONNECTING) {
                 timeoutJob?.cancel()
                 // Start the timeout coroutine only for CONNECTING state
-                L.i { "${connection.name} [ws]monitor: Starting timeout coroutine for state: $state, timeout: ${CONNECTING_TIMEOUT}ms" }
                 timeoutJob = launch {
                     delay(CONNECTING_TIMEOUT)
                     if (isMonitoring) {
                         timeoutJob = null
-                        L.i { "${connection.name} [ws]monitor: Timeout for connecting, canceling connection" }
+                        L.i { "${connection.name} [ws]monitor: connecting timeout after ${CONNECTING_TIMEOUT}ms, canceling connection" }
                         connection.cancelConnection()
                     }
                 }
-                // 将timeoutJob添加到监控列表中
                 timeoutJob?.let { monitoringJobs.add(it) }
             } else {
                 timeoutJob?.let {
-                    L.i { "${connection.name} [ws]monitor: Canceling timeout coroutine for state: $state" }
                     it.cancel()
-                    monitoringJobs.remove(it)  // 从监控列表中移除
+                    monitoringJobs.remove(it)
                     timeoutJob = null
                 }
             }
@@ -264,38 +287,37 @@ class WebSocketHealthMonitor
     private fun checkConnectedStateHealthy(webSocketConnection: WebSocketConnection) {
         val job = launch {
             while (isMonitoring) {
-                // 等待超时或外部事件打断，解决 Doze 模式下 delay 被冻结的问题
-                val triggeredByExternalEvent = try {
-                    withTimeout(KEEP_ALIVE_SEND_CADENCE) {
-                        notificationFlow.first()
-                    }
-                    true // 被外部事件唤醒
-                } catch (_: TimeoutCancellationException) {
-                    false // 正常超时
-                }
+                val wakeReason = awaitKeepAliveTick(webSocketConnection)
 
                 if (!isMonitoring) break
 
                 _monitorWakeTicks.tryEmit(Unit)
 
-                if (triggeredByExternalEvent) {
-                    L.i { "${webSocketConnection.name} [ws]monitor: health check triggered by external event (Alarm/Network/Foreground)" }
-                }
+                // A fresh socket only needs the wait re-entered so the wake alarm covers it;
+                // its first keep-alive follows one cadence later as usual.
+                if (wakeReason == WakeReason.CONNECTED) continue
 
-                L.i { "${webSocketConnection.name} [ws]monitor: start check websocket healthy" }
+                val triggeredByExternalEvent = wakeReason != null && wakeReason != WakeReason.KEEP_ALIVE_ALARM
                 if (webSocketConnection.webSocketConnectionState.value == WebSocketConnectionState.CONNECTED) {
                     //why use lastHeartbeatSendTime instead of System.currentTimeMillis()? in case of App may be frozen in background
                     if (lastHeartbeatSendTime - lastHeartbeatResponseTime > MAX_TIME_SINCE_SUCCESSFUL_KEEP_ALIVE) {
-                        L.w { "${webSocketConnection.name} [ws]monitor: Missed keep lives, disconnect current websocket connection" }
+                        L.w { "${webSocketConnection.name} [ws]monitor: missed keep-alives, disconnecting lastSend=$lastHeartbeatSendTime lastResponse=$lastHeartbeatResponseTime" }
                         webSocketConnection.disconnectWhenConnected()
                     } else {
                         val sinceLastResponse = SystemClock.elapsedRealtime() - lastHeartbeatResponseElapsed
-                        L.i { "${webSocketConnection.name} [ws]monitor: send keep alive" }
+                        // Out-of-cadence sends (service alarm/network/foreground) are always
+                        // logged; the regular timer and wake-alarm cadence is sampled to keep
+                        // the file readable. The wake field shows which clock drove the send.
+                        val tick = ++keepAliveTicks
+                        if (triggeredByExternalEvent || tick % KEEP_ALIVE_LOG_EVERY == 0L) {
+                            L.i { "${webSocketConnection.name} [ws]monitor: keep alive n=$tick wake=${wakeReason ?: "timer"} sinceResponse=${sinceLastResponse}ms" }
+                        }
                         webSocketConnection.sendKeepAlive()
                         lastHeartbeatSendTime = System.currentTimeMillis()
-                        if (triggeredByExternalEvent && sinceLastResponse > STALE_PROBE_MIN_SILENCE) {
-                            // Likely woken from a vendor freeze with a possibly-zombie socket;
-                            // probe the keep-alive just sent instead of waiting up to 2 more cadences.
+                        if (wakeReason != null && sinceLastResponse > STALE_PROBE_MIN_SILENCE) {
+                            // Any wake (routine alarm included) after a long response silence:
+                            // likely a vendor freeze or a late alarm with a possibly-zombie socket;
+                            // probe the keep-alive just sent instead of waiting for miss accounting.
                             armStaleProbe(webSocketConnection)
                         }
                     }
@@ -303,6 +325,39 @@ class WebSocketHealthMonitor
             }
         }
         monitoringJobs.add(job)
+    }
+
+    /**
+     * Waits one keep-alive cadence, or less if a wake event arrives; `null` means the uptime
+     * timeout elapsed. While the socket is connected in keep-alive mode an elapsed-realtime
+     * alarm is armed as well, because the coroutine timeout runs on the uptime clock and stalls
+     * whenever the CPU suspends (issue #1325); whichever fires first ends the wait and the
+     * alarm is disarmed.
+     */
+    private suspend fun awaitKeepAliveTick(webSocketConnection: WebSocketConnection): WakeReason? {
+        val stateFlow = webSocketConnection.webSocketConnectionState
+        val connected = stateFlow.value == WebSocketConnectionState.CONNECTED
+        val armed = connected && keepAliveWakeAlarm.arm { notificationFlow.tryEmit(WakeReason.KEEP_ALIVE_ALARM) }
+        // Not connected yet: also end the wait once the socket connects, so the next iteration
+        // arms the wake alarm for it. The state flow's replay cache makes this race-free: a
+        // CONNECTED that lands before first() subscribes is still observed.
+        val wakes = if (connected) {
+            notificationFlow
+        } else {
+            merge(
+                notificationFlow,
+                stateFlow.filter { it == WebSocketConnectionState.CONNECTED }.map { WakeReason.CONNECTED },
+            )
+        }
+        return try {
+            withTimeout(KEEP_ALIVE_SEND_CADENCE) {
+                wakes.first()
+            }
+        } catch (_: TimeoutCancellationException) {
+            null
+        } finally {
+            if (armed) keepAliveWakeAlarm.cancel()
+        }
     }
 
     /**
@@ -340,15 +395,13 @@ class WebSocketHealthMonitor
         val job = webSocketConnection.webSocketConnectionState.onEach { state ->
             if (!isMonitoring) return@onEach
 
-            L.i { "${webSocketConnection.name} [ws]monitor: receive webSocketConnectionState: $state" }
+            L.i { "${webSocketConnection.name} [ws]monitor: state=$state" }
             when (reconnectPolicyFor(state)) {
                 ReconnectPolicy.RECONNECT_SWITCH_HOST -> {
                     coordinator.onWsFailure()
-                    // 连接层失败才切换 host，下次重连会使用新的 host
+                    // Only a connection-level failure switches host for the next attempt.
                     switchHost(webSocketConnection)
-                    L.i { "${webSocketConnection.name} [ws]monitor: start trigger doConnect, webSocketConnectionState: $state" }
                     handleRedoConnect(webSocketConnection)
-                    L.i { "${webSocketConnection.name} [ws]monitor: finished trigger doConnect, webSocketConnectionState: $state" }
                 }
 
                 ReconnectPolicy.RECONNECT_KEEP_HOST -> {
@@ -376,7 +429,6 @@ class WebSocketHealthMonitor
         webSocketConnection: WebSocketConnection
     ) {
         prepareForConnecting(webSocketConnection)
-        L.i { "${webSocketConnection.name} [ws]monitor: all set, start do connect" }
         withContext(Dispatchers.IO) {
             doConnectInternal(webSocketConnection)
         }
@@ -402,20 +454,18 @@ class WebSocketHealthMonitor
 
     private suspend fun delayWhenRetry(webSocketConnection: WebSocketConnection) {
         if (++attempts > 1) {
-            // 指数退避，最大5秒
-            val backoff = BackoffUtil.exponentialBackoff(attempts, TimeUnit.SECONDS.toMillis(5))
+            // Exponential backoff (see reconnectBackoffCapMs), cut short by any wake event.
+            val backoff = BackoffUtil.exponentialBackoff(attempts, reconnectBackoffCapMs(AppForegroundObserver.isForegrounded()))
 
-            L.w { "${webSocketConnection.name} Too many failed connection attempts, attempts: $attempts backing off: $backoff ms" }
+            L.w { "${webSocketConnection.name} [ws]monitor: backoff attempts=$attempts delay=${backoff}ms" }
 
-            // 等待超时或外部事件打断
             try {
                 withTimeout(backoff) {
                     notificationFlow.first()
                 }
-                L.i { "${webSocketConnection.name} Backoff interrupted by external trigger (Alarm/Network/Foreground)" }
+                L.i { "${webSocketConnection.name} [ws]monitor: backoff interrupted by external trigger" }
             } catch (_: TimeoutCancellationException) {
-                // 正常超时，继续重连流程
-                L.i { "${webSocketConnection.name} Backoff completed normally: $backoff ms" }
+                // Backoff elapsed; continue reconnecting.
             }
         }
     }
@@ -426,14 +476,12 @@ class WebSocketHealthMonitor
     }
 
     companion object {
-        // 连接超时时间：10 秒
-        // - 足够判断连接是否能建立（现代网络通常 3-5 秒内连接）
-        // - 配合 host 切换机制，快速失败后尝试其他 host
+        // Connect deadline: long enough for a normal handshake (3-5 s), short enough to
+        // fail fast and move on to the next host.
         private const val CONNECTING_TIMEOUT = 10_000L
 
-        // 网络等待超时时间：5秒
-        // - 作为安全机制，防止在 first() 开始收集前网络已恢复导致错过通知
-        // - 超时后会重新检查网络状态，避免永远等待
+        // Re-check interval while waiting for the network, in case the change notification
+        // landed before the wait started.
         private const val NETWORK_WAIT_TIMEOUT = 5_000L
 
         private val KEEP_ALIVE_SEND_CADENCE =
@@ -446,7 +494,12 @@ class WebSocketHealthMonitor
 
         // Minimum response silence before a probe may arm. 2x cadence: a healthy quiet
         // connection sits at ~1 cadence + RTT (phase jitter can cross 1x and cause spurious
-        // probes on every 5-min alarm), while a real freeze leaves minutes of silence.
+        // probes on every 5-min alarm), while a real freeze leaves minutes of silence. The
+        // 45 s background cadence (KeepAliveWakeAlarm.CADENCE_MS) + RTT also stays under it;
+        // a late alarm crosses it and buys one cheap probe.
         private val STALE_PROBE_MIN_SILENCE = KEEP_ALIVE_SEND_CADENCE * 2
+
+        /** Log every Nth in-cadence keep-alive (20 × 30-45 s = one line per 10-15 min). */
+        private const val KEEP_ALIVE_LOG_EVERY = 20L
     }
 }

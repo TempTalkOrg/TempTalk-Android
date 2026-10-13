@@ -34,7 +34,7 @@ object EnvelopDeserializer {
             verifyMac(input, macKey)
 
             Envelope.parseFrom(getPlaintext(input, cipherKey)).also {
-                L.i { "[EnvelopDeserializer] parse envelope success:${it.timestamp}" }
+                L.d { "[EnvelopDeserializer] parse envelope success:${it.timestamp}" }
             }
         } catch (e: InvalidVersionException) {
             // 解析 proto 数据可能出现异常，可以在这里处理

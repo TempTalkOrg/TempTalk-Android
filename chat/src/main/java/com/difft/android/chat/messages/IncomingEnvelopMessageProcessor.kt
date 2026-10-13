@@ -69,11 +69,14 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
     }
 
     private suspend fun doProcessBatch(batch: List<Pair<Envelope, Long>>) {
-        L.i { "[Message] Processing batch of ${batch.size} messages" }
+        if (batch.size > 1) L.i { "[Message] processing batch size=${batch.size}" }
         // Eager ACK — see issue #754 design §1.5. ACK first so a late
         // processing failure can't block the server's push pipeline;
         // recovery for transient failures is owned by FailedMessageProcessor.
-        batch.forEach { (envelop, requestId) -> sendAck(requestId, envelop.timestamp) }
+        batch.forEach { (envelop, requestId) ->
+            val acked = sendAck(requestId, envelop.timestamp)
+            L.i { "[Message] recv type=${envelop.type} ts=${envelop.timestamp} requestId=$requestId acked=$acked" }
+        }
 
         val failedEnvelopes = mutableListOf<Envelope>()
 
@@ -130,17 +133,13 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
     }
 
     suspend fun inComeMessage(envelope: Envelope, requestId: Long) {
-        L.i {
-            "[Message] NewInComingMessageProcessor receive new message into flow, type -> ${envelope.type} ${envelope.timestamp}"
-        }
+        L.d { "[Message] envelope into flow type=${envelope.type} ts=${envelope.timestamp} requestId=$requestId" }
         _incomingMessagesFlow.emit(Pair(envelope, requestId))
     }
 
-    private fun sendAck(requestId: Long, timestamp: Long) {
+    /** @return whether the ack was written to the socket; the failure is logged here. */
+    private fun sendAck(requestId: Long, timestamp: Long): Boolean =
         kotlin.runCatching { webSocket.sendAckToChatDataWebSocketWithoutLog(requestId) }.onFailure {
             L.e { "[Message] sendAck error, requestId:$requestId timestamp:$timestamp exception:${it.stackTraceToString()}" }
-        }.onSuccess {
-            L.i { "[Message] sendAck success, requestId:$requestId timestamp:$timestamp" }
-        }
-    }
+        }.isSuccess
 }

@@ -263,8 +263,11 @@ fun MessageModel.convertToTextMessage(): TextMessage {
                 // Empty for every row written since the server-side id stopped being seeded; it
                 // identifies nothing locally and only feeds the legacy job locator for older rows.
                 id = am.id.orEmpty(),
-                authorityId = am.authorityId!!,
-                contentType = am.contentType!!,
+                // A row may carry no server id (never uploaded, or imported from a device that had
+                // none) and no content type; 0 is the shared "no server id" signal and the generic
+                // MIME type keeps the bubble on the file path instead of failing the whole hydration.
+                authorityId = am.authorityId ?: NO_SERVER_ATTACHMENT_ID,
+                contentType = am.contentType ?: GENERIC_CONTENT_TYPE,
                 key = am.key,
                 size = am.size,
                 thumbnail = am.thumbnail,
@@ -331,6 +334,12 @@ fun MessageModel.convertToTextMessage(): TextMessage {
     )
 }
 
+/** Attachment rows without a server-side id use 0, the signal every repair/re-upload path tests for. */
+const val NO_SERVER_ATTACHMENT_ID = 0L
+
+/** Content type for rows that carried none: rendered as a plain file, never dropped. */
+const val GENERIC_CONTENT_TYPE = "application/octet-stream"
+
 /**
  * A row whose `localId` column is still NULL gets a synthesized id so the domain object always has
  * one — deterministic per row (see [synthesizedLocalId]), so repeated reads agree with each other
@@ -341,8 +350,8 @@ fun AttachmentModel.toAttachment(): Attachment {
     return Attachment(
         // See convertToTextMessage: empty for every row written since the id stopped being seeded.
         id = id.orEmpty(),
-        authorityId = authorityId!!,
-        contentType = contentType!!,
+        authorityId = authorityId ?: NO_SERVER_ATTACHMENT_ID,
+        contentType = contentType ?: GENERIC_CONTENT_TYPE,
         key = key,
         size = size,
         thumbnail = thumbnail,
@@ -1116,7 +1125,8 @@ fun MessageModel.previewContent(): String {
             } else if (forwardContext() != null) {
                 senderName + "[" + ResUtils.getString(R.string.chat_history) + "]"
             } else {
-                senderName + messageText
+                // Imported text rows may carry no body; never render the literal "null".
+                senderName + messageText.orEmpty()
             }
         } else if (isNotifyMessage()) {
             globalServices.gson.fromJson(messageText, JsonObject::class.java)?.get("showContent")?.asString.orEmpty()

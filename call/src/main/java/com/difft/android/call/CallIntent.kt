@@ -50,6 +50,7 @@ class CallIntent(private val intent: Intent) {
         CALL_NEED_APP_LOCK("CALL_NEED_APP_LOCK"),
         CALL_WAIT_DIALOG_SHOWN("CALL_WAIT_DIALOG_SHOWN"),
         CALL_CLIENT_CALL_ID("CALL_CLIENT_CALL_ID"),
+        CALL_FULL_SCREEN_LAUNCH("CALL_FULL_SCREEN_LAUNCH"),
     }
 
     /**
@@ -128,6 +129,16 @@ class CallIntent(private val intent: Intent) {
             return this
         }
 
+        /**
+         * Marks the intent the system fires as a notification's full-screen intent — which it does
+         * only when the display is off or the keyguard is up. The ring screen uses it to pick its
+         * answer control, since by onCreate the display has usually already been woken.
+         */
+        fun withFullScreenLaunch(fullScreenLaunch: Boolean): Builder {
+            intent.putExtra(getExtraString(Extra.CALL_FULL_SCREEN_LAUNCH), fullScreenLaunch)
+            return this
+        }
+
         fun build(): Intent {
             return intent
         }
@@ -148,6 +159,9 @@ class CallIntent(private val intent: Intent) {
     val startCallParams: ByteArray? by lazy { intent.getByteArrayExtra(getExtraString(Extra.CALL_START_PARAMS))}
 
     val needAppLock: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_NEED_APP_LOCK), false) }
+
+    /** True when the system launched this intent as a notification's full-screen intent (display off / keyguard up). */
+    val fullScreenLaunch: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_FULL_SCREEN_LAUNCH), false) }
 
     val callWaitDialogShown: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), false) }
 

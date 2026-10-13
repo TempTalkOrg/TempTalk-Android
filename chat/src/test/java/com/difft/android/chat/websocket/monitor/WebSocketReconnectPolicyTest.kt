@@ -5,12 +5,19 @@ import org.junit.Test
 import kotlin.test.assertEquals
 
 /**
- * Unit tests for [reconnectPolicyFor] — the branch matrix the health monitor consumes (issue #1230).
+ * Unit tests for [reconnectPolicyFor] — the branch matrix the health monitor consumes (issue #1230) —
+ * and [reconnectBackoffCapMs], the foreground/background reconnect backoff cap (issue #1325).
  *
  * The point of the split is that an auth-level rejection must NOT switch host or count as a
  * connectivity failure: the server answered correctly and rejected the credential.
  */
 class WebSocketReconnectPolicyTest {
+
+    @Test
+    fun `reconnect backoff keeps the fast 5 s cap in foreground and 30 s in background`() {
+        assertEquals(5_000L, reconnectBackoffCapMs(isForegrounded = true))
+        assertEquals(30_000L, reconnectBackoffCapMs(isForegrounded = false))
+    }
 
     @Test
     fun `auth-level failures reconnect without switching host`() {

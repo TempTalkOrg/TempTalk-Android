@@ -76,6 +76,12 @@ internal object TranslateBlockBinder {
                 views.container.setOnClickListener { onRetry(message) }
             }
 
+            TranslateStatus.FailedModel -> {
+                showBlock(views, progress = false, content = false, attribution = false, error = true)
+                views.error.setText(R.string.chat_translate_model_failed)
+                views.container.setOnClickListener { onRetry(message) }
+            }
+
             TranslateStatus.FailedTooLong -> {
                 showBlock(views, progress = false, content = false, attribution = false, error = true)
                 views.error.setText(R.string.chat_translate_too_long)

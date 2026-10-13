@@ -1,5 +1,7 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.chat.message.ReadReceiptDispatcher
+import com.difft.android.chat.message.SenderReadReceiptAcc
 import org.difft.app.database.models.MessageModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -8,9 +10,9 @@ import org.junit.Test
 /**
  * Unit tests for the #909 read-receipt accumulation + chunking logic.
  *
- * These invoke the production seam [ChatMessageViewModel.accumulateReadReceipt] directly
+ * These invoke the production seam [ReadReceiptDispatcher.accumulateReadReceipt] directly
  * (a pure fold over a message sequence) and the production chunk cap
- * [ChatMessageViewModel.MAX_TIMESTAMPS_PER_RECEIPT] via stdlib `chunked`, exactly as
+ * [ReadReceiptDispatcher.MAX_TIMESTAMPS_PER_RECEIPT] via stdlib `chunked`, exactly as
  * `sendReadRecipient` does. No WCDB / native libs required — [MessageModel] is a plain POJO.
  *
  * Covers design test cases T14 (per-sender accumulation + max), T15 (chunking math),
@@ -34,7 +36,7 @@ class ReadReceiptAccumulationTest {
         val perSender = HashMap<String, SenderReadReceiptAcc>()
         var globalMax: MessageModel? = null
         messages.forEach { m ->
-            ChatMessageViewModel.accumulateReadReceipt(perSender, m)
+            ReadReceiptDispatcher.accumulateReadReceipt(perSender, m)
             val cur = globalMax
             if (cur == null || m.systemShowTimestamp > cur.systemShowTimestamp) globalMax = m
         }
@@ -78,7 +80,7 @@ class ReadReceiptAccumulationTest {
     // T15 — chunking: a sender over the cap is split into multiple Jobs, union == full set
     @Test
     fun `timestamps over the cap split into multiple chunks covering the full set`() {
-        val cap = ChatMessageViewModel.MAX_TIMESTAMPS_PER_RECEIPT
+        val cap = ReadReceiptDispatcher.MAX_TIMESTAMPS_PER_RECEIPT
         val total = cap + 50
         val messages = (1..total).map { msg("A", it.toLong()) }
         val (perSender, _) = accumulate(messages)
@@ -95,7 +97,7 @@ class ReadReceiptAccumulationTest {
     // T15 boundary — exactly at the cap stays a single chunk
     @Test
     fun `timestamps exactly at the cap stay a single chunk`() {
-        val cap = ChatMessageViewModel.MAX_TIMESTAMPS_PER_RECEIPT
+        val cap = ReadReceiptDispatcher.MAX_TIMESTAMPS_PER_RECEIPT
         val messages = (1..cap).map { msg("A", it.toLong()) }
         val (perSender, _) = accumulate(messages)
 
@@ -111,7 +113,7 @@ class ReadReceiptAccumulationTest {
     fun `large group plans no per-sender receipt jobs`() {
         val (perSender, _) = accumulate(listOf(msg("A", 100), msg("B", 200)))
 
-        val plans = ChatMessageViewModel.planReadReceiptJobs(perSender, isLargeGroup = true)
+        val plans = ReadReceiptDispatcher.planReadReceiptJobs(perSender, isLargeGroup = true)
         assertTrue(plans.isEmpty())
     }
 
@@ -123,7 +125,7 @@ class ReadReceiptAccumulationTest {
             listOf(msg("A", 100), msg("B", 150), msg("A", 200))
         )
 
-        val plans = ChatMessageViewModel.planReadReceiptJobs(perSender, isLargeGroup = false)
+        val plans = ReadReceiptDispatcher.planReadReceiptJobs(perSender, isLargeGroup = false)
 
         assertEquals(2, plans.size)
         val byRecipient = plans.associateBy { it.recipientId }
@@ -137,11 +139,11 @@ class ReadReceiptAccumulationTest {
     // all sharing the same max message; union of plan timestamps == full set, in order.
     @Test
     fun `plan splits an over-cap sender into multiple jobs sharing one read position`() {
-        val cap = ChatMessageViewModel.MAX_TIMESTAMPS_PER_RECEIPT
+        val cap = ReadReceiptDispatcher.MAX_TIMESTAMPS_PER_RECEIPT
         val total = cap + 50
         val (perSender, _) = accumulate((1..total).map { msg("A", it.toLong()) })
 
-        val plans = ChatMessageViewModel.planReadReceiptJobs(perSender, isLargeGroup = false)
+        val plans = ReadReceiptDispatcher.planReadReceiptJobs(perSender, isLargeGroup = false)
 
         assertEquals(2, plans.size)                                   // (cap+50)/cap rounds up to 2
         plans.forEach { assertTrue(it.timeStamps.size <= cap) }

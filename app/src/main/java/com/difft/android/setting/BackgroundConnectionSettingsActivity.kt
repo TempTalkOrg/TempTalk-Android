@@ -127,13 +127,8 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             AutoStartPermissionHelper.canOpenAutoStartSettings(this)
         }
 
-        val hasExactAlarmPermission = remember(trigger) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-                alarmManager.canScheduleExactAlarms()
-            } else {
-                true // Android 12 以下不需要权限
-            }
+        val exactAlarmState = remember(trigger) {
+            ExactAlarmAccess.state(this@BackgroundConnectionSettingsActivity)
         }
 
         MainContentPreview(
@@ -142,7 +137,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             isBackgroundRestricted = isBackgroundRestricted,
             isDataSaverRestricted = dataSaverState.isRestricted,
             canOpenAutoStart = canOpenAutoStart,
-            hasExactAlarmPermission = hasExactAlarmPermission,
+            exactAlarmState = exactAlarmState,
             onBackgroundConnectionSwitchChanged = { newValue ->
                 if (newValue) {
                     // Enable service: check requirements first
@@ -177,7 +172,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                     L.w { "Failed to open auto-start settings" }
                 }
             },
-            onExactAlarmClick = { openExactAlarmSettings() }
+            onExactAlarmClick = { ExactAlarmAccess.openSettings(this) }
         )
     }
 
@@ -199,7 +194,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         isBackgroundRestricted: Boolean = true,
         isDataSaverRestricted: Boolean = false,
         canOpenAutoStart: Boolean = true,
-        hasExactAlarmPermission: Boolean = false,
+        exactAlarmState: ExactAlarmState = ExactAlarmState.NotApplicable,
         onBackgroundConnectionSwitchChanged: (Boolean) -> Unit,
         onBackgroundRestrictionClick: (() -> Unit)? = null,
         onBatteryOptimizationClick: (() -> Unit)? = null,
@@ -247,7 +242,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                             isIgnoringBatteryOpt = isIgnoringBatteryOpt,
                             isDataSaverRestricted = isDataSaverRestricted,
                             canOpenAutoStart = canOpenAutoStart,
-                            hasExactAlarmPermission = hasExactAlarmPermission,
+                            exactAlarmState = exactAlarmState,
                             onBackgroundRestrictionClick = onBackgroundRestrictionClick,
                             onBatteryOptimizationClick = onBatteryOptimizationClick,
                             onDataSaverClick = onDataSaverClick,
@@ -272,7 +267,7 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         isIgnoringBatteryOpt: Boolean = false,
         isDataSaverRestricted: Boolean = false,
         canOpenAutoStart: Boolean = true,
-        hasExactAlarmPermission: Boolean = false,
+        exactAlarmState: ExactAlarmState = ExactAlarmState.NotApplicable,
         onBackgroundRestrictionClick: (() -> Unit)? = null,
         onBatteryOptimizationClick: (() -> Unit)? = null,
         onDataSaverClick: (() -> Unit)? = null,
@@ -333,18 +328,19 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                 )
             }
 
-            // Exact alarm check (Android 12+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Exact alarm check (Android 12+, only when this build declares the permission)
+            if (exactAlarmState != ExactAlarmState.NotApplicable) {
+                val granted = exactAlarmState == ExactAlarmState.Granted
                 DividerLine()
                 CheckItem(
                     title = stringResource(com.difft.android.chat.R.string.exact_alarm_check),
-                    status = if (hasExactAlarmPermission) {
+                    status = if (granted) {
                         stringResource(com.difft.android.chat.R.string.exact_alarm_granted)
                     } else {
                         stringResource(com.difft.android.chat.R.string.exact_alarm_not_granted)
                     },
-                    showArrow = !hasExactAlarmPermission,
-                    onClick = if (!hasExactAlarmPermission) onExactAlarmClick else null
+                    showArrow = !granted,
+                    onClick = if (!granted) onExactAlarmClick else null
                 )
             }
         }
@@ -495,19 +491,6 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             startActivity(intent)
         } catch (e: Exception) {
             L.e(e) { "Failed to open data saver settings" }
-        }
-    }
-
-    private fun openExactAlarmSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                    data = Uri.fromParts("package", packageName, null)
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                L.e(e) { "Failed to open exact alarm settings" }
-            }
         }
     }
 }

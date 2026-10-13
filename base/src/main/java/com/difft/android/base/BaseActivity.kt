@@ -6,10 +6,12 @@ import android.os.Bundle
 import android.view.Display
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.window.layout.FoldingFeature
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.EdgeToEdgeUtils.applySystemBarsPadding
 import com.difft.android.base.utils.EdgeToEdgeUtils.setupEdgeToEdge
+import com.difft.android.base.utils.FoldPostureWatcher
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.OrientationDisplayWatcher
 import com.difft.android.base.utils.OrientationPolicy
@@ -45,10 +47,15 @@ abstract class BaseActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Pre-super: setRequestedOrientation post-super on API >= 26 can throw for
-        // translucent activities. Safe here — OrientationPolicy reads only display metrics.
-        if (shouldApplyOrientationPolicy()) {
+        // translucent activities. Safe here — OrientationPolicy reads only display metrics
+        // and `resources`, both available after attachBaseContext.
+        val applyPolicy = shouldApplyOrientationPolicy()
+        if (applyPolicy) {
             policyAppliedOrientation = OrientationPolicy.applyTo(this)
         }
+        // Created inside a pending unfold: applyTo held this screen open instead of locking
+        // it, so it needs the same delayed re-lock as the screen that released.
+        val heldForUnfold = applyPolicy && OrientationPolicy.isUnfoldPending()
         // Enable edge-to-edge before super.onCreate()
         if (shouldEnableEdgeToEdge()) {
             setupEdgeToEdge()
@@ -57,7 +64,41 @@ abstract class BaseActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         AppStartup.onCriticalRenderEventEnd()
         L.i { "[BaseActivity]${javaClass.name} Activity onCreate cost: ${System.currentTimeMillis() - activityStartTimestamp}" }
+        if (applyPolicy) {
+            FoldPostureWatcher.attach(this, ::onFoldPosture)
+            if (heldForUnfold) OrientationPolicy.scheduleUnfoldRelock(this) { reapplyOrientationPolicyIfOwned() }
+        }
     }
+
+    /**
+     * Fold posture, ahead of the display switch. A fold that this instance saw CLOSED (no folding
+     * feature) and then OPENING (HALF_OPENED / FLAT) while still on the phone-sized outer panel
+     * releases the policy's portrait lock so the unfolded display comes up in the sensor
+     * rotation instead of portrait-then-landscape; a closed fold re-runs the policy, which
+     * re-locks if no display switch came. Requiring the closed → opening transition keeps a
+     * clamshell's phone-sized main panel (always open with a folding feature) locked. Only while
+     * the policy owns the value, never while pinned in picture-in-picture.
+     */
+    private fun onFoldPosture(state: FoldingFeature.State?) {
+        val openedFromClosed = foldPostureSeen && lastFoldPosture == null && state != null
+        foldPostureSeen = true
+        lastFoldPosture = state
+        if (!shouldApplyOrientationPolicy() || isInPictureInPictureMode) return
+        val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
+        if (!owned) return
+        if (state == null) {
+            OrientationPolicy.clearUnfoldPending()
+            reapplyOrientationPolicyIfOwned()
+        } else if (openedFromClosed) {
+            OrientationPolicy.preReleaseForUnfold(this)?.let {
+                policyAppliedOrientation = it
+                OrientationPolicy.scheduleUnfoldRelock(this) { reapplyOrientationPolicyIfOwned() }
+            }
+        }
+    }
+
+    private var foldPostureSeen = false
+    private var lastFoldPosture: FoldingFeature.State? = null
 
     override fun setContentView(layoutResID: Int) {
         super.setContentView(layoutResID)
@@ -137,6 +178,10 @@ abstract class BaseActivity : AppCompatActivity() {
 
     override fun onStop() {
         orientationDisplayWatcher.stop()
+        // The closed → opening transition must be seen within one STARTED span: a clamshell
+        // that reports "closed" just before it stops must not look like an unfold on restart.
+        foldPostureSeen = false
+        lastFoldPosture = null
         super.onStop()
     }
 
@@ -206,8 +251,9 @@ abstract class BaseActivity : AppCompatActivity() {
      * on all sizes, or manage orientation themselves (camera, PiP, etc.).
      * When false, BaseActivity leaves `requestedOrientation` untouched.
      *
-     * Note: invoked before `super.onCreate()` (and again from [onStart], [onConfigurationChanged],
-     * [onPictureInPictureModeChanged] and the display watcher's replay) — overrides must return a
+     * Note: invoked before `super.onCreate()` (and again after it, from [onStart],
+     * [onConfigurationChanged], [onPictureInPictureModeChanged], the display watcher's replay
+     * and the fold posture callback) — overrides must return a
      * constant. Hilt-injected fields and `savedInstanceState` are not yet available at the
      * pre-super call.
      */

@@ -70,7 +70,7 @@ internal fun CallMessageHandler.handleCallingMessage(
             if (response.status != CallMessageHandler.RESPONSE_STATUS_SUCCESS ||
                 response.data?.userStopped == true
             ) {
-                L.e { "[Call] handleCallMessage, checkCall fail:${response.reason}" }
+                L.w { "[Call] handleCallMessage, checkCall fail:${response.reason}" }
                 return@launch
             }
 

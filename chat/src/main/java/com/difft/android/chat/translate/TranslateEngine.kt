@@ -43,38 +43,45 @@ class TranslateEngine @Inject constructor(
      * Translates [text] into [target].
      *
      * AUTO is the per-conversation setting acting on incoming messages: it is restricted to
-     * zh/en sources and silently skips anything else. MANUAL is an explicit user action and
-     * accepts any source language the backend can translate from.
+     * zh/en sources and silently skips same-language and undetermined text. MANUAL is an explicit
+     * user action, so it always produces a visible result: it accepts any source language the
+     * backend can translate from, treats undetermined text (digits, emoji) as English, and shows
+     * same-language text as-is.
      */
     suspend fun translate(text: String, target: TranslateLang, mode: TranslateMode): TranslateResult {
         if (text.isBlank()) return TranslateResult.Unsupported(TranslateResult.Reason.EMPTY)
         if (text.length > MAX_TEXT_LENGTH) return TranslateResult.Unsupported(TranslateResult.Reason.TOO_LONG)
 
         if (!modelStore.isReady(target)) {
-            requestModels(modelStore.requiredModels(target), mode)
-            return TranslateResult.ModelNotReady
+            val missing = modelStore.requiredModels(target)
+            requestModels(missing, mode)
+            return TranslateResult.ModelNotReady(missing)
         }
 
         armIdleRelease()
         val source = detectSource(text)
-            ?: return TranslateResult.Unsupported(TranslateResult.Reason.LANGUAGE_NOT_SUPPORTED)
+            ?: if (mode == TranslateMode.MANUAL) {
+                TranslateLanguageCodes.PIVOT
+            } else {
+                return TranslateResult.Unsupported(TranslateResult.Reason.LANGUAGE_NOT_SUPPORTED)
+            }
         if (mode == TranslateMode.AUTO && source !in AUTO_SOURCES) {
             return TranslateResult.Unsupported(TranslateResult.Reason.LANGUAGE_NOT_SUPPORTED)
         }
-        if (source == target.code) return TranslateResult.SameLanguage
+        if (source == target.code) return sameLanguage(text, source, mode)
         // The pivot language is always available to the backend, so it is never a missing model; any
         // other source has to be on the device before the pair can run.
         if (source != TranslateLanguageCodes.PIVOT && !modelStore.isReady(ModelId(source))) {
-            requestModels(setOf(ModelId(source)), mode)
-            return TranslateResult.ModelNotReady
+            val missing = setOf(ModelId(source))
+            requestModels(missing, mode)
+            return TranslateResult.ModelNotReady(missing)
         }
 
         return try {
             val translated = backend.translate(text, source, target.code)
-            // A backend echoes the input back when it has nothing to do; treat that as same-language
-            // rather than showing the user a copy of their own message.
+            // A backend echoes the input back when it has nothing to do; treat that as same-language.
             if (translated.trim() == text.trim()) {
-                TranslateResult.SameLanguage
+                sameLanguage(text, source, mode)
             } else {
                 TranslateResult.Translated(translated, source)
             }
@@ -114,10 +121,14 @@ class TranslateEngine @Inject constructor(
         appScope.launch { releaseAll() }
     }
 
+    /** AUTO skips same-language text; MANUAL shows the original, since the user asked for a result. */
+    private fun sameLanguage(text: String, source: String, mode: TranslateMode): TranslateResult =
+        if (mode == TranslateMode.MANUAL) TranslateResult.Translated(text, source) else TranslateResult.SameLanguage
+
     private fun requestModels(models: Set<ModelId>, mode: TranslateMode) {
         if (mode != TranslateMode.MANUAL) return
         // The one path allowed to pull a model outside the settings screen: the user asked for this
-        // translation, so the download is started here and the retry is theirs.
+        // translation, so the download is started here; the manual caller waits for it and retries once.
         models.forEach { modelStore.ensureDownloaded(it, DownloadTrigger.MANUAL_TRANSLATE) }
     }
 

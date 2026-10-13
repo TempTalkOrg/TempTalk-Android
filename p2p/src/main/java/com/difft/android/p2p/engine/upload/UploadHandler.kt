@@ -2,6 +2,8 @@ package com.difft.android.p2p.engine.upload
 
 import com.difft.android.p2p.engine.io.FileSink
 import com.difft.android.p2p.engine.io.Sha256
+import com.difft.android.p2p.engine.io.TransferCommittedUnconfirmed
+import com.difft.android.p2p.engine.io.TransferStorageFault
 import com.difft.android.p2p.engine.model.ProtocolError
 import com.difft.android.p2p.engine.session.SessionManager
 import okio.Source
@@ -67,6 +69,13 @@ class UploadHandler(
         } catch (e: Exception) {
             // The body never finished: nothing to verify, nothing worth keeping on disk.
             fileSink.discard(meta)
+            // Out of space mid-body must reach the sender as a typed 403 on the still-open connection:
+            // only a ProtocolError is written to the socket by the server's catch chain, so a bare
+            // rethrow here would surface as a connection reset with no reason at all. No 102 can be in
+            // flight yet — the heartbeat starts at onBodyComplete — so the 403 cannot interleave.
+            if (e is TransferStorageFault) {
+                throw ProtocolError.Forbidden(MigrationRejectReason.INSUFFICIENT_STORAGE.wire)
+            }
             throw e
         }
         onBodyComplete()
@@ -79,8 +88,16 @@ class UploadHandler(
             throw ProtocolError.Internal("sha256 mismatch fileId=$fileId exp=$expected act=$actualSha")
         }
 
-        val landed = fileSink.finalizeFile(meta, expected).getOrElse {
-            throw ProtocolError.Internal("finalize failed fileId=$fileId: ${it.message}")
+        val landed = fileSink.finalizeFile(meta, expected).getOrElse { e ->
+            when (e) {
+                // Nothing was committed, so the honest answer is a typed 403 the sender can retry on.
+                is TransferStorageFault ->
+                    throw ProtocolError.Forbidden(MigrationRejectReason.INSUFFICIENT_STORAGE.wire)
+                // Committed but unprovable: the transport answers nothing at all, so the sender reads
+                // "unknown" rather than a verdict this receiver cannot stand behind.
+                is TransferCommittedUnconfirmed -> throw e
+                else -> throw ProtocolError.Internal("finalize failed fileId=$fileId: ${e.message}")
+            }
         }
         sessionManager.markDone(sessionId, fileId)
         return UploadResult(fileId = fileId, landedPath = landed, bytes = bytes, sha256 = actualSha, headers = fileSink.successHeaders(meta))

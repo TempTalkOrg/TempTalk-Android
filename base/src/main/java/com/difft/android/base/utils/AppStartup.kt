@@ -247,7 +247,7 @@ object AppStartup {
      * was intentionally excluded since it does not reach the local log file.
      *
      * The stack trace is inlined into the message via `stackTraceToString()` per
-     * `.claude/rules/logging-standards.md` so it is always present in the file log
+     * `docs/agents/logging-standards-full.md` so it is always present in the file log
      * regardless of the Timber formatter's throwable-handling policy.
      */
     private fun reportTaskFailure(kind: String, taskName: String, e: Throwable) {

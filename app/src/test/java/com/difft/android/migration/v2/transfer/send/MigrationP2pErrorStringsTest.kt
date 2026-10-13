@@ -66,6 +66,33 @@ class MigrationP2pErrorStringsTest {
         assertEquals(MigrationFailureKind.CONNECTION, classifyFailure("failed: ${MigrationError.ConnectionLost.code}"))
     }
 
+    /** T33 — the reverse-pairing and storage tokens, each with a page of its own. */
+    @Test
+    fun `reverse-pairing and storage outcomes resolve to their own kinds`() {
+        assertEquals(
+            MigrationFailureKind.PEER_UPDATE_NEEDED,
+            classifyFailure(PrepareUploadRejectedException(PrepareUploadReasons.UNSUPPORTED_PROTOCOL).message.orEmpty()),
+        )
+        assertEquals(
+            MigrationFailureKind.PEER_CANCELLED,
+            classifyFailure(PrepareUploadRejectedException(PrepareUploadReasons.DESKTOP_CANCELLED).message.orEmpty()),
+        )
+        assertEquals(MigrationFailureKind.DESKTOP_NOT_CONNECTED, classifyFailure(PrepareUploadReasons.DESKTOP_NOT_CONNECTED))
+        assertEquals(MigrationFailureKind.PAIR_TOKEN, classifyFailure("403 forbidden: ${MigrationRejectReason.PAIR_TOKEN.wire}"))
+        assertEquals(
+            MigrationFailureKind.STORAGE_FULL,
+            classifyFailure("403 forbidden: ${MigrationRejectReason.INSUFFICIENT_STORAGE.wire}"),
+        )
+        // The local out-of-space error says the same thing as the peer's 403, so it says it the same way.
+        assertEquals(MigrationFailureKind.STORAGE_FULL, classifyFailure("failed: ${MigrationError.DiskSpaceInsufficient.code}"))
+        // Only the computer's own user can update it, so this page must not offer THIS device's
+        // download page — which is what the UPDATE_NEEDED kind, and only that kind, drives.
+        assertEquals(R.string.migration_m3_title, MigrationFailureKind.PEER_UPDATE_NEEDED.titleRes)
+        assertEquals(R.string.migration_p3_reason_update_desktop, MigrationFailureKind.PEER_UPDATE_NEEDED.reasonRes)
+        assertEquals(MigrationResultTone.WARNING, MigrationFailureKind.PEER_UPDATE_NEEDED.tone)
+        assertEquals(MigrationResultTone.ERROR, MigrationFailureKind.STORAGE_FULL.tone)
+    }
+
     @Test
     fun `anything unrecognised is the unknown sentence with the failed title`() {
         val kind = classifyFailure("java.net.SocketException: Connection reset")

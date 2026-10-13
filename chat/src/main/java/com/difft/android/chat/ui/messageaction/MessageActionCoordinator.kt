@@ -4,9 +4,9 @@ import android.graphics.Point
 import android.graphics.Rect
 import android.view.View
 import android.widget.TextView
+import androidx.annotation.VisibleForTesting
 import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.RecyclerView
-import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.chat.common.TextTruncationUtil
 import com.difft.android.chat.message.TextChatMessage
@@ -24,8 +24,14 @@ import difft.android.messageserialization.model.Mention
  * 
  * Flow:
  * 1. Long press → Show message action popup + select all text
- * 2. User drags selection (not full) → Hide message action popup, show text selection menu
- * 3. User clicks "Select All" → Show message action popup again
+ * 2. Every settled selection change (initial select-all, Select All button, handle drag end) fires the
+ *    SelectionCallback: a partial selection switches the menu to SELECTION mode, a full or empty one
+ *    back to the full menu
+ * 3. A handle drag past touch slop hides the menu; drag end shows it again, re-anchored to the
+ *    selection rows ([SelectionMenuSync])
+ * 4. A list scroll keeps the selection: the menu hides while the list moves and comes back
+ *    re-anchored when it settles; the message leaving the viewport or its text changing on rebind
+ *    dismisses ([ListScrollSync])
  */
 class MessageActionCoordinator(
     private val activity: FragmentActivity,
@@ -64,6 +70,8 @@ class MessageActionCoordinator(
     private val configBuilder = MessageActionConfigBuilder(globalConfigsManager, translateSupported)
     private var messageActionPopup: MessageActionPopup? = null
     private var textSelectionManager: TextSelectionManager? = null
+    private val selectionSync = SelectionMenuSync({ messageActionPopup }, { textSelectionManager })
+    private val listSync = ListScrollSync({ messageActionPopup }, { textSelectionManager }, selectionSync, ::dismiss)
     
     private var currentMessage: TextChatMessage? = null
     private var currentTextView: TextView? = null
@@ -78,11 +86,6 @@ class MessageActionCoordinator(
     // Save original text for restoring OnTouchListener (message.message may change due to RecyclerView recycling)
     private var savedRawText: String = ""
     private var savedMentions: List<Mention>? = null
-    
-    // Listeners to dismiss popup when list scrolls or data changes
-    private var scrollListener: RecyclerView.OnScrollListener? = null
-    private var adapterObserver: RecyclerView.AdapterDataObserver? = null
-    private var currentRecyclerView: RecyclerView? = null
     
     /**
      * Set the action listener
@@ -192,9 +195,9 @@ class MessageActionCoordinator(
                 anchorView = messageView,
                 config = config,
                 containerView = containerView,
-                textView = textView,
                 callbacks = createPopupCallbacks()
             )
+            popup.onGestureEnd = listSync::onGestureEnd
         }
         
         // Setup custom text selection if enabled and text view is provided
@@ -210,57 +213,12 @@ class MessageActionCoordinator(
             isInitializing = false
         }
         
-        // Add scroll listener to dismiss popup when list scrolls
-        setupScrollListener(containerView)
-    }
-    
-    /**
-     * Setup scroll listener on RecyclerView to dismiss popup when list scrolls or data changes
-     */
-    private fun setupScrollListener(containerView: View?) {
-        // Remove any existing listener
-        removeScrollListener()
-        
-        // Find RecyclerView - search up the view hierarchy from anchorView or containerView
-        val recyclerView = findRecyclerView(currentAnchorView) 
-            ?: findRecyclerView(containerView)
-        
-        if (recyclerView != null) {
-            currentRecyclerView = recyclerView
-            
-            // Scroll listener - dismiss when user scrolls
-            scrollListener = object : RecyclerView.OnScrollListener() {
-                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    // Dismiss on any scroll
-                    if (dx != 0 || dy != 0) {
-                        dismiss()
-                    }
-                }
-            }
-            recyclerView.addOnScrollListener(scrollListener!!)
-            
-            // Adapter observer - dismiss when data changes (e.g., new message received)
-            adapterObserver = object : RecyclerView.AdapterDataObserver() {
-                override fun onChanged() {
-                    dismiss()
-                }
-                
-                override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-                    dismiss()
-                }
-                
-                override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
-                    dismiss()
-                }
-                
-                override fun onItemRangeMoved(fromPosition: Int, toPosition: Int, itemCount: Int) {
-                    dismiss()
-                }
-            }
-            recyclerView.adapter?.registerAdapterDataObserver(adapterObserver!!)
+        // Follow list scrolls; dismiss when the message leaves the viewport or its text changes on rebind
+        (findRecyclerView(messageView) ?: findRecyclerView(containerView))?.let {
+            listSync.attach(it, messageView, containerView, textView)
         }
     }
-    
+
     /**
      * Find RecyclerView in the view hierarchy (searching up from the given view)
      */
@@ -275,33 +233,13 @@ class MessageActionCoordinator(
         }
         return null
     }
-    
-    /**
-     * Remove scroll listener and adapter observer from RecyclerView
-     */
-    private fun removeScrollListener() {
-        scrollListener?.let { listener ->
-            currentRecyclerView?.removeOnScrollListener(listener)
-        }
-        adapterObserver?.let { observer ->
-            try {
-                currentRecyclerView?.adapter?.unregisterAdapterDataObserver(observer)
-            } catch (e: Exception) {
-                // Observer might not be registered
-                L.w { "[MessageActionCoordinator] unregisterAdapterDataObserver failed: ${e.stackTraceToString()}" }
-            }
-        }
-        scrollListener = null
-        adapterObserver = null
-        currentRecyclerView = null
-    }
-    
+
     /**
      * Dismiss all popups and clear state
      */
     fun dismiss() {
-        // Remove scroll listener first
-        removeScrollListener()
+        // Remove the list listeners first (the anchor's detach listener must not re-enter)
+        listSync.detach()
         
         messageActionPopup?.dismiss()
         messageActionPopup = null
@@ -309,6 +247,7 @@ class MessageActionCoordinator(
         // Clean up custom text selection
         textSelectionManager?.detach()
         textSelectionManager = null
+        selectionSync.reset()
         
         // Restore OnTouchListener for double-click preview using saved values
         val textView = currentTextView
@@ -339,6 +278,9 @@ class MessageActionCoordinator(
      */
     val message: TextChatMessage?
         get() = currentMessage
+
+    @VisibleForTesting internal val popupForTest: MessageActionPopup? get() = messageActionPopup
+    @VisibleForTesting internal val selectionManagerForTest: TextSelectionManager? get() = textSelectionManager
 
     /**
      * Resolve the selected text to pass to copy/forward.
@@ -386,36 +328,12 @@ class MessageActionCoordinator(
             }
             
             override fun onActionSelected(action: MessageAction.Type) {
-                handleAction(action)
+                currentMessage?.let { msg -> actionListener?.let { action.dispatchTo(it, msg) } }
             }
             
             override fun onDismiss() {
                 cleanupAfterDismiss()
             }
-        }
-    }
-    
-    private fun handleAction(action: MessageAction.Type) {
-        val message = currentMessage ?: return
-        
-        when (action) {
-            MessageAction.Type.QUOTE -> actionListener?.onQuote(message)
-            MessageAction.Type.COPY -> actionListener?.onCopy(message)
-            MessageAction.Type.TRANSLATE -> actionListener?.onTranslate(message)
-            MessageAction.Type.TRANSLATE_OFF -> actionListener?.onTranslateOff(message)
-            MessageAction.Type.FORWARD -> actionListener?.onForward(message)
-            MessageAction.Type.SPEECH_TO_TEXT -> actionListener?.onSpeechToText(message)
-            MessageAction.Type.SPEECH_TO_TEXT_OFF -> actionListener?.onSpeechToTextOff(message)
-            MessageAction.Type.SAVE -> actionListener?.onSave(message)
-            MessageAction.Type.MULTISELECT -> actionListener?.onMultiSelect(message)
-            MessageAction.Type.SAVE_TO_NOTE -> actionListener?.onSaveToNote(message)
-            MessageAction.Type.DELETE_SAVED -> actionListener?.onDeleteSaved(message)
-            MessageAction.Type.RECALL -> actionListener?.onRecall(message)
-            MessageAction.Type.MORE_INFO -> actionListener?.onMoreInfo(message)
-            MessageAction.Type.FAVORITE_GIF -> actionListener?.onFavoriteGif(message)
-            MessageAction.Type.SELECT_ALL -> { /* Handled by TextSelectionPopup */ }
-            MessageAction.Type.RESEND,
-            MessageAction.Type.DELETE -> { /* Handled by FailedMessageActionPopup */ }
         }
     }
     
@@ -431,14 +349,17 @@ class MessageActionCoordinator(
                 return@post
             }
             
-            // Create and setup TextSelectionManager
-            textSelectionManager = TextSelectionManager(textView).apply {
+            // Assigned before selectAll(): the first callback re-anchors through this field (#1294)
+            TextSelectionManager(textView).also { textSelectionManager = it }.apply {
                 setEnabled(textSelectionEnabled)
                 onSelectionChanged = object : TextSelectionManager.SelectionCallback {
                     override fun onSelectionChanged(start: Int, end: Int, isFullSelect: Boolean) {
+                        // Every settled change, not only drag end ("Select All" has no drag)
+                        selectionSync.reanchor()
                         handleCustomSelectionChanged(start, end, isFullSelect)
                     }
                 }
+                handleDragCallback = selectionSync.dragCallback
                 // Pass containerView (e.g., RecyclerView) to clip highlight bounds
                 attachToOverlay(overlayContainer, currentContainerView)
                 
@@ -450,7 +371,9 @@ class MessageActionCoordinator(
     
     /**
      * Handle selection changes from TextSelectionManager.
-     * This is called when user finishes dragging a selection handle.
+     * Fires on every settled selection change (initial select-all, Select All button, handle drag end):
+     * a partial selection switches the menu to SELECTION mode, a full or empty one to the full menu.
+     * Ignored while [isInitializing], so the initial select-all leaves the full menu in place.
      */
     private fun handleCustomSelectionChanged(selStart: Int, selEnd: Int, isFullSelect: Boolean) {
         // Skip during initialization
@@ -475,9 +398,11 @@ class MessageActionCoordinator(
     
     
     private fun cleanupAfterDismiss() {
+        listSync.detach()
         // Clean up custom text selection
         textSelectionManager?.detach()
         textSelectionManager = null
+        selectionSync.reset()
         
         // Restore OnTouchListener for double-click preview using saved values
         // Skip if already cleaned up by dismiss() (savedRawText would be empty)

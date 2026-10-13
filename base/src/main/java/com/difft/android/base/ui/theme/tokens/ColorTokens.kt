@@ -36,6 +36,8 @@ object ColorTokens {
     val ErrorDark = Palette.Red500                        // terror (light)
     val Info = Primary                                    // tinfo (light)
     val InfoLight = Palette.Blue200                       // tinfo (dark)
+    // Fixed in both themes: the library defines bgwhite as one value, e.g. the incoming-call slider handle.
+    val BgWhite = Palette.Gray5                           // bgwhite
 
     // ============== Light Theme Colors ==============
     object Light {

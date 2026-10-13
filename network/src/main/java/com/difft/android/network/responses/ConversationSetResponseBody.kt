@@ -37,6 +37,12 @@ data class ConversationSetResponseBody(
 ) {
     val isMuted: Boolean
         get() = muteStatus == MuteStatus.MUTED.value
+
+    /** Log-safe summary: free-text fields (remark, describes) are reduced to presence flags. */
+    fun toLogString(): String =
+        "conv=$conversation mute=$muteStatus block=$blockStatus confidential=$confidentialMode " +
+            "expiry=$messageExpiry clearAnchor=$messageClearAnchor version=$version " +
+            "hasRemark=${!remark.isNullOrEmpty()} saveToPhotos=$saveToPhotos translate=$translateSetting"
 }
 
 enum class MuteStatus(val value: Int) {

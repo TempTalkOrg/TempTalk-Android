@@ -180,11 +180,12 @@ abstract class ChatMessageViewModelTestBase {
             callManager = mockk(relaxed = true),
             autoTranslateCoordinatorFactory = translateFactory,
             speechToTextManager = mockk(relaxed = true),
-            pushReadReceiptSendJobFactory = mockk(relaxed = true),
+            readReceiptDispatcher = mockk(relaxed = true),
             activityNoticeDispatcher = mockk(relaxed = true),
             onGoingCallStateManager = mockk(relaxed = true),
             callDataManager = mockk(relaxed = true),
             messageHydrator = MessageHydrator(wrapChildRowLoader(childRowLoader)),
+            conversationUnreadMarker = mockk(relaxed = true),
         ).also {
             createdViewModels += it
             if (initialize) it.initialize()

@@ -7,6 +7,7 @@ import android.os.Looper
 import android.view.Display
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
+import com.difft.android.base.log.lumberjack.L
 
 /**
  * Display-level replay trigger for [OrientationPolicy].
@@ -52,16 +53,32 @@ class OrientationDisplayWatcher(
      */
     fun start() {
         displayManager()?.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
-        deliverIfHostDisplay(ContextCompat.getDisplayOrDefault(activity).displayId)
+        deliverIfHostDisplay(ContextCompat.getDisplayOrDefault(activity).displayId, event = "snapshot")
     }
 
-    private fun deliverIfHostDisplay(displayId: Int) {
+    private fun deliverIfHostDisplay(displayId: Int, event: String = "changed") {
         if (activity.isFinishing || activity.isDestroyed) return
         if (activity.isInPictureInPictureMode) return
         if (displayId != ContextCompat.getDisplayOrDefault(activity).displayId) return
         val display = displayManager()?.getDisplay(displayId) ?: return
         if (display.state != Display.STATE_ON) return
+        logPanelIfChanged(display, event)
         onHostDisplayChanged(display)
+    }
+
+    /**
+     * Field diagnostic: one line per PANEL change process-wide (fold / unfold switch the mode
+     * the host display reports), plus the first snapshot after process start as the positive
+     * control. Together with the `orientation set` line and the activity relaunch lines this
+     * fixes the order of a fold's display switch, policy replay and relaunch in a field log.
+     * Keyed on the mode, not the activity, so a stack of activities starting does not repeat it.
+     */
+    private fun logPanelIfChanged(display: Display, event: String) {
+        val mode = runCatching { display.mode }.getOrNull()
+        val panel = "id=${display.displayId} mode=${mode?.physicalWidth}x${mode?.physicalHeight}"
+        if (panel == lastLoggedPanel) return
+        lastLoggedPanel = panel
+        L.i { "[Display] host panel $event $panel cls=${activity.javaClass.simpleName}" }
     }
 
     fun stop() {
@@ -69,6 +86,12 @@ class OrientationDisplayWatcher(
     }
 
     // Application context on purpose: a Display fetched through an Activity context reports the
-    // activity's window bounds from getRealMetrics (see OrientationPolicy.displayShortSideDp).
+    // activity's window bounds from getRealMetrics (see OrientationPolicy.readShortSides).
     private fun displayManager(): DisplayManager? = activity.applicationContext.getSystemService<DisplayManager>()
+
+    private companion object {
+        /** Last panel signature logged, shared by every watcher in the process. */
+        @Volatile
+        private var lastLoggedPanel: String? = null
+    }
 }

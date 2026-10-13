@@ -189,7 +189,7 @@ class JobManager(
     }
 
     override fun onConstraintMet(reason: String) {
-        L.i { "onConstraintMet($reason)" }
+        L.d { "[JobManager] onConstraintMet($reason)" }
         wakeUp()
     }
 

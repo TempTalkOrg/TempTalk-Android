@@ -14,6 +14,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 /**
  * Promote's P3 moves the staged attachments onto the real attachment dir. `renameTo` only succeeds
@@ -37,6 +38,21 @@ class RestorePathsTest {
             File(base, RestorePaths.WORK_DIR_NAME),
             File(paths.attachmentsStagingDir).parentFile,
         )
+    }
+
+    @Test
+    fun `the receive spool sits on the attachment mount, away from the staging db`() {
+        val paths = RestorePaths.forContext(context)
+
+        // The commit tail reclaims this directory and nothing else. It must therefore hold no staging
+        // artifact: if it shared the work dir with the staging database, that reclaim would delete the
+        // one file a cold-start resume needs to finish the promote.
+        assertEquals(
+            File(FilePathManager.getBaseDirFile(), RestorePaths.WORK_DIR_NAME),
+            File(paths.spoolDir).parentFile,
+        )
+        assertNotEquals(File(paths.stagingDbPath).parentFile, File(paths.spoolDir))
+        assertNotEquals(File(paths.containerWorkFile).parentFile, File(paths.spoolDir))
     }
 
     @Test

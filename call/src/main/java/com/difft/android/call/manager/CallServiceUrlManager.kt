@@ -39,6 +39,7 @@ class CallServiceUrlManager @Inject constructor(
     private val secureConfigStore: SecureConfigStore,
     private val proxyConfigProviderLazy: dagger.Lazy<ProxyConfigProvider>,
     private val globalConfigsManagerLazy: dagger.Lazy<IGlobalConfigsManager>,
+    private val physicalHttpTransport: dagger.Lazy<CallPhysicalHttpTransport>,
 ) {
 
     private val callHttpService: LCallHttpService by lazy {
@@ -278,7 +279,20 @@ class CallServiceUrlManager @Inject constructor(
             }
         }
         try {
-            val response = callHttpService.getServiceUrlV2()
+            val response = if (proxyConfigProviderLazy.get().isEnabledForCall) {
+                callHttpService.getServiceUrlV2()
+            } else {
+                try {
+                    physicalHttpTransport.get().fetchServiceUrls()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.e(e) {
+                        "[Call] physical service URL request failed, falling back to Retrofit"
+                    }
+                    callHttpService.getServiceUrlV2()
+                }
+            }
             if (response.status != 0 || response.data == null) {
                 L.e { "[Call] CallServiceUrlManager getServiceUrlV2 failed status=${response.status}" }
                 statisticsLogManager.get().report(

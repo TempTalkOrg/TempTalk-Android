@@ -1,7 +1,6 @@
 package com.difft.android.chat.recent
 
 import android.app.Activity
-import android.content.Context
 import android.text.TextUtils
 import androidx.lifecycle.viewModelScope
 import com.difft.android.base.call.CallDataSourceType
@@ -13,20 +12,17 @@ import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
-import com.difft.android.base.utils.sampleAfterFirst
 import androidx.lifecycle.ViewModel
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.repo.LCallHttpService
-import com.difft.android.chat.contacts.data.ContactorUtil.getEntryPoint
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.DraftRepository
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.chat.group.GroupUtil
-import com.difft.android.network.requests.ConversationSetRequestBody
 import dagger.hilt.android.lifecycle.HiltViewModel
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
@@ -35,26 +31,28 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.cache.ContactRemarkCache
 import org.difft.app.database.models.DBRoomModel
 import org.difft.app.database.models.RoomModel
-import org.difft.app.database.updateRoomUnreadState
+import com.difft.android.chat.message.ConversationUnreadMarker
+import difft.android.messageserialization.model.isManualUnreadActive
 import org.difft.app.database.wcdb
 import com.difft.android.chat.util.AppIconBadgeManager
 import com.difft.android.chat.util.MessageNotificationUtil
 import util.TimeFormatter
 import javax.inject.Inject
 import dagger.Lazy
+import com.difft.android.base.utils.sampleAfterFirst
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.minutes
 
 @HiltViewModel
@@ -68,6 +66,7 @@ class RecentChatViewModel @Inject constructor(
     private val callDataManagerLazy: Lazy<CallDataManager>,
     private val contactorCacheManager: ContactorCacheManager,
     private val groupUtil: Lazy<GroupUtil>,
+    private val unreadMarker: Lazy<ConversationUnreadMarker>,
 ) : ViewModel() {
 
     private val language by lazy {
@@ -97,7 +96,7 @@ class RecentChatViewModel @Inject constructor(
                             .and(DBRoomModel.roomName.notEq(""))
                             .and(DBRoomModel.lastActiveTime.notEq(0L))
                     )
-                    L.i { "[ChatList] latestRoomModelsFlow queried ${newRooms.size} rooms" }
+                    L.d { "[ChatList] latestRoomModelsFlow queried ${newRooms.size} rooms" }
                     newRooms
                 }
             }
@@ -116,6 +115,8 @@ class RecentChatViewModel @Inject constructor(
 
     val allRecentRoomsStateFlow = MutableStateFlow(emptyList<RoomViewData>())
 
+    private var lastLoggedRoomCount = -1
+
     val instantCallRoomViewData: MutableMap<String, RoomViewData> = mutableMapOf()
 
     @Inject
@@ -128,7 +129,6 @@ class RecentChatViewModel @Inject constructor(
         ) { roomModels, allDrafts ->
             Pair(roomModels, allDrafts)
         }.sampleAfterFirst(500).onEach { (roomModels, allDrafts) ->
-            L.i { "[ChatList] Processing conversations: ${roomModels.size}, drafts: ${allDrafts.size}" }
 
             val finalRoomList = buildList {
                 // 添加常规房间数据
@@ -155,6 +155,7 @@ class RecentChatViewModel @Inject constructor(
                         lastActiveTime = activeTime,
                         lastActiveTimeText = lastActiveTimeText,
                         unreadMessageNum = it.unreadMessageNum,
+                        isManualUnread = isManualUnreadActive(it.markUnreadFlag, it.markUnreadAt, it.lastActiveTime, it.readPosition),
                         muteStatus = it.muteStatus,
                         pinnedTime = it.pinnedTime,
                         mentionType = it.mentionType,
@@ -176,7 +177,12 @@ class RecentChatViewModel @Inject constructor(
             }.sortedByDescending { it.sortTime }
 
             allRecentRoomsStateFlow.value = finalRoomList
-            L.i { "[ChatList] allRecentRoomsStateFlow updated: ${allRecentRoomsStateFlow.value.size}" }
+            // The flow re-emits every minute (updateTime ticker) and on every room table
+            // change; only a size change is worth a line.
+            if (finalRoomList.size != lastLoggedRoomCount) {
+                lastLoggedRoomCount = finalRoomList.size
+                L.i { "[ChatList] rooms=${finalRoomList.size} drafts=${allDrafts.size}" }
+            }
         }.flowOn(Dispatchers.IO).launchIn(viewModelScope)
     }
 
@@ -246,8 +252,10 @@ class RecentChatViewModel @Inject constructor(
                         callDataManager.clearAllCallData()
                     }
                 }
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
-                L.e { "[Call] retrieveCallingList error: ${error.message}" }
+                L.w { "[Call] retrieveCallingList failed ${error.javaClass.simpleName}: ${error.message}" }
             }
         }
     }
@@ -273,6 +281,7 @@ class RecentChatViewModel @Inject constructor(
                     )
                 }
                 L.i { "Successfully pin item $isPinnedItem $channelId" }
+                ToastUtil.show(if (isPinnedItem) com.difft.android.chat.R.string.chat_toast_pinned else com.difft.android.chat.R.string.chat_toast_unpinned)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -281,63 +290,42 @@ class RecentChatViewModel @Inject constructor(
         }
     }
 
-
-    fun muteChannel(
-        context: Context,
-        channelId: String,
-        muteStatus: Int
-    ) {
-        storeConversionSettingsToServer(
-            context = context,
-            setting = ConversationSetRequestBody(
-                conversation = channelId,
-                muteStatus = muteStatus
-            )
-        )
+    fun markAsUnread(data: RoomViewData) {
+        unreadMarker.get().markAsUnread(data.toFor())
     }
 
-    private fun storeConversionSettingsToServer(
-        context: Context,
-        setting: ConversationSetRequestBody
-    ) {
+    fun markAsRead(data: RoomViewData) {
         viewModelScope.launch {
+            unreadMarker.get().markAsRead(data.toFor())
+        }
+    }
+
+    private fun RoomViewData.toFor(): For =
+        if (type == RoomViewData.Type.Group) For.Group(roomId) else For.Account(roomId)
+
+    fun markAllAsRead(activity: Activity) {
+        viewModelScope.launch(Dispatchers.Main) {
+            ComposeDialogManager.showWait(activity, "")
+
             try {
-                val result = withContext(Dispatchers.IO) {
-                    context
-                        .getEntryPoint()
-                        .getHttpClient()
-                        .httpService
-                        .fetchConversationSet(
-                            setting
-                        )
-                }
-                if (result.status == 0) {
-//                    saveMuteStatus(setting.conversation, it.data?.muteStatus ?: 0)
-                } else {
-                    result.reason?.let { message -> ToastUtil.show(message) }
+                withContext(Dispatchers.IO) {
+                    // Same per-room path as "Mark as read": read receipts + read-position sync + READ flag
+                    // sync, so other devices clear too (the old local-only reset never synced).
+                    wcdb.room.allObjects
+                        .filter { it.unreadMessageNum > 0 || isManualUnreadActive(it.markUnreadFlag, it.markUnreadAt, it.lastActiveTime, it.readPosition) }
+                        .forEach {
+                            val room = if (it.roomType == 0) For.Account(it.roomId) else For.Group(it.roomId)
+                            unreadMarker.get().markAsRead(room)
+                            RoomChangeTracker.trackRoom(it.roomId, RoomChangeType.REFRESH)
+                        }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                e.message?.let { message -> ToastUtil.show(message) }
+                L.e { "[MarkUnread] markAllAsRead failed: ${e.stackTraceToString()}" }
+            } finally {
+                ComposeDialogManager.dismissWait()
             }
-        }
-    }
-
-    fun markAllAsRead(activity: Activity) {
-        viewModelScope.launch(Dispatchers.Main) {
-            //allRecentRoomsStateFlow.value = allRecentRoomsStateFlow.value.map { it.copy(unreadMessageNum = 0) }
-
-            ComposeDialogManager.showWait(activity, "")
-
-            withContext(Dispatchers.IO) {
-                wcdb.room.allObjects.filter { it.unreadMessageNum > 0 }.forEach {
-                    it.updateRoomUnreadState(it.lastActiveTime)
-                    RoomChangeTracker.trackRoom(it.roomId, RoomChangeType.REFRESH)
-                }
-            }
-
-            ComposeDialogManager.dismissWait()
 
             delay(1000)
             // Zero-reset on the same field the FCM increment path uses, so

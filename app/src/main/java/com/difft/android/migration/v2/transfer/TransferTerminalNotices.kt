@@ -28,7 +28,9 @@ internal class TransferTerminalNotices(
                 context.getString(R.string.migration_p2p_notification_title_failure),
                 localizedFailureReason(state.reason),
             )
-            TransferState.Unknown -> notificationHelper.showTerminal(
+            // The data is on disk but its promote tail is not proven done, which is exactly what the
+            // sender-side "unconfirmed" copy already says; a fourth string pair would say it twice.
+            TransferState.Unknown, TransferState.CommittedUnconfirmed -> notificationHelper.showTerminal(
                 context.getString(R.string.migration_p2p_notification_title_unconfirmed),
                 context.getString(R.string.migration_p2p_notification_text_unconfirmed),
             )

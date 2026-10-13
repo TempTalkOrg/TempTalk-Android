@@ -10,6 +10,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.cancellation.CancellationException
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -92,8 +93,10 @@ object FeatureGrayManager {
                 saveGrayMap(grayCache)
             }
             L.i { "[FeatureGrayManager] gray update success: $grayCache" }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            L.e { "[FeatureGrayManager] gray update error: ${e.message}" }
+            L.w { "[FeatureGrayManager] gray update failed ${e.javaClass.simpleName}: ${e.message}" }
         }
     }
 

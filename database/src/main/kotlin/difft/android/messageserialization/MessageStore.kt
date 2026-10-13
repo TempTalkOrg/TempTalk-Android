@@ -29,8 +29,8 @@ interface MessageStore {
      * instead of two per entry.
      *
      * Entries whose status is not persistable (Translating / SameLanguage / Failed /
-     * FailedTooLong) are dropped with a warning, and so are entries whose message no longer
-     * exists in [conversationId].
+     * FailedTooLong / FailedModel) are dropped with a warning, and so are entries whose message
+     * no longer exists in [conversationId].
      */
     suspend fun updateMessageTranslateDataBatch(
         conversationId: String,

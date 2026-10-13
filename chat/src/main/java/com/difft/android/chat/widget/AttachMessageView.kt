@@ -29,6 +29,9 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobs.DownloadAttachmentJob
 import com.difft.android.chat.util.viewFile
 
+/** `messageId:status` keys whose unreadable-file warning was already written this process. */
+private val unreadableLogged: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
 class AttachMessageView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : ConstraintLayout(context, attrs) {
@@ -65,7 +68,9 @@ class AttachMessageView @JvmOverloads constructor(
         if (!isFileValid) {
             // A bubble that offers a download for a file this device should already hold is only
             // diagnosable from the row it rendered: which directory it named, and what it believed.
-            L.w {
+            // Once per (message id, status) per process: the row rebinds on every scroll, but a
+            // status change (e.g. after a re-download) is a new observation worth a line.
+            if (unreadableLogged.add("${message.id}:${attachment.status}")) L.w {
                 "[Attachment] file not readable messageId=${message.id} localId=${attachment.localId} " +
                     "fileNameLen=${attachment.fileName?.length} fileNameHash=${attachment.fileName?.hashCode()} " +
                     "status=${attachment.status} size=${attachment.size} mine=${message.isMine} " +
@@ -176,7 +181,7 @@ class AttachMessageView @JvmOverloads constructor(
 
     private fun downloadAttachment(message: TextChatMessage, attachmentPath: String) {
         val attachment = message.attachment ?: return
-        val key = attachment.key ?: return
+        val key = attachment.key?.takeIf { it.isNotEmpty() } ?: return
         ApplicationDependencies.getJobManager().add(
             DownloadAttachmentJob(
                 attachment.localId,

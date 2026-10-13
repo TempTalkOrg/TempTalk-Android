@@ -1,200 +1,305 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    Swipe-to-reveal row (chat-list gesture design): the action layers sit behind
+    `swipe_foreground`, which ChatListSwipeLayout translates. Button geometry: 72dp wide,
+    full row height, 24dp icon + 12sp label, white on the action colour.
+-->
+<com.difft.android.chat.recent.ChatListSwipeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:paddingVertical="14dp">
+    android:layout_height="wrap_content">
 
-    <FrameLayout
-        android:id="@+id/frame_layout_avatar"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="16dp">
-
-        <com.difft.android.chat.common.GroupAvatarView
-            android:id="@+id/imageview_group_avatar"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            tools:src="@tools:sample/avatars" />
-
-        <com.difft.android.chat.common.AvatarView
-            android:id="@+id/imageview_avatar"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            tools:src="@tools:sample/avatars" />
-    </FrameLayout>
-
-
+    <!-- Revealed by a swipe towards the end edge; a full swipe paints the uncovered row in this colour. -->
     <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_marginEnd="16dp"
-        android:layout_weight="1"
+        android:id="@+id/swipe_start_actions"
+        android:layout_width="@dimen/chat_list_swipe_action_width"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@color/primary"
+        android:gravity="center"
         android:orientation="vertical">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+        <ImageView
+            android:id="@+id/action_read_icon"
+            android:layout_width="@dimen/chat_list_swipe_action_icon"
+            android:layout_height="@dimen/chat_list_swipe_action_icon"
+            android:importantForAccessibility="no"
+            android:src="@drawable/chat_icon_mark_read"
+            app:tint="@color/t.white" />
 
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:layout_width="0dp"
+        <TextView
+            android:id="@+id/action_read_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/chat_list_swipe_action_label_gap"
+            android:ellipsize="end"
+            android:lines="1"
+            android:textColor="@color/t.white"
+            android:textSize="@dimen/chat_list_swipe_action_label"
+            tools:text="@string/chat_action_mark_read" />
+    </LinearLayout>
+
+    <!-- Revealed by a swipe towards the start edge: pin, then delete at the edge. -->
+    <LinearLayout
+        android:id="@+id/swipe_end_actions"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/action_pin"
+            android:layout_width="@dimen/chat_list_swipe_action_width"
+            android:layout_height="match_parent"
+            android:background="@color/bg.tooltip"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/action_pin_icon"
+                android:layout_width="@dimen/chat_list_swipe_action_icon"
+                android:layout_height="@dimen/chat_list_swipe_action_icon"
+                android:importantForAccessibility="no"
+                android:src="@drawable/chat_icon_stick"
+                app:tint="@color/t.white" />
+
+            <TextView
+                android:id="@+id/action_pin_label"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
-                android:layout_weight="1">
+                android:layout_marginTop="@dimen/chat_list_swipe_action_label_gap"
+                android:ellipsize="end"
+                android:lines="1"
+                android:textColor="@color/t.white"
+                android:textSize="@dimen/chat_list_swipe_action_label"
+                tools:text="@string/chat_stick" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/action_delete"
+            android:layout_width="@dimen/chat_list_swipe_action_width"
+            android:layout_height="match_parent"
+            android:background="@color/error"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="@dimen/chat_list_swipe_action_icon"
+                android:layout_height="@dimen/chat_list_swipe_action_icon"
+                android:importantForAccessibility="no"
+                android:src="@drawable/chat_message_action_delete"
+                app:tint="@color/t.white" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/chat_list_swipe_action_label_gap"
+                android:ellipsize="end"
+                android:lines="1"
+                android:text="@string/me_delete"
+                android:textColor="@color/t.white"
+                android:textSize="@dimen/chat_list_swipe_action_label" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/swipe_foreground"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="14dp">
+
+        <FrameLayout
+            android:id="@+id/frame_layout_avatar"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="16dp">
+
+            <com.difft.android.chat.common.GroupAvatarView
+                android:id="@+id/imageview_group_avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                tools:src="@tools:sample/avatars" />
+
+            <com.difft.android.chat.common.AvatarView
+                android:id="@+id/imageview_avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                tools:src="@tools:sample/avatars" />
+        </FrameLayout>
+
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="16dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1">
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/textview_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:lines="1"
+                        android:textColor="@color/t.primary"
+                        android:textSize="16sp"
+                        app:layout_constrainedWidth="true"
+                        app:layout_constraintEnd_toStartOf="@+id/imageview_bot_badge"
+                        app:layout_constraintHorizontal_bias="0"
+                        app:layout_constraintHorizontal_chainStyle="packed"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        tools:text="Design UED Design UED Design UED" />
+
+                    <ImageView
+                        android:id="@+id/imageview_bot_badge"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="4dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/chat_ic_official_bot_badge"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="@id/textview_label"
+                        app:layout_constraintEnd_toStartOf="@+id/textview_timer"
+                        app:layout_constraintStart_toEndOf="@+id/textview_label"
+                        app:layout_constraintTop_toTopOf="@id/textview_label"
+                        tools:visibility="visible" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/textview_timer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/t.third"
+                        android:textSize="16sp"
+                        android:visibility="gone"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintHorizontal_bias="0"
+                        app:layout_constraintStart_toEndOf="@+id/imageview_bot_badge"
+                        app:layout_constraintTop_toTopOf="parent"
+                        tools:text="[7d]"
+                        tools:visibility="visible" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/textview_label"
+                    android:id="@+id/textview_date"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:lines="1"
-                    android:textColor="@color/t.primary"
-                    android:textSize="16sp"
-                    app:layout_constrainedWidth="true"
-                    app:layout_constraintEnd_toStartOf="@+id/imageview_bot_badge"
-                    app:layout_constraintHorizontal_bias="0"
-                    app:layout_constraintHorizontal_chainStyle="packed"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    tools:text="Design UED Design UED Design UED" />
+                    android:textColor="@color/t.third"
+                    android:textSize="12sp"
+                    tools:text="10:09 AM" />
+            </LinearLayout>
 
-                <ImageView
-                    android:id="@+id/imageview_bot_badge"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!--
+                    Sending indicator: independent of the tag run (a room can show both). Tint lives
+                    HERE via app:tint, never in the drawable — its strokeColor is baked in and shared
+                    with the bubble's own sending icon (ChatMessageViewHolder), which must keep it.
+                -->
+                <!-- Deliberately larger than the bubble's 13dp iv_send_status: sized to the 14sp
+                     preview line (user-adjudicated; the 12dp-intrinsic vector scales cleanly). -->
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/imageview_sending"
                     android:layout_width="16dp"
                     android:layout_height="16dp"
-                    android:layout_marginStart="4dp"
-                    android:importantForAccessibility="no"
-                    android:src="@drawable/chat_ic_official_bot_badge"
+                    android:layout_marginEnd="4dp"
+                    android:src="@drawable/chat_icon_message_sending_new"
                     android:visibility="gone"
-                    app:layout_constraintBottom_toBottomOf="@id/textview_label"
-                    app:layout_constraintEnd_toStartOf="@+id/textview_timer"
-                    app:layout_constraintStart_toEndOf="@+id/textview_label"
-                    app:layout_constraintTop_toTopOf="@id/textview_label"
+                    app:tint="@color/t.third"
                     tools:visibility="visible" />
 
+                <!--
+                    lines/ellipsize are the last-resort guard: without them an over-long tag run wraps
+                    and grows the row to two lines. Colour is owned here, so the tag text needs no spans.
+                -->
                 <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/textview_timer"
+                    android:id="@+id/textview_at"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:ellipsize="end"
+                    android:lines="1"
+                    android:textColor="@color/t.error"
+                    android:textSize="14sp"
+                    tools:text="[@You]" />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/textview_detail"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:lines="1"
                     android:textColor="@color/t.third"
-                    android:textSize="16sp"
+                    android:textSize="14sp"
+                    tools:text="Manta :Diana@binan...Manta :Diana@binan...Manta :Diana@binan..." />
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/textview_missed_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="18dp"
+                    android:background="@drawable/chat_missing_number_bg"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:minWidth="18dp"
+                    android:minHeight="18dp"
+                    android:padding="3dp"
+                    android:textColor="@color/white"
+                    android:textSize="10sp"
                     android:visibility="gone"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintHorizontal_bias="0"
-                    app:layout_constraintStart_toEndOf="@+id/imageview_bot_badge"
-                    app:layout_constraintTop_toTopOf="parent"
-                    tools:text="[7d]"
+                    tools:ignore="SmallSp"
+                    tools:text="99+"
                     tools:visibility="visible" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
 
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/textview_date"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:lines="1"
-                android:textColor="@color/t.third"
-                android:textSize="12sp"
-                tools:text="10:09 AM" />
+            </LinearLayout>
+
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/call_bar_duration"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <!--
-                Sending indicator: independent of the tag run (a room can show both). Tint lives
-                HERE via app:tint, never in the drawable — its strokeColor is baked in and shared
-                with the bubble's own sending icon (ChatMessageViewHolder), which must keep it.
-            -->
-            <!-- Deliberately larger than the bubble's 13dp iv_send_status: sized to the 14sp
-                 preview line (user-adjudicated; the 12dp-intrinsic vector scales cleanly). -->
-            <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/imageview_sending"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="4dp"
-                android:src="@drawable/chat_icon_message_sending_new"
-                android:visibility="gone"
-                app:tint="@color/t.third"
-                tools:visibility="visible" />
-
-            <!--
-                lines/ellipsize are the last-resort guard: without them an over-long tag run wraps
-                and grows the row to two lines. Colour is owned here, so the tag text needs no spans.
-            -->
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/textview_at"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:ellipsize="end"
-                android:lines="1"
-                android:textColor="@color/t.error"
-                android:textSize="14sp"
-                tools:text="[@You]" />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/textview_detail"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:lines="1"
-                android:textColor="@color/t.third"
-                android:textSize="14sp"
-                tools:text="Manta :Diana@binan...Manta :Diana@binan...Manta :Diana@binan..." />
-
-            <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/textview_missed_number"
-                android:layout_width="wrap_content"
-                android:layout_height="18dp"
-                android:background="@drawable/chat_missing_number_bg"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:lines="1"
-                android:minWidth="18dp"
-                android:minHeight="18dp"
-                android:padding="3dp"
-                android:textColor="@color/white"
-                android:textSize="10sp"
-                android:visibility="gone"
-                tools:ignore="SmallSp"
-                tools:text="99+"
-                tools:visibility="visible" />
-
-        </LinearLayout>
+            android:layout_gravity="center"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/rounded_button_join_for_chat_list"
+            android:backgroundTint="@color/primary"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="4dp"
+            android:textColor="@color/t.white"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:text="Join"
+            tools:visibility="visible" />
 
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/call_bar_duration"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_marginEnd="16dp"
-        android:background="@drawable/rounded_button_join_for_chat_list"
-        android:backgroundTint="@color/primary"
-        android:gravity="center"
-        android:paddingStart="8dp"
-        android:paddingTop="4dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="4dp"
-        android:textColor="@color/t.white"
-        android:textSize="12sp"
-        android:visibility="gone"
-        tools:text="Join"
-        tools:visibility="visible" />
-
-
-</LinearLayout>
+</com.difft.android.chat.recent.ChatListSwipeLayout>

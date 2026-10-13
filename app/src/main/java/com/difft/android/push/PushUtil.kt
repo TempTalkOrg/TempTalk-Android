@@ -198,12 +198,12 @@ class PushUtil @Inject constructor(
                 )
 
                 if (result.status == 0) {
-                    L.i { "[Push] 绑定token成功" }
+                    L.i { "[Push] fcm token bound" }
                 } else {
-                    L.e { "[Push] 绑定token失败: status=${result.status}" }
+                    L.w { "[Push] fcm token bind failed status=${result.status}" }
                 }
             } catch (e: Exception) {
-                L.e { "[Push] 绑定token失败: ${e.message}" }
+                L.w { "[Push] fcm token bind failed ${e.javaClass.simpleName}: ${e.message}" }
             }
         }
     }

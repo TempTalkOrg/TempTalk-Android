@@ -48,6 +48,11 @@ import org.difft.app.database.models.ContactorModel
 data class ContactDetailUiState(
     val contactor: ContactorModel? = null,
     val isFriend: Boolean = true,
+    /**
+     * False until the local relation lookup finishes. Friend-dependent actions stay blank (with their
+     * height reserved) meanwhile, so a non-friend card never flashes the friend layout first.
+     */
+    val isRelationResolved: Boolean = false,
     /** Weak-pending (delayed-removal) contact: isFriend=false + this true → show "Remove Now". */
     val isWeakPending: Boolean = false,
     val isSelf: Boolean = false,
@@ -147,7 +152,7 @@ fun ContactDetailScreen(
         TopBar(
             isPopupMode = isPopupMode,
             showBackButton = showBackButton,
-            showMoreButton = uiState.isFriend && !uiState.isSelf,
+            showMoreButton = uiState.isRelationResolved && uiState.isFriend && !uiState.isSelf,
             isEditing = uiState.isEditingRemark,
             onCloseClick = onCloseClick,
             onMoreClick = onMoreClick,
@@ -186,6 +191,7 @@ fun ContactDetailScreen(
         ActionButtonsSection(
             isSelf = uiState.isSelf,
             isFriend = uiState.isFriend,
+            isRelationResolved = uiState.isRelationResolved,
             isWeakPending = uiState.isWeakPending,
             isOfficialAccount = uiState.isOfficialAccount,
             onMessageClick = onMessageClick,
@@ -312,11 +318,13 @@ private val TOP_BAR_HEIGHT = 52.dp
 private val TOP_BAR_ICON_PADDING = 12.dp
 private val PRIVACY_HINT_MIN_SIZE = 11.sp
 private val PRIVACY_HINT_MAX_SIZE = 14.sp
+private val ACTION_BUTTON_HEIGHT = 72.dp
 
 @Composable
 private fun ActionButtonsSection(
     isSelf: Boolean,
     isFriend: Boolean,
+    isRelationResolved: Boolean,
     isWeakPending: Boolean,
     isOfficialAccount: Boolean,
     onMessageClick: () -> Unit,
@@ -346,6 +354,9 @@ private fun ActionButtonsSection(
                     modifier = Modifier.weight(1f)
                 )
             }
+
+            // Relation unknown: keep the row's height so resolving it doesn't shift the layout.
+            !isRelationResolved -> Spacer(modifier = Modifier.height(ACTION_BUTTON_HEIGHT))
 
             isFriend -> {
                 // Friend: show message, call (if not bot), share
@@ -406,7 +417,7 @@ private fun ActionButton(
     val labelColor = tint ?: DifftTheme.colors.textPrimary
     Column(
         modifier = modifier
-            .height(72.dp)
+            .height(ACTION_BUTTON_HEIGHT)
             .clip(RoundedCornerShape(DifftTheme.spacing.inlineSmall))
             .background(DifftTheme.colors.background)
             .clickable { onClick() },
@@ -577,6 +588,7 @@ private fun ContactDetailScreenPreview() {
                 sourceDescribe = "Search",
                 commonGroupsCount = 3,
                 isFriend = true,
+                isRelationResolved = true,
                 isSelf = false,
                 isOfficialAccount = false
             ),
@@ -606,6 +618,7 @@ private fun ContactDetailScreenSelfPreview() {
                 userId = "my_id",
                 joinedAt = "2023-06-01",
                 isFriend = true,
+                isRelationResolved = true,
                 isSelf = true,
                 isOfficialAccount = false
             ),
@@ -636,6 +649,7 @@ private fun ContactDetailScreenNonFriendPreview() {
                 joinedAt = "2024-03-20",
                 commonGroupsCount = 1,
                 isFriend = false,
+                isRelationResolved = true,
                 isSelf = false,
                 isOfficialAccount = false
             ),
@@ -666,6 +680,7 @@ private fun ContactDetailScreenWeakPendingPreview() {
                 joinedAt = "2024-03-20",
                 commonGroupsCount = 0,
                 isFriend = false,
+                isRelationResolved = true,
                 isWeakPending = true,
                 isSelf = false,
                 isOfficialAccount = false
@@ -697,6 +712,7 @@ private fun ContactDetailScreenPopupPreview() {
                 joinedAt = "2024-02-10",
                 commonGroupsCount = 5,
                 isFriend = true,
+                isRelationResolved = true,
                 isSelf = false,
                 isOfficialAccount = false
             ),

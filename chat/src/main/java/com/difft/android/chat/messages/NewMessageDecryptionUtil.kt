@@ -77,7 +77,7 @@ class NewMessageDecryptionUtil @Inject constructor(
             return null
         }
 
-        L.i { "[Message] decrypt encrypted message===${envelope.timestamp}" }
+        L.d { "[Message] decrypt encrypted message===${envelope.timestamp}" }
         val version = envelope.content.first().toUInt().shr(4).toInt()
 
         if (version !in MESSAGE_MINIMUM_SUPPORTED_VERSION..MESSAGE_MAX_SUPPORTED_VERSION) {

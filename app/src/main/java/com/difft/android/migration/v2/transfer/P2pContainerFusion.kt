@@ -9,40 +9,32 @@ import com.difft.android.migration.v2.container.ContainerManifest
 import com.difft.android.migration.v2.container.ContainerReader
 import com.difft.android.migration.v2.container.ContainerTotals
 import com.difft.android.migration.v2.container.ContainerWriter
-import com.difft.android.migration.v2.container.ProgressReporter
 import com.difft.android.migration.v2.container.counting
 import com.difft.android.migration.v2.model.NeutralRecord
 import com.difft.android.migration.v2.restore.RestoreOrchestrator
 import com.difft.android.migration.v2.restore.RestoreResult
-import com.difft.android.p2p.android.client.SenderHttpClient
 import com.difft.android.p2p.android.server.ReceiverHttpServer
 import com.difft.android.p2p.android.tls.SelfSignedCert
 import com.difft.android.p2p.engine.model.DeviceInfo
-import com.difft.android.p2p.engine.model.FileMetadata
 import com.difft.android.p2p.engine.model.MigrationHandshake
 import com.difft.android.migration.v2.container.FormatCompat
 import com.difft.android.p2p.engine.model.QrPayload
+import com.difft.android.p2p.engine.session.PairingSessionRegistry
 import com.difft.android.p2p.engine.session.PinPolicy
 import com.difft.android.p2p.engine.session.SessionManager
 import com.difft.android.p2p.engine.session.TerminalRecordStore
 import com.difft.android.p2p.engine.session.TransferProgressReporter
 import com.difft.android.p2p.engine.upload.MigrationHandshakeValidator
+import com.difft.android.p2p.engine.upload.StoragePrecheck
 import com.difft.android.p2p.engine.upload.UploadReplyHeaders
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.net.InetAddress
-import java.util.UUID
 
 /**
  * Joins the migration container engine to the `:p2p` transport so a container streams device to
@@ -60,6 +52,9 @@ class P2pContainerFusion(
     private val crypto: BackupCrypto,
 ) {
 
+    /** The send half: pipe, upload, verdict race and the `/cancel` notice (see [P2pSenderPipeline]). */
+    private val sender = P2pSenderPipeline(writer)
+
     /**
      * Handle returned by the receiver starters: the QR to render plus the live receive outcome. [R] is
      * the consumer's outcome type — a [ContainerManifest] for the byte pipe, a [RestoreResult] for the
@@ -71,6 +66,11 @@ class P2pContainerFusion(
         private val server: ReceiverHttpServer,
         private val receiveSink: P2pContainerReceiveSink<R>,
         private val pinPolicy: PinPolicy,
+        /**
+         * The pending reverse-pairing session this listener authorizes against. Empty until the owner
+         * registers one; the `/prepare-upload` handler takes the pairing branch only while it is active.
+         */
+        val pairingRegistry: PairingSessionRegistry,
     ) : ReceiverLinger.Listener {
         /** The pairing payload to show; [rotatePin] replaces its PIN. */
         @Volatile
@@ -92,9 +92,14 @@ class P2pContainerFusion(
             server.closeToNewSessions()
         }
 
-        /** Tears down the server and its sessions. Idempotent. */
+        /**
+         * Tears down the server, its sessions and the receive spool. Idempotent. The server closes
+         * sockets but knows nothing about the sink, so a teardown between files (or before any upload
+         * started) would otherwise leave spool segments behind.
+         */
         override fun stop() {
             runCatching { server.stop() }
+            runCatching { receiveSink.abort() }
         }
     }
 
@@ -106,12 +111,14 @@ class P2pContainerFusion(
      * @param ip the LAN IP advertised in the QR and in the cert SAN.
      * @param scope the scope the streaming reader runs on; the caller owns its lifecycle.
      * @param cert the receiver's self-signed cert, whose fingerprint the sender pins.
+     * @param spoolDir where the body's segment files land while the consumer drains them.
      */
     fun startReceiver(
         ip: String,
         scope: CoroutineScope,
         cert: SelfSignedCert,
         alias: String,
+        spoolDir: File,
         attachmentTarget: AttachmentByteTarget,
         onRecord: suspend (NeutralRecord) -> Unit,
         onEvent: (ReceiverHttpServer.ServerEvent) -> Unit = {},
@@ -127,9 +134,9 @@ class P2pContainerFusion(
         requirePin = requirePin,
         identity = null,            // byte-pipe (I1/I2): no advertised identity, no gate
         migrationValidator = null,
-    ) { transferKey, _ ->
+    ) { transferKey, _, _ ->
         // I1/I2: read the stream straight into readStreaming; the outcome is the verified manifest.
-        P2pContainerReceiveSink<ContainerManifest>(scope = scope) { input ->
+        P2pContainerReceiveSink<ContainerManifest>(scope = scope, spoolDir = spoolDir) { input ->
             reader.readStreaming(input, transferKey, attachmentTarget, onRecord = onRecord)
         }
     }
@@ -150,6 +157,9 @@ class P2pContainerFusion(
         alias: String,
         orchestrator: RestoreOrchestrator,
         currentVerifyAccount: String,
+        // Where the body's segment files land while the importer drains them. Wiped by the owner
+        // before the listener binds, and by the spool itself on teardown.
+        spoolDir: File,
         onEvent: (ReceiverHttpServer.ServerEvent) -> Unit = {},
         port: Int = ReceiverHttpServer.DEFAULT_PORT,
         requirePin: Boolean = true,
@@ -173,6 +183,11 @@ class P2pContainerFusion(
         terminalStore: TerminalRecordStore? = null,
         // Every LAN address this device can be reached at, [ip] first (see `NetworkUtils.lanCandidates`).
         ips: List<String> = listOf(ip),
+        // `(totalWritten, backlogBytes)` from the spool writer, on the socket thread: the free-space
+        // monitor's hook. Throwing from it stops the receive with that failure.
+        onWriteProgress: (Long, Long) -> Unit = { _, _ -> },
+        // Free-space gate for `prepare-upload`, supplied by `:app` so `StatFs` stays out of `:p2p`.
+        storagePrecheck: StoragePrecheck? = null,
     ): ReceiverSession<RestoreResult> = bringUpReceiver(
         ip = ip,
         ips = ips,
@@ -185,9 +200,18 @@ class P2pContainerFusion(
         identity = identity,
         migrationValidator = migrationValidator,
         terminalStore = terminalStore,
-    ) { transferKey, liveness ->
+        storagePrecheck = storagePrecheck,
+    ) { transferKey, liveness, pairingRegistry ->
+        // The orchestrator's figure comes from the manifest totals and is exact; the byte counter
+        // measures against the advertised size, which is only an estimate. A source that announces no
+        // totals (the Desktop writes zeros) would otherwise leave the page indeterminate for the whole
+        // body, so the counter stands in until the first manifest-based report and then stays quiet.
+        val manifestProgressSeen = AtomicBoolean(false)
         P2pContainerReceiveSink<RestoreResult>(
             scope = scope,
+            spoolDir = spoolDir,
+            onWriteProgress = onWriteProgress,
+            onProgress = { ratio -> if (!manifestProgressSeen.get()) onProgress(ratio) },
             // Only a promoted import confirms the 200; a guard rejection must not.
             isSuccess = { it is RestoreResult.ReadyForSignIn },
             // The handoff sender wipes itself on the receipt, so the receipt must say the credential is
@@ -200,16 +224,23 @@ class P2pContainerFusion(
                 }
             },
             onBodyComplete = onBodyComplete,
-            // Not the byte counter: it would measure against the advertised size, which is only an
-            // estimate, and fight the exact figure the orchestrator reports from the manifest.
         ) { input ->
             // The transferKey rides in the passphrase position and is never logged.
             val account = credentialHandoffAccount?.invoke()?.takeIf { it.isNotBlank() } ?: currentVerifyAccount
+            // Reverse pairing: the container is keyed with the transfer key from the peer's code,
+            // registered before `/reverse-pair` was sent. Read at body start, strictly after the
+            // pairing authorization accepted, so a single read is race-free — as with the adopted
+            // account above. Scoped to the accepted generation: a re-scan yields null here rather than
+            // swapping the key under a body that is already streaming.
+            val key = pairingRegistry.acceptedTransferKey() ?: transferKey
             orchestrator.restoreFromStream(
                 source = input,
-                transferKey = transferKey,
+                transferKey = key,
                 currentVerifyAccount = account,
-                onProgress = onProgress,
+                onProgress = { ratio ->
+                    manifestProgressSeen.set(true)
+                    onProgress(ratio)
+                },
                 credentialHandoff = credentialHandoffAccount != null,
                 liveness = liveness,
             )
@@ -232,18 +263,26 @@ class P2pContainerFusion(
         identity: ReceiverIdentity?,
         migrationValidator: MigrationHandshakeValidator?,
         terminalStore: TerminalRecordStore? = null,
+        storagePrecheck: StoragePrecheck? = null,
         // Every address the code advertises, [ip] first; the connecting side races them.
         ips: List<String> = listOf(ip),
-        sinkFactory: (transferKey: String, liveness: TransferProgressReporter) -> P2pContainerReceiveSink<R>,
+        sinkFactory: (
+            transferKey: String,
+            liveness: TransferProgressReporter,
+            pairingRegistry: PairingSessionRegistry,
+        ) -> P2pContainerReceiveSink<R>,
     ): ReceiverSession<R> {
         val transferKey = generateTransferKey()
         val pinPolicy = PinPolicy()
         val pinCode = pinPolicy.issue()
+        // Empty until the owner registers a reverse-pairing session; while it is empty the
+        // `/prepare-upload` handler takes the unchanged PIN path.
+        val pairingRegistry = PairingSessionRegistry()
 
         // The session manager is also what the import reports its progress into, so it exists
         // before the sink that will do the reporting.
         val sessionManager = SessionManager(terminalStore = terminalStore)
-        val receiveSink = sinkFactory(transferKey, sessionManager)
+        val receiveSink = sinkFactory(transferKey, sessionManager, pairingRegistry)
 
         val deviceInfo = DeviceInfo(alias = alias, fingerprint = cert.sha256Fingerprint, port = port)
         val server = ReceiverHttpServer(
@@ -256,6 +295,8 @@ class P2pContainerFusion(
             onEvent = onEvent,
             // I4: the env/account/version fail-fast gate (null on the byte-pipe path → no gate).
             migrationValidator = migrationValidator,
+            pairingRegistry = pairingRegistry,
+            storagePrecheck = storagePrecheck,
         )
         // A same-device handoff advertises loopback alone, so the listener stays off the LAN. It binds
         // the advertised literal itself: `InetAddress.getLoopbackAddress()` is `::1` on Android, which a
@@ -280,7 +321,7 @@ class P2pContainerFusion(
             formatVersion = identity?.formatVersion,
         )
         L.i { "[MigrationV2][P2P][Rx] receiver up ip=$ip port=$boundPort requirePin=$requirePin gate=${migrationValidator != null}" }
-        return ReceiverSession(qr, transferKey, server, receiveSink, pinPolicy)
+        return ReceiverSession(qr, transferKey, server, receiveSink, pinPolicy, pairingRegistry)
     }
 
     /**
@@ -317,10 +358,10 @@ class P2pContainerFusion(
 
         // Pre-count the exact container length by dry-encoding through a counting sink, so this path
         // can stream with a known Content-Length.
-        val length = countContainerLength(records, attachmentSource, transferKey, sourceAccount, sourceAppVersion)
+        val length = sender.countContainerLength(records, attachmentSource, transferKey, sourceAccount, sourceAppVersion)
         L.i { "[MigrationV2][P2P][Tx] container length=$length records=${records.size} framing=content-length" }
 
-        streamThroughPipe(
+        sender.streamThroughPipe(
             target = target,
             transferKey = transferKey,
             declaredLength = length,
@@ -392,7 +433,7 @@ class P2pContainerFusion(
                 "handshake=${sourceEnvironment != null} estimatedTotalBytes=$estimatedTotalBytes"
         }
 
-        streamThroughPipe(
+        sender.streamThroughPipe(
             target = target,
             transferKey = transferKey,
             declaredLength = P2pContainerPipe.UNKNOWN_LENGTH,
@@ -423,244 +464,6 @@ class P2pContainerFusion(
         )
     }
 
-    /**
-     * Shared sender mechanics for both send paths: open a [P2pContainerPipe], `prepare-upload`, then
-     * run the writer (filling the pipe) and the uploader (draining it) on separate coroutines, since a
-     * full pipe blocks the writer until the reader drains and one thread would deadlock. Both are
-     * children of this call, so whichever fails first cancels the other and is what the caller sees.
-     * [declaredLength] selects the framing: non-negative gives a `Content-Length`,
-     * [P2pContainerPipe.UNKNOWN_LENGTH] gives chunked transfer-encoding.
-     */
-    private suspend fun streamThroughPipe(
-        target: QrPayload,
-        transferKey: String,
-        declaredLength: Long,
-        // Approximate progress denominator for the chunked path; 0 on the Content-Length path, where
-        // `declaredLength` is both the real size and the denominator.
-        estimatedTotalBytes: Long,
-        records: Flow<NeutralRecord>,
-        attachmentSource: com.difft.android.migration.v2.container.AttachmentByteSource,
-        sourceAccount: String,
-        sourceAppVersion: String,
-        handshake: MigrationHandshake?,
-        awaitPeerConfirm: Boolean = false,
-        onAwaitingPeerConfirm: () -> Unit = {},
-        onProgress: (Float) -> Unit,
-        onBodySent: () -> Unit = {},
-        onReply: (Map<String, String>) -> Unit = {},
-        senderAlias: String = "migration-sender",
-        totals: ContainerTotals? = null,
-        onSessionPrepared: (SenderSessionRef) -> Unit = {},
-        verdictWatch: VerdictWatch? = null,
-        onVerdictStall: (Boolean) -> Unit = {},
-    ): Boolean {
-        val pipe = P2pContainerPipe(declaredLength = declaredLength)
-        val client = SenderHttpClient(target)
-        val fileId = UUID.randomUUID().toString()
-        // Advertised size in the prepare-upload metadata, which the session slot does not gate on: the
-        // real container size on the Content-Length path, the estimate on the chunked path so the
-        // receiver can drive its own bar. Advisory only — the receiver still de-chunks by
-        // Transfer-Encoding.
-        val advertisedSize =
-            if (declaredLength >= 0L) declaredLength else estimatedTotalBytes.coerceAtLeast(0L)
-        val meta = FileMetadata(
-            id = fileId,
-            fileName = pipe.fileSource.fileName,
-            size = advertisedSize,
-            fileType = pipe.fileSource.mimeType,
-            sha256 = null, // container's own trailing HMAC is the integrity gate (not a pre-hash)
-        )
-        val self = DeviceInfo(alias = senderAlias, fingerprint = "tx-${fileId.take(8)}")
-        // The handshake, when present, carries the source identity, so the receiver's gate can reject
-        // with a typed 403 before any bytes flow.
-        val prepared = if (awaitPeerConfirm) {
-            PeerConfirmRetry.run(onWaiting = onAwaitingPeerConfirm) {
-                client.prepareUpload(self, mapOf(fileId to meta), target.pin, handshake)
-            }
-        } else {
-            client.prepareUpload(self, mapOf(fileId to meta), target.pin, handshake)
-        }
-        val token = prepared.files[fileId] ?: run {
-            L.w { "[MigrationV2][P2P][Tx] no upload token for fileId" }
-            return false
-        }
-        val session = SenderSessionRef(
-            ip = target.ip,
-            port = target.port,
-            fingerprint = target.fp,
-            sessionId = prepared.sessionId,
-            sessionToken = prepared.sessionToken,
-            caps = prepared.caps.orEmpty(),
-        )
-        L.i { "[MigrationV2][P2P][Tx] session prepared caps=${session.caps} statusToken=${session.sessionToken != null}" }
-        onSessionPrepared(session)
-
-        // Progress. With totals, count what the writer frames — records and attachment payload — against
-        // the same totals the receiver reads from the manifest, so both bars run the one formula and end
-        // together at 100%. The writer runs at most one pipe buffer (1 MiB) ahead of the wire, so this
-        // leads the true upload by that much and no more. Without totals, the byte estimate below stands.
-        val reporter = ProgressReporter(onProgress).also { it.start(totals) }
-        val countedRecords = if (totals != null) records.onEach { reporter.recordDone() } else records
-        val countedAttachments = if (totals != null) attachmentSource.counting(reporter::attachmentBytes) else attachmentSource
-
-        // Writer and uploader on separate coroutines, both children of this scope so a failure in
-        // either is contained. Whatever ends this early, the receiver is told by name.
-        return abortingSessionOnFailure(client, prepared.sessionId, prepared.sessionToken) {
-            coroutineScope {
-                val writeJob = async(Dispatchers.IO) {
-                    writer.write(
-                        records = countedRecords,
-                        sink = pipe.archiveSink,
-                        passphrase = transferKey, // R3: ephemeral key in the passphrase position; never logged
-                        attachmentBytes = countedAttachments,
-                        sourceAccount = sourceAccount,
-                        sourceAppVersion = sourceAppVersion,
-                        totals = totals,
-                    )
-                }
-                // The moment the last body byte left, for the verdict watch's clocks.
-                val bodySent = CompletableDeferred<Long>()
-                val uploadJob = async(Dispatchers.IO) {
-                    runCatching {
-                        client.upload(
-                            sessionId = prepared.sessionId,
-                            fileId = fileId,
-                            token = token,
-                            source = pipe.fileSource,
-                            onProgress = { sent, total ->
-                                if (totals != null) return@upload // the reporter above owns progress
-                                // Prefer the real Content-Length, else the estimate on the chunked path; neither known
-                                // leaves the bar indeterminate. The estimate is approximate, so coerce into [0,1].
-                                val denominator = if (total > 0L) total else estimatedTotalBytes
-                                val ratio = if (denominator > 0L) (sent.toFloat() / denominator).coerceIn(0f, 1f) else 0f
-                                onProgress(ratio)
-                            },
-                            onBodySent = {
-                                bodySent.complete(System.currentTimeMillis())
-                                onBodySent()
-                            },
-                            onReply = onReply,
-                        )
-                    }.onFailure {
-                        // The uploader is gone before it drained the pipe — it never opened the body, or
-                        // was cancelled first. The writer may be parked on a full buffer, and cancelling
-                        // its coroutine cannot wake a blocked write; closing the read end does.
-                        pipe.abortRead()
-                    }
-                }
-                // The receiver's own account of the session, on a second connection, from the moment
-                // the body is in. Only with a receiver that serves it; a Desktop that does not keeps
-                // the upload response as the one word, exactly as before.
-                val watchJob = if (verdictWatch != null && session.supportsStatus) {
-                    async(Dispatchers.IO) {
-                        val sentAt = bodySent.await()
-                        verdictWatch.run(
-                            bodySentAt = sentAt,
-                            status = { client.status(session.sessionId, session.sessionToken.orEmpty()) },
-                            onStall = onVerdictStall,
-                        )
-                    }
-                } else {
-                    null
-                }
-                val ok = awaitVerdict(uploadJob, watchJob, bodySent)
-                writeJob.await()
-                L.i { "[MigrationV2][P2P][Tx] upload complete result=$ok" }
-                ok
-            }
-        }
-    }
-
-    /**
-     * Whichever speaks first decides — with two exceptions. An upload connection that ends without a
-     * response after the body was sent (a timeout, a reset, a receiver too busy to answer) is not a
-     * verdict: the watch on its own connection still is, so the wait goes on there. And a verdict
-     * that is not `succeeded` is thrown as [SendVerdictException], so the caller can tell a receiver
-     * that said `failed` from one that said nothing at all, and so no `/cancel` follows it.
-     */
-    private suspend fun awaitVerdict(
-        uploadJob: Deferred<Result<Boolean>>,
-        watchJob: Deferred<Verdict>?,
-        bodySent: CompletableDeferred<Long>,
-    ): Boolean {
-        if (watchJob == null) return uploadJob.await().getOrThrow()
-        val first: Any = select {
-            uploadJob.onAwait { it }
-            watchJob.onAwait { it }
-        }
-        if (first is Verdict) {
-            L.i { "[MigrationV2][P2P][Tx] verdict from /status: $first" }
-            uploadJob.cancel()
-            return first.confirmed()
-        }
-        @Suppress("UNCHECKED_CAST")
-        val result = first as Result<Boolean>
-        return result.fold(
-            onSuccess = { ok ->
-                watchJob.cancel()
-                ok
-            },
-            onFailure = { e ->
-                if (e is kotlin.coroutines.cancellation.CancellationException || !bodySent.isCompleted) {
-                    // Cancelled, or the body never fully left: there is nothing to ask the receiver about.
-                    watchJob.cancel()
-                    throw e
-                }
-                L.w { "[MigrationV2][P2P][Tx] upload connection ended before the verdict, asking /status: ${e.message}" }
-                watchJob.await().confirmed()
-            },
-        )
-    }
-
-    private fun Verdict.confirmed(): Boolean =
-        if (this is Verdict.Succeeded) true else throw SendVerdictException(this)
-
-    /**
-     * iOS parity: a sender that stops — cancelled, or its upload failed — names its session on
-     * `POST /cancel`, so the receiver reads the abort as the source leaving rather than a dropped
-     * link. The hang-up itself has already happened by then (cancelling the call closes the socket),
-     * so the notice runs non-cancellable with its own short deadline, best-effort.
-     */
-    private suspend inline fun <T> abortingSessionOnFailure(
-        client: SenderHttpClient,
-        sessionId: String,
-        sessionToken: String?,
-        block: () -> T,
-    ): T =
-        try {
-            block()
-        } catch (e: Throwable) {
-            // A verdict the receiver itself gave, or a wait that ran out: the receiver is not to be
-            // told to stop. On a timeout in particular a cancel could only turn "still importing" into
-            // an ambiguity the status route exists to remove.
-            if (e !is SendVerdictException) {
-                withContext(NonCancellable) {
-                    withTimeoutOrNull(CANCEL_NOTICE_TIMEOUT_MS) { client.cancel(sessionId, sessionToken) }
-                }
-            }
-            throw e
-        }
-
-    /** Dry-encodes the container through [ContainerSizeCounter] to learn its exact byte length. */
-    private suspend fun countContainerLength(
-        records: List<NeutralRecord>,
-        attachmentSource: com.difft.android.migration.v2.container.AttachmentByteSource,
-        transferKey: String,
-        sourceAccount: String,
-        sourceAppVersion: String,
-    ): Long {
-        val counter = ContainerSizeCounter()
-        writer.write(
-            records = records.asFlow(),
-            sink = counter,
-            passphrase = transferKey,
-            attachmentBytes = attachmentSource,
-            sourceAccount = sourceAccount,
-            sourceAppVersion = sourceAppVersion,
-        )
-        return counter.byteCount
-    }
-
     /** Generates the ephemeral 256-bit transfer key, base64-encoded for the QR. Never logged. */
     private fun generateTransferKey(): String =
         Base64.encodeToString(crypto.randomBytes(TRANSFER_KEY_BYTES), Base64.NO_WRAP)
@@ -668,8 +471,5 @@ class P2pContainerFusion(
     companion object {
         /** Length of the ephemeral transfer key. */
         const val TRANSFER_KEY_BYTES = 32
-
-        /** How long the sender waits for its `/cancel` notice to land before giving up on it. */
-        private const val CANCEL_NOTICE_TIMEOUT_MS = 3_000L
     }
 }

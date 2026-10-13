@@ -223,7 +223,7 @@
 
     <!-- Retiring package: "move to the new app" guide -->
     <string name="legacy_migration_title">Move to %1$s</string>
-    <string name="legacy_migration_why">Due to a Google policy change, this app will no longer be updated. %1$s works the same way and uses the same account — both your account and chat history can be transferred. This app will be signed out once the transfer completes.</string>
+    <string name="legacy_migration_why">Due to changes in Google\'s Android app distribution requirements, future Quicall updates will be available through a separate app. We\'re actively working through these changes and doing our best to minimize the impact.\n\nYou can continue using the same account in %1$s, and your contacts and groups will remain available. To keep your chat history, complete the transfer before uninstalling this app. Once the transfer is complete, you\'ll be signed out of this app.</string>
     <string name="legacy_migration_download">Get %1$s</string>
     <string name="legacy_migration_later">Not Now</string>
     <string name="legacy_migration_open_failed">Couldn\'t open that. Please try again.</string>
@@ -255,6 +255,11 @@
     <string name="migration_r2_scan_body">On your computer, open Quicall and go to Settings → Data Migration.</string>
     <string name="migration_r2_locked">This transfer has already started on another device.</string>
     <string name="migration_r2_desktop_cancelled">Canceled on the computer.</string>
+    <string name="migration_r2_desktop_confirm_title">Confirm on Your Computer</string>
+    <string name="migration_r2_desktop_confirm_hint">Confirm the transfer on your computer to continue. Keep both devices on the same network.</string>
+    <string name="migration_r2_desktop_connect_title">Waiting for Your Computer</string>
+    <string name="migration_r2_desktop_connect_hint">Your computer is connecting. Keep this screen open.</string>
+    <string name="migration_r2_finishing_restart">Finishing up — restarting…</string>
     <string name="migration_s1_target">Transfer your chat history to “%1$s”</string>
     <string name="migration_s1_current_account">Current account</string>
     <string name="migration_s1_calculating">Calculating transfer size…</string>
@@ -306,6 +311,10 @@
     <string name="migration_p3_reason_space">Free up at least %1$s on this device, or go back and exclude attachments.</string>
     <string name="migration_p3_reason_expired">The QR code has expired. Refresh it on the other device, then scan again.</string>
     <string name="migration_p3_reason_peer_timeout">The computer didn\'t confirm in time. Scan the code again.</string>
+    <string name="migration_p3_reason_update_desktop">Update Quicall on your computer, then scan the code again.</string>
+    <string name="migration_p3_reason_desktop_not_connected">Your computer didn\'t connect. It may have been canceled there — scan the code again.</string>
+    <string name="migration_p3_reason_pair_token">This pairing is no longer valid. Scan the code on your computer again.</string>
+    <string name="migration_p3_reason_storage_full">This device is out of storage, so the transfer stopped. Free up space and try again.</string>
     <string name="migration_p3_reason_target_not_empty">“%1$s” already holds an account or chat data, so nothing was transferred.</string>
     <string name="migration_p3_reason_handoff_disabled">Transferring from the old app isn\'t available right now.</string>
     <string name="migration_p3_retry">Try Again</string>

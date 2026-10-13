@@ -11,6 +11,7 @@ import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -31,6 +32,10 @@ import com.difft.android.call.manager.CallRingtoneManager
 import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.util.IncomingAnswerMode
+import com.difft.android.call.util.IncomingAnswerModeResolver
+import com.difft.android.call.util.IncomingCallTouchGuard
+import com.difft.android.call.util.ScreenDeviceUtil
 import com.difft.android.call.util.StringUtil
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.databinding.CallActivityIncomingCallBinding
@@ -68,6 +73,10 @@ class LIncomingCallActivity : BaseActivity() {
     private val callDataManager: CallDataManager by lazy { callDataManagerLazy.get() }
 
     private var isAcceptingCall = false
+    private lateinit var screenState: ScreenDeviceUtil.ScreenState
+    private var answerMode = IncomingAnswerMode.TAP
+    private var pausedSinceCreate = false
+    private val touchGuard = IncomingCallTouchGuard()
 
     private val pipController by lazy {
         IncomingCallPipController(this, binding) { hangUpTheCall("renderPipMode") }
@@ -77,11 +86,16 @@ class LIncomingCallActivity : BaseActivity() {
         // Orientation comes from BaseActivity's sw600dp policy (portrait on phones, free
         // rotation on tablets / unfolded foldables) — the same gate the rest of the app uses.
         super.onCreate(savedInstanceState)
-        L.d { "[Call] LIncomingCallActivity onCreate: onCreate" }
-
+        screenState = ScreenDeviceUtil.readScreenState(this)
         initializeActivityState()
+        L.i {
+            "[Call] LIncomingCallActivity onCreate action=${callIntent.action} roomId=${callIntent.roomId}" +
+                " fullScreenLaunch=${callIntent.fullScreenLaunch}" +
+                " interactive=${screenState.interactive} keyguardLocked=${screenState.keyguardLocked}"
+        }
         registerIncomingCallReceiver()
         handleCallNotificationAction()
+        touchGuard.markShown()
         initUI()
         pipController.initialize()
         setupCallControlMessageListener()
@@ -172,6 +186,14 @@ class LIncomingCallActivity : BaseActivity() {
     }
 
     private fun initUI() {
+        binding.answerControls.touchObserver = { touchGuard.recordTouch(it) }
+        binding.answerSlider.touchObserver = { touchGuard.recordTouch(it) }
+        binding.answerControls.onAccept = { if (allowsTap("accept")) acceptCall("tap") }
+        binding.answerControls.onReject = { if (allowsTap("reject")) rejectCall("tap") }
+        // A completed slide is deliberate; the post-show cool-down filters accidental taps only.
+        binding.answerSlider.onAnswer = { acceptCall("slide") }
+        binding.answerSlider.onDecline = { rejectCall("slide") }
+        applyAnswerMode()
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
@@ -201,53 +223,96 @@ class LIncomingCallActivity : BaseActivity() {
             ResUtils.getString(com.difft.android.chat.R.string.call_invite)
         }
 
-        binding.acceptCallBtn.setOnClickListener {
-            if (isAcceptingCall) return@setOnClickListener
-            isAcceptingCall = true
-            setAcceptLoading(true)
-            lifecycleScope.launch {
-                val canJoin = if (!onGoingCallStateManager.isInCalling()) {
-                    true
-                } else {
-                    L.i { "[Call] LIncomingCallActivity acceptCallBtn click: end current call before join." }
-                    endCurrentCallAndWaitForRelease()
-                }
-                if (!canJoin) {
-                    setAcceptLoading(false)
-                    isAcceptingCall = false
-                    return@launch
-                }
-                L.i { "[Call] LIncomingCallActivity initUI: acceptCallBtn click: callIntent:$callIntent" }
-                val status = callToChatController.joinCall(
-                    applicationContext, callIntent.roomId, callIntent.roomName,
-                    callIntent.callerId, callType, callIntent.conversationId,
-                    inComingCallStateManager.isNeedAppLock(),
-                )
-                handleJoinCallResponse(status)
-            }
-        }
-        binding.rejectCallBtn.setOnClickListener {
-            appScope.launch {
-                callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId)
-                if (callType == CallType.ONE_ON_ONE) {
-                    callDataManager.removeCallData(callIntent.roomId)
-                }
-                hangUpTheCall("reject: local reject the call")
-            }
-        }
         binding.windowZoomOut.setOnClickListener { pipController.enterIfPossible("windowZoomOut") }
+    }
+
+    /**
+     * Screen woken by the call (full-screen intent, display off or keyguard up): the single-track
+     * slider replaces the buttons, so no pocket or palm tap can accept or reject. An unlocked phone
+     * already in use keeps the tap buttons. Re-evaluated on resume so a screen
+     * that comes back after the person unlocked the phone drops to taps
+     * (see [IncomingAnswerModeResolver.onResume]).
+     */
+    private fun applyAnswerMode(mode: IncomingAnswerMode, reason: String) {
+        answerMode = mode
+        val slide = mode == IncomingAnswerMode.SLIDE
+        binding.answerControls.isVisible = !slide
+        binding.answerSlider.isVisible = slide
+        L.i { "[Call] LIncomingCallActivity answerMode=$mode reason=$reason" }
+    }
+
+    private fun applyAnswerMode() {
+        applyAnswerMode(IncomingAnswerModeResolver.atCreate(callIntent.fullScreenLaunch, screenState), "create")
+    }
+
+    /**
+     * Only after this screen has been paused and brought back (Home, then unlock and reopen — the
+     * foreground-restore reorder path). The first resume right after onCreate is skipped: a
+     * showWhenLocked window can occlude or clear a non-secure keyguard on its own, and reading
+     * "keyguard gone" there would drop the slider before anyone touched the phone.
+     */
+    private fun reevaluateAnswerModeOnResume() {
+        if (answerMode != IncomingAnswerMode.SLIDE || !pausedSinceCreate) return
+        val now = ScreenDeviceUtil.readScreenState(this)
+        val mode = IncomingAnswerModeResolver.onResume(answerMode, atCreate = screenState, now = now)
+        if (mode != answerMode) applyAnswerMode(mode, "resume")
+    }
+
+    private fun acceptCall(trigger: String) {
+        if (isAcceptingCall) return
+        isAcceptingCall = true
+        setAcceptLoading(true)
+        lifecycleScope.launch {
+            val canJoin = if (!onGoingCallStateManager.isInCalling()) {
+                true
+            } else {
+                L.i { "[Call] LIncomingCallActivity acceptCall: end current call before join." }
+                endCurrentCallAndWaitForRelease()
+            }
+            if (!canJoin) {
+                setAcceptLoading(false)
+                isAcceptingCall = false
+                return@launch
+            }
+            L.i {
+                "[Call] LIncomingCallActivity acceptCall trigger=$trigger callIntent:$callIntent" +
+                    " sinceShownMs=${touchGuard.sinceShownMs()} touch[${touchGuard.describeLastTouch()}]"
+            }
+            val status = callToChatController.joinCall(
+                applicationContext, callIntent.roomId, callIntent.roomName,
+                callIntent.callerId, callType, callIntent.conversationId,
+                inComingCallStateManager.isNeedAppLock(),
+            )
+            handleJoinCallResponse(status)
+        }
+    }
+
+    private fun rejectCall(trigger: String) {
+        L.i {
+            "[Call] LIncomingCallActivity rejectCall trigger=$trigger roomId=${callIntent.roomId}" +
+                " sinceShownMs=${touchGuard.sinceShownMs()} touch[${touchGuard.describeLastTouch()}]"
+        }
+        appScope.launch {
+            callToChatController.rejectCall(callIntent.callerId, CallRole.CALLEE, callType.type, callIntent.roomId, callIntent.conversationId)
+            if (callType == CallType.ONE_ON_ONE) {
+                callDataManager.removeCallData(callIntent.roomId)
+            }
+            hangUpTheCall("reject: local reject the call")
+        }
     }
 
     override fun onPause() {
         super.onPause()
         L.i { "[Call] LIncomingCallActivity onPause" }
         inComingCallStateManager.setIsInForeground(false)
+        pausedSinceCreate = true
     }
 
     override fun onResume() {
         super.onResume()
         L.i { "[Call] LIncomingCallActivity onResume" }
         inComingCallStateManager.setIsInForeground(true)
+        reevaluateAnswerModeOnResume()
     }
 
     override fun onDestroy() {
@@ -303,22 +368,34 @@ class LIncomingCallActivity : BaseActivity() {
     }
 
     private fun handleJoinCallResponse(status: Boolean) {
-        runOnUiThread {
-            setAcceptLoading(false)
-            isAcceptingCall = false
-        }
         if (!status) {
             L.e { "[Call] LIncomingActivity join call failed." }
-            runOnUiThread { ToastUtil.show(R.string.call_join_failed_tip) }
+            runOnUiThread {
+                setAcceptLoading(false)
+                isAcceptingCall = false
+                ToastUtil.show(R.string.call_join_failed_tip)
+            }
             hangUpTheCall("accept: join the call failed")
         } else {
+            // Joined: this screen is about to be destroyed by the INVITED_DESTROY broadcast. Leave the
+            // controls disabled (and the slider un-armed) so nothing can accept twice in the gap.
             hangUpTheCall("accept: join the call")
         }
     }
 
+    /**
+     * A tap inside the post-show cool-down is dropped: the screen was most likely lit under an
+     * unintended touch. The slider bypasses this: a completed slide is deliberate.
+     */
+    private fun allowsTap(action: String): Boolean {
+        if (touchGuard.allowsTap()) return true
+        L.i { "[Call] LIncomingCallActivity $action tap ignored: cooldown sinceShownMs=${touchGuard.sinceShownMs()}" }
+        return false
+    }
+
     private fun setAcceptLoading(isLoading: Boolean) {
-        binding.acceptCallBtn.isEnabled = !isLoading
-        binding.rejectCallBtn.isEnabled = !isLoading
+        binding.answerControls.isEnabled = !isLoading
+        binding.answerSlider.isEnabled = !isLoading
     }
 
     private suspend fun endCurrentCallAndWaitForRelease(): Boolean {

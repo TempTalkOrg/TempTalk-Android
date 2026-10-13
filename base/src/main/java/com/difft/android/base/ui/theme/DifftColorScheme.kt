@@ -45,6 +45,7 @@ data class DifftExtendedColors(
     val backgroundPagePrimary: Color,  // bgpage-primary
     val backgroundPageSecondary: Color,  // bgpage-secondary
     val bg5: Color,  // bg5 — permanently dark surface (call UI)
+    val bgWhite: Color,  // bgwhite — fixed light surface in both themes (call slider handle)
 
     // UI elements
     val line: Color,
@@ -186,6 +187,7 @@ fun createLightExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundPagePrimary = ColorTokens.Light.BackgroundPagePrimary,
     backgroundPageSecondary = ColorTokens.Light.BackgroundPageSecondary,
     bg5 = ColorTokens.Light.Bg5,
+    bgWhite = ColorTokens.BgWhite,
 
     line = ColorTokens.Light.Line,
     divider = ColorTokens.Light.Divider,
@@ -233,6 +235,7 @@ fun createDarkExtendedColors(): DifftExtendedColors = DifftExtendedColors(
     backgroundPagePrimary = ColorTokens.Dark.BackgroundPagePrimary,
     backgroundPageSecondary = ColorTokens.Dark.BackgroundPageSecondary,
     bg5 = ColorTokens.Dark.Bg5,
+    bgWhite = ColorTokens.BgWhite,
 
     line = ColorTokens.Dark.Line,
     divider = ColorTokens.Dark.Divider,

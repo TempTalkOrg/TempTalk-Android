@@ -52,13 +52,24 @@
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
         tools:node="remove" />
-    <!-- Remove AD_ID permission - not needed for Crashlytics/Performance -->
+    <!-- Remove all advertising-related permissions (GMS/Firebase transitive) - the app uses no advertising id -->
     <uses-permission
         android:name="com.google.android.gms.permission.AD_ID"
         tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_AD_ID"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_TOPICS"
+        tools:node="remove" />
 
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries package="${applicationId}">
         <intent>
@@ -115,6 +126,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="locked"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -144,64 +156,79 @@
              proper layout switching between single-pane and dual-pane modes on rotation/fold -->
         <activity
             android:name=".IndexActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden"
             android:exported="false"
             android:launchMode="singleTask" />
         <activity
             android:name=".setting.PrivacySettingActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.NotificationSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.BackgroundConnectionSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.ProxySettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />
         <activity
             android:name=".linkeddevices.LinkedDevicesActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.NotificationContentDisplaySettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.ChatSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.VoicePlaybackSpeedSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.VoiceChangerSettingsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.AboutActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.AccountActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.language.LanguageActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.theme.ThemeActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".setting.DeleteAccountActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
@@ -209,33 +236,39 @@
              proper camera preview re-initialization on rotation/fold -->
         <activity
             android:name=".chat.invite.ScanActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden"
             android:exported="false" />
         <activity
             android:name=".search.SearchActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
         <activity
             android:name=".search.SearchMoreActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
         <activity
             android:name=".chat.recent.InviteParticipantsActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTask" />
 
         <activity
             android:name=".setting.SetPasscodeActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
         <activity
             android:name=".login.ScreenLockActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:launchMode="singleTop"
@@ -244,21 +277,25 @@
 
         <activity
             android:name=".setting.SetPasscodeTimeoutActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
         <activity
             android:name=".setting.ScreenLockSettingActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
         <activity
             android:name=".setting.SetPatternActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
         <activity
             android:name=".call.LIncomingCallActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize|uiMode|smallestScreenSize"
             android:exported="false"
             android:launchMode="singleInstance"
@@ -279,22 +316,24 @@
             android:theme="@style/TransparentActivityTheme"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
-            android:screenOrientation="portrait"
-            tools:ignore="LockedOrientationActivity,DiscouragedApi"
+            tools:ignore="DiscouragedApi"
             tools:targetApi="27" />
 
         <activity
             android:name=".setting.TestActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
         <activity
             android:name=".setting.DialogTestActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
 
         <activity
             android:name=".setting.SetCustomIdActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
@@ -367,21 +406,17 @@
             </intent-filter>
         </service>
 
-        <service
-            android:name="com.difft.android.setting.AppUpgradeService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <!-- Migration: one-shot "migration complete" page on the first cold start after a restore-path
              sign-in (MainActivity routes here when the restore flag reads COMPLETED). -->
         <!-- Migration: the post-verification source chooser (R1). Launched for result by the login flow; internal only. -->
         <activity
             android:name="com.difft.android.migration.v2.login.MigrationSourceChooserActivity"
             android:exported="false"
-            android:screenOrientation="portrait" />
+            android:screenOrientation="locked" />
 
         <activity
             android:name="com.difft.android.migration.v2.login.MigrationSuccessActivity"
+            android:screenOrientation="locked"
             android:exported="false" />
 
         <!-- Same-device migration: the ONLY exported migration entry point. A UI-less trampoline the
@@ -410,12 +445,14 @@
              (which vets caller package + certificate first) — never directly by another app. -->
         <activity
             android:name="com.difft.android.migration.v2.handoff.MigrationHandoffEntryActivity"
+            android:screenOrientation="locked"
             android:exported="false"
             android:launchMode="singleTop" />
 
         <!-- Retiring package only: "move to the new app" guide (title-bar icon / first-launch notice / Me page). -->
         <activity
             android:name="com.difft.android.migration.legacy.LegacyMigrationGuideActivity"
+            android:screenOrientation="locked"
             android:exported="false" />
 
         <!-- Migration v2 (I4): production P2P RECEIVE Activity (NEW device shows QR). Launched-for-result
@@ -423,6 +460,7 @@
              internal launch only. -->
         <activity
             android:name="com.difft.android.migration.v2.transfer.login.MigrationP2pReceiveActivity"
+            android:screenOrientation="locked"
             android:exported="false"
             android:launchMode="singleTop" />
 
@@ -431,6 +469,7 @@
              exported="false" — internal launch only. -->
         <activity
             android:name="com.difft.android.migration.v2.transfer.send.MigrationP2pSendActivity"
+            android:screenOrientation="locked"
             android:exported="false"
             android:launchMode="singleTop" />
 
@@ -438,6 +477,7 @@
              user decides here whether chat history syncs along with the link. Internal launch only. -->
         <activity
             android:name="com.difft.android.migration.v2.transfer.link.LinkLoginActivity"
+            android:screenOrientation="locked"
             android:exported="false"
             android:launchMode="singleTop" />
 

@@ -22,6 +22,8 @@ import com.difft.android.migration.v2.model.NeutralRecord
 import com.difft.android.migration.v2.model.SendState
 import com.difft.android.migration.v2.readtime.ReadLadder
 import com.difft.android.migration.v2.restore.AttachmentFileNaming
+import org.difft.app.database.GENERIC_CONTENT_TYPE
+import org.difft.app.database.NO_SERVER_ATTACHMENT_ID
 import org.difft.app.database.models.AttachmentModel
 import org.difft.app.database.models.ForwardContextModel
 import org.difft.app.database.models.ForwardModel
@@ -587,7 +589,9 @@ class NeutralImporter(
                 id = n.stableId
                 messageId = msgRef
                 forwardModelDatabaseId = fwdFk
-                contentType = n.contentType
+                // The neutral format allows both to be absent (a Desktop or iOS source with bytes but no
+                // server id, a legacy row with no type); readers expect the same sentinels local writes use.
+                contentType = n.contentType ?: GENERIC_CONTENT_TYPE
                 size = n.size.toInt()
                 width = n.width ?: 0
                 height = n.height ?: 0
@@ -596,13 +600,23 @@ class NeutralImporter(
                 amplitudes = n.amplitudes
                 fileName = rowFileName
                 // Pointer-only attachments carry no bytes, so restore the server pointer: authorityId
-                // and key let the destination fetch and decrypt.
-                authorityId = n.serverAttachmentId
+                // and key let the destination fetch and decrypt. A source that had neither has
+                // nothing to fetch; such a row lands as unavailable below.
+                authorityId = n.serverAttachmentId ?: NO_SERVER_ATTACHMENT_ID
                 n.encryptionKey?.let { key = Base64.decode(it, Base64.NO_WRAP) }
                 // digest restored alongside key: the download/decrypt gate requires both non-null.
                 n.digestBase64?.let { digest = Base64.decode(it, Base64.NO_WRAP) }
-                // Open-vs-download signal: bytes present means downloaded.
-                status = if (n.pointerOnly) 0 else ATTACHMENT_STATUS_SUCCESS
+                // Open-vs-download signal: bytes present means downloaded. A pointer without a server
+                // id or key can never be fetched, so it takes the terminal state the download job
+                // gives a purged file instead of stalling at the bubble's download gate. Absent, 0
+                // (the sentinel older Android containers wrote) and "" all mean "none".
+                val fetchable = (n.serverAttachmentId ?: NO_SERVER_ATTACHMENT_ID) != NO_SERVER_ATTACHMENT_ID &&
+                    !n.encryptionKey.isNullOrEmpty()
+                status = when {
+                    !n.pointerOnly -> ATTACHMENT_STATUS_SUCCESS
+                    !fetchable -> ATTACHMENT_STATUS_EXPIRED
+                    else -> 0
+                }
                 // The row's own address. Set even when pointer-only: a later re-download writes its
                 // bytes to this same directory, so the address must exist before the file does.
                 this.localId = localId
@@ -634,11 +648,14 @@ class NeutralImporter(
         return fallback
     }
 
-    /** Resolve a forward owner PK from its `{author, sentAt}` identity, or null if absent. */
+    /**
+     * Resolve a forward owner PK from its `{author, sentAt}` identity, or null if absent. A sender
+     * that omitted the owning node's author omits it here too; the node decoded with `""` (see
+     * [com.difft.android.migration.v2.container.AbsentIsEmpty]), so the key is built the same way.
+     */
     private fun ownerPk(map: Map<OwnerKey, Long>, n: NeutralAttachment): Long? {
-        val author = n.ownerAuthor ?: return null
         val sentAt = n.ownerSentAt ?: return null
-        return map[OwnerKey(author, sentAt)]
+        return map[OwnerKey(n.ownerAuthor.orEmpty(), sentAt)]
     }
 
     private fun enqueueConversation(n: com.difft.android.migration.v2.model.NeutralConversationLocal) {
@@ -684,6 +701,7 @@ class NeutralImporter(
 
         /** `AttachmentStatus.SUCCESS.code` — bytes present ⇒ downloaded (render shows "open"). */
         private const val ATTACHMENT_STATUS_SUCCESS = 3
+        private const val ATTACHMENT_STATUS_EXPIRED = 5
 
         /**
          * `MessageModel.readTime` sentinel for a message the source says has explicitly not started

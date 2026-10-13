@@ -4,29 +4,35 @@
     <application android:supportsRtl="true">
         <activity
             android:name=".LoginActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".BindAccountActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
         <activity
             android:name=".VerifyCodeActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
         <activity
             android:name=".ui.CountryPickerActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
             android:name=".ContactProfileSettingActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false"
             android:windowSoftInputMode="stateVisible|adjustResize" />
         <activity
             android:name=".intro.RegisterIntroActivity"
+            android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
     </application>

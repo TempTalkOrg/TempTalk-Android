@@ -20,6 +20,7 @@ import difft.android.messageserialization.model.TextMessage
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobs.PushForwardNoticeSendJob
 import com.difft.android.chat.jobs.PushGroupKeySendJob
+import com.difft.android.chat.jobs.PushMarkAsUnreadSendJob
 import com.difft.android.chat.jobs.PushReactionSendJob
 import com.difft.android.chat.jobs.PushReadReceiptSendJob
 import com.difft.android.chat.jobs.PushTextSendJob
@@ -84,6 +85,20 @@ interface PushReadReceiptSendJobFactory {
         @Assisted("sendSyncToSelf")
         sendSyncToSelf: Boolean
     ): PushReadReceiptSendJob
+}
+
+@AssistedFactory
+interface PushMarkAsUnreadSendJobFactory {
+    fun create(
+        @Assisted
+        parameters: Job.Parameters?,
+        @Assisted("roomId")
+        roomId: String,
+        @Assisted("isGroup")
+        isGroup: Boolean,
+        @Assisted("flag")
+        flag: Int,
+    ): PushMarkAsUnreadSendJob
 }
 
 @AssistedFactory

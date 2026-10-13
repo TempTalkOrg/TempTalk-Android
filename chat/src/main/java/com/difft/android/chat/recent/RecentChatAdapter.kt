@@ -2,38 +2,15 @@ package com.difft.android.chat.recent
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
-import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
-import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.appScope
-import kotlinx.coroutines.launch
-import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
-import com.difft.android.call.LCallActivity
-import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
-import com.difft.android.chat.contacts.data.getContactAvatarData
-import com.difft.android.chat.contacts.data.getContactAvatarUrl
-import com.difft.android.chat.contacts.data.isOfficialAccount
-import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
-import com.difft.android.chat.group.getAvatarData
-import com.difft.android.chat.search.setHighLightText
-import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
-import com.difft.android.base.widget.ToastUtil
-import com.difft.android.call.LCallManager.EntryPoint
-import com.difft.android.call.state.OnGoingCallStateManager
-import dagger.hilt.android.EntryPointAccessors
 
 abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolean = false) : ListAdapter<ListItem, RecyclerView.ViewHolder>(
     object : DiffUtil.ItemCallback<ListItem>() {
@@ -88,6 +65,45 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
      */
     open fun onFooterClicked() = Unit
 
+    /**
+     * Swipe / long-press actions (chat-list gesture design). `open` with no-op defaults for the
+     * same reason as [onFooterClicked]: the search adapter disables swiping and never fires them.
+     */
+    open fun onReadToggle(roomViewData: RoomViewData) = Unit
+
+    open fun onPinToggle(roomViewData: RoomViewData) = Unit
+
+    open fun onDeleteRequested(roomViewData: RoomViewData) = Unit
+
+    /** At most one row is open at a time; scrolling or opening another row closes it. */
+    private var openSwipe: ChatListSwipeLayout? = null
+
+    private val swipeCallback = object : ChatListSwipeLayout.Callback {
+        override fun onOpened(layout: ChatListSwipeLayout) {
+            if (openSwipe !== layout) openSwipe?.close()
+            openSwipe = layout
+        }
+
+        override fun onClosed(layout: ChatListSwipeLayout) {
+            if (openSwipe === layout) openSwipe = null
+        }
+    }
+
+    private val closeOnScroll = object : RecyclerView.OnScrollListener() {
+        override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+            if (newState == RecyclerView.SCROLL_STATE_DRAGGING) openSwipe?.close()
+        }
+
+        // Programmatic scrolls (jump to next unread, scroll to top) never enter DRAGGING.
+        override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+            if (dy != 0) openSwipe?.close()
+        }
+    }
+
+    fun closeOpenSwipe() {
+        openSwipe?.close()
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
@@ -100,7 +116,9 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                 val chatHolder = holder as RecentChatViewHolder
                 val data = item.data
 
-                chatHolder.itemView.setOnTouchListener { _, event ->
+                // The foreground owns the row's clicks, so the press position must be read there
+                // (the swipe root never sees DOWN on a closed row).
+                chatHolder.touchTarget.setOnTouchListener { _, event ->
                     if (event.action == MotionEvent.ACTION_DOWN) {
                         lastTouchX = event.rawX.toInt()
                         lastTouchY = event.rawY.toInt()
@@ -112,8 +130,18 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                     searchKey,
                     data,
                     isSelected = selectedId != null && data.roomId == selectedId,
-                    { onItemClicked(data, position - 2) }, // Adjust position
-                    { onItemLongClicked(holder.itemView, data, position - 2, lastTouchX, lastTouchY) })
+                    onItemClick = { onItemClicked(data, position - 2) }, // Adjust position
+                    onItemLongClick = {
+                        closeOpenSwipe()
+                        onItemLongClicked(holder.itemView, data, position - 2, lastTouchX, lastTouchY)
+                    },
+                    swipe = if (isForSearch) null else RecentChatViewHolder.SwipeActions(
+                        callback = swipeCallback,
+                        onReadToggle = { onReadToggle(data) },
+                        onPinToggle = { onPinToggle(data) },
+                        onDelete = { onDeleteRequested(data) },
+                    ),
+                )
             }
 
             is ListItem.E2eeFooter -> {
@@ -144,11 +172,14 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
 
     private fun updateVisibleViewHolders() {
         val rv = recyclerView ?: return
-        val layoutManager = rv.layoutManager ?: return
-        val first = (layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
-            ?.findFirstVisibleItemPosition() ?: 0
-        val last = (layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)
-            ?.findLastVisibleItemPosition() ?: (itemCount - 1)
+        val layoutManager = rv.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager ?: return
+        val first = layoutManager.findFirstVisibleItemPosition()
+        val last = layoutManager.findLastVisibleItemPosition()
+        // Both return NO_POSITION before a layout settles — they delegate to the same helper, so
+        // they are never -1 singly. The earlier `?: 0` / `?: (itemCount - 1)` guarded the layout
+        // manager cast, not these ints, leaving -1..-1 to run one iteration at position -1, where
+        // a non-null holder match would reach getItem(-1) and throw.
+        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
 
         for (i in first..last) {
             (rv.findViewHolderForAdapterPosition(i) as? RecentChatViewHolder)?.let { holder ->
@@ -163,10 +194,13 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
         this.recyclerView = recyclerView
+        recyclerView.addOnScrollListener(closeOnScroll)
     }
 
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
+        recyclerView.removeOnScrollListener(closeOnScroll)
+        openSwipe = null
         this.recyclerView = null
     }
 
@@ -197,268 +231,6 @@ class SearchInputViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) 
         // Initialize your search input view here
         // For example, set up listeners or bind data if needed
     }
-}
-
-class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myID: String, private val isForSearch: Boolean) : RecyclerView.ViewHolder(run {
-    val inflater = LayoutInflater.from(container.context)
-    ChatFragmentRecentChatListItemBinding.inflate(inflater, container, false).root
-}) {
-
-    private val binding = ChatFragmentRecentChatListItemBinding.bind(itemView)
-    private var currentIsSelected: Boolean = false
-
-    /** RecyclerView width, already measured by the time onCreateViewHolder runs. */
-    private val containerWidthPx: Int = container.width
-
-    @SuppressLint("ClickableViewAccessibility")
-    fun bind(searchKey: String, data: RoomViewData, isSelected: Boolean = false, onItemClick: () -> Unit, onItemLongClick: () -> Unit) {
-        currentIsSelected = isSelected
-        updateTextSizes(TextSizeUtil.isLarger)
-
-        if (isForSearch && searchKey.isNotEmpty()) {
-            binding.textviewLabel.setHighLightText(data.roomName.toString(), searchKey)
-        } else {
-            binding.textviewLabel.text = data.roomName
-        }
-
-        binding.textviewTimer.visibility = View.GONE
-        data.messageExpiry?.let {
-            if (it > 0L) {
-                binding.textviewTimer.visibility = View.VISIBLE
-                val text = " [" + it.toArchiveTimeDisplayText() + "]"
-                binding.textviewTimer.text = text
-            }
-        }
-
-        binding.imageviewGroupAvatar.visibility = View.GONE
-        binding.imageviewAvatar.visibility = View.GONE
-
-        when (data.type) {
-            is RoomViewData.Type.OneOnOne -> {
-                binding.imageviewAvatar.visibility = View.VISIBLE
-                if (data.roomId == myID) {
-                    binding.imageviewBotBadge.isVisible = false
-                    binding.imageviewAvatar.showFavorites()
-                    if (searchKey.isNotEmpty()) {
-                        binding.textviewLabel.setHighLightText(
-                            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites),
-                            searchKey
-                        )
-                    } else {
-                        binding.textviewLabel.text =
-                            binding.root.context.getString(com.difft.android.base.R.string.chat_favorites)
-                    }
-                } else {
-                    binding.imageviewBotBadge.isVisible = data.roomId.isOfficialAccount()
-                    val contactAvatar = (data.remarkAvatarJson?.takeIf { it.isNotEmpty() } ?: data.roomAvatarJson)
-                        ?.getContactAvatarData()
-                    binding.imageviewAvatar.setAvatar(
-                        contactAvatar?.getContactAvatarUrl(),
-                        contactAvatar?.encKey,
-                        data.roomName?.firstOrNull()?.toString() ?: "#",
-                        data.roomId
-                    )
-                }
-            }
-
-            is RoomViewData.Type.Group -> {
-                binding.imageviewGroupAvatar.visibility = View.VISIBLE
-                binding.imageviewGroupAvatar.setAvatar(data.roomAvatarJson?.getAvatarData(), true, data.groupMembersNumber, data.roomId)
-                binding.imageviewBotBadge.isVisible = false
-            }
-        }
-
-        if (data.isInstantCall) {
-            binding.imageviewAvatar.visibility = View.VISIBLE
-            binding.imageviewAvatar.setAvatar(com.difft.android.base.R.drawable.base_ic_instant_call)
-        }
-        binding.textviewDetail.isVisible = !data.isInstantCall
-
-        val bgColorRes = when {
-            isSelected -> com.difft.android.base.R.color.bg3
-            !isForSearch && data.isPinned -> com.difft.android.base.R.color.bg2
-            else -> com.difft.android.base.R.color.bg1
-        }
-        binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, bgColorRes))
-
-        binding.textviewDate.text = data.lastActiveTimeText
-        applyDetailRow(data)
-        binding.textviewMissedNumber.text =
-            if (data.unreadMessageNum > 99) "99+" else data.unreadMessageNum.toString()
-        applyTagRow(data)
-
-        showMissingNumber(data.unreadMessageNum, data.isMuted)
-
-        binding.root.setOnClickListener {
-            onItemClick()
-        }
-        binding.root.setOnLongClickListener {
-            onItemLongClick()
-            true
-        }
-        updateCallBarDuration(data)
-    }
-
-    private fun updateTextSizes(isLarger: Boolean) {
-        if (isLarger) {
-            binding.textviewLabel.textSize = 24f
-            binding.textviewTimer.textSize = 24f
-            binding.textviewDate.textSize = 21f
-            binding.textviewAt.textSize = 21f
-            binding.textviewDetail.textSize = 21f
-            binding.textviewMissedNumber.textSize = 12f
-        } else {
-            binding.textviewLabel.textSize = 16f
-            binding.textviewTimer.textSize = 16f
-            binding.textviewDate.textSize = 14f
-            binding.textviewAt.textSize = 14f
-            binding.textviewDetail.textSize = 14f
-            binding.textviewMissedNumber.textSize = 10f
-        }
-    }
-
-    /**
-     * Content only: the draft body when a draft exists, otherwise the message preview. A draft is
-     * "present" only when non-null AND non-empty — the same test [applyTagRow] uses for the
-     * `[Draft]` tag, so the two can never disagree about whether a draft EXISTS.
-     *
-     * They can still disagree about labelling: `[Draft]` is the first tag width degradation drops,
-     * and this row is not degraded, so a crowded row shows the draft body with no `[Draft]` label.
-     * Deliberate — the body is the useful part. Making them inseparable would mean moving the draft
-     * indicator into this row as a prefix, which is a design change.
-     */
-    private fun applyDetailRow(data: RoomViewData) {
-        val context = binding.root.context
-        binding.textviewDetail.text =
-            data.draftPreview?.takeIf { it.isNotEmpty() } ?: data.lastDisplayContent
-        binding.textviewDetail.setTextColor(
-            ContextCompat.getColor(context, detailColorRes(data.unreadMessageNum, data.isMuted))
-        )
-    }
-
-    /**
-     * Assembles the preview tag run into a single TextView and degrades it to the available width.
-     *
-     * Precondition: [updateTextSizes] has already run — `textviewAt.paint` carries the final text
-     * size, and measuring before it would under-estimate at the larger size and drop too few tags.
-     *
-     * The tag run is derived solely from [RoomViewData] fields; it must never query the message or
-     * room tables, which would put a per-row DB read on the list-refresh path.
-     *
-     * Colour comes solely from `android:textColor="@color/t.error"` in the layout.
-     */
-    private fun applyTagRow(data: RoomViewData) {
-        val context = binding.root.context
-        // Independent of the tag run below — a room can show the icon AND [Send failed] at once.
-        val showSendingIcon = data.sendingStatus != ROOM_SENDING_STATUS_NONE
-        binding.imageviewSending.isVisible = showSendingIcon
-        val labels = ChatListTagLabels(
-            criticalAlert = context.getString(R.string.chat_list_critical_alert),
-            sendFailed = context.getString(R.string.chat_list_send_failed),
-            atYou = context.getString(R.string.chat_list_at_you),
-            atAll = context.getString(R.string.chat_list_at_all),
-            draft = context.getString(R.string.chat_list_draft),
-        )
-        val all = buildTagSegments(
-            criticalAlertType = data.criticalAlertType,
-            sendStatus = data.sendStatus,
-            mentionType = data.mentionType,
-            hasDraft = !data.draftPreview.isNullOrEmpty(),
-            labels = labels,
-        )
-        val rowWidthPx = resolveRowWidthPx(
-            itemViewWidthPx = itemView.width,
-            containerWidthPx = containerWidthPx,
-            displayWidthPx = context.resources.displayMetrics.widthPixels,
-        )
-        val visible = selectVisibleTags(
-            tags = all,
-            availableWidthPx = computeTagAvailableWidthPx(
-                rowWidthPx = rowWidthPx,
-                density = context.resources.displayMetrics.density,
-                hasUnreadBadge = data.unreadMessageNum != 0,
-                // Mirrors updateCallBarDuration()'s visibility test without reordering it: that
-                // method also rewrites the row background and the click listener.
-                hasCallBar = !data.callData?.roomId.isNullOrEmpty(),
-                isLargerText = TextSizeUtil.isLarger,
-                hasSendingIcon = showSendingIcon,
-            ),
-            measureText = binding.textviewAt.paint::measureText,
-        )
-        // Driven by `visible`, not `all`: a run made entirely of droppable tags can degrade to
-        // nothing, and an empty-but-VISIBLE TextView would still consume its marginEnd.
-        binding.textviewAt.isVisible = visible.isNotEmpty()
-        binding.textviewAt.text = joinTags(visible)
-    }
-
-    private fun showMissingNumber(missedNumber: Int, isMuted: Boolean) {
-        if (missedNumber == 0) {
-            binding.textviewMissedNumber.visibility = View.GONE
-        } else {
-            binding.textviewMissedNumber.visibility = View.VISIBLE
-            if (isMuted) {
-                binding.textviewMissedNumber.setBackgroundResource(R.drawable.chat_missing_number_bg_muted)
-            } else {
-                binding.textviewMissedNumber.setBackgroundResource(R.drawable.chat_missing_number_bg)
-            }
-        }
-    }
-
-    private fun setupCallingJoinButton(
-        view: TextView,
-        showTime: String?
-    ) {
-        view.text = if(!TextUtils.isEmpty(showTime)) showTime else view.context.getString(R.string.join)
-    }
-
-
-    fun updateCallBarDuration(data: RoomViewData) {
-        val callData = data.callData
-        if (callData != null) {
-            val roomId = callData.roomId
-            if (!roomId.isNullOrEmpty()) {
-                if(!currentIsSelected && !data.isPinned) {
-                    binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
-                }
-                binding.callBarDuration.isVisible = true
-                val callStateManager = getCallStateManager()
-                val showTime = callStateManager.getCallingTime(roomId)
-                setupCallingJoinButton(binding.callBarDuration, showTime)
-                binding.callBarDuration.setOnClickListener {
-                    if (!callStateManager.isInCalling()) {
-                        L.i { "[call] CallBar Joining call for roomId:${roomId}." }
-                        appScope.launch {
-                            val status = LCallManager.joinCall(activity, callData)
-                            if (!status) {
-                                L.e { "[Call] CallBar join call failed." }
-                                ToastUtil.show(com.difft.android.call.R.string.call_join_failed_tip)
-                            }
-                        }
-                    } else {
-                        if (callStateManager.getCurrentRoomId() == roomId) {
-                            L.i { "[call] CallBar Bringing back current call for roomId:${roomId}." }
-                            LCallManager.bringCallScreenToFront(ApplicationHelper.instance.applicationContext)
-                        } else {
-                            ToastUtil.show(com.difft.android.call.R.string.call_newcall_tip)
-                        }
-                    }
-                }
-            }
-        } else {
-            if(!currentIsSelected && !data.isPinned) {
-                binding.root.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg1))
-            }
-            binding.callBarDuration.isVisible = false
-        }
-    }
-
-    private fun getCallStateManager(): OnGoingCallStateManager {
-        val entryPoint = EntryPointAccessors.fromApplication<EntryPoint>(
-            activity.applicationContext
-        )
-        return entryPoint.onGoingCallStateManager
-    }
-
 }
 
 sealed class ListItem {
