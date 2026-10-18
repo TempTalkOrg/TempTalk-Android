@@ -4,6 +4,8 @@ import android.app.Application
 import android.app.job.JobInfo
 import android.app.job.JobParameters
 import android.app.job.JobScheduler
+import android.os.PowerManager
+import androidx.test.core.app.ApplicationProvider
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -19,8 +21,10 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
@@ -49,10 +53,12 @@ class JobSchedulerSchedulerTest {
 
         ApplicationDependencies.init(application, TestDependencyProvider)
         coJustRun { jobManager.wakeUpFromSystem() }
+        JobSchedulerScheduler.SystemService.acquireWakeLock = { null }
     }
 
     @After
     fun tearDown() {
+        JobSchedulerScheduler.SystemService.acquireWakeLock = defaultAcquireWakeLock
         TestDependencyProvider.failure = null
         clearMocks(jobScheduler, application, sharedJobManager)
         RecordingJobServiceShadow.reset()
@@ -198,21 +204,84 @@ class JobSchedulerSchedulerTest {
 
     @Test
     fun `onStartJob wakes the manager and always asks for a re-run`() {
+        val woke = CountDownLatch(1)
+        coEvery { jobManager.wakeUpFromSystem() } answers { woke.countDown() }
         val service = buildService()
 
         val started = service.onStartJob(params(PLAIN_JOB_ID))
 
-        assertTrue(started, "onStartJob must keep the binding until the wake-up finishes it")
+        assertTrue(started, "the run is completed asynchronously, so onStartJob keeps it open")
         assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1))
+        assertTrue(woke.await(AWAIT_SECONDS, TimeUnit.SECONDS), "the job manager was never woken")
     }
 
     @Test
-    fun `onStopJob reports unfinished before completion and finished afterwards`() {
+    fun `the run is completed without waiting for the job manager to finish waking`() {
+        // Models a cold start: the manager's init is still loading storage when the job arrives.
         val gate = CountDownLatch(1)
+        val woke = CountDownLatch(1)
         coEvery { jobManager.wakeUpFromSystem() } answers {
             gate.await()
-            events.add("wake")
+            woke.countDown()
         }
+        val service = buildService()
+
+        service.onStartJob(params(PLAIN_JOB_ID))
+
+        assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1), "completion must not wait for the wake")
+        assertEquals(1L, woke.count, "the wake is still in progress after the run completed")
+        gate.countDown()
+        assertTrue(woke.await(AWAIT_SECONDS, TimeUnit.SECONDS), "the wake must still be delivered")
+    }
+
+    @Test
+    fun `the wake lock is held across completion and the wake, and released afterwards`() {
+        val order = LinkedBlockingQueue<String>()
+        val lock = newWakeLock()
+        JobSchedulerScheduler.SystemService.acquireWakeLock = { lock.acquire(); lock }
+        RecordingJobServiceShadow.onFinish = { order.add("finish held=${lock.isHeld}") }
+        coEvery { jobManager.wakeUpFromSystem() } answers { order.add("wake held=${lock.isHeld}") }
+        val service = buildService()
+
+        service.onStartJob(params(PLAIN_JOB_ID))
+
+        assertEquals(listOf("finish held=true", "wake held=true"), order.drainInOrder(2, "step"))
+        assertTrue(awaitReleased(lock), "the wake lock must be released once the wake is delivered")
+    }
+
+    @Test
+    fun `the wake lock is released when the job manager cannot be provided`() {
+        failJobManagerLookup(IllegalStateException("job manager unavailable"))
+        val lock = newWakeLock()
+        JobSchedulerScheduler.SystemService.acquireWakeLock = { lock.acquire(); lock }
+        val service = buildService()
+
+        service.onStartJob(params(PLAIN_JOB_ID))
+
+        assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1))
+        assertTrue(awaitReleased(lock), "the wake lock must not leak")
+    }
+
+    @Test
+    fun `a stalled wake-lock acquisition is completed by the main-thread fallback exactly once`() {
+        val gate = CountDownLatch(1)
+        JobSchedulerScheduler.SystemService.acquireWakeLock = { gate.await(); null }
+        val service = buildService()
+
+        service.onStartJob(params(PLAIN_JOB_ID))
+        assertNull(pollEvent(), "nothing completes the run while acquisition is stalled")
+
+        ShadowLooper.idleMainLooper(FALLBACK_MILLIS, TimeUnit.MILLISECONDS)
+        assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1), "the fallback must complete the run")
+
+        gate.countDown()
+        assertNull(pollEvent(), "the background path must not complete the run a second time")
+    }
+
+    @Test
+    fun `onStopJob asks for a reschedule before and after completion`() {
+        val gate = CountDownLatch(1)
+        JobSchedulerScheduler.SystemService.acquireWakeLock = { gate.await(); null }
         val service = buildService()
         val params = params(PLAIN_JOB_ID)
 
@@ -220,9 +289,10 @@ class JobSchedulerSchedulerTest {
         assertTrue(service.onStopJob(params), "a job stopped before it finished must be rescheduled")
 
         gate.countDown()
-        assertEquals(listOf("wake"), drain(1))
-        assertFalse(service.onStopJob(params), "a completed job must not request a reschedule")
         assertNull(pollEvent(), "a job the framework already stopped must not be finished too")
+        // A stop the framework queued before our completion message can still be handled after
+        // the entry is gone; answering false there would drop the non-periodic job.
+        assertTrue(service.onStopJob(params), "a stop that lands after completion must still reschedule")
     }
 
     @Test
@@ -233,20 +303,22 @@ class JobSchedulerSchedulerTest {
         service.onStartJob(params)
         assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1))
 
-        assertFalse(service.onStopJob(params))
-        assertTrue(events.isEmpty(), "no second jobFinished should be issued")
+        assertTrue(service.onStopJob(params))
+        ShadowLooper.idleMainLooper(FALLBACK_MILLIS, TimeUnit.MILLISECONDS)
+        assertNull(pollEvent(), "neither the stop nor the cancelled fallback may finish it again")
     }
 
     @Test
     fun `a framework failure inside jobFinished does not break the wake-up`() {
         RecordingJobServiceShadow.throwOnFinish = true
+        val woke = CountDownLatch(1)
+        coEvery { jobManager.wakeUpFromSystem() } answers { woke.countDown() }
         val service = buildService()
-        val params = params(PLAIN_JOB_ID)
 
-        service.onStartJob(params)
+        service.onStartJob(params(PLAIN_JOB_ID))
 
         assertEquals(listOf("finish-failed:$PLAIN_JOB_ID"), drain(1))
-        assertFalse(service.onStopJob(params), "the in-flight entry must be released even on failure")
+        assertTrue(woke.await(AWAIT_SECONDS, TimeUnit.SECONDS), "the wake must still be delivered")
     }
 
     @Test
@@ -261,8 +333,7 @@ class JobSchedulerSchedulerTest {
         // The wake-up failed, so nothing drained storage; retiring the job is the idle
         // transition's business, never a failed wake's.
         assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1))
-        assertTrue(events.isEmpty(), "the job must be finished exactly once")
-        assertFalse(service.onStopJob(params))
+        assertNull(pollEvent(), "the job must be finished exactly once")
     }
 
     @Test
@@ -278,33 +349,31 @@ class JobSchedulerSchedulerTest {
 
     @Test
     fun `a stale run cannot complete the entry a later run of the same jobId owns`() {
-        // The framework stops a run that outlives its 10-minute cap and re-runs the same id on the
-        // still-bound instance; the stale completion must not consume the new run's entry.
-        val started = AtomicInteger()
+        // The framework stops a run and re-runs the same id on the still-bound instance; the
+        // stale run's late completion must not consume the new run's entry.
+        val acquired = AtomicInteger()
         val entered = CountDownLatch(1)
         val gate = CountDownLatch(1)
-        coEvery { jobManager.wakeUpFromSystem() } answers {
-            // Only the first run is held, so the second one completes while the first is still in
-            // the wake-up.
-            if (started.getAndIncrement() == 0) {
+        JobSchedulerScheduler.SystemService.acquireWakeLock = {
+            // Only the first run is held, so the second one completes while the first is stalled.
+            if (acquired.getAndIncrement() == 0) {
                 entered.countDown()
                 gate.await()
             }
+            null
         }
         val service = buildService()
         val stale = params(PLAIN_JOB_ID)
         val current = params(PLAIN_JOB_ID)
 
         service.onStartJob(stale)
-        assertTrue(entered.await(AWAIT_SECONDS, TimeUnit.SECONDS), "the stale run never reached the wake-up")
+        assertTrue(entered.await(AWAIT_SECONDS, TimeUnit.SECONDS), "the stale run never reached acquisition")
         service.onStartJob(current)
 
         assertEquals(listOf("finished:$PLAIN_JOB_ID:true"), drain(1), "the current run must complete")
 
         gate.countDown()
         assertNull(pollEvent(), "the stale run must not issue a second completion")
-        assertFalse(service.onStopJob(stale), "the stale run no longer owns the id")
-        assertFalse(service.onStopJob(current), "the current run was already completed")
     }
 
     // -- SystemService: two jobIds bound to one instance --
@@ -321,14 +390,13 @@ class JobSchedulerSchedulerTest {
         val recorded = drain(2)
         assertTrue(recorded.contains("finished:$PLAIN_JOB_ID:true"), "plain job was never finished")
         assertTrue(recorded.contains("finished:$NETWORK_JOB_ID:true"), "network job was never finished")
-        assertFalse(service.onStopJob(network))
-        assertFalse(service.onStopJob(plain))
+        assertNull(pollEvent(), "each job must be finished exactly once")
     }
 
     @Test
     fun `stopping one jobId leaves the other in flight and still finishes it`() {
         val gate = CountDownLatch(1)
-        coEvery { jobManager.wakeUpFromSystem() } answers { gate.await() }
+        JobSchedulerScheduler.SystemService.acquireWakeLock = { gate.await(); null }
         val service = buildService()
         val plain = params(PLAIN_JOB_ID)
         val network = params(NETWORK_JOB_ID)
@@ -340,7 +408,6 @@ class JobSchedulerSchedulerTest {
         gate.countDown()
         assertEquals(listOf("finished:$NETWORK_JOB_ID:true"), drain(1), "the untouched job must still finish")
         assertNull(pollEvent(), "the stopped job must not be finished too")
-        assertFalse(service.onStopJob(plain), "the stopped job must not be reported unfinished twice")
     }
 
     // -- Helpers --
@@ -372,6 +439,19 @@ class JobSchedulerSchedulerTest {
 
     private fun params(jobId: Int): JobParameters = jobParams(jobId)
 
+    /** A Robolectric-backed lock; the framework class is final and cannot be mocked inline. */
+    private fun newWakeLock(): PowerManager.WakeLock =
+        ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "test:wake")
+            .apply { setReferenceCounted(false) }
+
+    private fun awaitReleased(lock: PowerManager.WakeLock): Boolean {
+        val deadline = System.currentTimeMillis() + AWAIT_SECONDS * 1000
+        while (lock.isHeld && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        return !lock.isHeld
+    }
+
     private fun drain(count: Int): List<String> = events.drainInOrder(count, "event")
 
     /**
@@ -383,5 +463,10 @@ class JobSchedulerSchedulerTest {
     private companion object {
         /** How long a "nothing else is recorded" assertion gives the executor to prove otherwise. */
         const val NO_EVENT_MILLIS = 200L
+
+        /** Past the service's 2-second main-thread fallback. */
+        const val FALLBACK_MILLIS = 2_500L
+
+        val defaultAcquireWakeLock = JobSchedulerScheduler.SystemService.acquireWakeLock
     }
 }

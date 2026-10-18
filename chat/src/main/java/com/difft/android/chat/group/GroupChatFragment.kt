@@ -316,14 +316,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
         }
         binding.includeFullInput.ivFullInputConfidential.setOnClickListener { view ->
             val confidentialMode = if (view.tag == 0) 1 else 0
-            chatSettingViewModel.setConversationConfigs(
-                requireActivity(),
-                chatViewModel.forWhat.id,
-                null,
-                null,
-                null,
-                confidentialMode
-            )
+            chatSettingViewModel.setConfidentialMode(confidentialMode)
         }
 
         updateConfidential()

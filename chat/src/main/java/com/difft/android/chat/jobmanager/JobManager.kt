@@ -229,9 +229,7 @@ class JobManager(
     /**
      * Signals the job runners on behalf of a persisted wake-up the system started.
      *
-     * Suspends until the signal has been delivered, so the caller finishes its system job only
-     * once the queue has been poked. Nothing here decides the wake-up's fate: the runners' next
-     * idle transition is what cancels the groups that no longer have work.
+     * Suspends until the signal is delivered, so the caller can hold its wake lock until then.
      */
     internal suspend fun wakeUpFromSystem() = withContext(managementDispatcher) {
         initDeferred.await()

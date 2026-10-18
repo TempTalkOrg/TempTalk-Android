@@ -16,6 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -120,13 +121,13 @@ class WCDBWritePathOptimizationTest {
             reactions = listOf(Reaction(emoji = "🎉", uid = "u2", originTimestamp = 2_000L)),
         )
 
-        wcdb.putMessageIfNotExists(msg)
+        assertTrue(wcdb.putMessageIfNotExists(msg), "first call inserts")
 
         assertNotNull(wcdb.message.getFirstObject(DBMessageModel.id.eq(msgId)))
         assertEquals(1, wcdb.reaction.getAllObjects(DBReactionModel.messageId.eq(msgId)).size)
 
         // Second call: existence check hits → no re-insert, no duplicate reaction.
-        wcdb.putMessageIfNotExists(msg)
+        assertFalse(wcdb.putMessageIfNotExists(msg), "repeat reports no insert")
         assertEquals(1L, wcdb.message.getAllObjects(DBMessageModel.id.eq(msgId)).size.toLong())
         assertEquals(1, wcdb.reaction.getAllObjects(DBReactionModel.messageId.eq(msgId)).size)
     }

@@ -11,6 +11,7 @@ import android.os.SystemClock
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import androidx.activity.ComponentActivity
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -544,6 +545,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         appScope.launch {
             fgBgMutex.withLock {
                 recordLastUseTime()
+                // Names follow the app language; only re-submits a channel whose name differs.
+                runCatching { messageNotificationUtil.get().refreshChannelNames() }
                 scheduleGrayConfigUpdateCheck()
                 // NOTE: incoming-call restore is intentionally NOT triggered here. On a cold start this
                 // fires too early — the launcher's IndexActivity + the app lock come up afterwards and
@@ -558,6 +561,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 // Reconcile auto-translate models. No-op (one SQL query, no ML Kit call) when no
                 // conversation has the setting on, so users of the feature pay and nobody else does.
                 translateModelStore.get().onForeground()
+                // #1328 daily background-connection health report; throttled internally.
+                processExitProbe.reportHealthIfDue()
             }
         }
     }
@@ -640,8 +645,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                     inactiveDeviceDialogPresenter.get().onActivityResumed(activity)
                 }
 
-                // 原有的 Call 反馈逻辑
-                if (activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
+                // Call feedback overlay. Only a ComponentActivity can carry the ViewTree owners it
+                // needs; on any other host keep the pending feedback for the next suitable one.
+                if (activity is ComponentActivity && activity !is LCallActivity && activity !is MainActivity && activity !is LIncomingCallActivity) {
                     launch(Dispatchers.IO) {
                         val callInfo = LCallManager.getAndClearCallFeedbackInfo()
                         if (callInfo != null && !activity.isDestroyed) {

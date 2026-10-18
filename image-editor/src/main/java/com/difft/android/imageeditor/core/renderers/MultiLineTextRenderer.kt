@@ -492,11 +492,12 @@ class MultiLineTextRenderer(
     }
 
     companion object {
-        private val HIT_PADDING = DimensionUnit.DP.toPixels(30f)
-        private val HIGHLIGHT_HORIZONTAL_PADDING = DimensionUnit.DP.toPixels(8f)
-        private val HIGHLIGHT_TOP_PADDING = DimensionUnit.DP.toPixels(10f)
-        private val HIGHLIGHT_BOTTOM_PADDING = DimensionUnit.DP.toPixels(6f)
-        private val HIGHLIGHT_CORNER_RADIUS = DimensionUnit.DP.toPixels(4f)
+        // Getters: the system density changes with the display-size setting while the process lives.
+        private val HIT_PADDING get() = DimensionUnit.DP.toPixels(30f)
+        private val HIGHLIGHT_HORIZONTAL_PADDING get() = DimensionUnit.DP.toPixels(8f)
+        private val HIGHLIGHT_TOP_PADDING get() = DimensionUnit.DP.toPixels(10f)
+        private val HIGHLIGHT_BOTTOM_PADDING get() = DimensionUnit.DP.toPixels(6f)
+        private val HIGHLIGHT_CORNER_RADIUS get() = DimensionUnit.DP.toPixels(4f)
 
         private const val PADDING = 10
 

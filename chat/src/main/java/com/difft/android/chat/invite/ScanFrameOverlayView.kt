@@ -73,6 +73,29 @@ class ScanFrameOverlayView @JvmOverloads constructor(
 
     private val rect = RectF()
 
+    /**
+     * The migration scan page's viewfinder (the migration design's scan state, as iOS draws it): a
+     * fixed 248dp square marked only by four rounded primary corners, with no mask, border or scan
+     * line. Off for the general scanner, which keeps its larger framed look.
+     */
+    var migrationStyle: Boolean = false
+        set(value) {
+            field = value
+            if (value) stopScanLine()
+            invalidate()
+        }
+
+    private val migrationRectPx = 248.dp.toFloat()
+    private val migrationSideInsetPx = 16.dp.toFloat()
+    private val migrationCornerLenPx = 42.dp.toFloat()
+    private val migrationCornerRadiusPx = 10.dp.toFloat()
+    private val migrationCornerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = cornerThickPx
+        color = ContextCompat.getColor(context, baseR.color.primary)
+    }
+    private val strokeRect = RectF()
+
     // Moving scan line — replaces BGA's qrcv_customScanLineDrawable animation. Blue vector
     // (scan_line.xml, primary-blue gradient fading at both ends), swept top↔bottom inside the rect.
     private val scanLine: Drawable? = ContextCompat.getDrawable(context, R.drawable.scan_line)
@@ -91,6 +114,10 @@ class ScanFrameOverlayView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        if (migrationStyle) {
+            drawMigrationViewfinder(canvas)
+            return
+        }
         val cx = width / 2f
         val cy = height / 2f
         val half = rectSizePx / 2f
@@ -133,6 +160,7 @@ class ScanFrameOverlayView @JvmOverloads constructor(
      * paths where scanning never begins.
      */
     fun startScanLine() {
+        if (migrationStyle) return
         if (!scanLineAnimator.isStarted) scanLineAnimator.start()
     }
 
@@ -145,6 +173,26 @@ class ScanFrameOverlayView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         scanLineAnimator.cancel() // safety net: ensure the infinite animator never outlives the view
         super.onDetachedFromWindow()
+    }
+
+    /**
+     * Four rounded L-shaped corners: the frame's rounded outline, stroked inside its bounds, clipped
+     * to a [migrationCornerLenPx] square at each corner.
+     */
+    private fun drawMigrationViewfinder(canvas: Canvas) {
+        val size = migrationRectPx.coerceAtMost(width - 2 * migrationSideInsetPx)
+        if (size <= 0f) return
+        val half = size / 2f
+        rect.set(width / 2f - half, height / 2f - half, width / 2f + half, height / 2f + half)
+        val inset = cornerThickPx / 2f
+        strokeRect.set(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+        val len = migrationCornerLenPx.coerceAtMost(half)
+        for ((x, y) in listOf(rect.left to rect.top, rect.right - len to rect.top, rect.left to rect.bottom - len, rect.right - len to rect.bottom - len)) {
+            val save = canvas.save()
+            canvas.clipRect(x, y, x + len, y + len)
+            canvas.drawRoundRect(strokeRect, migrationCornerRadiusPx, migrationCornerRadiusPx, migrationCornerPaint)
+            canvas.restoreToCount(save)
+        }
     }
 
     private fun drawCorners(canvas: Canvas, r: RectF) {

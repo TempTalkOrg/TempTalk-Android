@@ -270,6 +270,16 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         binding.buttonJoinCall.text = ResUtils.getString(R.string.call_join)
         binding.buttonJoinCall.setOnClickListener {
             L.i { "[Call] ChatHeaderCallFragment onclick button joinCall roomId:${callData.roomId}" }
+            // In a call this header offers another call: hang up first, as the chat-list call bar says.
+            if (onGoingCallStateManager.isInCalling()) {
+                if (onGoingCallStateManager.getCurrentRoomId() == callData.roomId) {
+                    LCallManager.bringCallScreenToFront(requireActivity())
+                } else {
+                    L.i { "[Call] ChatHeaderCallFragment join blocked: in another call" }
+                    ToastUtil.show(com.difft.android.call.R.string.call_newcall_tip)
+                }
+                return@setOnClickListener
+            }
             viewLifecycleOwner.lifecycleScope.launch {
                 val status = LCallManager.joinCall(requireActivity(), callData)
                 if (!status) {

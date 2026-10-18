@@ -1,9 +1,7 @@
 package com.difft.android.call.media
 
 import android.Manifest
-import android.content.Intent
 import com.difft.android.base.android.permission.PermissionUtil
-import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ResUtils
@@ -88,9 +86,8 @@ class CallMediaController(
                         setMicrophone(enabled, publishMuted)
                         if (isShowBarrage) showMuteBarrageByMicEnabled(enabled)
                     } else {
-                        val intent = Intent(LCallConstants.CALL_NOTIFICATION_PUSH_STREAM_LIMIT)
-                        intent.setPackage(ApplicationHelper.instance.packageName)
-                        ApplicationHelper.instance.sendBroadcast(intent)
+                        L.w { "[Call] CallMediaController publish blocked media=audio reason=streamLimit" }
+                        showToast(ResUtils.getString(R.string.call_push_stream_limit_tip))
                     }
                 } else {
                     setMicrophone(enabled, publishMuted)
@@ -137,9 +134,8 @@ class CallMediaController(
                             setCamera(true)
                         }
                     } else {
-                        val intent = Intent(LCallConstants.CALL_NOTIFICATION_PUSH_STREAM_LIMIT)
-                        intent.setPackage(ApplicationHelper.instance.packageName)
-                        ApplicationHelper.instance.sendBroadcast(intent)
+                        L.w { "[Call] CallMediaController publish blocked media=video reason=streamLimit" }
+                        showToast(ResUtils.getString(R.string.call_push_stream_limit_tip))
                     }
                 } else {
                     setCamera(enabled)

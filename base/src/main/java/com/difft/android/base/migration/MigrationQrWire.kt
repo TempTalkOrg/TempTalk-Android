@@ -21,6 +21,13 @@ object MigrationQrWire {
      */
     const val MIN_BARE_TEXT_LENGTH = 65
 
+    /** Flags bit (second byte) marking a code whose displayer holds the data: a Desktop export code. */
+    const val FLAG_DOWNLOAD = 0x01
+
+    /** Whether [payload] is a v2 structure whose displayer holds the data (see [FLAG_DOWNLOAD]). */
+    fun isDownloadPayload(payload: ByteArray): Boolean =
+        payload.size >= 2 && payload[0] == MAGIC_V2 && payload[1].toInt() and FLAG_DOWNLOAD != 0
+
     /** Line breaks a scanner may append; spaces are part of the alphabet and must stay. */
     fun stripLineBreaks(raw: String): String = raw.trim('\r', '\n')
 

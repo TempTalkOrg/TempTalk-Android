@@ -4,7 +4,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.call.CallType
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.connect.CallConnectionCoordinator
-import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.service.TestScopeApplication
 import com.difft.android.test.TestDispatcherRule
@@ -64,77 +63,33 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
     @get:Rule(order = 1)
     val globalMocks = GlobalStaticMockRule()
 
-    private lateinit var room: Room
-    private lateinit var roomCtl: CallRoomController
-    private lateinit var coordinator: CallConnectionCoordinator
-    private lateinit var timeoutMonitor: CallTimeoutMonitor
+    private lateinit var f: RoomEventDispatcherFixture
+    private val room get() = f.room
+    private val roomCtl get() = f.roomCtl
+    private val coordinator get() = f.connectionCoordinator
+    private val timeoutMonitor get() = f.timeoutMonitor
 
     /** Records every host.setMicEnabled(enabled, publishMuted, isShowBarrage) invocation. */
-    private val setMicCalls = mutableListOf<Triple<Boolean, Boolean, Boolean>>()
+    private val setMicCalls get() = f.setMicCalls
 
     /** Records every host.setCameraEnabled(enabled) invocation. */
-    private val setCameraCalls = mutableListOf<Boolean>()
+    private val setCameraCalls get() = f.setCameraCalls
 
     /** Records duration-timer starts triggered by the media-ready gate. */
-    private var startCallTimerCalls = 0
+    private val startCallTimerCalls get() = f.startCallTimerCalls
 
     @Before
     fun setUp() {
         ApplicationHelper.init(ApplicationProvider.getApplicationContext())
-        room = mockk(relaxed = true)
-        roomCtl = mockk(relaxed = true)
-        coordinator = mockk(relaxed = true)
-        timeoutMonitor = mockk(relaxed = true)
-        every { coordinator.isRetryUrlConnecting } returns false
-        every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.CONNECTED)
-        every { room.state } returns Room.State.CONNECTED
+        f = RoomEventDispatcherFixture(CoroutineScope(dispatcherRule.testDispatcher))
     }
 
     @After
     fun tearDown() {
         unmockkAll()
-        setMicCalls.clear()
-        setCameraCalls.clear()
-        startCallTimerCalls = 0
     }
 
-    private fun buildDispatcher(callType: String): RoomEventDispatcher {
-        val host = RoomEventHost(
-            showBarrageFn = { _, _, _ -> },
-            setMicEnabledFn = { enabled, publishMuted, isShowBarrage ->
-                setMicCalls.add(Triple(enabled, publishMuted, isShowBarrage))
-            },
-            setCameraEnabledFn = { enabled -> setCameraCalls.add(enabled) },
-            resetNoBodySpeakCheckFn = {},
-            sendHangUpBroadcastFn = {},
-            stopRingToneAndTimeoutCheckFn = {},
-            resolveCallTypeFn = {},
-            handleConnectedStateFn = {},
-            startCallDurationTimerFn = { startCallTimerCalls++ },
-            onFeedbackIdentityResolvedFn = { _, _, _ -> },
-            onNetworkPoorStateChangedFn = {},
-            getCurrentCallTypeFn = { callType },
-            getCurrentRoomIdFn = { "room-1" },
-        )
-        return RoomEventDispatcher(
-            scope = CoroutineScope(dispatcherRule.testDispatcher),
-            room = room,
-            roomCtl = roomCtl,
-            rtm = mockk(relaxed = true),
-            connectionCoordinator = coordinator,
-            callUiController = mockk(relaxed = true),
-            participantManager = mockk(relaxed = true),
-            screenSharePreWarmer = mockk(relaxed = true),
-            timeoutMonitor = timeoutMonitor,
-            timerManager = mockk(relaxed = true),
-            speakerState = mockk(relaxed = true),
-            callDataManager = mockk(relaxed = true),
-            statisticsLogManager = mockk(relaxed = true),
-            mySelfId = "self",
-            networkQuality = mockk(relaxed = true),
-            host = host,
-        )
-    }
+    private fun buildDispatcher(callType: String): RoomEventDispatcher = f.build(callType)
 
     private fun invokeRestore(dispatcher: RoomEventDispatcher) {
         val method = RoomEventDispatcher::class.java
@@ -143,12 +98,7 @@ class RoomEventDispatcherManualSwitchMediaRestoreTest {
         method.invoke(dispatcher)
     }
 
-    private fun dispatch(dispatcher: RoomEventDispatcher, event: RoomEvent) {
-        val method = RoomEventDispatcher::class.java
-            .getDeclaredMethod("dispatch", RoomEvent::class.java)
-        method.isAccessible = true
-        method.invoke(dispatcher, event)
-    }
+    private fun dispatch(dispatcher: RoomEventDispatcher, event: RoomEvent) = f.dispatch(dispatcher, event)
 
     private fun armCallTimerGate(
         dispatcher: RoomEventDispatcher,

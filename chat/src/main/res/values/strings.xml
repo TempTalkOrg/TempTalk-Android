@@ -1,6 +1,4 @@
 <resources>
-    <string name="attendee_external_label">EXT</string>
-    <string name="attendee_host_prefix">Host・</string>
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">Learn more</string>
     <string name="SpanUtil__read_more">Read more</string>
@@ -224,7 +222,6 @@
     <string name="chat_option_create_group">Create Group</string>
     <string name="chat_option_scan">Scan</string>
     <string name="chat_option_add_contact">Add Contact</string>
-    <string name="chat_option_instant_call">Instant Meeting</string>
     <string name="chat_option_mark_all_as_read">Mark all as read</string>
     <!-- Topic -->
     <!--
@@ -389,7 +386,6 @@
     <string name="invite_regenerate_dialog_content">The old invite code will expire. Are you sure to continue?</string>
     <string name="invite_regenerate_dialog_cancel">Cancel</string>
     <string name="invite_regenerate_dialog_ok">Regenerate</string>
-    <string name="invite_ok">OK</string>
     <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
     <string name="invite_only_moderators_can_add">This group only allows moderators to invite.</string>
     <string name="invite_code">%s Invite Code</string>
@@ -399,6 +395,7 @@
     <!--    scan-->
     <string name="scan_scan">Scan</string>
     <string name="scan_camera_open_failed">Failed to open the camera. Please try again.</string>
+    <string name="scan_computer_export_code_hint">To transfer chat history from a computer, choose Transfer from Computer on the receiving phone\'s migration page during sign-in.</string>
     <string name="link_device">Link this device?</string>
     <string name="link_device_tips">This device will be able to see your groups and contacts, read all your messages, and send messages in your name.</string>
     <string name="link_new_device">Link New Device</string>
@@ -434,8 +431,6 @@
     <string name="app_ignore">Ignore</string>
 
     <!-- 20230927@w: for event scheduler ____________________________________-->
-    <string name="meetings_action_start">Start</string>
-    <string name="meetings_action_invite">Invite</string>
     <string name="duration_selection_15_mins">15 minutes</string>
     <string name="duration_selection_30_mins">30 minutes</string>
     <string name="duration_selection_45_mins">45 minutes</string>
@@ -460,8 +455,25 @@
     <string name="notification_go_to_settings">Go to settings</string>
     <string name="notification_title">Notification</string>
     <string name="notification_group_chat_notification">Group Chat Notification</string>
-    <string name="notification_settings">Notification</string>
-    <string name="notification_full_screen_settings">Full screen notification</string>
+    <string name="notification_message_notifications">Message notifications</string>
+    <string name="notification_call_notifications">Call notifications</string>
+    <string name="notification_group_lock_screen_caption">Needed for calls and Critical Alerts to pop up while the screen is locked</string>
+    <string name="notification_full_screen_display">Full-screen display</string>
+    <string name="notification_oem_popup">Pop-up and lock-screen permissions</string>
+    <string name="notification_vendor_settings">Vendor pop-up and lock-screen settings</string>
+    <string name="notification_banner_off">Notifications are turned off, so you will not be alerted to messages or calls</string>
+    <string name="notification_banner_enable">Turn on</string>
+    <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission). When enabled, Critical Alerts break through Silent Mode and Do Not Disturb.</string>
+    <string name="critical_alert_delivery_caption">Push is unavailable. Turn on Background connection so Critical Alerts can be delivered.</string>
+    <string name="notification_level_no_banner">No banner</string>
+    <string name="notification_level_silent">Silenced</string>
+    <string name="notification_level_lock_hidden">Hidden on lock screen</string>
+    <string name="notification_level_check">Need to check</string>
+    <string name="notification_status_ok">Normal</string>
+    <string name="notification_status_check">Need to check</string>
+    <string name="notification_status_problem">Needs attention</string>
+    <string name="background_activity_check">Background Activity</string>
+    <string name="background_vendor_settings">Vendor background settings</string>
     <string name="notification_settings_open_fail">Notification settings page not available on this device</string>
     <string name="notification_enable">Enabled</string>
     <string name="notification_disable">Disabled</string>
@@ -481,6 +493,8 @@
     <string name="notification_update_default_group_setting">Update Default Group Setting</string>
     <string name="notification_custom_settings">CUSTOM SETTINGS</string>
     <string name="notification_message_sounds">Message Sound</string>
+    <string name="notification_sound_none">None</string>
+    <string name="notification_sound_custom">Custom sound</string>
     <string name="notification_message_notification">Message Notification</string>
     <string name="notification_critical_alert_title">Missed Call from %s</string>
     <string name="notification_critical_alert_content">Urgent: Please answer the call now.</string>
@@ -494,9 +508,6 @@
     <string name="file_expired">File has expired.</string>
     <string name="file_expired_cannot_view">This file has expired and can no longer be viewed</string>
     <string name="uploading">UPLOADING</string>
-    <string name="members">MEMBERS</string>
-    <string name="invite_participants">Invite Members</string>
-    <string name="install_call_btn_add">Add</string>
     <string name="add_participants">Add Members</string>
 
     <string name="MediaReviewFragment__add_a_message">Add a message</string>
@@ -583,6 +594,8 @@
 
     <string name="auto_start_check">Auto-start Permission</string>
     <string name="auto_start_need_check">Need to Check</string>
+    <string name="background_connection_guide_prompt">Still missing messages or calls?</string>
+    <string name="background_connection_guide_link">View the setup guide</string>
 
     <string name="exact_alarm_check">Exact Alarm</string>
     <string name="exact_alarm_granted">Normal</string>
@@ -590,10 +603,6 @@
 
     <string name="background_connection_check_failed">Please ensure the following settings are in normal status before enabling background connection</string>
 
-    <string name="critical_alert_notification_permission_check_failed">Please enable notification to receive important alerts.</string>
-    <string name="critical_alert_background_connection_permission_check_failed">Please enable background connection to receive important alerts.</string>
-    <string name="critical_alert_all_permission_check_failed">Please enable notification, full-screen alert, and background connection permissions to ensure important alerts are delivered promptly.</string>
-    <string name="critical_alert_fullscreen_permission_check_failed">Please enable full-screen notification permission to receive important alerts.</string>
 
     <string name="disappearing_messages">Timer</string>
     <string name="disappearing_messages_tips">Messages will expire after being read, they will GONE and then can NOT be viewed in any way.</string>
@@ -636,8 +645,6 @@
     <string name="group_edit_name_done">Done</string>
     <string name="group_edit_name_empty">Group name can\'t be empty</string>
     <string name="critical_alerts">Critical Alerts</string>
-    <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission). When enabled, Critical Alerts break through Silent Mode and Do Not Disturb.</string>
-    <string name="critical_alerts_off">Off</string>
     <!-- Chat Archive Settings -->
     <string name="chat_archive_extend_time_title">Extend timer?</string>
     <string name="chat_archive_extend_time_message">Previously deleted messages can’t be recovered.</string>

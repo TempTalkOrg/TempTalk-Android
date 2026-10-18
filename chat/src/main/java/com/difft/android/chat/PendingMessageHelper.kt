@@ -1,6 +1,7 @@
 package com.difft.android.chat
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.base.utils.Base64
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
@@ -14,11 +15,14 @@ import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.responses.PendingMessage
 import com.difft.android.websocket.api.util.transformGroupIdFromLocalToServer
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -39,7 +43,11 @@ class PendingMessageHelper @Inject constructor(
     private val httpClient: ChativeHttpClient,
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
     private val failedMessageProcessor: FailedMessageProcessor,
+    private val healthCounters: KeepAliveHealthCounters,
 ) {
+
+    /** What asked for the pull; only [FCM] pulls feed the push-health counters (#1328). */
+    enum class PullTrigger { FCM, OTHER }
 
     suspend fun obtainPendingMessageAndSave(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -57,20 +65,25 @@ class PendingMessageHelper @Inject constructor(
      * 主动拉取和处理消息
      * - 依赖 WebSocket 实时同步作为主要消息通道，FCM 拉取作为补充
      * - 使用 AtomicBoolean 互斥锁防止并发执行
+     * - [PullTrigger.FCM] 触发的拉取结果计入 pull_ok / pull_fail；因防重入跳过的调用不计
      */
-    fun schedulePendingMessageWork() {
+    fun schedulePendingMessageWork(trigger: PullTrigger = PullTrigger.OTHER, scope: CoroutineScope = appScope) {
         // 使用 compareAndSet 原子操作获取锁，避免并发执行
         if (!isProcessing.compareAndSet(false, true)) {
             L.i { "[Message][PendingMessageHelper] Already processing pending messages, skipping duplicate request" }
             return
         }
 
-        appScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
+            var counted = false
             try {
                 val startTime = System.currentTimeMillis()
                 L.i { "[Message][PendingMessageHelper] Starting direct processing" }
 
                 val success = obtainPendingMessageAndSave()
+                // obtainPendingMessageAndSave turns scope cancellation into `false`; that is not a pull failure.
+                ensureActive()
+                counted = recordFcmPull(trigger, success)
 
                 val duration = System.currentTimeMillis() - startTime
                 if (success) {
@@ -78,13 +91,23 @@ class PendingMessageHelper @Inject constructor(
                 } else {
                     L.w { "[Message][PendingMessageHelper] Direct processing partial success in ${duration}ms, WebSocket will compensate" }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (!counted) recordFcmPull(trigger, false)
                 L.e { "[Message][PendingMessageHelper] Direct processing failed: ${e.stackTraceToString()}" }
             } finally {
                 // 确保无论成功失败都释放锁
                 isProcessing.set(false)
             }
         }
+    }
+
+    private fun recordFcmPull(trigger: PullTrigger, success: Boolean): Boolean {
+        if (trigger != PullTrigger.FCM) return false
+        // Telemetry must never fail the pull.
+        runCatching { healthCounters.onPullResult(success) }
+        return true
     }
 
     companion object {

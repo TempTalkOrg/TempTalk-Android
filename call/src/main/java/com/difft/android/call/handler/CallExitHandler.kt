@@ -6,29 +6,47 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallToChatController
-import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.session.CallExitContext
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.state.OngoingCallPublisher
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+
+/** What the exit decision reads from the call session; implemented by `CallSessionGraph`. */
+internal interface CallExitSession {
+    val callStatus: StateFlow<CallStatus>
+    fun getCurrentCallUidList(): List<String>
+
+    /** The end-call RTM; [onComplete] runs when the send settles. */
+    fun sendEndCall(onComplete: (Boolean) -> Unit)
+}
 
 /**
  * 统一管理通话退出逻辑
  * 负责根据不同的通话状态执行相应的退出操作
+ *
+ * Owned by the call session, one per bound page [context]; [onEndCall] hands the end to the
+ * session's finish request, which the page renders.
  */
-class CallExitHandler(
-    private val viewModel: LCallViewModel,
+internal class CallExitHandler(
+    private val session: CallExitSession,
     private val callToChatController: LCallToChatController,
     private val onGoingCallStateManager: OnGoingCallStateManager,
+    private val publisher: OngoingCallPublisher,
     private val callDataManager: CallDataManager,
     private val callIntent: CallIntent,
     private val callRole: CallRole,
-    private val conversationId: String?,
-    private val callType: String,
+    val context: CallExitContext,
     private val onEndCall: () -> Unit
 ) {
+    private val conversationId: String? get() = context.conversationId
+    private val callType: String get() = context.callType
+
     /**
      * 本次是否为主叫发起（isInitiator）。显式取自发起动作，只有 start-call 路径会置 START_CALL；
      * join/accept 走 JOIN_CALL/ACCEPT_CALL，原发起人二次入会同样恒为 false。
@@ -51,7 +69,7 @@ class CallExitHandler(
         // 主叫在信令尚未连上（窗口 W，仍处于 CALLING）时退出：不管点的是离开还是结束，
         // 都走结束逻辑——1v1 发 cancel，group 把 LEAVE 升级为 END（forceEnd 语义的 hangup）。
         // 此时 roomId 往往还没就绪，取消由 clientCallId 兜底定位（服务端就绪后打通）。
-        if (isInitiator && viewModel.callStatus.value == CallStatus.CALLING) {
+        if (isInitiator && session.callStatus.value == CallStatus.CALLING) {
             L.i { "[Call] CallExitHandler: initiator exits before signaling connected, sending end signal" }
             handleInitiatorPreConnectExit(params)
             return
@@ -61,7 +79,7 @@ class CallExitHandler(
         val callInfo = callDataManager.getCallListData()[params.roomId]
 
         // 如果通话信息不存在，或会议重连中，则直接结束通话并清理资源
-        if (callInfo == null || viewModel.callStatus.value == CallStatus.RECONNECTING) {
+        if (callInfo == null || session.callStatus.value == CallStatus.RECONNECTING) {
             L.i { "[Call] CallExitHandler: Call info is null or reconnecting, ending call directly" }
             onEndCall()
             return
@@ -86,7 +104,7 @@ class CallExitHandler(
      * 根据通话状态处理退出逻辑
      */
     private fun handleExitByStatus(params: CallExitParams, effectiveType: String) {
-        when (val status = viewModel.callStatus.value) {
+        when (val status = session.callStatus.value) {
             CallStatus.CALLING -> {
                 // 主叫：发送取消消息
                 handleCallingExit()
@@ -118,7 +136,7 @@ class CallExitHandler(
     private fun handleCallingExit() {
         L.d { "[Call] CallExitHandler sendCancelCallMessage" }
         onGoingCallStateManager.getCurrentRoomId()?.let { roomId ->
-            appScope.launch {
+            sendThenEnd("cancel") {
                 callToChatController.cancelCall(
                     callerId = callIntent.callerId,
                     callRole = callRole,
@@ -127,7 +145,6 @@ class CallExitHandler(
                     conversationId = conversationId
                 )
                 L.i { "[Call] CallExitHandler: Cancel call message sent, ending call" }
-                onEndCall()
             }
         } ?: run {
             L.w { "[Call] CallExitHandler: No roomId available, ending call directly" }
@@ -148,13 +165,13 @@ class CallExitHandler(
         // teardown 取消前收到响应，会读到此门闩、确定性地跳过响铃/始通话消息，并 best-effort 补发权威取消。
         // 远端止铃的最终保证是后端把这里携带 clientCallId 的取消当作墓碑（后续用同一 clientCallId 建房不再
         // 响铃）——快速退出时响应往往晚于 teardown、补发不一定执行，故不能依赖客户端时序。
-        onGoingCallStateManager.markInitiatorPreConnectCancelled()
+        publisher.publish { markInitiatorPreConnectCancelled() }
         val roomId = onGoingCallStateManager.getCurrentRoomId()?.takeIf { it.isNotEmpty() }
             ?: params.roomId
             ?: ""
         val resolvedType = CallType.fromString(callType) ?: CallType.ONE_ON_ONE
         L.i { "[Call] CallExitHandler handleInitiatorPreConnectExit type:$resolvedType roomId:$roomId" }
-        appScope.launch {
+        sendThenEnd("preConnectEnd") {
             if (resolvedType == CallType.ONE_ON_ONE) {
                 callToChatController.cancelCall(
                     callerId = callIntent.callerId,
@@ -170,11 +187,10 @@ class CallExitHandler(
                     type = callType,
                     roomId = roomId,
                     conversationId = conversationId,
-                    callUidList = viewModel.getCurrentCallUidList(),
+                    callUidList = session.getCurrentCallUidList(),
                 )
             }
             L.i { "[Call] CallExitHandler: pre-connect end signal sent, ending call" }
-            onEndCall()
         }
     }
 
@@ -197,9 +213,9 @@ class CallExitHandler(
 
         // 参会者 uid 必须在发出 end-call RTM 之前快照：远端收到该消息就会陆续退房，
         // 等到回调里再读，列表可能已经缩水甚至为空，对端就收不到挂断消息了。
-        val callUidList = viewModel.getCurrentCallUidList()
+        val callUidList = session.getCurrentCallUidList()
 
-        viewModel.rtm.sendEndCall(onComplete = {
+        session.sendEndCall(onComplete = {
             // instant 会议没有归属会话，收件人由参会者 uid 列表解析，conversationId 恒为空；
             // 1v1 / 群的收件人则由 conversationId 定位（1v1 主叫更是直接非空断言），缺失时只能就地结束。
             if (effectiveType != CallType.INSTANT.type && conversationId.isNullOrEmpty()) {
@@ -208,7 +224,7 @@ class CallExitHandler(
                 return@sendEndCall
             }
 
-            appScope.launch {
+            sendThenEnd("hangup") {
                 callToChatController.hangUpCall(
                     callerId = params.callerId,
                     callRole = callRole,
@@ -218,8 +234,22 @@ class CallExitHandler(
                     callUidList = callUidList,
                 )
                 L.i { "[Call] CallExitHandler: Hang up call message sent, ending call" }
-                onEndCall()
             }
         })
+    }
+
+    /** Sends [send] on `appScope`; the call ends however the send goes, a throwing one included. */
+    private fun sendThenEnd(tag: String, send: suspend () -> Unit) {
+        appScope.launch {
+            try {
+                send()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e(e) { "[Call] CallExitHandler: $tag signaling failed, ending call" }
+            } finally {
+                onEndCall()
+            }
+        }
     }
 }

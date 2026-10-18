@@ -197,6 +197,20 @@ class FastJobStorageTest {
     }
 
     @Test
+    fun `getPending head job in backoff or running blocks later eligible job in same queue`() {
+        // SettingSyncJob relies on this: a job that runs knows every earlier job in its queue is gone.
+        storage.init()
+        val backingOff = buildJobSpec(id = "head", queueKey = "q1", createTime = 100, nextRunAttemptTime = 5000L)
+        val later = buildJobSpec(id = "later", queueKey = "q1", createTime = 200, nextRunAttemptTime = 0)
+        storage.insertJobs(listOf(FullSpec(backingOff, emptyList()), FullSpec(later, emptyList())))
+
+        assertTrue(storage.getPendingJobsWithNoDependenciesInCreatedOrder(1000L).isEmpty())
+
+        storage.updateJobAfterRetry("head", isRunning = true, runAttempt = 1, nextRunAttemptTime = 0, serializedData = "{}")
+        assertTrue(storage.getPendingJobsWithNoDependenciesInCreatedOrder(10_000L).isEmpty())
+    }
+
+    @Test
     fun `getPending returns one job per distinct queue`() {
         storage.init()
         val jobA = buildJobSpec(id = "a1", queueKey = "qA", createTime = 100, nextRunAttemptTime = 0)

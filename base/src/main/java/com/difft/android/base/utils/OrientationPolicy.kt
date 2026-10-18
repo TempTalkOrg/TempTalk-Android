@@ -259,12 +259,13 @@ object OrientationPolicy {
      * Pure resolution rule. The panel mode decides; the app-level bounds stand in only when no
      * mode is reported; the activity's window is a floor under both.
      *
-     * Why not the bounds alone: HyperOS updates the app-level configuration only when the process
-     * starts, so its maxBounds stay at the launch posture. A process started folded and then
-     * unfolded keeps answering the outer panel (Xiaomi 18 Fold: boundsSwDp=424 while the window
-     * already measured 608dp) and would lock the unfolded display to portrait — which at 608dp
-     * wide can never reach the dual-pane gate; a process started unfolded and then folded keeps
-     * answering 608 and would leave the outer panel free to rotate.
+     * Why not the bounds alone: the app-level maxBounds used to stay at the launch posture. A
+     * process started folded and then unfolded kept answering the outer panel (Xiaomi 18 Fold:
+     * boundsSwDp=424 while the window already measured 608dp), which would lock the unfolded
+     * display to portrait — at 608dp wide it can never reach the dual-pane gate. The same freeze
+     * reproduced on a Pixel Fold emulator and came from the full-configuration override
+     * `LanguageUtils.createConfiguredContext` used to apply; HyperOS is likely the same cause but
+     * unconfirmed. The mode never passes through `Resources`, so it stays the primary source.
      *
      * Why the window floor: a window can never be larger than the display it is on, so a window
      * short side at or above the threshold proves a large display even if every display-level

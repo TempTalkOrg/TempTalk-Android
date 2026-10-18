@@ -28,9 +28,8 @@ import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
-import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.ConversationSetRequestBody
+import com.difft.android.chat.setting.sync.ConfidentialModeSyncCoordinator
+import kotlinx.coroutines.CancellationException
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import com.difft.android.selector.entity.LocalMedia
@@ -60,8 +59,6 @@ import com.difft.android.chat.util.visible
 import com.difft.android.video.TranscodingQuality
 import com.difft.android.chat.video.videoconverter.VideoThumbnailsRangeSelectorView
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.Locale
@@ -75,8 +72,7 @@ import javax.annotation.meta.Exhaustive
 class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_review_fragment), VideoThumbnailsRangeSelectorView.RangeDragListener {
 
     @Inject
-    @ChativeHttpClientModule.Chat
-    lateinit var httpClient: ChativeHttpClient
+    lateinit var confidentialSync: ConfidentialModeSyncCoordinator
 
     private val sharedViewModel: MediaSelectionViewModel by viewModels(
         ownerProducer = { requireActivity() }
@@ -714,21 +710,19 @@ class MediaReviewFragment : androidx.fragment.app.Fragment(R.layout.v2_media_rev
         }
     }
 
+    /** Local-first: the switch takes effect at once; a sync job carries it to the server. */
     private fun syncConfidentialModeToServer(mode: Int) {
         val conversationId = (requireActivity() as? MediaSelectionActivity)?.conversationId
         if (conversationId.isNullOrEmpty()) return
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    httpClient.httpService.fetchConversationSet(
-                        ConversationSetRequestBody(conversationId, confidentialMode = mode)
-                    )
-                }
-                if (result.status == 0) {
+                if (confidentialSync.setConfidentialMode(conversationId, mode)) {
                     sharedViewModel.setConfidentialMode(mode)
                 } else {
                     com.difft.android.base.widget.ToastUtil.show(getString(R.string.operation_failed))
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.e(e) { "$TAG syncConfidentialMode failed" }
                 com.difft.android.base.widget.ToastUtil.show(getString(R.string.operation_failed))

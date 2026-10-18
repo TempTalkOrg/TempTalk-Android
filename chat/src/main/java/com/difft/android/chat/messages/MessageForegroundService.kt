@@ -7,6 +7,9 @@ import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
+import com.difft.android.base.monitor.FgsStartFailure
+import com.difft.android.base.monitor.ForegroundServiceFailureRecorder
+import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.log.lumberjack.L
@@ -48,7 +51,14 @@ class MessageForegroundService : Service() {
         fun webSocketManager(): WebSocketManager
 
         fun messageServiceManager(): MessageServiceManager
+
+        fun foregroundServiceFailureRecorder(): ForegroundServiceFailureRecorder
+
+        fun keepAliveHealthCounters(): KeepAliveHealthCounters
     }
+
+    // #1328 health counter: one start-foreground refusal per service instance.
+    private var refusalRecorded = false
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineName("MessageForegroundService") + dbKeyFailSoftExceptionHandler)
 
@@ -61,6 +71,7 @@ class MessageForegroundService : Service() {
         L.i { "[MessageForegroundService] onCreate()" }
         postForegroundNotification()
         isRunning = true
+        if (!refusalRecorded) runCatching { healthCounters().onServiceStarted() }
 
         // Bare call (NOT serviceScope.launch): collector anchors to WCDBUpdateService's process scope and must outlive this Service. Idempotent.
         WCDBUpdateService.updatingRooms()
@@ -109,14 +120,26 @@ class MessageForegroundService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        runCatching { healthCounters().onServiceStopped() }
         serviceScope.cancel()
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
         L.i { "[MessageForegroundService] onDestroy()" }
     }
 
+    private fun healthCounters(): KeepAliveHealthCounters =
+        EntryPointAccessors.fromApplication(applicationContext, ServiceEntryPoint::class.java).keepAliveHealthCounters()
+
     private fun postForegroundNotification() {
-        ForegroundServiceStarter.startForegroundSafely(this, FOREGROUND_ID, createNotification())
+        val started = ForegroundServiceStarter.startForegroundSafely(this, FOREGROUND_ID, createNotification())
+        // onCreate and onStartCommand both land here; count a refusal once.
+        if (!started && !refusalRecorded) {
+            refusalRecorded = true
+            runCatching {
+                EntryPointAccessors.fromApplication(applicationContext, ServiceEntryPoint::class.java)
+                    .foregroundServiceFailureRecorder().record(FgsStartFailure.STARTFG_REFUSED)
+            }
+        }
     }
 
     private fun createNotification(): Notification {

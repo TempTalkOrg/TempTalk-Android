@@ -15,6 +15,10 @@ import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.ConversationSettingUpdate
 import com.difft.android.chat.setting.SAVE_TO_PHOTOS_SET_DEFAULT
 import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.chat.setting.sync.ConfidentialModeSyncCoordinator
+import com.difft.android.chat.setting.sync.ConversationSettingsApplier
+import com.difft.android.chat.setting.sync.ServerConfigSnapshot
+import com.difft.android.chat.setting.sync.SnapshotSource
 import com.difft.android.chat.translate.backend.TranslateBackend
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
@@ -36,6 +40,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,6 +57,8 @@ class ChatSettingViewModel @AssistedInject constructor(
     @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
     private val dbRoomStore: DBRoomStore,
+    private val settingsApplier: ConversationSettingsApplier,
+    private val confidentialSync: ConfidentialModeSyncCoordinator,
     translateBackend: TranslateBackend,
 ) : ViewModel() {
 
@@ -187,16 +194,6 @@ class ChatSettingViewModel @AssistedInject constructor(
         confidentialMode = confidentialMode ?: this.confidentialMode
     )
 
-    /**
-     * Normalises a server-provided expiry: the self conversation has none, a negative value means
-     * "use the default archive time". Mirrors `ConversationSettingsManager`.
-     */
-    private fun normalizeMessageExpiry(conversationId: String, messageExpiry: Long): Long = when {
-        conversationId == globalServices.myId -> 0L
-        messageExpiry >= 0 -> messageExpiry
-        else -> messageArchiveManager.getDefaultMessageArchiveTime()
-    }
-
     fun updateSelectedOption(activity: Activity, time: Long) {
         ComposeDialogManager.showWait(activity, "")
         viewModelScope.launch {
@@ -230,7 +227,6 @@ class ChatSettingViewModel @AssistedInject constructor(
         remark: String? = null,
         muteStatus: Int? = null,
         blockStatus: Int? = null,
-        confidentialMode: Int? = null,
         needFinishActivity: Boolean = false,
         successTips: String? = null
     ): Job {
@@ -243,54 +239,45 @@ class ChatSettingViewModel @AssistedInject constructor(
                                 conversation = conversation,
                                 remark = remark,
                                 muteStatus = muteStatus,
-                                blockStatus = blockStatus,
-                                confidentialMode = confidentialMode
+                                blockStatus = blockStatus
                             )
                         )
                 }
                 if (result.status == 0) {
                     val echoed = result.data
-                    // Merge against the value the flow holds right now and emit before persisting,
-                    // so a config update landing during the DB write is not overwritten by the
-                    // stale snapshot this request started from. The write itself only covers the
-                    // requested columns, so a concurrent change to any other column is untouched.
-                    val mergedConfig = _conversationSet.updateAndGet { latest ->
-                        when {
-                            // setConversationConfigs never changes the expiry fields, so keep the
-                            // local ones; saveToPhotos is local-only and never echoed.
-                            echoed != null -> echoed.copy(
-                                messageExpiry = latest?.messageExpiry
-                                    ?: normalizeMessageExpiry(echoed.conversation, echoed.messageExpiry),
-                                messageClearAnchor = latest?.messageClearAnchor ?: echoed.messageClearAnchor,
-                                saveToPhotos = latest?.saveToPhotos,
-                                translateSetting = latest?.translateSetting ?: 0
-                            )
-                            // Accepted with nothing echoed back: apply the values this request
-                            // asked for, exactly as an update event would. A re-fetch instead would
-                            // discard them, report nothing when the GET fails, and could land after
-                            // a newer write.
-                            latest != null -> latest.applying(remark, muteStatus, blockStatus, confidentialMode)
-                            else -> null
+                    if (echoed != null) {
+                        // The echo is a full server snapshot: the applier version-gates it, keeps a
+                        // pending local confidential toggle untouched and writes the row. The row is
+                        // created first when the contact was never chatted with, exactly as opening
+                        // the chat would, so there is always one row of truth to reflect.
+                        val applied = withContext(Dispatchers.IO) {
+                            dbRoomStore.createRoomIfNotExist(this@ChatSettingViewModel.conversation)
+                            settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromEcho(echoed), SnapshotSource.Echo)
                         }
-                    }
-                    if (mergedConfig == null) {
-                        // No echo and no local config to merge into: pull the whole thing, and
-                        // await it so this job (and the caller's guard) stays alive until the
-                        // config is loaded.
-                        refreshConversationConfigs().join()
-                        if (_conversationSet.value == null) {
-                            ToastUtil.show(activity.getString(R.string.operation_failed))
-                        }
+                        reflectRow(applied, fallback = null)
                     } else {
-                        // Only what was requested, in both branches: the untouched columns keep
-                        // their stored values instead of being rewritten from an in-memory config.
-                        withContext(Dispatchers.IO) {
-                            updateCachedSettings(
-                                conversationId = conversation,
-                                muteStatus = muteStatus,
-                                blockStatus = blockStatus,
-                                confidentialMode = confidentialMode
-                            )
+                        // Accepted with nothing echoed back: apply the values this request asked
+                        // for, exactly as an update event would. A re-fetch instead would discard
+                        // them, report nothing when the GET fails, and could land after a newer write.
+                        val mergedConfig = _conversationSet.updateAndGet { latest ->
+                            latest?.applying(remark, muteStatus, blockStatus)
+                        }
+                        if (mergedConfig == null) {
+                            // No local config to merge into: pull the whole thing, and await it so
+                            // this job (and the caller's guard) stays alive until the config is loaded.
+                            refreshConversationConfigs().join()
+                            if (_conversationSet.value == null) {
+                                ToastUtil.show(activity.getString(R.string.operation_failed))
+                            }
+                        } else {
+                            // Only what was requested: the untouched columns keep their stored values.
+                            withContext(Dispatchers.IO) {
+                                updateCachedSettings(
+                                    conversationId = conversation,
+                                    muteStatus = muteStatus,
+                                    blockStatus = blockStatus
+                                )
+                            }
                         }
                     }
                     if (!TextUtils.isEmpty(successTips)) {
@@ -345,23 +332,18 @@ class ChatSettingViewModel @AssistedInject constructor(
                     response.data?.let { conversationSets ->
                         val conversationSet = conversationSets.conversations.find { body -> body.conversation == conversationId }
                         conversationSet?.let { set ->
-                            val finalMessageExpiry = normalizeMessageExpiry(set.conversation, set.messageExpiry)
-                            // Preserve local-only values (never synced to server). Step 1 loaded
-                            // them from the DB before this network call, so the snapshot is current.
-                            val localSaveToPhotos = _conversationSet.value?.saveToPhotos
-                            val localTranslateSetting = _conversationSet.value?.translateSetting ?: 0
-                            val finalSet = set.copy(
-                                messageExpiry = finalMessageExpiry,
-                                saveToPhotos = localSaveToPhotos,
-                                translateSetting = localTranslateSetting
-                            )
-                            // Update database cache (saveToPhotos is not included, uses separate updateSaveToPhotos)
-                            withContext(Dispatchers.IO) {
-                                updateCachedConfig(conversationId, finalSet)
+                            // The applier version-gates the pull and leaves a pending local
+                            // confidential toggle alone; merge what it wrote. The row is created
+                            // first (as opening the chat would) so the pull always has one to land in.
+                            val applied = withContext(Dispatchers.IO) {
+                                dbRoomStore.createRoomIfNotExist(conversation)
+                                settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromPull(set), SnapshotSource.Pull)
                             }
-                            L.i { "[ChatSettings] server config ${finalSet.toLogString()} rawExpiry=${set.messageExpiry}" }
-                            // 再次更新 UI
-                            updateConversationSetResponseBody(finalSet)
+                            L.i { "[ChatSettings] server config ${set.toLogString()} rawExpiry=${set.messageExpiry}" }
+                            reflectRow(
+                                applied,
+                                fallback = set.copy(messageExpiry = normalizeMessageExpiry(set.conversation, set.messageExpiry))
+                            )
                         }
                     }
                 } else {
@@ -405,44 +387,70 @@ class ChatSettingViewModel @AssistedInject constructor(
     }
 
     /**
-     * Update conversation config cache in database
-     * Note: saveToPhotos is local-only and uses separate updateSaveToPhotos method
+     * Brings [conversationSet] in line with the row after a write to it. A loaded flow merges only
+     * the fields that changed (an atomic merge cannot be overtaken by an update landing meanwhile).
+     * A flow that never loaded is seeded from the row itself, never from a delta or a snapshot: the
+     * row may hold a pending local confidential toggle the snapshot does not. [fallback] is used
+     * only when the row cannot be read.
      */
-    private fun updateCachedConfig(conversationId: String, config: ConversationSetResponseBody) =
-        updateCachedSettings(
-            conversationId = conversationId,
-            muteStatus = config.muteStatus,
-            blockStatus = config.blockStatus,
-            confidentialMode = config.confidentialMode,
-            messageExpiry = config.messageExpiry,
-            messageClearAnchor = config.messageClearAnchor
-        )
+    private suspend fun reflectRow(applied: ConversationSettingUpdate?, fallback: ConversationSetResponseBody?) {
+        if (_conversationSet.value != null) {
+            applied?.let { handleConversationSettingUpdate(it) }
+            return
+        }
+        val fromRow = loadCachedConfig(conversation.id)
+        when {
+            fromRow != null -> _conversationSet.update { current -> current ?: fromRow }
+            applied != null -> handleConversationSettingUpdate(applied)
+            fallback != null -> _conversationSet.update { current -> current ?: fallback }
+        }
+    }
+
+    /**
+     * Normalises a server-provided expiry: the self conversation has none, a negative value means
+     * "use the default archive time". Mirrors `ConversationSettingsApplier`.
+     */
+    private fun normalizeMessageExpiry(conversationId: String, messageExpiry: Long): Long = when {
+        conversationId == globalServices.myId -> 0L
+        messageExpiry >= 0 -> messageExpiry
+        else -> messageArchiveManager.getDefaultMessageArchiveTime()
+    }
+
+    /**
+     * Local-first confidential toggle: the row and this flow change at once, and a sync job
+     * carries the value to the server. See [ConfidentialModeSyncCoordinator].
+     */
+    fun setConfidentialMode(target: Int) {
+        viewModelScope.launch {
+            val written = confidentialSync.setConfidentialMode(conversation, target)
+            if (written) {
+                reflectRow(ConversationSettingUpdate(conversationId = conversation.id, confidentialMode = target), fallback = null)
+            } else {
+                L.w { "[ChatSettings] confidential toggle local write failed conversationId=${conversation.id}" }
+            }
+        }
+    }
 
     /**
      * Update conversation config cache in database; a null field leaves its column alone.
-     * Note: saveToPhotos is local-only and uses separate updateSaveToPhotos method
+     * Only the fields `setConversationConfigs` can request; confidentialMode is owned by the sync job.
      */
     private fun updateCachedSettings(
         conversationId: String,
         muteStatus: Int? = null,
-        blockStatus: Int? = null,
-        confidentialMode: Int? = null,
-        messageExpiry: Long? = null,
-        messageClearAnchor: Long? = null
+        blockStatus: Int? = null
     ) {
         // The store skips null columns and writes nothing when all are null; mirror that here so
         // the log never claims a write that did not happen.
-        if (listOf(muteStatus, blockStatus, confidentialMode, messageExpiry, messageClearAnchor).all { it == null }) return
+        if (muteStatus == null && blockStatus == null) return
         try {
+            dbRoomStore.createRoomIfNotExist(conversation)
             dbRoomStore.updateConversationSettings(
                 roomId = conversationId,
                 muteStatus = muteStatus,
-                blockStatus = blockStatus,
-                confidentialMode = confidentialMode,
-                messageExpiry = messageExpiry,
-                messageClearAnchor = messageClearAnchor
+                blockStatus = blockStatus
             )
-            L.i { "[ChatSettings] cached settings updated conversationId=$conversationId mute=$muteStatus block=$blockStatus confidential=$confidentialMode expiry=$messageExpiry anchor=$messageClearAnchor" }
+            L.i { "[ChatSettings] cached settings updated conversationId=$conversationId mute=$muteStatus block=$blockStatus" }
         } catch (e: Exception) {
             L.e { "[ChatSettings] updateCachedSettings failed conversationId=$conversationId: ${e.stackTraceToString()}" }
         }

@@ -119,6 +119,11 @@ class ScanCameraController(
         analyzer?.rearm()
     }
 
+    /** Resumes scanning right after the screen declined [text], passing over that code from now on. */
+    fun skip(text: String) {
+        analyzer?.skip(text)
+    }
+
     fun shutdown() {
         // Order matters: unbind the camera FIRST (stops the analyzer dispatching new frames to the
         // executor), THEN shut the executor down — prevents a RejectedExecutionException from an

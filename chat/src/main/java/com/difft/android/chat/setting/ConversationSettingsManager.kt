@@ -3,14 +3,16 @@ package com.difft.android.chat.setting
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.appScope
-import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
-import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.chat.setting.sync.ConversationSettingsApplier
+import com.difft.android.chat.setting.sync.ServerConfigSnapshot
+import com.difft.android.chat.setting.sync.SnapshotSource
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.ConversationSetResponseBody
+import dagger.Lazy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -57,8 +59,9 @@ data class ConversationSettingUpdate(
 class ConversationSettingsManager @Inject constructor(
     @param:ChativeHttpClientModule.Chat
     private val httpClient: ChativeHttpClient,
-    private val messageArchiveManager: MessageArchiveManager,
-    private val dbRoomStore: DBRoomStore
+    private val dbRoomStore: DBRoomStore,
+    // Lazy: the applier emits through this manager, so the two reference each other.
+    private val applier: Lazy<ConversationSettingsApplier>
 ) : CoroutineScope by appScope {
 
     private val _conversationSettingUpdate = MutableSharedFlow<ConversationSettingUpdate>(extraBufferCapacity = 1)
@@ -122,6 +125,10 @@ class ConversationSettingsManager @Inject constructor(
             messageExpiry = messageExpiry,
             messageClearAnchor = messageClearAnchor
         )
+        emitConversationSettingUpdate(update)
+    }
+
+    fun emitConversationSettingUpdate(update: ConversationSettingUpdate) {
         L.i { "[ConversationSettingsManager] emitConversationSettingUpdate: $update" }
         _conversationSettingUpdate.tryEmit(update)
     }
@@ -253,77 +260,26 @@ class ConversationSettingsManager @Inject constructor(
     }
 
     /**
-     * 更新房间设置
+     * Applies each pulled config through [ConversationSettingsApplier], which owns the version gate
+     * and the local-first gating of the confidential field.
      */
-    private fun updateRoomSettings(
+    private suspend fun updateRoomSettings(
         roomModels: List<RoomModel>,
         conversationSettings: List<ConversationSetResponseBody>
     ) {
-        val defaultMessageExpiry = messageArchiveManager.getDefaultMessageArchiveTime()
-
+        val knownRooms = roomModels.mapTo(HashSet()) { it.roomId }
         conversationSettings.forEach { setting ->
             try {
-                // 处理 messageExpiry
-                val finalMessageExpiry = when {
-                    setting.conversation == globalServices.myId -> 0L
-                    setting.messageExpiry >= 0 -> setting.messageExpiry
-                    else -> defaultMessageExpiry
-                }
-
-                // 查找对应的房间
-                val currentRoom = roomModels.find { it.roomId == setting.conversation }
-                if (currentRoom == null) {
+                if (setting.conversation !in knownRooms) {
                     L.w { "[ConversationSettingsManager] Room not found for conversation: ${setting.conversation}" }
                     return@forEach
                 }
-
-                // 检查是否需要更新
-                if (needsUpdate(currentRoom, setting, finalMessageExpiry)) {
-                    updateRoomSetting(currentRoom, setting, finalMessageExpiry)
-                }
-
+                // Silent like the previous bulk write: open screens read the row, a burst of
+                // events would overflow the update flow.
+                applier.get().applyServerSnapshot(ServerConfigSnapshot.fromPull(setting), SnapshotSource.Pull, announce = false)
             } catch (e: Exception) {
                 L.e { "[ConversationSettingsManager] Error processing setting for conversation ${setting.conversation}: ${e.message}" }
             }
-        }
-    }
-
-    /**
-     * 检查房间设置是否需要更新
-     */
-    private fun needsUpdate(
-        room: RoomModel,
-        setting: ConversationSetResponseBody,
-        finalMessageExpiry: Long
-    ): Boolean {
-        return room.muteStatus != setting.muteStatus ||
-                room.blockStatus != setting.blockStatus ||
-                room.messageExpiry != finalMessageExpiry ||
-                room.messageClearAnchor != setting.messageClearAnchor ||
-                room.confidentialMode != setting.confidentialMode
-    }
-
-    /**
-     * 更新单个房间的设置
-     */
-    private fun updateRoomSetting(
-        room: RoomModel,
-        setting: ConversationSetResponseBody,
-        finalMessageExpiry: Long
-    ) {
-        try {
-            L.i { "[ConversationSettingsManager] Updating room ${room.roomId}: muteStatus=${setting.muteStatus}, blockStatus=${setting.blockStatus}, confidentialMode=${setting.confidentialMode}, messageExpiry=$finalMessageExpiry, messageClearAnchor=${setting.messageClearAnchor}" }
-
-            dbRoomStore.updateConversationSettings(
-                roomId = room.roomId,
-                muteStatus = setting.muteStatus,
-                blockStatus = setting.blockStatus,
-                confidentialMode = setting.confidentialMode,
-                messageExpiry = finalMessageExpiry,
-                messageClearAnchor = setting.messageClearAnchor
-            )
-        } catch (e: Exception) {
-            L.e { "[ConversationSettingsManager] Failed to update room ${room.roomId}: ${e.message}" }
         }
     }
 } 

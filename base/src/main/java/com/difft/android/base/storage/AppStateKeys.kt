@@ -105,6 +105,32 @@ object AppStateKeys {
     // startup freeze probe so each real process exit is reported exactly once.
     val LAST_SEEN_EXIT_TS = longPreferencesKey("last_seen_exit_ts")
 
+    // #1328 background-connection health telemetry. Counters are encoded `NAME:count,NAME:count`
+    // (see KeepAliveHealthCodec); enums and counts only, no identifiers.
+    /** Pending exit-reason counts (`<REASON>_fg|bg`) accumulated since the last report. */
+    val BG_HEALTH_EXIT_COUNTS = stringPreferencesKey("bg_health_exit_counts")
+
+    /** Pending foreground-service start failure counts, keyed by failure type. */
+    val BG_HEALTH_FGS_FAILS = stringPreferencesKey("bg_health_fgs_fails")
+
+    /** Epoch ms of the last report; doubles as the start of the current reporting window. */
+    val BG_HEALTH_LAST_REPORT_TS = longPreferencesKey("bg_health_last_report_ts")
+
+    /** Pending event counts (FCM receipts, latency buckets, service uptime), see HealthEventKeys. */
+    val BG_HEALTH_EVENT_COUNTS = stringPreferencesKey("bg_health_event_counts")
+
+    /** Stable random 0..99 per install; selects the keep-alive-off control sample. */
+    val BG_HEALTH_SAMPLE_SLOT = intPreferencesKey("bg_health_sample_slot")
+
+    /** Up to 7 daily count slots feeding the local push-health verdict, see KeepAliveHealthWindow. */
+    val BG_HEALTH_DAILY = stringPreferencesKey("bg_health_daily")
+
+    /** Epoch ms when FCM token fetch/bind first failed in the current failure run; absent when healthy. Duration use only. */
+    val BG_FCM_FAIL_SINCE = longPreferencesKey("bg_fcm_fail_since")
+
+    /** Last FCM token outcome: `ok`, `fail` or `nogms`; absent until the first attempt. */
+    val BG_FCM_STATE = stringPreferencesKey("bg_fcm_state")
+
     // ---------- Section F: Trusted-time (ServerTimeProvider) ----------
     //
     // Cold-start fallback for the process-level trusted clock. Non-sensitive, non-PII — plain
@@ -179,6 +205,15 @@ object AppStateKeys {
     // Cleared with the rest of app_state on active logout; the downloaded models themselves are
     // device-level resources and are kept.
     val TRANSLATE_MODEL_DOWNLOAD_STATE = stringPreferencesKey("translate_model_download_state")
+
+    // ---------- Section K: Notification readiness (#1350) ----------
+
+    /** Notification-channel maintenance version already applied; see NotificationChannelManager. */
+    val NOTIFICATION_CHANNEL_VERSION = intPreferencesKey("notification_channel_version")
+
+    /** App version name for which the critical-alert bypass-DND reconcile was last attempted. */
+    val CRITICAL_ALERT_BYPASS_ATTEMPT_VERSION = stringPreferencesKey("critical_alert_bypass_attempt_version")
+
 }
 
 /**
@@ -264,4 +299,8 @@ object AppStateDefaults {
 
     // Section J defaults — nullable-string sentinel; "" means "no failure recorded for any model".
     const val TRANSLATE_MODEL_DOWNLOAD_STATE = ""
+
+    // Section K defaults — 0 = no channel maintenance applied yet; "" = no bypass reconcile attempted.
+    const val NOTIFICATION_CHANNEL_VERSION = 0
+    const val CRITICAL_ALERT_BYPASS_ATTEMPT_VERSION = ""
 }

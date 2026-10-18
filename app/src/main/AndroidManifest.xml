@@ -253,13 +253,6 @@
             android:exported="false" />
 
         <activity
-            android:name=".chat.recent.InviteParticipantsActivity"
-            android:screenOrientation="locked"
-            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
-            android:exported="false"
-            android:launchMode="singleTask" />
-
-        <activity
             android:name=".setting.SetPasscodeActivity"
             android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"

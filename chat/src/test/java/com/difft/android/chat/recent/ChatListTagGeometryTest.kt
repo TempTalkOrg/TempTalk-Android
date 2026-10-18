@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * T4-12 … T4-18 — the width budget the tag run may spend, and the row-width fallback chain.
+ * T4-12, T4-13, T4-15 … T4-18 — the width budget the tag run may spend, and the row-width fallback chain.
  *
  * Pure JVM. Every expected number is written out as an explicit dp sum so a change to any reserve
  * constant fails here with the arithmetic visible, rather than silently shifting how many tags
@@ -23,16 +23,16 @@ class ChatListTagGeometryTest {
     private fun width(
         rowWidthPx: Int = 1080,
         hasUnreadBadge: Boolean = false,
-        hasCallBar: Boolean = false,
         isLargerText: Boolean = false,
         hasSendingIcon: Boolean = false,
+        hasPinnedIcon: Boolean = false,
     ): Float = computeTagAvailableWidthPx(
         rowWidthPx = rowWidthPx,
         density = density,
         hasUnreadBadge = hasUnreadBadge,
-        hasCallBar = hasCallBar,
         isLargerText = isLargerText,
         hasSendingIcon = hasSendingIcon,
+        hasPinnedIcon = hasPinnedIcon,
     )
 
     // ── T4-12 ────────────────────────────────────────────────────────────────
@@ -50,11 +50,9 @@ class ChatListTagGeometryTest {
         assertEquals(width() - density * 24, width(hasUnreadBadge = true), 0f)
     }
 
-    // ── T4-14 ────────────────────────────────────────────────────────────────
-
     @Test
-    fun `T4-14 an ongoing-call bar costs 88dp`() {
-        assertEquals(width() - density * 88, width(hasCallBar = true), 0f)
+    fun `a pinned icon costs 18dp`() {
+        assertEquals(width() - density * 18, width(hasPinnedIcon = true), 0f)
     }
 
     // ── T4-15 ────────────────────────────────────────────────────────────────
@@ -91,11 +89,11 @@ class ChatListTagGeometryTest {
         val worst = width(
             rowWidthPx = 720,
             hasUnreadBadge = true,
-            hasCallBar = true,
             isLargerText = true,
+            hasSendingIcon = true,
         )
-        // 720 - 3 * (116 + 84 + 88 + 30) = -234
-        assertEquals(720f - density * (fixedReserveDp + 84 + 88 + 30), worst, 0f)
+        // 720 - 3 * (116 + 84 + 30 + 20) = -30
+        assertEquals(720f - density * (fixedReserveDp + 84 + 30 + 20), worst, 0f)
         assertTrue("expected a negative budget, was $worst", worst < 0f)
     }
 

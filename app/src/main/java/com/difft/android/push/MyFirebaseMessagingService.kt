@@ -2,10 +2,13 @@ package com.difft.android.push
 
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.NotificationRepostGuard
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
+import com.difft.android.call.manager.CallDataManager
 import com.difft.android.chat.PendingMessageHelper
 import com.difft.android.chat.data.NOTIFY_TYPE_CALL_HANGUP
 import com.difft.android.chat.data.PushCustomContent
@@ -44,6 +47,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     " sentTime=${remoteMessage.sentTime} hasNotification=${remoteMessage.notification != null}" +
                     " dataKeys=${remoteMessage.data.keys.joinToString(",")}"
             }
+            runCatching {
+                entryPoint.keepAliveHealthCounters.onFcmReceived(
+                    deprioritized = remoteMessage.originalPriority == RemoteMessage.PRIORITY_HIGH &&
+                        remoteMessage.priority != RemoteMessage.PRIORITY_HIGH
+                )
+            }
             val customContent = remoteMessage.data["custom_content"]
             if (!TextUtils.isEmpty(customContent)) {
                 val pushCustomContent = entryPoint.gson.fromJson(customContent, PushCustomContent::class.java)
@@ -67,7 +76,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             // 主动拉取和处理消息
-            entryPoint.pendingMessageHelper.schedulePendingMessageWork()
+            entryPoint.pendingMessageHelper.schedulePendingMessageWork(PendingMessageHelper.PullTrigger.FCM)
         } catch (e: Exception) {
             L.i { "[fcm] onMessageReceived error - $e" }
         }
@@ -120,6 +129,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     private fun handleNormalMessage(entryPoint: EntryPoint, pushCustomContent: PushCustomContent) {
         pushCustomContent.msg?.let {
             appScope.launch(Dispatchers.IO) {
+                // #1347: notifying invites this push may duplicate, snapshotted before processing so
+                // a notification this very push creates is never re-posted over its full-screen intent.
+                val showingInviteIds = snapshotShowingInviteNotificationIds(entryPoint, pushCustomContent)
                 try {
                     L.i { "[fcm] Start processing message" }
 
@@ -168,6 +180,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 } catch (e: Exception) {
                     L.w { "[fcm] Processing message envelope error: ${e.stackTraceToString()}" }
                     handleMessageProcessingError(entryPoint, pushCustomContent)
+                } finally {
+                    showingInviteIds.forEach { entryPoint.notificationRepostGuard.repostIfActive(it) }
                 }
             }
         } ?: run {
@@ -178,7 +192,27 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    /** Notification ids of the notifying call invites this push may duplicate that are still showing. */
+    private fun snapshotShowingInviteNotificationIds(entryPoint: EntryPoint, pushCustomContent: PushCustomContent): List<Int> =
+        try {
+            matchNotifyingCallRoomIds(
+                entryPoint.callDataManager.getCallListData().values,
+                pushCustomContent.gid,
+                pushCustomContent.uid,
+            ).map { it.hashCode() }
+                .filter { entryPoint.messageNotificationUtil.isNotificationShowing(it) }
+        } catch (e: Exception) {
+            L.w { "[fcm] invite snapshot failed error=${e.javaClass.simpleName}" }
+            emptyList()
+        }
+
     private suspend fun handleMessageProcessingError(entryPoint: EntryPoint, pushCustomContent: PushCustomContent) {
+        // Server notify pushes carry no envelope; the generic fallback would be misleading (#1347).
+        if (isServerNotifyPush(pushCustomContent.uid, pushCustomContent.notifyType)) {
+            L.i { "[fcm] skip fallback notification reason=serverPush notifyType=${pushCustomContent.notifyType}" }
+            return
+        }
+
         // 检查某些通知类型不显示通知
         if (pushCustomContent.notifyType == NOTIFY_TYPE_CALL_HANGUP) {
             L.i { "[fcm] notifyType: ${pushCustomContent.notifyType}, skip notification" }
@@ -240,5 +274,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val pushUtil: PushUtil
         val userManager: UserManager
         val gson: Gson
+        val callDataManager: CallDataManager
+        val notificationRepostGuard: NotificationRepostGuard
+        val keepAliveHealthCounters: KeepAliveHealthCounters
     }
 }

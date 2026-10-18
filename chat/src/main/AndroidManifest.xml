@@ -250,6 +250,10 @@
     </application>
 
     <queries>
+        <!-- Xiaomi settings apps the auto-start and power-policy helpers probe;
+             API 30+ package visibility hides them from queryIntentActivities otherwise. -->
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.miui.powerkeeper" />
         <intent>
             <action android:name="android.intent.action.INSERT" />
             <data android:mimeType="vnd.android.cursor.item/event" />

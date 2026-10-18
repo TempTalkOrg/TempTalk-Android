@@ -24,6 +24,8 @@ import com.difft.android.chat.jobs.PushMarkAsUnreadSendJob
 import com.difft.android.chat.jobs.PushReactionSendJob
 import com.difft.android.chat.jobs.PushReadReceiptSendJob
 import com.difft.android.chat.jobs.PushTextSendJob
+import com.difft.android.chat.jobs.SettingSyncJob
+import com.difft.android.chat.setting.sync.SyncField
 import difft.android.messageserialization.model.ForwardNoticeData
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 
@@ -60,6 +62,22 @@ interface PushReactionSendJobFactory {
         @Assisted parameters: Job.Parameters?,
         @Assisted textMessage: TextMessage,
     ): PushReactionSendJob
+}
+
+@AssistedFactory
+interface SettingSyncJobFactory {
+    /**
+     * parameters: Job.Parameters? only used in JobManager, when creating a job from the SettingSyncJob's Factory
+     */
+    fun create(
+        @Assisted parameters: Job.Parameters?,
+        @Assisted("roomId") roomId: String,
+        @Assisted field: SyncField,
+        @Assisted("target") target: Int,
+        @Assisted("ts") ts: Long,
+        @Assisted phase: SettingSyncJob.Phase,
+        @Assisted("acceptedVersion") acceptedVersion: Int,
+    ): SettingSyncJob
 }
 
 @AssistedFactory

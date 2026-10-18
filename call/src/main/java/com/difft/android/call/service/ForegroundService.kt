@@ -22,24 +22,25 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
-import com.difft.android.base.call.CallActionType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.data.CallStatus
+import com.difft.android.call.receiver.CallNotificationActionReceiver
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.difft.android.call.util.FullScreenPermissionHelper
+import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.SystemProps
 import com.difft.android.call.util.PermissionUtil
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -52,8 +53,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 
 /**
@@ -82,8 +81,7 @@ import java.util.concurrent.Executors
  * way to read it back, so the vendor is all there is to key on.
  */
 private val notificationTemplateDropsCallStyleActions: Boolean by lazy {
-    // Redmi and POCO devices report Xiaomi here, so the one vendor covers the family — matching
-    // what FullScreenPermissionHelper already keys its MIUI handling off.
+    // Redmi and POCO devices report Xiaomi as the manufacturer, so this one check covers the family.
     val drops = Build.MANUFACTURER.lowercase(Locale.ROOT) == MANUFACTURER_XIAOMI
     // The ROM version properties are logged but deliberately not part of the decision. The vendor
     // is the blunt signal: a Xiaomi device running a non-MIUI ROM renders CallStyle correctly and
@@ -93,8 +91,8 @@ private val notificationTemplateDropsCallStyleActions: Boolean by lazy {
     L.i {
         "[Call] ForegroundService notification template check manufacturer=${Build.MANUFACTURER}" +
             " brand=${Build.BRAND} model=${Build.MODEL}" +
-            " miuiVersion=${FullScreenPermissionHelper.getSystemProperty("ro.miui.ui.version.name")}" +
-            " hyperOsVersion=${FullScreenPermissionHelper.getSystemProperty("ro.mi.os.version.name")}" +
+            " miuiVersion=${SystemProps.get("ro.miui.ui.version.name")}" +
+            " hyperOsVersion=${SystemProps.get("ro.mi.os.version.name")}" +
             " dropsCallStyleActions=$drops"
     }
     drops
@@ -108,6 +106,7 @@ open class ForegroundService : Service() {
     @InstallIn(SingletonComponent::class)
     interface ServiceEntryPoint {
         fun onGoingCallStateManager(): OnGoingCallStateManager
+        fun ongoingCallServiceController(): OngoingCallServiceController
     }
 
     private val entryPoint by lazy {
@@ -132,9 +131,6 @@ open class ForegroundService : Service() {
         foregroundStarted.value = value
     }
 
-    @Volatile
-    private var isCallMsgListenerStarted = false
-
     /**
      * The notification currently posted. Re-posting paths that must not change what the user sees —
      * a foreground-service-type update after a permission grant — republish this instead of
@@ -143,9 +139,10 @@ open class ForegroundService : Service() {
     @Volatile
     private var currentNotification: Notification? = null
 
-    private val serviceExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /** The start id of the latest delivered start; a failed promotion stops only up to it. */
+    private var lastStartId = 0
 
 
     @RequiresApi(30)
@@ -170,11 +167,7 @@ open class ForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         L.i { "[Call] +++ ForegroundService onCreate +++" }
-        isServiceRunning = true
         createNotificationChannel()
-        serviceExecutor.execute {
-            addCallControlMessageListener()
-        }
         observeCallState()
     }
 
@@ -204,7 +197,7 @@ open class ForegroundService : Service() {
                 if (state == null) return@collect
                 val notification = buildOngoingCallNotification(state.status, state.connectedAt)
                 val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getServiceType() else 0
-                if (ForegroundServiceStarter.startForegroundSafely(this@ForegroundService, DEFAULT_NOTIFICATION_ID, notification, type)) {
+                if (promote(notification, type)) {
                     currentNotification = notification
                     L.i {
                         "[Call] ForegroundService notification updated status=${state.status}" +
@@ -213,11 +206,42 @@ open class ForegroundService : Service() {
                             " chronometer=${notificationTemplateDropsCallStyleActions && state.connectedAt > 0}"
                     }
                 } else {
-                    // Helper already called stopSelf(); collapse our local state to match.
+                    // The service has already been told to stop; collapse our local state to match.
                     setForegroundStarted(false)
                 }
             }
         }
+    }
+
+    /**
+     * Every promotion goes through here. A type the platform denies (a microphone or camera start
+     * without while-in-use eligibility throws [SecurityException], which the shared helper does not
+     * catch) is retried as DATA_SYNC alone. A start the platform refuses outright makes the helper
+     * return false, having stopped the service itself. On either failure the owning session is told so
+     * it can retry from the foreground; a denial stops the service up to [lastStartId], so a start
+     * already queued behind it survives. Returns whether the service is in the foreground.
+     */
+    private fun promote(notification: Notification, type: Int): Boolean {
+        val dataSync = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        val retryAsDataSync = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && type != dataSync
+        val promoted = promoteOrNull(notification, type)
+            ?: if (retryAsDataSync) promoteOrNull(notification, dataSync) else null
+        if (promoted == true) return true
+        val owner = ownerSessionId
+        isServiceRunning = false
+        if (owner != NO_OWNER) {
+            Handler(Looper.getMainLooper()).post { entryPoint.ongoingCallServiceController().onPromoteFailed(owner) }
+        }
+        if (promoted == null) stopSelfResult(lastStartId)
+        return false
+    }
+
+    /** One promotion as [type]: the helper's result, or null when the platform denies the type. */
+    private fun promoteOrNull(notification: Notification, type: Int): Boolean? = try {
+        ForegroundServiceStarter.startForegroundSafely(this, DEFAULT_NOTIFICATION_ID, notification, type)
+    } catch (e: SecurityException) {
+        L.w { "[Call] ForegroundService type denied session=$ownerSessionId type=$type: ${e.message}" }
+        null
     }
 
     /**
@@ -238,23 +262,19 @@ open class ForegroundService : Service() {
         )
     }
 
+    /** The notification's hang-up action: an explicit-component broadcast to the non-exported receiver. */
+    private fun hangUpPendingIntent(): PendingIntent = PendingIntent.getBroadcast(
+        this,
+        REQUEST_CODE_HANG_UP,
+        Intent(this, CallNotificationActionReceiver::class.java)
+            .setAction(CallNotificationActionReceiver.ACTION_HANG_UP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
     private fun buildOngoingCallNotification(status: CallStatus, connectedAt: Long): Notification {
 
         val pendingIntent = callActivityPendingIntent()
-        val hangUpIntent = Intent().apply {
-            action = LCallActivity.ACTION_IN_CALLING_CONTROL
-            setPackage(ApplicationHelper.instance.packageName)
-            putExtra(
-                LCallActivity.EXTRA_CONTROL_TYPE,
-                CallActionType.DECLINE.type
-            )
-        }
-        val hangUpPendingIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            hangUpIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val hangUpPendingIntent = hangUpPendingIntent()
 
         val builder = NotificationCompat.Builder(this, CHANNEL_CONFIG_NAME_ONGOING_CALL)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
@@ -302,10 +322,15 @@ open class ForegroundService : Service() {
         // screen: rebuilding the starting notification there would drop a connected call back to
         // "Connecting…" without CallStyle. The first start has nothing posted yet, which is also
         // what keeps that path free of injected state. The state collector takes over from here.
+        lastStartId = startId
+        val isTypeUpdate = intent?.action == ACTION_UPDATE_SERVICE_TYPE
+        // The update start has arrived, promoted or not: from here on a stop may bring the service down.
+        if (isTypeUpdate) pendingTypeUpdates = (pendingTypeUpdates - 1).coerceAtLeast(0)
         val notification = currentNotification ?: buildStartingNotification()
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getServiceType() else 0
-        if (ForegroundServiceStarter.startForegroundSafely(this, DEFAULT_NOTIFICATION_ID, notification, type)) {
+        if (promote(notification, type)) {
             currentNotification = notification
+            isServiceRunning = true
             if (!isForegroundStarted) {
                 L.i { "[Call] ForegroundService +++ start Foreground Service +++" }
                 setForegroundStarted(true)
@@ -315,33 +340,43 @@ open class ForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        if (intent != null && intent.action != null) {
-            // Stop is handled on the main thread so it is ordered against the notification
-            // collector, which also runs there.
-            if (intent.action == ACTION_STOP_SERVICE) {
-                L.i { "[Call] ForegroundService +++ Stopping Foreground Service +++" }
-                // Clear first so a state change in this window cannot re-promote the service
-                // after it has been told to stop.
-                setForegroundStarted(false)
-                // Nothing of this call may be republished by a later start of the same instance.
-                currentNotification = null
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            if (intent.action == ACTION_UPDATE_SERVICE_TYPE) {
-                // Also handled on the main thread so its read-and-post of the current
-                // notification is ordered against the notification collector, which runs there
-                // too — off-thread it could republish a notification the collector has already
-                // superseded.
-                L.i { "[Call] ForegroundService +++ Updating Service Type +++" }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    updateServiceType()
-                }
+        val owner = ownerSessionId
+        if (owner == NO_OWNER) {
+            stopWithoutOwner(startId)
+            return START_NOT_STICKY
+        }
+        val requested = intent?.getLongExtra(EXTRA_SESSION_ID, NO_OWNER) ?: NO_OWNER
+        if (requested != NO_OWNER && requested != owner) {
+            L.i { "[Call] ForegroundService late start session=$requested owner=$owner" }
+        }
+
+        if (isTypeUpdate) {
+            // Handled on the main thread so its read-and-post of the current notification is
+            // ordered against the notification collector, which runs there too — off-thread it
+            // could republish a notification the collector has already superseded.
+            L.i { "[Call] ForegroundService +++ Updating Service Type +++" }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                updateServiceType()
             }
         }
 
         return START_NOT_STICKY
+    }
+
+    /**
+     * No session owns the service: a start that reached it after its owner's stop, or a type update
+     * the stop had to wait for. The mandatory promotion has run; stop up to [startId] so that a start
+     * already queued behind this one (a new session's) survives and re-checks.
+     */
+    private fun stopWithoutOwner(startId: Int) {
+        L.i { "[Call] ForegroundService no owner, stopping startId=$startId" }
+        // Clear first so a state change in this window cannot re-promote the service.
+        setForegroundStarted(false)
+        // Nothing of the ended call may be republished by a later start of the same instance.
+        currentNotification = null
+        isServiceRunning = false
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelfResult(startId)
     }
 
 
@@ -350,8 +385,8 @@ open class ForegroundService : Service() {
         L.d { "[Call] ForegroundService onDestroy" }
         cancelNotification()
         serviceScope.cancel()
-        isCallMsgListenerStarted = false
         isServiceRunning = false
+        pendingTypeUpdates = 0
     }
 
     private fun cancelNotification() {
@@ -367,59 +402,26 @@ open class ForegroundService : Service() {
         return null // not used.
     }
 
+    /** A swiped-away task, the app's or the call page's, leaves the call running. */
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        L.i { "[Call] ForegroundService onTaskRemoved rootIntent:$rootIntent" }
-        if(rootIntent != null && rootIntent.action == Intent.ACTION_MAIN){
-            sendBroadcast(createAppTaskEndIntent())
-        }
+        L.i { "[Call] ForegroundService onTaskRemoved rootAction=${rootIntent?.action}" }
     }
 
-    private fun addCallControlMessageListener() {
-        if(!isCallMsgListenerStarted){
-            isCallMsgListenerStarted = true
-            serviceScope.launch {
-                onGoingCallStateManager.controlMessage.collect {
-                    handleControlMessage(it)
-                }
-            }
-        }
-    }
-
-    private fun createAppTaskEndIntent() = Intent().apply {
-        action = LCallActivity.ACTION_IN_CALLING_CONTROL
-        setPackage(ApplicationHelper.instance.packageName)
-        putExtra(LCallActivity.EXTRA_CONTROL_TYPE, CallActionType.DECLINE.type)
-    }
-
-
-    private fun sendCallControlBroadcast(context: Context, actionType: CallActionType, roomId: String) {
-        val intent = Intent(LCallActivity.ACTION_IN_CALLING_CONTROL).apply {
-            setPackage(ApplicationHelper.instance.packageName)
-            putExtra(LCallActivity.EXTRA_CONTROL_TYPE, actionType.type)
-            putExtra(LCallActivity.EXTRA_PARAM_ROOM_ID, roomId)
-        }
-        context.sendBroadcast(intent)
-    }
-
-
-    private fun handleControlMessage( controlMessage: OnGoingCallStateManager.ControlMessage?) {
-        if (controlMessage == null) return
-        L.i { "[Call] ForegroundService handleControlMessage ${controlMessage.actionType} roomId:${controlMessage.roomId}" }
-        when (controlMessage.actionType) {
-            CallActionType.CALLEND, CallActionType.HANGUP, CallActionType.REJECT -> {
-                sendCallControlBroadcast(this, controlMessage.actionType, controlMessage.roomId)
-            }
-            else -> { }
-        }
-    }
+    private fun serviceChannelName(): String =
+        NotificationChannelIds.nameRes(CHANNEL_CONFIG_NAME_ONGOING_CALL)?.let { getString(it) } ?: DEFAULT_CHANNEL_ID
 
     private fun createNotificationChannel() {
         val serviceChannel = NotificationChannel(
             CHANNEL_CONFIG_NAME_ONGOING_CALL,
-            DEFAULT_CHANNEL_ID,  // User-visible name
-            NotificationManager.IMPORTANCE_DEFAULT // or HIGH, LOW, MIN
-        )
+            serviceChannelName(),
+            // Same spec as NotificationChannelManager (the chat module owns it and cannot be reached from here).
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            setShowBadge(false)
+            setSound(null, null)
+            enableVibration(false)
+        }
         val manager = getSystemService<NotificationManager?>(NotificationManager::class.java)
         if (manager != null) {
             manager.createNotificationChannel(serviceChannel)
@@ -464,24 +466,33 @@ open class ForegroundService : Service() {
             // Re-post what is already on screen rather than rebuilding: a connected call keeps its
             // CallStyle notification and hang-up action across the permission-grant update.
             val notification = currentNotification ?: buildStartingNotification()
-            if (ForegroundServiceStarter.startForegroundSafely(
-                    this, DEFAULT_NOTIFICATION_ID, notification, newServiceType
-                )
-            ) {
+            if (promote(notification, newServiceType)) {
                 L.i { "[Call] ForegroundService service type updated successfully" }
             } else {
-                // Helper already called stopSelf(); collapse our local state to match.
+                // The service has already been told to stop; collapse our local state to match.
                 setForegroundStarted(false)
             }
         }
     }
 
     companion object {
-        var isServiceRunning = false
+        /** True from the first successful promotion until the service stops; written on main. */
+        @Volatile
+        internal var isServiceRunning = false
+
+        /** The call session the service runs for, or [NO_OWNER]; written on main by [OngoingCallServiceController]. */
+        @Volatile
+        internal var ownerSessionId: Long = NO_OWNER
+
+        /** Type-update starts issued and not yet delivered; main-confined. */
+        internal var pendingTypeUpdates = 0
+
+        internal const val NO_OWNER = -1L
+        internal const val EXTRA_SESSION_ID = "call_session_id"
         const val DEFAULT_NOTIFICATION_ID = 3456
         const val DEFAULT_CHANNEL_ID = "tt_livekit_foreground"
         const val CHANNEL_CONFIG_NAME_ONGOING_CALL = "ONGOING_CALL"
-        const val ACTION_STOP_SERVICE = "ACTION_STOP_SERVICE"
         const val ACTION_UPDATE_SERVICE_TYPE = "ACTION_UPDATE_SERVICE_TYPE"
+        private const val REQUEST_CODE_HANG_UP = 1
     }
 }

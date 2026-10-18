@@ -5,14 +5,23 @@ import com.difft.android.call.data.BarrageMessage
 import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.TextBubbleMessage
 import com.difft.android.call.network.NetworkQualityView
+import com.difft.android.call.session.CallSessionUiSource
+import com.difft.android.call.session.CallSessionUiState
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class CallUiController() {
+/**
+ * Call UI state. Owned by `LCallViewModel`; the UI writes its own fields here. The five
+ * session-written fields ([isShareScreening], [countDownDurationStr], [speakingEnabled],
+ * [reconnectCount], [networkQuality]) are the session's own `StateFlow` objects, so their values,
+ * write order and conflation are the session's, and they have no setter here.
+ */
+class CallUiController(session: CallSessionUiSource = CallSessionUiState()) {
 
     private val _showBottomCallEndViewEnable = MutableStateFlow(false)
     val showBottomCallEndViewEnable = _showBottomCallEndViewEnable.asStateFlow()
@@ -56,11 +65,11 @@ class CallUiController() {
     )
     val textBubbleMessage: SharedFlow<TextBubbleMessage> = _textBubbleMessage.asSharedFlow()
 
-    private val _isShareScreening = MutableStateFlow(false)
-    val isShareScreening = _isShareScreening.asStateFlow()
+    /** Bound to the session (same object). */
+    val isShareScreening: StateFlow<Boolean> = session.isShareScreening
 
-    private val _countDownDurationStr = MutableStateFlow("00:00")
-    val countDownDurationStr = _countDownDurationStr.asStateFlow()
+    /** Bound to the session (same object). */
+    val countDownDurationStr: StateFlow<String> = session.countDownDurationStr
 
     private val _isCriticalAlertEnable = MutableStateFlow(false)
     val isCriticalAlertEnable = _isCriticalAlertEnable.asStateFlow()
@@ -71,8 +80,8 @@ class CallUiController() {
     private val _showCriticalAlertConfirmViewEnabled = MutableStateFlow(false)
     val showCriticalAlertConfirmViewEnabled = _showCriticalAlertConfirmViewEnabled.asStateFlow()
 
-    private val _speakingEnabled = MutableStateFlow(true)
-    val speakingEnabled = _speakingEnabled.asStateFlow()
+    /** Bound to the session (same object). */
+    val speakingEnabled: StateFlow<Boolean> = session.speakingEnabled
 
     /**
      * A participant mute menu (grid tile or screen-share panel) is showing. It lives in its own
@@ -83,19 +92,14 @@ class CallUiController() {
     private val _participantMenuOpen = MutableStateFlow(false)
     val participantMenuOpen = _participantMenuOpen.asStateFlow()
 
-    private val _reconnectCount = MutableStateFlow(0)
-    val reconnectCount = _reconnectCount.asStateFlow()
+    /** Bound to the session (same object). */
+    val reconnectCount: StateFlow<Int> = session.reconnectCount
 
     /**
-     * Room-wide weak-network verdict. Both suppression rules are already applied by
-     * [com.difft.android.call.network.NetworkQualityTracker], so the UI must never re-implement
-     * them — and must never branch on [NetworkQualityView.suppressed], because the snapshot is
-     * already empty when that flag is true.
-     *
-     * Written only by NetworkQualityCoordinator, on the main dispatcher.
+     * Room-wide weak-network verdict, bound to the session (same object). See
+     * [CallSessionUiSource.networkQuality] for the suppression contract the UI relies on.
      */
-    private val _networkQuality = MutableStateFlow(NetworkQualityView.NONE)
-    val networkQuality = _networkQuality.asStateFlow()
+    val networkQuality: StateFlow<NetworkQualityView> = session.networkQuality
 
     /**
      * Updates the Picture-in-Picture (PiP) mode state for the current call.
@@ -188,20 +192,6 @@ class CallUiController() {
     }
 
     /**
-     * Updates the screen-sharing state in the call UI.
-     */
-    fun setShareScreening(enabled: Boolean) {
-        _isShareScreening.value = enabled
-    }
-
-    /**
-     * Sets the formatted string representing the remaining countdown duration for display in the UI.
-     */
-    fun setCountDownDurationStr(str: String) {
-        _countDownDurationStr.value = str
-    }
-
-    /**
      * Sets the critical alert enable state and updates the LiveData value.
      */
     fun setCriticalAlertEnable(enable: Boolean) {
@@ -212,27 +202,8 @@ class CallUiController() {
         _isRequestingPermission.value = status
     }
 
-    fun setSpeakingEnabled(enabled: Boolean) {
-        _speakingEnabled.value = enabled
-    }
-
     fun setParticipantMenuOpen(open: Boolean) {
         _participantMenuOpen.value = open
-    }
-
-    fun incrementReconnectCount() {
-        _reconnectCount.value++
-    }
-
-    /**
-     * Publishes a whole new weak-network snapshot. A full replacement, not a read-modify-write, so
-     * plain assignment is correct here; `MutableStateFlow` drops equal values, which is the
-     * de-duplication for the 500 ms tick.
-     *
-     * Public so the render-layer Compose tests can drive the UI with a bare `CallUiController()`.
-     */
-    fun setNetworkQuality(view: NetworkQualityView) {
-        _networkQuality.value = view
     }
 
     @Volatile

@@ -9,21 +9,15 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,32 +25,31 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.core.content.ContextCompat
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationFix
+import com.difft.android.base.notification.NotificationFixJump
+import com.difft.android.base.notification.OemBrand
 import com.difft.android.base.ui.TitleBar
 import com.difft.android.base.ui.compose.settings.DifftSwitchRow
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.openExternalBrowser
 import com.difft.android.base.widget.ToastUtil
 import dagger.hilt.android.AndroidEntryPoint
 import com.difft.android.chat.messages.MessageForegroundService
 import com.difft.android.chat.messages.MessageServiceManager
 import com.difft.android.chat.util.AutoStartPermissionHelper
+import com.difft.android.chat.util.BackgroundActivityPermissionHelper
 import com.difft.android.chat.util.DeviceProperties
 import javax.inject.Inject
 
@@ -124,7 +117,11 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             DeviceProperties.getDataSaverState(this)
         }
         val canOpenAutoStart = remember(trigger) {
-            AutoStartPermissionHelper.canOpenAutoStartSettings(this)
+            AutoStartPermissionHelper.canOpenAutoStartSettings()
+        }
+        val showVendorGuide = remember { OemBrand.current().let { it.isChinaOem && it != OemBrand.XIAOMI } }
+        val canOpenBackgroundActivity = remember(trigger) {
+            BackgroundActivityPermissionHelper.canOpenBackgroundActivitySettings(this)
         }
 
         val exactAlarmState = remember(trigger) {
@@ -137,6 +134,8 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
             isBackgroundRestricted = isBackgroundRestricted,
             isDataSaverRestricted = dataSaverState.isRestricted,
             canOpenAutoStart = canOpenAutoStart,
+            canOpenBackgroundActivity = canOpenBackgroundActivity,
+            showVendorGuide = showVendorGuide,
             exactAlarmState = exactAlarmState,
             onBackgroundConnectionSwitchChanged = { newValue ->
                 if (newValue) {
@@ -172,7 +171,15 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                     L.w { "Failed to open auto-start settings" }
                 }
             },
-            onExactAlarmClick = { ExactAlarmAccess.openSettings(this) }
+            onBackgroundActivityClick = {
+                val success = BackgroundActivityPermissionHelper.openBackgroundActivitySettings(this@BackgroundConnectionSettingsActivity)
+                if (!success) {
+                    L.w { "[BgConnection] open background-activity settings failed" }
+                }
+            },
+            onVendorGuideClick = { openExternalBrowser(BackgroundConnectionHelpLink.build(BackgroundConnectionHelpLink.Source.BACKGROUND_CONNECTION)) },
+            onExactAlarmClick = { ExactAlarmAccess.openSettings(this) },
+            onSetupGuideClick = { openExternalBrowser(BackgroundConnectionHelpLink.build(BackgroundConnectionHelpLink.Source.BACKGROUND_CONNECTION)) }
         )
     }
 
@@ -194,13 +201,18 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         isBackgroundRestricted: Boolean = true,
         isDataSaverRestricted: Boolean = false,
         canOpenAutoStart: Boolean = true,
+        canOpenBackgroundActivity: Boolean = true,
+        showVendorGuide: Boolean = false,
         exactAlarmState: ExactAlarmState = ExactAlarmState.NotApplicable,
         onBackgroundConnectionSwitchChanged: (Boolean) -> Unit,
         onBackgroundRestrictionClick: (() -> Unit)? = null,
         onBatteryOptimizationClick: (() -> Unit)? = null,
         onDataSaverClick: (() -> Unit)? = null,
         onAutoStartClick: (() -> Unit)? = null,
-        onExactAlarmClick: (() -> Unit)? = null
+        onBackgroundActivityClick: (() -> Unit)? = null,
+        onVendorGuideClick: (() -> Unit)? = null,
+        onExactAlarmClick: (() -> Unit)? = null,
+        onSetupGuideClick: (() -> Unit)? = null
     ) {
         val context = LocalContext.current
 
@@ -242,11 +254,15 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                             isIgnoringBatteryOpt = isIgnoringBatteryOpt,
                             isDataSaverRestricted = isDataSaverRestricted,
                             canOpenAutoStart = canOpenAutoStart,
+                            canOpenBackgroundActivity = canOpenBackgroundActivity,
+                            showVendorGuide = showVendorGuide,
                             exactAlarmState = exactAlarmState,
                             onBackgroundRestrictionClick = onBackgroundRestrictionClick,
                             onBatteryOptimizationClick = onBatteryOptimizationClick,
                             onDataSaverClick = onDataSaverClick,
                             onAutoStartClick = onAutoStartClick,
+                            onBackgroundActivityClick = onBackgroundActivityClick,
+                            onVendorGuideClick = onVendorGuideClick,
                             onExactAlarmClick = onExactAlarmClick
                         )
                     }
@@ -256,92 +272,12 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
                 item {
                     BottomTipsText()
                 }
-            }
-        }
-    }
 
-    @Preview(showBackground = true)
-    @Composable
-    private fun CheckItemsContent(
-        isBackgroundRestricted: Boolean = true,
-        isIgnoringBatteryOpt: Boolean = false,
-        isDataSaverRestricted: Boolean = false,
-        canOpenAutoStart: Boolean = true,
-        exactAlarmState: ExactAlarmState = ExactAlarmState.NotApplicable,
-        onBackgroundRestrictionClick: (() -> Unit)? = null,
-        onBatteryOptimizationClick: (() -> Unit)? = null,
-        onDataSaverClick: (() -> Unit)? = null,
-        onAutoStartClick: (() -> Unit)? = null,
-        onExactAlarmClick: (() -> Unit)? = null
-    ) {
-        val context = LocalContext.current
-        Column {
-            // Background restriction check (Android 9+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                DividerLine()
-                CheckItem(
-                    title = stringResource(com.difft.android.chat.R.string.background_restriction_check),
-                    status = if (isBackgroundRestricted) {
-                        stringResource(com.difft.android.chat.R.string.background_restriction_restricted)
-                    } else {
-                        stringResource(com.difft.android.chat.R.string.background_restriction_unrestricted)
-                    },
-                    showArrow = true,
-                    onClick = onBackgroundRestrictionClick
-                )
-            }
-
-            // Battery optimization check
-            DividerLine()
-            CheckItem(
-                title = stringResource(com.difft.android.chat.R.string.battery_optimization_check),
-                status = if (isIgnoringBatteryOpt) {
-                    stringResource(com.difft.android.chat.R.string.battery_optimization_ignored)
-                } else {
-                    stringResource(com.difft.android.chat.R.string.battery_optimization_not_ignored)
-                },
-                showArrow = !isIgnoringBatteryOpt,
-                onClick = if (!isIgnoringBatteryOpt) onBatteryOptimizationClick else null
-            )
-
-            // Data saver check
-            DividerLine()
-            CheckItem(
-                title = stringResource(com.difft.android.chat.R.string.data_saver_check),
-                status = if (isDataSaverRestricted) {
-                    stringResource(com.difft.android.chat.R.string.data_saver_restricted)
-                } else {
-                    stringResource(com.difft.android.chat.R.string.data_saver_unrestricted)
-                },
-                showArrow = true,
-                onClick = onDataSaverClick
-            )
-
-            // Auto start check (for Chinese ROMs)
-            if (canOpenAutoStart) {
-                DividerLine()
-                CheckItem(
-                    title = stringResource(com.difft.android.chat.R.string.auto_start_check),
-                    status = stringResource(com.difft.android.chat.R.string.auto_start_need_check),
-                    showArrow = true,
-                    onClick = onAutoStartClick
-                )
-            }
-
-            // Exact alarm check (Android 12+, only when this build declares the permission)
-            if (exactAlarmState != ExactAlarmState.NotApplicable) {
-                val granted = exactAlarmState == ExactAlarmState.Granted
-                DividerLine()
-                CheckItem(
-                    title = stringResource(com.difft.android.chat.R.string.exact_alarm_check),
-                    status = if (granted) {
-                        stringResource(com.difft.android.chat.R.string.exact_alarm_granted)
-                    } else {
-                        stringResource(com.difft.android.chat.R.string.exact_alarm_not_granted)
-                    },
-                    showArrow = !granted,
-                    onClick = if (!granted) onExactAlarmClick else null
-                )
+                if (onSetupGuideClick != null) {
+                    item {
+                        SetupGuideFooter(onClick = onSetupGuideClick, modifier = Modifier.padding(horizontal = 16.dp))
+                    }
+                }
             }
         }
     }
@@ -380,94 +316,9 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
         )
     }
 
-    @Preview(showBackground = true)
-    @Composable
-    private fun CheckItem(
-        title: String = "Background Restriction",
-        status: String = "Restricted",
-        showArrow: Boolean = true,
-        onClick: (() -> Unit)? = null
-    ) {
-        val context = LocalContext.current
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .clickable(enabled = onClick != null) {
-                    onClick?.invoke()
-                }
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = title,
-                style = DifftTheme.typography.p2,
-                color = Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_primary
-                    )
-                ),
-                modifier = Modifier.weight(1f)
-            )
-
-            Text(
-                text = status,
-                style = DifftTheme.typography.p2,
-                color = Color(
-                    ContextCompat.getColor(
-                        context,
-                        R.color.t_secondary
-                    )
-                ),
-                modifier = Modifier.padding(end = 5.dp)
-            )
-
-            // Arrow - use alpha to hide but preserve space
-            Box(
-                modifier = Modifier.size(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    imageVector = ImageVector.vectorResource(id = com.difft.android.base.R.drawable.base_ic_chevron_right),
-                    contentDescription = null, // Decorative icon, no accessibility description needed
-                    colorFilter = ColorFilter.tint(DifftTheme.colors.icon),
-                    modifier = Modifier
-                        .size(16.dp)
-                        .alpha(if (showArrow) 1f else 0f)
-                )
-            }
-        }
-    }
-
-    @Preview(showBackground = true)
-    @Composable
-    private fun DividerLine() {
-        val context = LocalContext.current
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(
-                    Color(
-                        ContextCompat.getColor(
-                            context,
-                            R.color.bg
-                        )
-                    )
-                )
-        )
-    }
-
     private fun openBackgroundRestrictionSettings() {
-        try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            L.e(e) { "Failed to open background restriction settings" }
+        if (!NotificationFixJump.open(this, NotificationFix.BACKGROUND_RESTRICTION)) {
+            L.w { "[BgConnection] open background restriction settings failed" }
         }
     }
 

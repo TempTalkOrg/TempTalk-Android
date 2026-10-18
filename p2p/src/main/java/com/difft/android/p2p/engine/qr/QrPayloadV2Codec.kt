@@ -30,7 +30,7 @@ object QrPayloadV2Codec {
     const val MAX_ACCOUNT_BYTES = 16
     const val MAX_VERSION_BYTES = 16
 
-    private const val FLAG_DOWNLOAD = 0x01
+    private const val FLAG_DOWNLOAD = MigrationQrWire.FLAG_DOWNLOAD
     private const val FLAG_HAS_KEY = 0x02
     private const val FLAG_HAS_PRECHECK = 0x04
     private const val FLAG_HAS_PORT = 0x08

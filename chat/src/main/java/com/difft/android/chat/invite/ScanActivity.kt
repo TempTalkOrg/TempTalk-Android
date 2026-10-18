@@ -3,13 +3,24 @@ package com.difft.android.chat.invite
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Color
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import android.os.Bundle
 import android.view.OrientationEventListener
 import android.view.Surface
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import com.difft.android.base.R as BaseR
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
+import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.security.SafeLinkOpener
@@ -39,6 +50,19 @@ class ScanActivity : BaseActivity() {
         const val EXTRA_HINT = "extra_hint"
         const val EXTRA_HINT_SECONDARY = "extra_hint_secondary"
 
+        /**
+         * Set by a result caller that sends data (the migration send screen) so a computer's export
+         * code is declined here, with the scanner still open. The home scanner always declines it.
+         */
+        const val EXTRA_DECLINE_COMPUTER_EXPORT_CODE = "extra_decline_computer_export_code"
+
+        /**
+         * Set by the migration screens: the page takes the migration design's scan state (black
+         * header and ground, white title and back icon, the corner-only viewfinder). The home
+         * scanner keeps its own look.
+         */
+        const val EXTRA_MIGRATION_STYLE = "extra_migration_style"
+
         fun startActivity(activity: Activity) {
             val intent = Intent(activity, ScanActivity::class.java)
             activity.startActivity(intent)
@@ -51,6 +75,10 @@ class ScanActivity : BaseActivity() {
 
     private val returnResult: Boolean by lazy { intent.getBooleanExtra(EXTRA_RETURN_RESULT, false) }
 
+    private val declinesComputerExportCode: Boolean by lazy {
+        !returnResult || intent.getBooleanExtra(EXTRA_DECLINE_COMPUTER_EXPORT_CODE, false)
+    }
+
     private val mBinding: ActivityScanBinding by viewbind()
 
     @Inject
@@ -61,6 +89,9 @@ class ScanActivity : BaseActivity() {
 
 
     private var cameraController: ScanCameraController? = null
+
+    /** The caution shown under the guidance after this scanner declined a code. */
+    private var declinedNotice by mutableStateOf<String?>(null)
     private var orientationListener: OrientationEventListener? = null
 
     private val onCameraPermissionForScan = registerPermission {
@@ -77,15 +108,36 @@ class ScanActivity : BaseActivity() {
         applyCallerGuidance()
     }
 
-    /** A caller may dress the scanner for its own step; without extras the page is the plain home scanner. */
+    /**
+     * A caller may dress the scanner for its own step; without extras the page is the plain home
+     * scanner. The bottom block is always on the dark camera ground, so it is drawn in dark colours.
+     */
     private fun applyCallerGuidance() {
         intent.getStringExtra(EXTRA_TITLE)?.let { mBinding.tvTitle.text = it }
-        val hint = intent.getStringExtra(EXTRA_HINT) ?: return
-        mBinding.llHint.visibility = android.view.View.VISIBLE
-        mBinding.tvHint.text = hint
-        val secondary = intent.getStringExtra(EXTRA_HINT_SECONDARY)
-        mBinding.tvHintSecondary.visibility = if (secondary.isNullOrEmpty()) android.view.View.GONE else android.view.View.VISIBLE
-        mBinding.tvHintSecondary.text = secondary
+        if (intent.getBooleanExtra(EXTRA_MIGRATION_STYLE, false)) applyMigrationStyle()
+        val note = scanNote(intent.getStringExtra(EXTRA_HINT), intent.getStringExtra(EXTRA_HINT_SECONDARY))
+        mBinding.composeGuidance.setContent {
+            DifftTheme(darkTheme = true, applyWindowBackground = false) {
+                ScanGuidance(note = note, notice = declinedNotice)
+            }
+        }
+    }
+
+    /** Black page and header with light content, and the migration viewfinder. */
+    private fun applyMigrationStyle() {
+        val black = ContextCompat.getColor(this, BaseR.color.black)
+        val white = ContextCompat.getColor(this, BaseR.color.white)
+        mBinding.root.setBackgroundColor(black)
+        mBinding.header.setBackgroundColor(black)
+        mBinding.tvTitle.setTextColor(white)
+        mBinding.ibBack.imageTintList = ColorStateList.valueOf(white)
+        mBinding.scanOverlay.migrationStyle = true
+        // Dark bar styles, not just light icons: below API 29 the default edge-to-edge paints a
+        // near-white navigation scrim in light mode, which white buttons would vanish into.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
     }
 
     private fun startScan() {
@@ -150,6 +202,13 @@ class ScanActivity : BaseActivity() {
         // gone — vibrate/route on a dead context. Drop anything that arrives below STARTED.
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
 
+        // A computer's export code can only be taken by a phone that is signing in. Starting a send
+        // to it fails at the computer, so say where it belongs and keep scanning instead.
+        if (declinesComputerExportCode && PeerApps.isComputerExportQr(result)) {
+            declineComputerExportCode(result)
+            return
+        }
+
         ServiceUtil.getVibrator(this).vibrate(50)
 
         // Caller (e.g. proxy settings) just wants the raw string back.
@@ -206,6 +265,12 @@ class ScanActivity : BaseActivity() {
         } else {
             showResultContent(result)
         }
+    }
+
+    private fun declineComputerExportCode(result: String) {
+        L.i { "[Scan] declined kind=computer_export" }
+        declinedNotice = getString(R.string.scan_computer_export_code_hint)
+        cameraController?.skip(result)
     }
 
     private fun showResultContent(result: String?) {

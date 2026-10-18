@@ -56,13 +56,10 @@ import com.difft.android.chat.R
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
 import com.difft.android.chat.common.MESSAGE_INPUT_MAX_LINES
 import com.difft.android.chat.compose.ConfidentialTipDialogContent
-import com.difft.android.network.ChativeHttpClient
-import com.difft.android.network.di.ChativeHttpClientModule
-import com.difft.android.network.requests.ConversationSetRequestBody
+import com.difft.android.chat.setting.sync.ConfidentialModeSyncCoordinator
+import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -70,8 +67,7 @@ import javax.inject.Inject
 class FilePreSendActivity : BaseActivity() {
 
     @Inject
-    @ChativeHttpClientModule.Chat
-    lateinit var httpClient: ChativeHttpClient
+    lateinit var confidentialSync: ConfidentialModeSyncCoordinator
 
     override fun shouldApplySystemBarsPadding(): Boolean = false
 
@@ -163,20 +159,18 @@ class FilePreSendActivity : BaseActivity() {
         }
     }
 
+    /** Local-first: the switch takes effect at once; a sync job carries it to the server. */
     private fun syncConfidentialModeToServer(mode: Int) {
         if (conversationId.isEmpty()) return
         lifecycleScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    httpClient.httpService.fetchConversationSet(
-                        ConversationSetRequestBody(conversationId, confidentialMode = mode)
-                    )
-                }
-                if (result.status == 0) {
+                if (confidentialSync.setConfidentialMode(conversationId, mode)) {
                     confidentialMode.intValue = mode
                 } else {
                     com.difft.android.base.widget.ToastUtil.show(getString(R.string.operation_failed))
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.e(e) { "[FilePreSendActivity] syncConfidentialMode failed" }
                 com.difft.android.base.widget.ToastUtil.show(getString(R.string.operation_failed))

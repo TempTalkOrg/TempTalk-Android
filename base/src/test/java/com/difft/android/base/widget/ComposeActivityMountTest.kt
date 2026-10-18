@@ -1,5 +1,6 @@
 package com.difft.android.base.widget
 
+import android.app.Activity
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -20,7 +21,8 @@ import kotlin.test.assertTrue
  * mechanism [E2eeInfoSheet.show] and [ComposeDialogManager] both rely on. Verifies the
  * ComposeView is actually attached to
  * `android.R.id.content` (and detached again) and that ViewTree owners are installed so
- * the hosted Compose content can actually recompose.
+ * the hosted Compose content can actually recompose. Also pins that a plain Activity host
+ * is skipped.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -43,6 +45,25 @@ class ComposeActivityMountTest {
         ComposeActivityMount.unmount(activity, composeView)
 
         assertFalse(rootView.containsDescendant(composeView), "composeView must be detached from content root after unmount")
+
+        controller.destroy()
+    }
+
+    @Test
+    fun `mount on a plain Activity host is a no-op and unmount stays safe`() {
+        // A plain Activity has no ViewTree owners, so mounting would crash on first attach.
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val composeView = ComposeView(activity).apply {
+            setContent { TrivialContent() }
+        }
+        val rootView = activity.findViewById<ViewGroup>(android.R.id.content)
+
+        ComposeActivityMount.mount(activity, composeView)
+
+        assertFalse(rootView.containsDescendant(composeView), "composeView must not be attached on a host without ViewTree owners")
+
+        ComposeActivityMount.unmount(activity, composeView)
 
         controller.destroy()
     }

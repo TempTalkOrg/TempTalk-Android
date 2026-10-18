@@ -13,6 +13,7 @@ import com.difft.android.call.core.CallUiController
 import com.difft.android.call.network.NetworkQualityLevel
 import com.difft.android.call.network.NetworkQualityView
 import com.difft.android.call.service.TestScopeApplication
+import com.difft.android.call.session.CallSessionUiState
 import io.mockk.unmockkAll
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -40,12 +41,14 @@ class WeakNetworkBadgeTest {
     @get:Rule
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
+    private lateinit var sessionUi: CallSessionUiState
     private lateinit var controller: CallUiController
 
     @Before
     fun setUp() {
         ApplicationHelper.init(ApplicationProvider.getApplicationContext())
-        controller = CallUiController()
+        sessionUi = CallSessionUiState()
+        controller = CallUiController(sessionUi)
     }
 
     @After
@@ -59,7 +62,7 @@ class WeakNetworkBadgeTest {
         participantCount: Int = GROUP_COUNT,
         localIdentity: String = LOCAL_ID,
     ) {
-        controller.setNetworkQuality(view)
+        sessionUi.setNetworkQuality(view)
         composeTestRule.setContent {
             // The call screen is a forced-dark subtree, matching CallContent.
             DifftTheme(darkTheme = true) {

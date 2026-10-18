@@ -19,6 +19,9 @@ import com.difft.android.chat.group.GroupUpdater
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.chat.setting.sync.ConversationSettingsApplier
+import com.difft.android.chat.setting.sync.ServerConfigSnapshot
+import com.difft.android.chat.setting.sync.SnapshotSource
 import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.formatBase58Id
@@ -92,6 +95,7 @@ class MessageContentProcessor @Inject constructor(
     private val receiptMessageHelper: ReceiptMessageHelper,
     private val messageNotificationUtil: MessageNotificationUtil,
     private val conversationSettingsManager: ConversationSettingsManager,
+    private val settingsApplier: ConversationSettingsApplier,
     private val localMessageCreator: LocalMessageCreator,
     private val groupCryptoRepo: com.difft.android.chat.crypto.GroupCryptoRepo,
     private val groupUtil: com.difft.android.chat.group.GroupUtil,
@@ -833,15 +837,20 @@ class MessageContentProcessor @Inject constructor(
                 }
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CONVERSATION_SETTING) {
                 // Type 4: muteStatus, blockStatus, confidentialMode
-                message.data?.conversation?.let {
+                val data = message.data
+                data?.conversation?.let {
                     kotlin.runCatching {
                         val notifyConversation = gson.fromJson(it.toString(), NotifyConversation::class.java)
-                        // 批量更新配置到数据库
-                        dbRoomStore.updateConversationSettings(
-                            roomId = notifyConversation.conversation,
-                            muteStatus = notifyConversation.muteStatus,
-                            blockStatus = notifyConversation.blockStatus,
-                            confidentialMode = notifyConversation.confidentialMode
+                        // The applier owns the version gate, the own-push skip and the local-first
+                        // gating of confidentialMode, and emits the update event for what it wrote.
+                        settingsApplier.applyServerSnapshot(
+                            ServerConfigSnapshot.fromNotify(notifyConversation),
+                            SnapshotSource.Push(
+                                serverTimestamp = data.serverTimestamp.takeIf { ts -> ts > 0 } ?: envelop.timestamp,
+                                changeType = data.changeType,
+                                operator = data.operator,
+                                operatorDeviceId = data.operatorDeviceId,
+                            )
                         )
                         // Gate on `!= null`: empty string means "clear", null means "not in this notify".
                         if (notifyConversation.remark != null) {
@@ -850,12 +859,6 @@ class MessageContentProcessor @Inject constructor(
                         if (notifyConversation.remarkAvatar != null) {
                             ContactorUtil.updateRemarkAvatar(notifyConversation.conversation, notifyConversation.remarkAvatar)
                         }
-                        conversationSettingsManager.emitConversationSettingUpdate(
-                            conversationId = notifyConversation.conversation,
-                            muteStatus = notifyConversation.muteStatus,
-                            blockStatus = notifyConversation.blockStatus,
-                            confidentialMode = notifyConversation.confidentialMode
-                        )
                     }.onFailure {
                         L.e { "[Message][${tag}] handle conversation setting notify message fail: ${it.stackTraceToString()}" }
                     }

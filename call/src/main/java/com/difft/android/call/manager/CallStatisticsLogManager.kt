@@ -41,6 +41,33 @@ class CallStatisticsLogManager @Inject constructor(
     @Volatile
     private var currentRoomId: String? = null
 
+    // The call session whose room the ids belong to. Claimed on main, released from a cleanup step
+    // on IO: both are synchronized so a release can never clear a claim that landed in between.
+    private var roomOwnerSessionId: Long = NO_ROOM_OWNER
+
+    /** Session [sessionId] starts: it owns the room ids from now on, which start empty. */
+    @Synchronized
+    fun claimRoom(sessionId: Long) {
+        roomOwnerSessionId = sessionId
+        currentRoomLocalId = null
+        currentRoomId = null
+    }
+
+    /**
+     * Session [sessionId]'s cleanup: clears the room ids only while it still owns them, so a late
+     * cleanup of an ended call never clears the ids of the call that started after it.
+     */
+    @Synchronized
+    fun releaseRoom(sessionId: Long) {
+        if (roomOwnerSessionId != sessionId) {
+            L.i { "[Call] CallStatisticsLogManager releaseRoom skipped: owner=$roomOwnerSessionId session=$sessionId" }
+            return
+        }
+        roomOwnerSessionId = NO_ROOM_OWNER
+        currentRoomLocalId = null
+        currentRoomId = null
+    }
+
     fun setRoomLocalId(localId: String?) {
         currentRoomLocalId = localId
     }
@@ -175,6 +202,7 @@ class CallStatisticsLogManager @Inject constructor(
     }
 
     private companion object {
+        const val NO_ROOM_OWNER = -1L
         const val FLUSH_THRESHOLD = 5
         const val FLUSH_DELAY_MS = 60_000L
         const val SEND_INTERVAL_MS = 2_000L

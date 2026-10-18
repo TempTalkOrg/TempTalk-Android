@@ -471,7 +471,7 @@ internal class CallConnectionCoordinator(
                 // end the call and the subsequent reconnect will be rejected with status
                 // 22001 ("Invalid Call, maybe expired"). Reject up-front and roll back
                 // engine state so the UI reflects the still-active connection.
-                // Non-throwing snapshot: this collector runs on the (Main) viewModelScope and can
+                // Non-throwing snapshot: this collector runs on the session's (Main) mainScope and can
                 // race with call teardown (releaseLocked sets released=true before callStatus flips
                 // out of CONNECTED/RECONNECTED). Reading the fail-loud room getter here would crash
                 // with "room accessed after release"; a released room reads as "no remotes" → the
@@ -510,7 +510,7 @@ internal class CallConnectionCoordinator(
                 val joinCallParams = createStartCallParams(body)
                 // disconnect() is a blocking call; under an active proxy the tunnel
                 // socket close performs a TLS close_notify network write. The combine
-                // collector runs on the (Main) viewModelScope, so disconnecting here
+                // collector runs on the session's (Main) mainScope, so disconnecting here
                 // directly would do network I/O on the main thread
                 // (NetworkOnMainThreadException). Run it on IO, right before the
                 // reconnect, so ordering is preserved.

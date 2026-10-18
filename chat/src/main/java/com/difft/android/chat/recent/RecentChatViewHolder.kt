@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.annotation.ColorRes
 import androidx.core.content.ContextCompat
 import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import androidx.recyclerview.widget.RecyclerView
@@ -128,13 +129,6 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         }
         binding.textviewDetail.isVisible = !data.isInstantCall
 
-        val bgColorRes = when {
-            isSelected -> com.difft.android.base.R.color.bg3
-            !isForSearch && data.isPinned -> com.difft.android.base.R.color.bg2
-            else -> com.difft.android.base.R.color.bg1
-        }
-        binding.swipeForeground.setBackgroundColor(ContextCompat.getColor(binding.root.context, bgColorRes))
-
         binding.textviewDate.text = data.lastActiveTimeText
         applyDetailRow(data)
         binding.textviewMissedNumber.text =
@@ -156,9 +150,9 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
     /**
      * Swipe towards the end edge reveals Read/Unread (label follows the badge state; a full swipe
      * runs it); towards the start edge Pin/Unpin and Delete. Note-to-Self has no Delete (design:
-     * Saved is not deletable). Rows with an active call bar do not swipe (the Join button owns the
-     * row). A holder recycled for another room starts closed; a rebind of the same room (list diff
-     * while the user holds it open or mid-drag) keeps its state.
+     * Saved is not deletable). Rows with an ongoing call do not swipe, matching iOS. A holder
+     * recycled for another room starts closed; a rebind of the same room (list diff while the
+     * user holds it open or mid-drag) keeps its state.
      */
     private fun bindSwipeActions(data: RoomViewData, swipe: SwipeActions?) {
         val root = binding.root
@@ -167,7 +161,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             boundRoomId = data.roomId
         }
         root.callback = swipe?.callback
-        root.swipeEnabled = swipe != null && data.callData == null
+        root.swipeEnabled = swipe != null && !data.hasOngoingCall
         if (swipe == null) {
             root.onFullSwipeStart = null
             return
@@ -268,11 +262,9 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 rowWidthPx = rowWidthPx,
                 density = context.resources.displayMetrics.density,
                 hasUnreadBadge = data.displayUnreadNum != 0,
-                // Mirrors updateCallBarDuration()'s visibility test without reordering it: that
-                // method also rewrites the row background and the click listener.
-                hasCallBar = !data.callData?.roomId.isNullOrEmpty(),
                 isLargerText = TextSizeUtil.isLarger,
                 hasSendingIcon = showSendingIcon,
+                hasPinnedIcon = shouldShowPinnedIcon(data),
             ),
             measureText = binding.textviewAt.paint::measureText,
         )
@@ -318,15 +310,33 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
     }
 
 
+    private fun shouldShowPinnedIcon(data: RoomViewData): Boolean = shouldShowPinnedIcon(
+        isForSearch = isForSearch,
+        isPinned = data.isPinned,
+        displayUnreadNum = data.displayUnreadNum,
+    )
+
+    /**
+     * Also runs on every call-bar tick, so it owns the row background, the pinned icon and the
+     * capsule/date swap on the first row.
+     */
     fun updateCallBarDuration(data: RoomViewData) {
+        val hasCallBar = data.hasOngoingCall
+        binding.swipeForeground.setBackgroundColor(
+            ContextCompat.getColor(binding.root.context, rowBackgroundColorRes(
+                isSelected = currentIsSelected,
+                isPinned = !isForSearch && data.isPinned,
+                hasCallBar = hasCallBar,
+            ))
+        )
+        binding.imageviewPinned.isVisible = shouldShowPinnedIcon(data)
+        // The meeting capsule takes the date's place on the first row.
+        binding.callBarDuration.isVisible = hasCallBar
+        binding.textviewDate.isVisible = !hasCallBar
         val callData = data.callData
         if (callData != null) {
             val roomId = callData.roomId
             if (!roomId.isNullOrEmpty()) {
-                if(!currentIsSelected && !data.isPinned) {
-                    binding.swipeForeground.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg2))
-                }
-                binding.callBarDuration.isVisible = true
                 val callStateManager = getCallStateManager()
                 val showTime = callStateManager.getCallingTime(roomId)
                 setupCallingJoinButton(binding.callBarDuration, showTime)
@@ -350,11 +360,6 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                     }
                 }
             }
-        } else {
-            if(!currentIsSelected && !data.isPinned) {
-                binding.swipeForeground.setBackgroundColor(ContextCompat.getColor(binding.root.context, com.difft.android.base.R.color.bg1))
-            }
-            binding.callBarDuration.isVisible = false
         }
     }
 
@@ -373,3 +378,31 @@ private const val UNREAD_BADGE_PADDING_DP = 3
 
 /** Manual-unread indicator: a dot with no number. */
 private const val UNREAD_DOT_SIZE_DP = 10
+
+/**
+ * A row with an ongoing call (instant calls included) shows the meeting capsule and offers no row
+ * actions, neither swipe nor long-press, matching iOS.
+ */
+internal val RoomViewData.hasOngoingCall: Boolean
+    get() = !callData?.roomId.isNullOrEmpty()
+
+/**
+ * Pinned rows are tinted bg2 alongside the pin icon; the dual-pane selected row uses the darker
+ * bg3 so it stays distinguishable from pinned rows (cross-platform pin design, Mac parity).
+ */
+@ColorRes
+internal fun rowBackgroundColorRes(isSelected: Boolean, isPinned: Boolean, hasCallBar: Boolean): Int = when {
+    isSelected -> com.difft.android.base.R.color.bg3
+    isPinned || hasCallBar -> com.difft.android.base.R.color.bg2
+    else -> com.difft.android.base.R.color.bg1
+}
+
+/**
+ * The pin icon takes the trailing slot only when it is free: an unread count or a manual-unread
+ * dot wins. An active-call row still shows it beside the join button. Search results never show it.
+ */
+internal fun shouldShowPinnedIcon(
+    isForSearch: Boolean,
+    isPinned: Boolean,
+    displayUnreadNum: Int,
+): Boolean = !isForSearch && isPinned && displayUnreadNum == 0

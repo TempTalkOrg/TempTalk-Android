@@ -247,6 +247,7 @@ abstract class VideoThumbnailsView : View {
 
     private companion object {
         private const val TAG = "VideoThumbnailsView"
-        private val CORNER_RADIUS = ViewUtil.dpToPx(8)
+        // Getter: the system density changes with the display-size setting while the process lives.
+        private val CORNER_RADIUS get() = ViewUtil.dpToPx(8)
     }
 }

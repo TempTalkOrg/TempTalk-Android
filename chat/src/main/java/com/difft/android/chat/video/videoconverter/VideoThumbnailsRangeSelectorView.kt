@@ -432,8 +432,9 @@ class VideoThumbnailsRangeSelectorView : VideoThumbnailsView {
 
         private val MINIMUM_SELECTABLE_RANGE = TimeUnit.MILLISECONDS.toMicros(500)
         private const val ANIMATION_DURATION_MS = 100
-        private val THUMB_RECT_CORNER_RADIUS: Float = ViewUtil.dpToPx(4).toFloat()
-        private val ACTIVE_REGION_CORNER_RADIUS: Float = ViewUtil.dpToPx(8).toFloat()
+        // Getters: the system density changes with the display-size setting while the process lives.
+        private val THUMB_RECT_CORNER_RADIUS: Float get() = ViewUtil.dpToPx(4).toFloat()
+        private val ACTIVE_REGION_CORNER_RADIUS: Float get() = ViewUtil.dpToPx(8).toFloat()
 
         private fun clamp(value: Long, min: Long, max: Long): Long = min(max(min, value), max)
     }

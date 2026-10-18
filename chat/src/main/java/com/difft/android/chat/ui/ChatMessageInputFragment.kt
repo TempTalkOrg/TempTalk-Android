@@ -1071,24 +1071,10 @@ class ChatMessageInputFragment : Fragment() {
                 // Show first-use tip when enabling confidential mode
                 if (confidentialMode == 1 && globalServices.userManager.getUserData()?.hasShownConfidentialTip != true) {
                     showConfidentialTipDialog {
-                        chatSettingViewModel.setConversationConfigs(
-                            requireActivity(),
-                            chatViewModel.forWhat.id,
-                            null,
-                            null,
-                            null,
-                            confidentialMode
-                        )
+                        chatSettingViewModel.setConfidentialMode(confidentialMode)
                     }
                 } else {
-                    chatSettingViewModel.setConversationConfigs(
-                        requireActivity(),
-                        chatViewModel.forWhat.id,
-                        null,
-                        null,
-                        null,
-                        confidentialMode
-                    )
+                    chatSettingViewModel.setConfidentialMode(confidentialMode)
                 }
             }
         }
@@ -1164,7 +1150,6 @@ class ChatMessageInputFragment : Fragment() {
                 null,
                 null,
                 0,
-                null,
                 false,
                 getString(R.string.contact_unblocked)
             )

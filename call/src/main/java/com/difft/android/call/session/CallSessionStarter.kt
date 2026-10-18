@@ -24,6 +24,7 @@ import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.CallRingtoneManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.state.OngoingCallPublisher
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
 import difft.android.messageserialization.For
 import io.livekit.android.room.Room
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import livekit.LivekitTemptalk
 
 /**
  * Drives the call session startup sequence after the ViewModel is constructed:
@@ -54,6 +56,7 @@ internal class CallSessionStarter(
     private val roomCtl: CallRoomController,
     private val connectionCoordinator: CallConnectionCoordinator,
     private val onGoingCallStateManager: OnGoingCallStateManager,
+    private val publisher: OngoingCallPublisher,
     private val callRingtoneManager: CallRingtoneManager,
     private val callDataManager: CallDataManager,
     private val contactorCacheManager: ContactorCacheManager,
@@ -65,6 +68,9 @@ internal class CallSessionStarter(
     private val createCallMsgConfig: Boolean,
     private val onRoomIdAssigned: (String) -> Unit,
     private val onE2eeKeyAssigned: (ByteArray) -> Unit,
+    // True once the session has started ending. Its teardown clears the pre-connect cancel latch
+    // before the room is released, so a late response must not be read as a live start.
+    private val isSessionEnding: () -> Boolean,
 ) {
 
     /** Launch the end-to-end startup flow on an IO dispatcher. */
@@ -86,6 +92,11 @@ internal class CallSessionStarter(
         val response = withTimeoutOrNull(RESPONSE_TIMEOUT_MS) {
             room::ttCallResp.flow.filterNotNull().first()
         }
+        handleStartCallResponse(response)
+    }
+
+    /** The response half of [processStartCallResponse]; null = timed out. Separate so tests can drive it. */
+    internal suspend fun handleStartCallResponse(response: LivekitTemptalk.TTCallResponse?) {
         L.i { "[Call] CallSessionStarter start call response callback." }
         if (response == null) {
             L.e { "[Call] CallSessionStarter start call response is null." }
@@ -105,7 +116,7 @@ internal class CallSessionStarter(
         if (roomId != null) {
             onRoomIdAssigned(roomId)
         }
-        onGoingCallStateManager.setCurrentRoomId(roomId)
+        publisher.publish { setCurrentRoomId(roomId) }
 
         val callerId = callIntent.callerId
         val callType = CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
@@ -151,7 +162,10 @@ internal class CallSessionStarter(
      * [reCancelAfterInitiatorExit] 做 **best-effort** 补发权威取消。远端止铃的最终保证在后端
      * clientCallId 墓碑（见 [reCancelAfterInitiatorExit] 说明），本方法不承担该保证。
      *
-     * @return true = 已走正常主叫路径；false = 主叫已退出，跳过副作用并尝试补发取消。
+     * 会话已在结束（[isSessionEnding]）时同样跳过副作用，但不补发：teardown 会先清空门闩、再由清理步骤
+     * 释放房间，此时无法区分窗口 W 退出与已连接群聊的 LEAVE，而群聊补发是全员挂断；结束信令由退出流程自己发。
+     *
+     * @return true = 已走正常主叫路径；false = 主叫已退出或会话在结束，跳过副作用。
      */
     internal suspend fun onStartCallSucceeded(
         forWhat: For,
@@ -167,6 +181,10 @@ internal class CallSessionStarter(
             reCancelAfterInitiatorExit(callType, roomId ?: "", callerId)
             return false
         }
+        if (isSessionEnding()) {
+            L.w { "[Call] CallSessionStarter start response skipped: session ending roomId:$roomId" }
+            return false
+        }
         startCallRingTone(callType)
         roomId?.let { rid ->
             addStartCallData(forWhat, callerId, callIntent.roomName, rid, callType, createdAt)
@@ -176,13 +194,15 @@ internal class CallSessionStarter(
     }
 
     /**
-     * best-effort 快路径：仅当建房响应恰好赶在 teardown 取消 viewModelScope 之前到达时，才用已知的
-     * 权威 [roomId] 补发结束信令（1v1 cancel，group hangup=end-for-all；窗口 W 内尚无远端加入，
-     * callUidList 为空）。语义与 [com.difft.android.call.handler.CallExitHandler.handleInitiatorPreConnectExit] 对齐。
+     * best-effort 快路径：仅当建房响应（经房间信令 `ttCallResp` 下发）恰好赶在 teardown 释放房间之前
+     * 到达时，才用已知的权威 [roomId] 补发结束信令（1v1 cancel，group hangup=end-for-all；窗口 W 内
+     * 尚无远端加入，callUidList 为空）。语义与 [com.difft.android.call.handler.CallExitHandler.handleInitiatorPreConnectExit] 对齐。
      *
-     * 注意：这**不是保证**。快速退出时响应通常晚于 onEndCall() 取消 viewModelScope 并释放房间，届时
-     * 本方法不会执行、roomId 也无从得知。该窗口的权威远端止铃由**后端**负责——把退出时携带 clientCallId
-     * 的取消当作墓碑，使后续用同一 clientCallId 建房不再响铃。本路径只在能生效时缩短窗口，不承担正确性。
+     * 注意：这**不是保证**。会话 main scope 要到清理的最后一步才取消，结束时并不立即取消；
+     * 拦住迟到响应的是清理步骤 `CallCleanupSteps` 中的 `roomCtl.disconnectAndRelease()`——房间断开并释放后，
+     * 响应不再经该房间信令到达，本方法不会执行、roomId 也无从得知（等待侧按 RESPONSE_TIMEOUT_MS 超时）。
+     * 该窗口的权威远端止铃由**后端**负责——把退出时携带 clientCallId 的取消当作墓碑，使后续用同一
+     * clientCallId 建房不再响铃。本路径只在能生效时缩短窗口，不承担正确性。
      */
     private suspend fun reCancelAfterInitiatorExit(callType: CallType, roomId: String, callerId: String) {
         L.w { "[Call] CallSessionStarter start response arrived after initiator exit -> re-cancel roomId:$roomId type:$callType" }

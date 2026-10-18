@@ -41,6 +41,7 @@ class EnvelopToMessageProcessorClassifyTest {
             newMessageDecryptionUtil = decryptionUtil,
             messageContentProcessor = contentProcessor,
             dbMessageStore = dbMessageStore,
+            healthCounters = mockk(relaxed = true),
         )
     }
 

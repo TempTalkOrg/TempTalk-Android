@@ -5,6 +5,7 @@ import com.difft.android.base.utils.globalServices
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.monitor.FcmTokenHealthRecorder
 import com.difft.android.base.utils.GmsHealth
 import com.difft.android.base.utils.appScope
 import com.difft.android.network.ChativeHttpClient
@@ -54,7 +55,8 @@ sealed class FcmInitResult {
 @Singleton
 class PushUtil @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    @param:ChativeHttpClientModule.Chat private val chatHttpClient: ChativeHttpClient
+    @param:ChativeHttpClientModule.Chat private val chatHttpClient: ChativeHttpClient,
+    private val fcmTokenHealth: FcmTokenHealthRecorder
 ) {
     // FCM 初始化状态 StateFlow (发布所有状态，供其他模块监听)
     private val _fcmInitResult = MutableStateFlow<FcmInitResult>(FcmInitResult.Idle)
@@ -95,6 +97,7 @@ class PushUtil @Inject constructor(
             if (GmsHealth.isGmsBroken(context)) {
                 L.w { "[Push][fcm] GMS installed but gservices provider missing, treating Play Services as unavailable" }
                 reportPushTelemetry(gmsAvailable = false, fcmTokenAvailable = false)
+                fcmTokenHealth.recordNoGms()
                 _fcmInitResult.value = FcmInitResult.PlayServicesUnavailable(ConnectionResult.SERVICE_INVALID)
                 return@launch
             }
@@ -106,12 +109,14 @@ class PushUtil @Inject constructor(
             if (!gmsAvailable) {
                 L.w { "[Push][fcm] Google Play Services not available, status:$playServiceStatus" }
                 reportPushTelemetry(gmsAvailable = false, fcmTokenAvailable = false)
+                fcmTokenHealth.recordNoGms()
                 _fcmInitResult.value = FcmInitResult.PlayServicesUnavailable(playServiceStatus)
                 return@launch
             }
 
             // 发送 Loading 状态
             _fcmInitResult.value = FcmInitResult.Loading
+            val attempt = fcmTokenHealth.beginAttempt()
 
             // Google Play Services 可用，尝试获取 FCM token（15秒超时）
             val tokenResult = withTimeoutOrNull(15000L) {
@@ -139,6 +144,7 @@ class PushUtil @Inject constructor(
                 tokenResult == null -> {
                     L.w { "[Push][fcm] Fetching FCM registration token timeout (15s)" }
                     reportPushTelemetry(gmsAvailable = true, fcmTokenAvailable = false)
+                    fcmTokenHealth.recordFailure(attempt)
                     _fcmInitResult.value = FcmInitResult.Failure("Timeout after 15 seconds")
                 }
 
@@ -147,7 +153,7 @@ class PushUtil @Inject constructor(
                     L.i { "[Push][fcm] Fetching FCM registration token success ${token.length}" }
 
                     // 成功时自动上报token到服务器
-                    sendRegistrationToServer(token)
+                    sendRegistrationToServer(token, attempt)
 
                     // 设置 Firebase Metrics
                     FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
@@ -160,6 +166,7 @@ class PushUtil @Inject constructor(
                     val error = tokenResult.exceptionOrNull()?.message ?: "Unknown error"
                     L.w { "[Push][fcm] Fetching FCM registration token failed: $error" }
                     reportPushTelemetry(gmsAvailable = true, fcmTokenAvailable = false)
+                    fcmTokenHealth.recordFailure(attempt)
                     _fcmInitResult.value = FcmInitResult.Failure(error)
                 }
             }
@@ -182,8 +189,10 @@ class PushUtil @Inject constructor(
 
     /**
      * 发送 Push Token 到服务器
+     * @param attempt generation from [FcmTokenHealthRecorder.beginAttempt]; defaults to a new attempt
+     *   (token refresh), while [initFCMPush] passes the one it took before fetching the token.
      */
-    suspend fun sendRegistrationToServer(fcmID: String) {
+    suspend fun sendRegistrationToServer(fcmID: String, attempt: Long = fcmTokenHealth.beginAttempt()) {
         withContext(Dispatchers.IO) {
             try {
                 // 检查 BasicAuth 是否存在，不存在表示未登录
@@ -199,11 +208,14 @@ class PushUtil @Inject constructor(
 
                 if (result.status == 0) {
                     L.i { "[Push] fcm token bound" }
+                    fcmTokenHealth.recordSuccess(attempt)
                 } else {
                     L.w { "[Push] fcm token bind failed status=${result.status}" }
+                    fcmTokenHealth.recordFailure(attempt)
                 }
             } catch (e: Exception) {
                 L.w { "[Push] fcm token bind failed ${e.javaClass.simpleName}: ${e.message}" }
+                fcmTokenHealth.recordFailure(attempt)
             }
         }
     }

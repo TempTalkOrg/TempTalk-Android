@@ -30,6 +30,8 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationFixJump
+import com.difft.android.base.notification.NotificationReadinessProvider
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.DualPaneCollapseUtil
@@ -49,7 +51,6 @@ import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
-import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.base.utils.NetworkUtils
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.ContactsFragment
@@ -95,6 +96,7 @@ import com.difft.android.push.FcmInitResult
 import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
+import com.difft.android.setting.NotificationReadinessText
 import com.difft.android.setting.UpdateManager
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.gson.Gson
@@ -116,6 +118,7 @@ import com.difft.android.chat.messages.MessageServiceManager
 import com.difft.android.chat.messages.PendingMessageProcessor
 import com.difft.android.chat.util.AppIconBadgeManager
 import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.NotificationChannelManager
 import com.difft.android.chat.websocket.WebSocketManager
 import com.difft.android.views.DraggableDividerView
 import java.io.File
@@ -627,6 +630,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         checkInsiderUpdate()
         checkNotificationFullScreenPermission()
         checkNotificationPermission()
+        reconcileCriticalAlertBypass()
     }
 
     private fun checkDisappearingMessage() {
@@ -959,6 +963,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     @Inject
     lateinit var messageNotificationUtil: MessageNotificationUtil
 
+    @Inject
+    lateinit var notificationReadinessProvider: NotificationReadinessProvider
+
+    @Inject
+    lateinit var notificationChannelManager: NotificationChannelManager
+
     private var checkNotificationPermissionIgnore = false
     private var checkNotificationFullScreenPermissionIgnore = false
     private var checkNotificationPermissionDialog: ComposeDialog? = null
@@ -1008,18 +1018,22 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
     }
 
+    /**
+     * Incoming-call prompt: raised only for a denied full-screen-intent permission (API 34+), as
+     * before the readiness model. Unknown or vendor-only signals never prompt.
+     */
     private fun checkNotificationFullScreenPermission() {
         if (checkNotificationFullScreenPermissionIgnore) return
 
         checkNotificationFullScreenPermissionJob?.cancel()
         checkNotificationFullScreenPermissionJob = lifecycleScope.launch {
-            val hasPermission = withContext(Dispatchers.IO) {
-                messageNotificationUtil.hasFullScreenNotificationPermission()
+            val issue = withContext(Dispatchers.IO) {
+                notificationReadinessProvider.readBlocking().callPromptIssue()
             }
             if (checkNotificationFullScreenPermissionIgnore) return@launch
-            if (!hasPermission) {
+            val message = issue?.let { NotificationReadinessText.promptMessage(this@IndexActivity, it, PackageUtil.getAppName().orEmpty()) }
+            if (issue != null && message != null) {
                 if (checkNotificationFullScreenPermissionDialog == null) {
-                    val message = FullScreenPermissionHelper.getNoPermissionTip()
                     checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
                         context = this@IndexActivity,
                         title = getString(R.string.tip),
@@ -1027,7 +1041,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                         confirmText = getString(R.string.notification_go_to_settings),
                         cancelText = getString(R.string.notification_ignore),
                         onConfirm = {
-                            messageNotificationUtil.openFullScreenNotificationSettings(this@IndexActivity)
+                            if (!NotificationFixJump.open(this@IndexActivity, NotificationFixJump.fixFor(issue))) {
+                                ToastUtil.show(R.string.notification_settings_open_fail)
+                            }
                         },
                         onCancel = {
                             checkNotificationFullScreenPermissionIgnore = true
@@ -1040,6 +1056,19 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             } else {
                 checkNotificationFullScreenPermissionDialog?.dismiss()
                 checkNotificationFullScreenPermissionDialog = null
+            }
+        }
+    }
+
+    /** Re-applies bypass-Do-Not-Disturb on the critical-alert category on each return to foreground. */
+    private fun reconcileCriticalAlertBypass() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                notificationChannelManager.reconcileCriticalAlertBypass()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[IndexActivity] critical alert bypass reconcile failed error=${e.javaClass.simpleName}" }
             }
         }
     }

@@ -40,8 +40,10 @@ import javax.inject.Singleton
 import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.handler.CallMessageHandler
 import com.difft.android.call.manager.ContactorCacheManager
+import com.difft.android.call.session.CallSessionLauncher
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.chat.call.LChatToCallController
+import dagger.Lazy
 
 @Singleton
 class LChatToCallControllerImpl @Inject constructor(
@@ -53,6 +55,8 @@ class LChatToCallControllerImpl @Inject constructor(
     private val globalConfigsManager: GlobalConfigsManager,
     private val contactorCacheManager: ContactorCacheManager,
     private val callMessageHandler: CallMessageHandler,
+    // Lazy: the launcher's session graph depends back on the call-to-chat controller.
+    private val sessionLauncher: Lazy<CallSessionLauncher>,
 ) : LChatToCallController {
 
     private val callConfig: CallConfig by lazy {
@@ -81,10 +85,11 @@ class LChatToCallControllerImpl @Inject constructor(
         }
 
         appScope.launch(Dispatchers.IO) {
+            // This start's own share of the wait dialog: every failure path releases only it, so a
+            // refused second tap leaves the first start's dialog up.
+            var waitToken = CallWaitDialogUtil.NO_CLAIM
             try {
-                withContext(Dispatchers.Main) {
-                    CallWaitDialogUtil.show(activity)
-                }
+                waitToken = withContext(Dispatchers.Main) { CallWaitDialogUtil.show(activity) }
 
                 dbRoomStore.createRoomIfNotExist(forWhat)
 
@@ -107,21 +112,21 @@ class LChatToCallControllerImpl @Inject constructor(
                     createdAt = System.currentTimeMillis()
                 )) {
                     is CallEncryptOutcome.Success -> {
-                        val result = startCallInternal(activity, forWhat, outcome.result, chatRoomName)
+                        val result = startCallInternal(activity, forWhat, outcome.result, chatRoomName, waitToken)
                         if (!result) {
-                            withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
+                            withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss(waitToken) }
                         }
                         onComplete(result, null)
                     }
                     is CallEncryptOutcome.Failed -> {
                         L.e { "[Call] startCall encryption failed: ${outcome.reason}" }
-                        withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
+                        withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss(waitToken) }
                         onComplete(false, ResUtils.getString(R.string.call_start_failed_tip))
                     }
                 }
             } catch (e: Exception) {
                 L.e { "[Call] startCall failed: ${e.message}" }
-                withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
+                withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss(waitToken) }
                 onComplete(false, ResUtils.getString(R.string.call_start_failed_tip))
             }
         }
@@ -155,7 +160,8 @@ class LChatToCallControllerImpl @Inject constructor(
         activity: Activity,
         forWhat: For,
         callEncryptResult: CallEncryptResult,
-        chatRoomName: String?
+        chatRoomName: String?,
+        waitToken: Int,
     ): Boolean {
         val callType = resolveCallType(forWhat)
 
@@ -196,8 +202,10 @@ class LChatToCallControllerImpl @Inject constructor(
             .withCallWaitDialogShown(true)
             .withClientCallId(clientCallId)
 
-        activity.startActivity(callIntentBuilder.build())
-        return true
+        // Main: the page launch and the session start share one main-thread message.
+        return withContext(Dispatchers.Main) {
+            sessionLauncher.get().launch(activity, callIntentBuilder.build(), waitToken)
+        }
     }
 
 }

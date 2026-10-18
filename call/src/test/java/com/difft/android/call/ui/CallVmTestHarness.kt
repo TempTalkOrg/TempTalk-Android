@@ -10,64 +10,56 @@ import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallActivity
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
-import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.VoicePreset
-import com.difft.android.call.manager.AudioDeviceManager
 import com.difft.android.call.manager.ContactorCacheManager
-import com.difft.android.call.media.CallAudioSetup
+import com.difft.android.call.session.CallSessionParams
+import com.difft.android.call.session.harness.CallSessionTestHarness
 import com.difft.android.network.UrlManager
-import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 import dagger.hilt.EntryPoints
-import io.mockk.Runs
 import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import io.mockk.mockkConstructor
 import io.mockk.mockkStatic
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Shared Phase-A-only [LCallViewModel] construction harness for `:call` Compose integration tests
- * (T5-* rows). Never calls `startRoomDependentWiring()`, so it needs none of
- * `LCallViewModelTwoPhaseInitTest`'s Phase-B
- * mocks (LiveKit, RoomEventDispatcher, CallSessionStarter, CallObservers) — those tests exercise
- * Phase B; these tests only exercise the Compose UI rendered off a constructed-but-never-connected
- * ViewModel (`callStatus`/`callType`/`participants`/`callUiController`/`timerManager` are all set
- * up during Phase A, i.e. the constructor).
+ * (T5-* rows). The session's room setup (Phase B) never runs; these tests only exercise the Compose
+ * UI rendered off a constructed-but-never-connected ViewModel (`callStatus`/`callType`/`participants`/
+ * `callUiController`/`timerManager` are all set up by the session's start, Phase A).
  *
- * [CallRoomController]'s real constructor is cheap (only `MutableStateFlow` init, no I/O — see
- * `CallRoomController.kt`), so it is allowed to run for real; `mockkConstructor` only intercepts
- * the specific member calls stubbed via [stubCallStatus] (`callStatus`/`callType`). No other
- * `CallRoomController` method is reachable from Phase A + `getCallRoomName()` + `participants`.
+ * The VM is built over a [CallSessionTestHarness] whose session runs on the real main
+ * (Robolectric Looper) dispatcher, as `viewModelScope` did, and parks Phase B
+ * ([CallSessionTestHarness.parked]). The room controller and the audio stack come from its fake
+ * components factory, so no constructor mocking is needed.
  */
 internal object CallVmTestHarness {
 
-    /** Must run before [buildViewModel]. */
+    private var pending: CallSessionTestHarness? = null
+
+    /** The session harness behind the most recent [buildViewModel] (writer access for tests). */
+    lateinit var lastHarness: CallSessionTestHarness
+        private set
+
+    private fun harness(): CallSessionTestHarness = pending ?: CallSessionTestHarness(
+        main = Dispatchers.Main.immediate,
+        default = CallSessionTestHarness.parked(),
+        captureCleanup = false,
+    ).also { pending = it }
+
+    /**
+     * Retained for its callers; the fake components factory now supplies the audio stack and the
+     * room controller, so there is nothing left to mock. Starts a fresh harness for the next VM.
+     */
     fun mockConstructionCollaborators() {
-        mockkConstructor(AudioPipelineProcessor::class)
-        every { anyConstructed<AudioPipelineProcessor>().setModule(any()) } just Runs
-        every { anyConstructed<AudioPipelineProcessor>().setSoundTouchPreset(any()) } just Runs
-        every { anyConstructed<AudioPipelineProcessor>().setDenoiseEnabled(any()) } just Runs
-        every { anyConstructed<AudioPipelineProcessor>().release() } just Runs
-
-        mockkConstructor(AudioDeviceManager::class)
-        every { anyConstructed<AudioDeviceManager>().audioHandler } returns mockk(relaxed = true)
-        every { anyConstructed<AudioDeviceManager>().switchVoicePreset(any()) } just Runs
-        every { anyConstructed<AudioDeviceManager>().initDeNoiseMode(any()) } just Runs
-
-        mockkConstructor(CallAudioSetup::class)
-        every { anyConstructed<CallAudioSetup>().start() } just Runs
-        every { anyConstructed<CallAudioSetup>().stop() } just Runs
-
-        mockkConstructor(CallRoomController::class)
+        pending = null
     }
 
-    /** Overrides the constructed [CallRoomController]'s `callStatus`/`callType` StateFlows. */
+    /** Sets the fake room controller's `callStatus`/`callType`. Must run before [buildViewModel]. */
     fun stubCallStatus(callStatus: CallStatus, callType: String) {
-        every { anyConstructed<CallRoomController>().callStatus } returns MutableStateFlow(callStatus).asStateFlow()
-        every { anyConstructed<CallRoomController>().callType } returns MutableStateFlow(callType).asStateFlow()
+        val components = harness().components
+        components.callStatus.value = callStatus
+        components.callType.value = callType
     }
 
     /**
@@ -80,12 +72,8 @@ internal object CallVmTestHarness {
      * that compose `MainPageWithTopStatusView` must stub the underlying `EntryPoints.get` call.
      * Must run before `composeTestRule.setContent { ... }`.
      *
-     * Also stubs `GlobalHiltEntryPoint` (the same Hilt lookup mechanism, via `globalServices`):
-     * group calls' `getCallRoomName()` eagerly constructs `CallTypeCoordinator`, whose ctor
-     * param evaluation touches `LCallViewModel.mySelfId` → `globalServices.myId` →
-     * `EntryPointAccessors.fromApplication<GlobalHiltEntryPoint>(...)` — the exact same
-     * non-Hilt-test-Application failure mode, on a different entry point interface. Any other
-     * entry point type falls through to the real (still-failing) call — no test here needs one.
+     * Also stubs `GlobalHiltEntryPoint` (the same Hilt lookup mechanism, via `globalServices`) for
+     * any UI code that reaches it; the session's own self id comes from the fake components factory.
      */
     fun mockEntryPointAccessors(contactorCacheManager: ContactorCacheManager = mockk(relaxed = true)): ContactorCacheManager {
         mockkStatic(EntryPoints::class)
@@ -122,29 +110,31 @@ internal object CallVmTestHarness {
     ): LCallViewModel {
         val application = ApplicationProvider.getApplicationContext<ScopeApplication>()
         ApplicationHelper.init(application)
+        val harness = harness().let { current ->
+            if (current.contactorCacheManager === contactorCacheManager) current
+            else current.withContactorCacheManager(contactorCacheManager)
+        }
+        pending = null
+        lastHarness = harness
         return LCallViewModel(
             application = application,
-            e2eeEnable = false,
-            callIntent = callIntent,
-            callConfig = CallConfig(),
-            callRole = callRole,
-            initialVoicePreset = VoicePreset.ORIGINAL,
-            callToChatController = mockk(relaxed = true),
-            messageEncryptor = mockk(relaxed = true),
-            onGoingCallStateManager = mockk(relaxed = true),
-            callDataManager = mockk(relaxed = true),
-            callVibrationManager = mockk(relaxed = true),
-            callRingtoneManager = mockk(relaxed = true),
-            contactorCacheManager = contactorCacheManager,
-            callFeedbackManager = mockk(relaxed = true),
-            callStatisticsLogManager = mockk(relaxed = true),
-            callTimeoutManager = mockk(relaxed = true),
-            callTlsProvider = mockk(relaxed = true),
-            httpClient = dagger.Lazy { mockk(relaxed = true) },
+            session = harness.start(CallSessionParams(false, callIntent, CallConfig(), callRole, VoicePreset.ORIGINAL)),
             userManager = mockk(relaxed = true),
-            proxyConfigProvider = mockk(relaxed = true),
             urlManager = urlManager,
-            authTokenProvider = mockk(relaxed = true),
+            onGoingCallStateManager = harness.ogsm,
         )
+    }
+
+    /** Same harness configuration and fake room state, with [contactorCacheManager] as the session's. */
+    private fun CallSessionTestHarness.withContactorCacheManager(
+        contactorCacheManager: ContactorCacheManager,
+    ): CallSessionTestHarness = CallSessionTestHarness(
+        main = main,
+        default = default,
+        contactorCacheManager = contactorCacheManager,
+        captureCleanup = false,
+    ).also {
+        it.components.callStatus.value = components.callStatus.value
+        it.components.callType.value = components.callType.value
     }
 }

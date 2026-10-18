@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-val appVersionName = "2.4.6"
+val appVersionName = "2.4.7"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")

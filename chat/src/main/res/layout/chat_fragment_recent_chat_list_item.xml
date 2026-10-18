@@ -205,6 +205,23 @@
                     android:textColor="@color/t.third"
                     android:textSize="12sp"
                     tools:text="10:09 AM" />
+
+                <!-- Meeting capsule: replaces the date while a call is ongoing (#1345). -->
+                <TextView
+                    android:id="@+id/call_bar_duration"
+                    android:layout_width="wrap_content"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:background="@drawable/chat_list_meeting_capsule_bg"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:paddingHorizontal="6dp"
+                    android:textColor="@color/t.white"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    tools:text="00:21"
+                    tools:visibility="visible" />
             </LinearLayout>
 
             <LinearLayout
@@ -277,28 +294,19 @@
                     tools:text="99+"
                     tools:visibility="visible" />
 
+                <!-- Shares the trailing slot with the badge above; at most one of them is visible. -->
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/imageview_pinned"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/chat_ic_list_pinned"
+                    android:visibility="gone"
+                    app:tint="@color/t.disable" />
+
             </LinearLayout>
 
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/call_bar_duration"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:layout_marginEnd="16dp"
-            android:background="@drawable/rounded_button_join_for_chat_list"
-            android:backgroundTint="@color/primary"
-            android:gravity="center"
-            android:paddingStart="8dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="8dp"
-            android:paddingBottom="4dp"
-            android:textColor="@color/t.white"
-            android:textSize="12sp"
-            android:visibility="gone"
-            tools:text="Join"
-            tools:visibility="visible" />
 
     </LinearLayout>
 

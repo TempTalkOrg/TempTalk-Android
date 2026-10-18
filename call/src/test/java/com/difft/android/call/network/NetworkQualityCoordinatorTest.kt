@@ -2,9 +2,9 @@ package com.difft.android.call.network
 
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.MediaSendIssueState
 import com.difft.android.call.service.TestScopeApplication
+import com.difft.android.call.session.CallSessionUiState
 import com.difft.android.test.TestDispatcherRule
 import com.difft.android.test.rules.GlobalStaticMockRule
 import io.livekit.android.room.Room
@@ -42,6 +42,9 @@ import java.time.Duration
  * Virtual time: `nowProvider` reads the same [StandardTestDispatcher] scheduler the tick's `delay`
  * uses, so hysteresis boundaries land on exact millisecond values. C9 is the deliberate exception —
  * it must exercise the production default provider.
+ *
+ * The coordinator publishes into a real `CallSessionUiState` (row T3-14): every case here asserts the
+ * session's `networkQuality` flow, and `stop()` publishes `NONE` into it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class, sdk = [33])
@@ -59,13 +62,13 @@ class NetworkQualityCoordinatorTest {
     private lateinit var scope: CoroutineScope
     private lateinit var roomState: MutableStateFlow<Room.State>
     private lateinit var mediaSendIssue: MutableStateFlow<MediaSendIssueState>
-    private lateinit var controller: CallUiController
+    private lateinit var uiState: CallSessionUiState
 
     private var localQuality: ConnectionQuality = ConnectionQuality.EXCELLENT
     private var remoteQualities: Map<String, ConnectionQuality> = emptyMap()
 
     /**
-     * Every distinct snapshot the controller published, in order. Stands in for Turbine's
+     * Every distinct snapshot published to the session UI state, in order. Stands in for Turbine's
      * `expectNoEvents()`: asserting the recorded size is unchanged after advancing virtual time is
      * the same statement ("the tick really stopped"), and it stays deterministic under explicit
      * virtual-time control.
@@ -78,10 +81,10 @@ class NetworkQualityCoordinatorTest {
         scope = CoroutineScope(dispatcherRule.testDispatcher)
         roomState = MutableStateFlow(Room.State.DISCONNECTED)
         mediaSendIssue = MutableStateFlow(MediaSendIssueState.NONE)
-        controller = CallUiController()
+        uiState = CallSessionUiState()
         localQuality = ConnectionQuality.EXCELLENT
         remoteQualities = emptyMap()
-        scope.launch { controller.networkQuality.collect { published += it } }
+        scope.launch { uiState.networkQuality.collect { published += it } }
         scheduler.runCurrent()
     }
 
@@ -98,7 +101,7 @@ class NetworkQualityCoordinatorTest {
         mediaSendIssue = mediaSendIssue,
         localQualityProvider = { localQuality },
         remoteQualityProvider = { remoteQualities },
-        callUiController = controller,
+        uiState = uiState,
         nowProvider = { scheduler.currentTime },
     )
 
@@ -109,7 +112,7 @@ class NetworkQualityCoordinatorTest {
         mediaSendIssue = mediaSendIssue,
         localQualityProvider = { localQuality },
         remoteQualityProvider = { remoteQualities },
-        callUiController = controller,
+        uiState = uiState,
     )
 
     /** Advances virtual time to exactly [target] and runs the task scheduled AT that instant. */
@@ -118,7 +121,7 @@ class NetworkQualityCoordinatorTest {
         scheduler.runCurrent()
     }
 
-    private fun view() = controller.networkQuality.value
+    private fun view() = uiState.networkQuality.value
 
     /** Starts the coordinator and lets the room-state collector process the current value. */
     private fun startAndSettle(): NetworkQualityCoordinator =

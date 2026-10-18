@@ -5,9 +5,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Signature matcher for the GMS-client SecurityException rescue in [CrashFilter]. The stacks mirror
- * Crashlytics issue 8d782ca9: a SecurityException parcelled back from GMS and re-thrown inside
- * play-services' own Handler, with no app frame anywhere on the stack.
+ * Signature matchers in [CrashFilter]; the GMS-client stacks mirror Crashlytics issue 8d782ca9, a
+ * SecurityException parcelled back from GMS and re-thrown inside play-services' own Handler, with
+ * no app frame anywhere on the stack.
  */
 class CrashFilterTest {
 
@@ -88,6 +88,69 @@ class CrashFilterTest {
         assertFalse(CrashFilter.isMissingNativeLibraryCrash(e, baseOnlyInstall = true))
     }
 
+    // ---- framework API missing on a ROM that misreports its SDK level (Crashlytics 41c8b4ad / 85d9ee38) ----
+
+    @Test
+    fun `matches a listed framework member missing on a device that reports its API level`() {
+        val e = NoSuchMethodError(SYSTEM_OVERLAYS_MISSING).withStack(OUTLINE_FRAME, INSETS_COMPAT_FRAME, APP_FRAME)
+
+        assertTrue(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+        assertTrue(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34 + 2))
+    }
+
+    @Test
+    fun `matches when the outline sits in a library fork class`() {
+        val e = NoSuchMethodError(FULL_SCREEN_INTENT_MISSING).withStack(LIBRARY_OUTLINE_FRAME, APP_FRAME)
+
+        assertTrue(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+    }
+
+    @Test
+    fun `matches a NoSuchMethodError wrapped in a cause chain`() {
+        val cause = NoSuchMethodError(SYSTEM_OVERLAYS_MISSING).withStack(OUTLINE_FRAME, APP_FRAME)
+        val e = ExceptionInInitializerError(cause).withStack(APP_FRAME, HANDLER_FRAME)
+
+        assertTrue(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+    }
+
+    @Test
+    fun `does not match on a device below the member's API level`() {
+        // An unguarded call on a genuine older device misses the same member and must keep reporting.
+        val e = NoSuchMethodError(FULL_SCREEN_INTENT_MISSING).withStack(LIBRARY_OUTLINE_FRAME, APP_FRAME)
+
+        assertFalse(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34 - 1))
+    }
+
+    @Test
+    fun `does not match a framework member outside the signature table`() {
+        val e = NoSuchMethodError("No virtual method getFoo()I in class Landroid/app/NotificationManager; or its super classes")
+            .withStack(OUTLINE_FRAME, APP_FRAME)
+
+        assertFalse(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+    }
+
+    @Test
+    fun `does not match without an outline frame`() {
+        val e = NoSuchMethodError(FULL_SCREEN_INTENT_MISSING).withStack(APP_FRAME, HANDLER_FRAME)
+
+        assertFalse(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+    }
+
+    @Test
+    fun `does not match a missing member of a bundled library`() {
+        val e = NoSuchMethodError("No virtual method canUseFullScreenIntent()Z in class Lcom/example/lib/Widget; or its super classes")
+            .withStack(OUTLINE_FRAME, APP_FRAME)
+
+        assertFalse(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+    }
+
+    @Test
+    fun `does not match other error types through an outline`() {
+        val e = NoClassDefFoundError("android.view.WindowInsets\$Type").withStack(OUTLINE_FRAME, APP_FRAME)
+
+        assertFalse(CrashFilter.isSpoofedSdkFrameworkMiss(e, sdkInt = API_34))
+    }
+
     private fun <T : Throwable> T.withStack(vararg frames: StackTraceElement): T = apply { stackTrace = arrayOf(*frames) }
 
     private companion object {
@@ -100,5 +163,18 @@ class CrashFilterTest {
         val HANDLER_FRAME = StackTraceElement("android.os.Handler", "dispatchMessage", "Handler.java", 117)
         val LOOPER_FRAME = StackTraceElement("android.os.Looper", "loop", "Looper.java", 293)
         const val DLOPEN_NOT_FOUND = "dlopen failed: library \"libWCDB.so\" not found"
+        val OUTLINE_FRAME =
+            StackTraceElement("androidx.core.view.WindowCompat\$\$ExternalSyntheticApiModelOutline0", "m\$8", "D8\$\$SyntheticClass", 0)
+        val LIBRARY_OUTLINE_FRAME =
+            StackTraceElement("timber.log.BaseTree\$\$ExternalSyntheticApiModelOutline0", "m", "D8\$\$SyntheticClass", 0)
+        const val API_34 = 34
+        val INSETS_COMPAT_FRAME =
+            StackTraceElement("androidx.core.view.WindowInsetsCompat\$TypeImpl34", "toPlatformType", "WindowInsetsCompat.java", 2880)
+        const val SYSTEM_OVERLAYS_MISSING =
+            "No static method systemOverlays()I in class Landroid/view/WindowInsets\$Type; or its super classes " +
+                "(declaration of 'android.view.WindowInsets\$Type' appears in /system/framework/framework.jar!classes3.dex)"
+        const val FULL_SCREEN_INTENT_MISSING =
+            "No virtual method canUseFullScreenIntent()Z in class Landroid/app/NotificationManager; or its super classes " +
+                "(declaration of 'android.app.NotificationManager' appears in /system/framework/framework.jar)"
     }
 }

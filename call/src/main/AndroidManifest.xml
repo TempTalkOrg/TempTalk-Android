@@ -48,6 +48,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- Ongoing-call notification hang-up. No intent filter: reached only by the explicit-component PendingIntent. -->
+        <receiver
+            android:name=".receiver.CallNotificationActionReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

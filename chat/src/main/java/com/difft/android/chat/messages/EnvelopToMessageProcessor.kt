@@ -1,6 +1,8 @@
 package com.difft.android.chat.messages
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.monitor.DeliveryChannel
+import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import com.google.gson.JsonSyntaxException
@@ -21,7 +23,17 @@ class EnvelopToMessageProcessor @Inject constructor(
     private val newMessageDecryptionUtil: NewMessageDecryptionUtil,
     private val messageContentProcessor: MessageContentProcessor,
     private val dbMessageStore: DBMessageStore,
+    private val healthCounters: KeepAliveHealthCounters,
 ) {
+
+    companion object {
+        // #1328 latency: WebSocket, FCM payload and server pull only; local retries/deferred queues would skew it.
+        private val LIVE_DELIVERY_CHANNELS = mapOf(
+            "message" to DeliveryChannel.WS,
+            "fcm" to DeliveryChannel.FCM,
+            "PendingMessageHelper" to DeliveryChannel.PULL
+        )
+    }
 
     /**
      * Decrypt + content-process + persist a single envelope, returning an
@@ -59,7 +71,14 @@ class EnvelopToMessageProcessor @Inject constructor(
                 ?.takeIf { dataMessageBodyNotExceed8K(it, tag) }
                 ?.processContentToMessage(tag)
                 ?.compatTimestamp()
-            result?.let { dbMessageStore.putWhenNonExist(it.message) }
+            val inserted = result?.let { dbMessageStore.putWhenNonExist(it.message) } ?: 0
+            val channel = LIVE_DELIVERY_CHANNELS[tag]
+            // Only a newly stored message is sampled: a redelivery after a process restart would
+            // otherwise be counted again with latency measured from the original server time.
+            if (inserted > 0 && channel != null) {
+                // Telemetry must never turn a processed message into a failure.
+                runCatching { healthCounters.onEnvelopeDelivered(envelope.systemShowTimestamp, channel) }
+            }
             EnvelopeProcessResult.Success(result)
         } catch (e: CancellationException) {
             // Coroutine cancellation (logout / scope shutdown) is not a message

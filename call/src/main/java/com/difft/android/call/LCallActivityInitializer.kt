@@ -8,33 +8,23 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
-import com.difft.android.base.call.CallRole
-import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.AppLockCallbackManager
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
-import com.difft.android.call.handler.CallActionHandler
-import com.difft.android.call.handler.CallErrorHandler
-import com.difft.android.call.handler.CallExitHandler
 import com.difft.android.call.handler.InviteCallHandler
 import com.difft.android.call.manager.CallCleanupManager
 import com.difft.android.call.manager.CallDialogManager
 import com.difft.android.call.manager.CallLifecycleObserver
 import com.difft.android.call.manager.CallScreenshotController
-import com.difft.android.call.manager.CallServiceManager
 import com.difft.android.call.manager.PictureInPictureManager
-import com.difft.android.call.manager.ProximityScreenOffController
-import com.difft.android.call.manager.shouldHoldProximityLock
-import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
+import com.difft.android.call.session.CallRoomState
 import com.difft.android.call.ui.CallContent
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.base.utils.hideNavigationBar
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Initialization extensions for [LCallActivity].
@@ -49,93 +39,44 @@ import kotlinx.coroutines.withContext
 
 internal fun LCallActivity.initializeState() {
     // The orientation policy is applied pre-super in LCallActivity.onCreate (it must precede
-    // the first frame); nothing orientation-related belongs here.
-    onGoingCallStateManager.setIsInCalling(true)
-
+    // the first frame); nothing orientation-related belongs here. The session shows the call
+    // (`isInCalling`) from its start; the page writes only its own flags.
     if (isAppLockEnabled()) {
         onGoingCallStateManager.setNeedAppLock(callIntent.needAppLock)
     } else {
         onGoingCallStateManager.setNeedAppLock(false)
     }
 
-    viewModel.getRoomId()?.let {
-        onGoingCallStateManager.setCurrentRoomId(it)
-    }
-
     viewModel.callUiController.setPipModeEnabled(isInPictureInPictureMode)
     onGoingCallStateManager.setIsInPipMode(isInPictureInPictureMode)
 }
 
-internal fun LCallActivity.initializeErrorHandler() {
-    callErrorHandler = CallErrorHandler(
-        activity = this,
-        lifecycleScope = lifecycleScope,
-        callIntent = callIntent,
-        onEndCall = { endCallAndClearResources() },
+/** Renders the session's finish request (tip, then the finish-effect end path); the view model is attached to the session. */
+internal fun LCallActivity.initializeSessionEffects() {
+    launchFinishRequestCollector(
+        finishRequest = viewModel.finishRequest,
+        showTip = { message, onDismiss -> showStyledPopTip(message, onDismiss) },
+        endCall = { endCallAndClearResources() },
     )
 }
 
-internal fun LCallActivity.initializeExitHandler() {
-    callExitHandler = CallExitHandler(
-        viewModel = viewModel,
-        callToChatController = callToChatController,
-        onGoingCallStateManager = onGoingCallStateManager,
-        callDataManager = callDataManager,
-        callIntent = callIntent,
-        callRole = callRole,
-        conversationId = onGoingCallStateManager.getConversationId(),
-        callType = onGoingCallStateManager.callType().ifEmpty { callIntent.callType },
-        onEndCall = { endCallAndClearResources() }
-    )
-}
-
-internal fun LCallActivity.initializeCallActionHandler() {
-    callActionHandler = CallActionHandler(
-        viewModel = viewModel,
-        onGoingCallStateManager = onGoingCallStateManager,
-        callRingtoneManager = ringtoneManager,
-        callIntent = callIntent,
-        callRole = callRole,
-        conversationId = onGoingCallStateManager.getConversationId(),
-        onExitClick = { params -> handleExitClick(params) },
-        onEndCall = { endCallAndClearResources() },
-        onShowTip = { message, onDismiss -> showStyledPopTip(message, onDismiss) }
-    )
-}
-
+/**
+ * Binds the page to the resolved [LCallActivity.session]: the call it shows comes from the session,
+ * the intent that opened the page only says whether its entry point already shows the wait dialog.
+ * Creating the view model attaches the page to the session.
+ */
 internal fun LCallActivity.handleIntent(savedInstanceState: Bundle?) {
-    callIntent = CallIntent(intent)
-    if (savedInstanceState == null) {
-        L.i { "[Call] LCallActivity: Processing intent" }
-        if (callRole == CallRole.CALLEE) {
-            LCallManager.stopIncomingCallService(callIntent.roomId, tag = "accept: has in call activity")
-        } else if (callIntent.action == CallIntent.Action.START_CALL && callIntent.callType == CallType.ONE_ON_ONE.type) {
-            callIntent.conversationId?.let { conversationId ->
-                viewModel.addAwaitingJoinInvitees(listOf(conversationId))
-            }
-        }
-        L.d { "[Call] LCallActivity logIntent:$callIntent" }
-        processIntent(callIntent)
-    } else {
-        L.i { "[Call] LCallActivity: Activity likely rotated, not processing intent" }
-    }
-}
-
-internal fun LCallActivity.processIntent(callIntent: CallIntent) {
-    if (callIntent.action == CallIntent.Action.START_CALL || callIntent.action == CallIntent.Action.JOIN_CALL) {
-        if (onGoingCallStateManager.callType().isEmpty()) {
-            onGoingCallStateManager.setCallType(callIntent.callType)
-        }
-        onGoingCallStateManager.setConversationId(callIntent.conversationId)
-        // Only the start-call path carries a clientCallId; join carries null and leaves it unset.
-        callIntent.clientCallId?.let { onGoingCallStateManager.setClientCallId(it) }
+    callIntent = session.params.callIntent
+    launchIntent = CallIntent(intent)
+    val sessionId = viewModel.sessionId
+    L.i {
+        "[Call] LCallActivity: attached session id=$sessionId action=${launchIntent.action} " +
+            "restored=${savedInstanceState != null}"
     }
 }
 
 internal fun LCallActivity.initializeManagers() {
-    initializeCallServiceManager()
     initializePictureInPictureManager()
-    initializeProximitySensor()
     initializeDialogManager()
     initializeInviteCallManager()
     initializeScreenshotController()
@@ -143,14 +84,12 @@ internal fun LCallActivity.initializeManagers() {
 
 internal fun LCallActivity.registerListeners() {
     registerOnBackPressedHandler()
-    registerAppUnlockListener()
     // Broadcast receiver registration involves Binder IPC to system_server,
     // which can take 100-500ms+ under load. Defer to the next main-looper
     // pass so onCreate returns promptly and the first frame renders.
     // NOTE: Must use Dispatchers.Main (not .immediate) — lifecycleScope
     // defaults to Main.immediate which would execute inline on the main thread.
     lifecycleScope.launch(Dispatchers.Main) {
-        registerCallActivityReceiver()
         registerScreenUnlockReceiver()
     }
 }
@@ -168,63 +107,53 @@ internal fun LCallActivity.configureWindow() {
     }
 }
 
+/**
+ * Shows the call once the session's room setup resolves: a ready room is rendered, a failed one
+ * finishes the page (the session ends itself). While it is pending the page shows a wait dialog,
+ * unless its entry point already shows one; both claims are released when it resolves.
+ */
 internal fun LCallActivity.initializeView() {
     L.i { "[Call] LCallActivity initView" }
-    if (!callIntent.callWaitDialogShown) {
+    val pageWaitToken = if (!launchIntent.callWaitDialogShown && viewModel.roomState.value == CallRoomState.Pending) {
         CallWaitDialogUtil.show(this)
+    } else {
+        CallWaitDialogUtil.NO_CLAIM
     }
-    lifecycleScope.launch {
-        // Phase B can throw if a release races in mid-wiring (fail-loud room getter). Catch it so the
-        // dismiss below ALWAYS runs — otherwise the wait dialog would stick on screen forever.
-        val wiringOk = withContext(Dispatchers.Default) {
-            runCatching { viewModel.startRoomDependentWiring() }
-                .onFailure { L.w(it) { "[Call] startRoomDependentWiring aborted (release in flight)" } }
-                .isSuccess
+    // Dispatchers.Main posts, so the content is set after the rest of onCreate, as the managers expect.
+    lifecycleScope.launch(Dispatchers.Main) {
+        val state = viewModel.roomState.first { it != CallRoomState.Pending }
+        CallWaitDialogUtil.dismiss(pageWaitToken)
+        viewModel.releaseEntryWaitDialog()
+        val room = (state as? CallRoomState.Ready)?.room?.takeUnless { viewModel.isSessionEnded }
+        if (room == null) {
+            L.i { "[Call] initView: no room to show state=${state.javaClass.simpleName}, finishing" }
+            finish()
+            return@launch
         }
-        withContext(Dispatchers.Main) {
-            CallWaitDialogUtil.dismiss()
-            // Read the room once, defensively: if wiring aborted or the room was released, finish
-            // gracefully instead of feeding a released room into setContent.
-            val room = if (wiringOk) runCatching { viewModel.room }.getOrNull() else null
-            if (room == null) {
-                L.i { "[Call] initView: room unavailable (release in flight), finishing" }
-                finish()
-                return@withContext
-            }
-            setContent {
-                val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
-                CallContent(
-                    room = room,
-                    viewModel = viewModel,
-                    inviteCallHandler = inviteCallManager,
-                    isUserSharingScreen = isUserSharingScreen,
-                    callConfig = callConfig,
-                    callIntent = callIntent,
-                    callRole = callRole,
-                    conversationId = onGoingCallStateManager.getConversationId(),
-                    autoHideTimeout = autoHideTimeout,
-                    muteOtherEnabled = muteOtherEnabled,
-                    onScreenClick = { handleScreenClick() },
-                    onCallTypeChanged = {
-                        onGoingCallStateManager.setCallType(it)
-                        updateScreenshotListeningState()
-                    },
-                    onInviteUsersClick = { handleInviteUsersClick() },
-                    onWindowZoomOutClick = { handleWindowZoomOutClick() },
-                    onInviteViewAction = { handleInviteViewAction(it) },
-                    onExitClick = { params, callEndType -> handleExitClick(params, callEndType) },
-                    onBottomCallEndAction = { action -> handleBottomCallEndAction(action) }
-                )
-            }
+        setContent {
+            val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
+            CallContent(
+                room = room,
+                viewModel = viewModel,
+                inviteCallHandler = inviteCallManager,
+                isUserSharingScreen = isUserSharingScreen,
+                callConfig = callConfig,
+                callIntent = callIntent,
+                callRole = callRole,
+                conversationId = onGoingCallStateManager.getConversationId(),
+                autoHideTimeout = autoHideTimeout,
+                muteOtherEnabled = muteOtherEnabled,
+                onScreenClick = { handleScreenClick() },
+                // The session publishes the call type to OnGoingCallStateManager itself.
+                onCallTypeChanged = { updateScreenshotListeningState() },
+                onInviteUsersClick = { handleInviteUsersClick() },
+                onWindowZoomOutClick = { handleWindowZoomOutClick() },
+                onInviteViewAction = { handleInviteViewAction(it) },
+                onExitClick = { params, callEndType -> handleExitClick(params, callEndType) },
+                onBottomCallEndAction = { action -> handleBottomCallEndAction(action) }
+            )
         }
     }
-}
-
-internal fun LCallActivity.initializeCallServiceManager() {
-    callServiceManager = CallServiceManager(
-        context = this,
-        callToChatController = callToChatController
-    ).also { it.startOngoingCallService() }
 }
 
 internal fun LCallActivity.initializePictureInPictureManager() {
@@ -237,20 +166,6 @@ internal fun LCallActivity.initializePictureInPictureManager() {
             onGoingCallStateManager.setIsInPipMode(isInPipMode)
         }
     ).also { it.initialize() }
-}
-
-internal fun LCallActivity.initializeProximitySensor() {
-    proximityScreenOffController = ProximityScreenOffController(
-        context = this,
-        lifecycle = lifecycle,
-        scope = lifecycleScope,
-        shouldHold = combine(
-            viewModel.audioRoute,
-            viewModel.cameraEnabled,
-            viewModel.callUiController.isShareScreening,
-            ::shouldHoldProximityLock,
-        ),
-    ).also { it.start() }
 }
 
 internal fun LCallActivity.initializeDialogManager() {
@@ -282,7 +197,6 @@ internal fun LCallActivity.initializeLifecycleObserver() {
         viewModel = viewModel,
         onGoingCallStateManager = onGoingCallStateManager,
         callToChatController = callToChatController,
-        callErrorHandler = callErrorHandler,
         callDialogManager = callDialogManager,
         callConfig = callConfig
     ).also { lifecycle.addObserver(it) }
@@ -292,7 +206,6 @@ internal fun LCallActivity.initializeCleanupManager() {
     callCleanupManager = CallCleanupManager(
         lifecycle = lifecycle,
         context = this,
-        callbackId = callbackId
     )
 }
 
@@ -311,33 +224,6 @@ internal fun LCallActivity.initializeScreenshotController() {
         },
         focusLostAtProvider = { windowFocusLostAt }
     )
-}
-
-internal fun LCallActivity.registerAppUnlockListener() {
-    appUnlockListener = {
-        if (it) {
-            onGoingCallStateManager.setNeedAppLock(false)
-        }
-    }
-    AppLockCallbackManager.addListener(callbackId, appUnlockListener)
-}
-
-internal fun LCallActivity.registerCallActivityReceiver() {
-    callActivityBroadcastReceiver = CallActivityBroadcastReceiver(
-        onPushStreamLimit = {
-            showStyledPopTip(getString(R.string.call_push_stream_limit_tip), onDismiss = {})
-        },
-        onOngoingTimeout = { roomId ->
-            if (roomId == onGoingCallStateManager.getCurrentRoomId()) {
-                showStyledPopTip(
-                    getString(R.string.call_callee_action_noanswer),
-                    onDismiss = { endCallAndClearResources() })
-            }
-        },
-        onCallControl = { actionType, roomId ->
-            callActionHandler?.handleCallAction(actionType, roomId)
-        }
-    ).also { it.register(this) }
 }
 
 internal fun LCallActivity.registerScreenUnlockReceiver() {
@@ -369,9 +255,5 @@ internal fun LCallActivity.handleExitClick(
     params: CallExitParams,
     callEndType: CallEndType? = CallEndType.LEAVE,
 ) {
-    callExitHandler?.handleExit(params, callEndType ?: CallEndType.LEAVE)
-        ?: run {
-            L.w { "[Call] LCallActivity: CallExitHandler is not initialized, ending call directly" }
-            endCallAndClearResources()
-        }
+    viewModel.requestExit(params, callEndType ?: CallEndType.LEAVE)
 }

@@ -321,24 +321,10 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
             val confidentialMode = if (view.tag == 0) 1 else 0
             if (confidentialMode == 1 && globalServices.userManager.getUserData()?.hasShownConfidentialTip != true) {
                 showConfidentialTipDialog {
-                    chatSettingViewModel.setConversationConfigs(
-                        this,
-                        chatViewModel.forWhat.id,
-                        null,
-                        null,
-                        null,
-                        confidentialMode
-                    )
+                    chatSettingViewModel.setConfidentialMode(confidentialMode)
                 }
             } else {
-                chatSettingViewModel.setConversationConfigs(
-                    this,
-                    chatViewModel.forWhat.id,
-                    null,
-                    null,
-                    null,
-                    confidentialMode
-                )
+                chatSettingViewModel.setConfidentialMode(confidentialMode)
             }
         }
 

@@ -163,6 +163,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
 
             override fun onItemLongClicked(view: View, roomViewData: RoomViewData, position: Int, touchX: Int, touchY: Int) {
+                if (roomViewData.hasOngoingCall) return
                 showItemActionsPop(view, roomViewData, touchX, touchY)
             }
 

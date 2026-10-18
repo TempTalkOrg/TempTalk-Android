@@ -571,7 +571,7 @@ class MainPageWithTopStatusViewTest {
     @Test
     fun `T20a - a bad local link shows the local weak-network text in the bar`() {
         val (vm, callIntent) = buildConnectedGroupViewModel()
-        vm.callUiController.setNetworkQuality(NetworkQualityView(local = NetworkQualityLevel.BAD))
+        sessionUi().setNetworkQuality(NetworkQualityView(local = NetworkQualityLevel.BAD))
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = false)
         composeTestRule.waitForIdle()
@@ -582,7 +582,7 @@ class MainPageWithTopStatusViewTest {
     @Test
     fun `T20b - a healthy snapshot leaves the bar empty`() {
         val (vm, callIntent) = buildConnectedGroupViewModel()
-        vm.callUiController.setNetworkQuality(NetworkQualityView.NONE)
+        sessionUi().setNetworkQuality(NetworkQualityView.NONE)
 
         setContentWithViewModel(vm, callIntent, isOneVOneCall = false)
         composeTestRule.waitForIdle()
@@ -593,7 +593,7 @@ class MainPageWithTopStatusViewTest {
     @Test
     fun `T20c - PiP mode still excludes the bar when the local link is bad`() {
         val (vm, callIntent) = buildConnectedGroupViewModel()
-        vm.callUiController.setNetworkQuality(NetworkQualityView(local = NetworkQualityLevel.BAD))
+        sessionUi().setNetworkQuality(NetworkQualityView(local = NetworkQualityLevel.BAD))
 
         setContentWithViewModel(vm, callIntent, isInPipMode = true, isOneVOneCall = false)
         composeTestRule.waitForIdle()
@@ -611,7 +611,7 @@ class MainPageWithTopStatusViewTest {
         // The headcount — local + one peer — is what turns a bad remote into a banner instead of a
         // tile badge. The list the production wiring publishes is exactly local + the room's remotes.
         vm.participantManager.setParticipants(listOf(localParticipant(), remoteParticipant("alice")))
-        vm.callUiController.setNetworkQuality(
+        sessionUi().setNetworkQuality(
             NetworkQualityView(remote = mapOf("alice" to NetworkQualityLevel.BAD)),
         )
 
@@ -627,7 +627,7 @@ class MainPageWithTopStatusViewTest {
         vm.participantManager.setParticipants(
             listOf(localParticipant(), remoteParticipant("alice"), remoteParticipant("bob")),
         )
-        vm.callUiController.setNetworkQuality(
+        sessionUi().setNetworkQuality(
             NetworkQualityView(remote = mapOf("alice" to NetworkQualityLevel.BAD)),
         )
 
@@ -636,6 +636,9 @@ class MainPageWithTopStatusViewTest {
 
         assertNotificationBarAbsent("with three people the badge names the bad peer instead")
     }
+
+    /** The session-side writer of the VM built last (the network-quality field is session-written). */
+    private fun sessionUi() = CallVmTestHarness.lastHarness.run { uiWriter(sessions.last()) }
 
     private fun localParticipant(): Participant = mockk<LocalParticipant>(relaxed = true)
 

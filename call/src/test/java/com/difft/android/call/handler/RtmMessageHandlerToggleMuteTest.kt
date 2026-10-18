@@ -1,5 +1,6 @@
 package com.difft.android.call.handler
 
+import com.difft.android.test.TestDispatcherRule
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
@@ -8,7 +9,14 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.withTimeout
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -18,13 +26,35 @@ import org.junit.Test
  */
 class RtmMessageHandlerToggleMuteTest {
 
+    // A Main that is never run: send()'s completion hop stays pending instead of reaching a real Main.
+    @get:Rule
+    val dispatcherRule = TestDispatcherRule(StandardTestDispatcher())
+
+    private val sendJob = SupervisorJob()
     private val room = mockk<Room>(relaxed = true)
     private val subject = RtmMessageHandler(
         room = room,
-        scope = CoroutineScope(Dispatchers.Unconfined),
+        scope = CoroutineScope(sendJob + Dispatchers.Unconfined),
         encryptor = { _, _ -> null },
         decryptor = { _, _ -> null },
     )
+
+    /**
+     * send() finishes on Dispatchers.IO with a hop to Main. End it here, while this test's Main is still
+     * installed: left running, it touches Main after the rule resets it and the failure is reported as
+     * an uncaught exception in whichever coroutine test this JVM runs next.
+     */
+    @After
+    fun tearDown() = runBlocking {
+        sendJob.cancel()
+        // A hop already queued on the test Main completes (as cancelled) only once that Main runs it.
+        withTimeout(5_000) {
+            while (sendJob.children.any()) {
+                dispatcherRule.testDispatcher.scheduler.advanceUntilIdle()
+                delay(10)
+            }
+        }
+    }
 
     @Test
     fun `local participant reports false once and sends nothing`() {

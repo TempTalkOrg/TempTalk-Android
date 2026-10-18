@@ -12,12 +12,12 @@ import androidx.core.content.IntentCompat
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.NewInstanceFactory
+import com.difft.android.chat.invite.ScanActivity
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.MigrationImportLauncher
 import com.difft.android.base.ui.theme.DifftTheme
 import dagger.hilt.android.AndroidEntryPoint
-import android.content.ComponentName
 import android.content.Intent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
@@ -128,7 +128,7 @@ class MigrationP2pReceiveActivity : BaseActivity() {
 
     /** Desktop export code: the scanner returns the raw payload; the ViewModel decides whether it is one. */
     private val scanLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val raw = result.data?.getStringExtra(SCAN_RESULT_EXTRA)
+        val raw = result.data?.getStringExtra(ScanActivity.EXTRA_SCAN_RESULT)
         if (result.resultCode == RESULT_OK && raw != null) {
             viewModel.onIntent(MigrationP2pReceiveIntent.PeerQrScanned(raw))
         } else {
@@ -277,12 +277,12 @@ class MigrationP2pReceiveActivity : BaseActivity() {
      * network rule.
      */
     private fun launchScan() {
-        val intent = Intent().apply {
-            component = ComponentName(packageName, SCAN_ACTIVITY_CLASS)
-            putExtra(SCAN_RETURN_RESULT_EXTRA, true)
-            putExtra(SCAN_TITLE_EXTRA, getString(R.string.migration_r2_scan_title))
-            putExtra(SCAN_HINT_EXTRA, getString(R.string.migration_r2_scan_body))
-            putExtra(SCAN_HINT_SECONDARY_EXTRA, getString(R.string.migration_r2_network))
+        val intent = Intent(this, ScanActivity::class.java).apply {
+            putExtra(ScanActivity.EXTRA_RETURN_RESULT, true)
+            putExtra(ScanActivity.EXTRA_TITLE, getString(R.string.migration_r2_scan_title))
+            putExtra(ScanActivity.EXTRA_MIGRATION_STYLE, true)
+            putExtra(ScanActivity.EXTRA_HINT, getString(R.string.migration_r2_scan_body))
+            putExtra(ScanActivity.EXTRA_HINT_SECONDARY, getString(R.string.migration_r2_network))
         }
         runCatching { scanLauncher.launch(intent) }
             .onFailure {
@@ -410,11 +410,5 @@ class MigrationP2pReceiveActivity : BaseActivity() {
     companion object {
         // Must match MigrationImportLauncherImpl.EXTRA_ACCOUNT ("extra_account").
         private const val EXTRA_ACCOUNT = "extra_account"
-        private const val SCAN_ACTIVITY_CLASS = "com.difft.android.chat.invite.ScanActivity"
-        private const val SCAN_RETURN_RESULT_EXTRA = "extra_return_result"
-        private const val SCAN_RESULT_EXTRA = "extra_scan_result"
-        private const val SCAN_TITLE_EXTRA = "extra_title"
-        private const val SCAN_HINT_EXTRA = "extra_hint"
-        private const val SCAN_HINT_SECONDARY_EXTRA = "extra_hint_secondary"
     }
 }

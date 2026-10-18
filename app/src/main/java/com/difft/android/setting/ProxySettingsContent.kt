@@ -188,7 +188,7 @@ private fun ProxyGroupSwitchRow(
 @Composable
 private fun ProxyUseProxyDescription() {
     val context = LocalContext.current
-    val linkColor = DifftTheme.colors.primary
+    val linkColor = DifftTheme.colors.textInfo
     val text = buildAnnotatedString {
         append(stringResource(R.string.proxy_use_proxy_desc))
         append(" ")

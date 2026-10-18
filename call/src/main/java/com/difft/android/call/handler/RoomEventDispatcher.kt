@@ -8,7 +8,6 @@ import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.call.R
 import com.difft.android.call.connect.CallConnectionCoordinator
 import com.difft.android.call.core.CallRoomController
-import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN
 import com.difft.android.call.data.RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN
@@ -23,6 +22,8 @@ import com.difft.android.call.manager.ParticipantManager
 import com.difft.android.call.manager.SpeakerStateHolder
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.network.NetworkQualityCoordinator
+import com.difft.android.call.session.CallSessionUiEvent
+import com.difft.android.call.session.CallSessionUiState
 import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import com.difft.android.call.util.IdUtil
 import io.livekit.android.events.DisconnectReason
@@ -44,17 +45,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * UI-layer side effects that cannot be moved cleanly out of the ViewModel.
- * Bundled as lambdas so `LCallViewModel` can construct one with method
- * references without having to implement an interface (~25 line savings in
- * the VM under the 500-line cap).
+ * Session-level side effects the dispatcher triggers but does not own.
+ * Bundled as lambdas so `CallSessionGraph` can construct one with method
+ * references without having to implement an interface (keeps the graph
+ * free of a host implementation class).
  */
 data class RoomEventHost(
     val showBarrageFn: (Participant, String, Int?) -> Unit,
     val setMicEnabledFn: (Boolean, Boolean, Boolean) -> Unit,
     val setCameraEnabledFn: (Boolean) -> Unit,
     val resetNoBodySpeakCheckFn: () -> Unit,
-    val sendHangUpBroadcastFn: (String) -> Unit,
+    val onRemoteEndRequestedFn: (String) -> Unit,
     val stopRingToneAndTimeoutCheckFn: () -> Unit,
     val resolveCallTypeFn: () -> Unit,
     val handleConnectedStateFn: () -> Unit,
@@ -70,7 +71,7 @@ data class RoomEventHost(
         setMicEnabledFn(enabled, publishMuted, isShowBarrage)
     fun setCameraEnabled(enabled: Boolean) = setCameraEnabledFn(enabled)
     fun resetNoBodySpeakCheck() = resetNoBodySpeakCheckFn()
-    fun sendHangUpBroadcast(roomId: String) = sendHangUpBroadcastFn(roomId)
+    fun onRemoteEndRequested(roomId: String) = onRemoteEndRequestedFn(roomId)
     fun stopRingToneAndTimeoutCheck() = stopRingToneAndTimeoutCheckFn()
 
     /**
@@ -91,8 +92,8 @@ data class RoomEventHost(
 /**
  * Consumes `Room.events` and dispatches them to the relevant collaborators.
  *
- * Extracted from `LCallViewModel.handleRoomEvents` so the ViewModel can stay
- * within the 500-line project limit. Owns:
+ * Built by
+ * `CallSessionGraph` on the session's main scope. Owns:
  *  - The single event-collector coroutine
  *  - Active-speaker → UI enable watchdog
  *  - Screen share state transitions (start/stop + resubscription verification)
@@ -103,7 +104,7 @@ internal class RoomEventDispatcher(
     private val roomCtl: CallRoomController,
     private val rtm: RtmMessageHandler,
     private val connectionCoordinator: CallConnectionCoordinator,
-    private val callUiController: CallUiController,
+    private val uiState: CallSessionUiState,
     private val participantManager: ParticipantManager,
     private val screenSharePreWarmer: ScreenSharePreWarmer,
     private val timeoutMonitor: CallTimeoutMonitor,
@@ -292,7 +293,7 @@ internal class RoomEventDispatcher(
                 L.i { "[Call] RoomEventDispatcher room event reconnecting." }
                 timeoutMonitor.cancelIfActive()
                 roomCtl.updateCallStatus(CallStatus.RECONNECTING)
-                callUiController.setSpeakingEnabled(false)
+                uiState.setSpeakingEnabled(false)
                 screenSharePreWarmer.markReconnecting()
             }
             is RoomEvent.Connected -> onConnected()
@@ -320,7 +321,7 @@ internal class RoomEventDispatcher(
                 screenSharePreWarmer.reWarmIfNeeded(
                     event.participant,
                     event.publication.source,
-                    callUiController.isShareScreening.value,
+                    uiState.isShareScreening.value,
                     participantManager.screenSharingUser.value?.identity?.value,
                 )
                 screenSharePreWarmer.handleTrackSubscribedIfPending(::onResubscriptionSettled)
@@ -331,7 +332,7 @@ internal class RoomEventDispatcher(
             // place (and de-duplicates equal values, unlike an event hook).
             is RoomEvent.ConnectionQualityChanged -> onConnectionQualityChanged(event.participant, event.quality)
             is RoomEvent.ActiveSpeakersChanged -> {
-                if (!callUiController.speakingEnabled.value) callUiController.setSpeakingEnabled(true)
+                if (!uiState.speakingEnabled.value) uiState.setSpeakingEnabled(true)
                 resetSpeakingWatchdog(event.speakers.isNotEmpty())
                 speakerState.onActiveSpeakersChanged(event.speakers)
             }
@@ -350,7 +351,7 @@ internal class RoomEventDispatcher(
             onEndCall = {
                 host.getCurrentRoomId()?.let { rid ->
                     callDataManager.removeCallData(rid)
-                    host.sendHangUpBroadcast(rid)
+                    host.onRemoteEndRequested(rid)
                 }
             },
             onServerEndCall = serverEndCall@{
@@ -361,7 +362,7 @@ internal class RoomEventDispatcher(
                 }
                 host.getCurrentRoomId()?.let { rid ->
                     callDataManager.removeCallData(rid)
-                    host.sendHangUpBroadcast(rid)
+                    host.onRemoteEndRequested(rid)
                 }
             },
             onCountDown = { data, topic ->
@@ -373,11 +374,11 @@ internal class RoomEventDispatcher(
                                 host.showBarrage(p, getString(R.string.call_barrage_message_countdown_timer))
                             }
                         }
-                        timerManager.startCountdown(left, onEnded = { }, onTick = { callUiController.setCountDownDurationStr(it) })
+                        timerManager.startCountdown(left, onEnded = { }, onTick = uiState::setCountDownDurationStr)
                     }
                     RTM_MESSAGE_TOPIC_EXTEND_COUNTDOWN -> {
                         val left = calculateCountDownDuration(data.expiredTimeMs, data.currentTimeMs)
-                        timerManager.startCountdown(left, onEnded = { }, onTick = { callUiController.setCountDownDurationStr(it) })
+                        timerManager.startCountdown(left, onEnded = { }, onTick = uiState::setCountDownDurationStr)
                     }
                     RTM_MESSAGE_TOPIC_CLEAR_COUNTDOWN -> timerManager.stopCountdown()
                 }
@@ -609,14 +610,13 @@ internal class RoomEventDispatcher(
     private fun checkRemoteUserScreenShare(participant: Participant) {
         if (participant !is RemoteParticipant) return
         val isSharing = participant.getTrackPublication(Track.Source.SCREEN_SHARE) != null
-        if (isSharing && !callUiController.isShareScreening.value) {
+        if (isSharing && !uiState.isShareScreening.value) {
             L.i { "[Call] RoomEventDispatcher ${participant.identity?.value} start screen sharing." }
             screenSharePreWarmer.preWarmSharer(participant)
             participantManager.resortParticipants()
             participantManager.setScreenSharingUser(participant)
-            callUiController.setShareScreening(true)
-            callUiController.setShowTopStatusViewEnabled(true)
-            callUiController.setShowBottomToolBarViewEnabled(true)
+            uiState.setShareScreening(true)
+            uiState.emit(CallSessionUiEvent.RevealCallChrome)
             host.showBarrage(participant, getString(R.string.call_barrage_message_screensharing))
         }
         if (participantManager.screenSharingUser.value?.identity?.value == participant.identity?.value && !isSharing) {
@@ -624,10 +624,9 @@ internal class RoomEventDispatcher(
             L.i { "[Call] RoomEventDispatcher ${participant.identity?.value} stop screen sharing." }
             screenSharePreWarmer.cleanupAll()
             participantManager.resortParticipants()
-            callUiController.setShareScreening(false)
+            uiState.setShareScreening(false)
             participantManager.setScreenSharingUser(null)
-            callUiController.setShowTopStatusViewEnabled(true)
-            callUiController.setShowBottomToolBarViewEnabled(true)
+            uiState.emit(CallSessionUiEvent.RevealCallChrome)
         }
     }
 
@@ -635,7 +634,7 @@ internal class RoomEventDispatcher(
         // reconnectCount 自增作为"重绑代"信号：不再用于 compose key（不销毁重建 renderer、不黑闪），
         // 而是驱动 VideoRenderer 对当前 track 原地 removeRenderer+addRenderer 刷新 sink，确保全量
         // 重连（track 可能是新对象、或底层流已替换）后新帧能恢复，避免永久卡在最后一帧。
-        callUiController.incrementReconnectCount()
+        uiState.incrementReconnectCount()
         participantManager.screenSharingUser.value?.let { checkRemoteUserScreenShare(it) }
     }
 
@@ -659,7 +658,7 @@ internal class RoomEventDispatcher(
         if (hasSpeakers) {
             speakingWatchdogJob = scope.launch {
                 delay(speakingWatchdogTimeoutMs)
-                callUiController.setSpeakingEnabled(false)
+                uiState.setSpeakingEnabled(false)
             }
         }
     }

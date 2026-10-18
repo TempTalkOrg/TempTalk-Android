@@ -60,7 +60,7 @@ class MigrationP2pSendViewModelTest {
      * non-null [transferKey] stands for "a key is present" and the fixed key below is what is encoded;
      * null is the no-key reject case.
      */
-    private fun rawQr(transferKey: String? = "present"): String =
+    private fun rawQr(transferKey: String? = "present", dir: String? = null): String =
         com.difft.android.p2p.android.qr.QrPayloadCodec.encodeText(
             com.difft.android.p2p.engine.model.QrPayload(
                 ip = "192.168.1.7",
@@ -69,6 +69,7 @@ class MigrationP2pSendViewModelTest {
                 pin = "123456",
                 alias = "Pixel",
                 transferKey = transferKey?.let { "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=" },
+                dir = dir,
             ),
         )
 
@@ -122,6 +123,21 @@ class MigrationP2pSendViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
         assertEquals(MigrationP2pSendState.Idle, vm.state.value)
+    }
+
+    @Test
+    fun `a computer export code stays Idle and points to the sign-in page, keyed or not`() = runTest {
+        val hint = ApplicationProvider.getApplicationContext<Application>()
+            .getString(com.difft.android.chat.R.string.scan_computer_export_code_hint)
+        for (key in listOf<String?>("present", null)) {
+            val vm = newVm()
+            vm.effects.test {
+                vm.onIntent(MigrationP2pSendIntent.QrScanned(rawQr(transferKey = key, dir = "download")))
+                assertEquals(MigrationP2pSendEffect.Toast(hint), awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
+            assertEquals(MigrationP2pSendState.Idle, vm.state.value)
+        }
     }
 
     @Test

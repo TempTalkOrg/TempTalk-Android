@@ -12,6 +12,7 @@ import com.difft.android.call.LCallToChatController
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.repo.LCallHttpService
+import com.difft.android.call.session.command.CallSessionCommands
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.messageserialization.db.store.DBRoomStore
@@ -19,6 +20,7 @@ import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
+import dagger.Lazy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -52,6 +54,8 @@ class CallMessageHandler @Inject constructor(
     internal val callToChatController: LCallToChatController,
     internal val groupRepo: GroupRepo,
     internal val dbRoomStore: DBRoomStore,
+    // Lazy: CallSessionCommands → holder → session factory → LCallToChatController → this class.
+    private val callSessionCommands: Lazy<CallSessionCommands>,
 ) {
     internal val callService: LCallHttpService by lazy {
         callHttpClient.getService(LCallHttpService::class.java)
@@ -102,15 +106,15 @@ class CallMessageHandler @Inject constructor(
         cancelNotificationAndHandleService(roomId, CallActionType.CALLEND, "ended: server call end notification")
 
         if (onGoingCallStateManager.isInCalling() && onGoingCallStateManager.getCurrentRoomId() == roomId) {
-            updateControlMessage(CallActionType.CALLEND, roomId)
+            endOngoingCall(CallActionType.CALLEND, roomId)
         }
     }
 
     // region shared helpers
 
     /**
-     * Cancel the incoming-call notification and either route the action to
-     * the current call UI or stop the incoming-call service.
+     * Cancel the incoming-call notification and either signal the action to
+     * the incoming-call page or stop the incoming-call service.
      */
     internal fun cancelNotificationAndHandleService(
         roomId: String,
@@ -126,6 +130,11 @@ class CallMessageHandler @Inject constructor(
         }
     }
 
+    /** A remote end for the call this device is in: goes straight to the live call session. */
+    internal fun endOngoingCall(actionType: CallActionType, roomId: String) =
+        callSessionCommands.get().onRemoteControl(actionType, roomId)
+
+    /** Signal for the incoming-call page only. */
     internal fun updateControlMessage(actionType: CallActionType, roomId: String) {
         val controlMessage = OnGoingCallStateManager.ControlMessage(
             actionType = actionType,

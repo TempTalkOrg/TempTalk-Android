@@ -30,6 +30,8 @@ import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.CallRingtoneManager
 import com.difft.android.call.manager.CallVibrationManager
+import com.difft.android.call.session.CallSessionHolder
+import com.difft.android.call.session.command.CallSessionCommands
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.IncomingAnswerMode
@@ -45,10 +47,8 @@ import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -61,6 +61,8 @@ class LIncomingCallActivity : BaseActivity() {
     @Inject lateinit var callVibrationManager: CallVibrationManager
     @Inject lateinit var callRingtoneManager: CallRingtoneManager
     @Inject lateinit var userManager: UserManager
+    @Inject lateinit var callSessionCommands: CallSessionCommands
+    @Inject lateinit var callSessionHolder: CallSessionHolder
 
     val binding: CallActivityIncomingCallBinding by viewbind()
 
@@ -399,23 +401,12 @@ class LIncomingCallActivity : BaseActivity() {
     }
 
     private suspend fun endCurrentCallAndWaitForRelease(): Boolean {
-        val currentRoomId = onGoingCallStateManager.getCurrentRoomId()
-        if (!currentRoomId.isNullOrEmpty()) {
-            val intent = Intent(LCallActivity.ACTION_IN_CALLING_CONTROL).apply {
-                putExtra(LCallActivity.EXTRA_CONTROL_TYPE, CallActionType.DECLINE.type)
-                putExtra(LCallActivity.EXTRA_PARAM_ROOM_ID, currentRoomId)
-                setPackage(ApplicationHelper.instance.packageName)
-            }
-            ApplicationHelper.instance.sendBroadcast(intent)
-        }
         return try {
-            withTimeoutOrNull(15_000) {
-                onGoingCallStateManager.isInCalling.first { !it }
-                true
-            } ?: run {
-                L.w { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease timeout." }
-                runOnUiThread { ToastUtil.show(R.string.call_join_failed_tip) }
-                false
+            awaitCurrentCallRelease(callSessionHolder, onGoingCallStateManager, callSessionCommands).also { released ->
+                if (!released) {
+                    L.w { "[Call] LIncomingCallActivity endCurrentCallAndWaitForRelease timeout." }
+                    runOnUiThread { ToastUtil.show(R.string.call_join_failed_tip) }
+                }
             }
         } catch (e: CancellationException) {
             throw e

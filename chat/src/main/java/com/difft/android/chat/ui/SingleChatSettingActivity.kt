@@ -69,6 +69,7 @@ import org.difft.app.database.getContactorFromAllTable
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.DBContactorModel
 import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageSoundLabel
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
@@ -212,7 +213,7 @@ class SingleChatSettingActivity : BaseActivity() {
         }
 
         mBinding.tvUnblock.setOnClickListener {
-            chatSettingViewModel.setConversationConfigs(this, contactId, null, null, 0, null, false, getString(R.string.contact_unblocked))
+            chatSettingViewModel.setConversationConfigs(this, contactId, null, null, 0, false, getString(R.string.contact_unblocked))
         }
         mBinding.tvBlock.setOnClickListener {
             showBlockDialog()
@@ -268,6 +269,22 @@ class SingleChatSettingActivity : BaseActivity() {
     override fun onResume() {
         super.onResume()
         handleCommonGroupsDisplay()
+        refreshNotificationSound()
+    }
+
+    /** Shows the sound this chat plays; re-read on return from the system category page. */
+    private fun refreshNotificationSound() {
+        if (!messageNotificationUtil.supportConversationNotification()) return
+        lifecycleScope.launch {
+            try {
+                val label = withContext(Dispatchers.IO) { MessageSoundLabel.readForConversation(applicationContext, contactId) }
+                mBinding.tvNotificationSound.text = label
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {
+                L.w { "[SingleChatSetting] notification sound read failed error=${e.javaClass.simpleName}" }
+            }
+        }
     }
 
     // region identity header (title bar + centered header)
@@ -436,12 +453,12 @@ class SingleChatSettingActivity : BaseActivity() {
 
                 tvBlock.setOnClickListener {
                     dialog?.dismiss()
-                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
+                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, false, getString(R.string.contact_blocked))
                 }
 
 //                tvBlockAndReport.setOnClickListener {
 //                    dialog?.dismiss()
-//                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, null, false, getString(R.string.contact_blocked))
+//                    chatSettingViewModel.setConversationConfigs(this@SingleChatSettingActivity, contactId, null, null, 1, false, getString(R.string.contact_blocked))
 ////                    chatSettingViewModel.reportContact(this@SingleChatSettingActivity, contactId)
 //                }
 

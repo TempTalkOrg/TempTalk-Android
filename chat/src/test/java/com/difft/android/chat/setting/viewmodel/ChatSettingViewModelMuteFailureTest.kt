@@ -8,14 +8,20 @@ import com.difft.android.chat.setting.ConversationSettingUpdate
 import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.translate.FakeTranslateBackend
 import com.difft.android.chat.setting.archive.MessageArchiveManager
+import com.difft.android.chat.setting.sync.ConfidentialModeSyncCoordinator
+import com.difft.android.chat.setting.sync.ConversationSettingsApplier
+import com.difft.android.chat.setting.sync.ServerConfigSnapshot
+import com.difft.android.chat.setting.sync.SnapshotSource
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.HttpService
 import com.difft.android.network.responses.ConversationSetResponseBody
+import com.difft.android.network.responses.GetConversationSetResponseBody
 import difft.android.messageserialization.For
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -39,6 +45,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.difft.app.database.models.RoomModel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -63,6 +70,8 @@ class ChatSettingViewModelMuteFailureTest {
     private val httpClient: ChativeHttpClient = mockk(relaxed = true)
     private val httpService: HttpService = mockk(relaxed = true)
     private val dbRoomStore: DBRoomStore = mockk(relaxed = true)
+    private val settingsApplier: ConversationSettingsApplier = mockk(relaxed = true)
+    private val confidentialSync: ConfidentialModeSyncCoordinator = mockk(relaxed = true)
     private val globalServicesMock: GlobalHiltEntryPoint = mockk(relaxed = true)
     private val userManager: UserManager = mockk(relaxed = true)
     private val settingUpdates = MutableSharedFlow<ConversationSettingUpdate>()
@@ -83,6 +92,7 @@ class ChatSettingViewModelMuteFailureTest {
         every { messageArchiveManager.getDefaultMessageArchiveTime() } returns DEFAULT_EXPIRY
         every { activity.getString(any()) } returns "failed"
         every { ToastUtil.show(any<String>()) } returns Unit
+        coEvery { settingsApplier.applyServerSnapshot(any(), any(), any()) } returns null
     }
 
     @After
@@ -99,6 +109,8 @@ class ChatSettingViewModelMuteFailureTest {
         conversationSettingsManager = conversationSettingsManager,
         httpClient = httpClient,
         dbRoomStore = dbRoomStore,
+        settingsApplier = settingsApplier,
+        confidentialSync = confidentialSync,
         translateBackend = FakeTranslateBackend(),
     )
 
@@ -149,31 +161,24 @@ class ChatSettingViewModelMuteFailureTest {
         verify { ToastUtil.show("failed") }
     }
 
+    /**
+     * An echoed body is a full server snapshot: it goes to [ConversationSettingsApplier], which
+     * version-gates it, protects a pending local confidential toggle and writes the row. The view
+     * model merges exactly the fields the applier reports as written, never its own write.
+     */
     @Test
-    fun `an accepted mute request emits the new config`() {
-        coEvery { httpService.fetchConversationSet(any()) } returns BaseResponse(
-            ver = 1,
-            status = 0,
-            reason = null,
-            data = ConversationSetResponseBody(conversation = CONVERSATION_ID, muteStatus = 1),
-        )
+    fun `an accepted mute request hands the echo to the applier and merges what it wrote`() {
+        val echo = ConversationSetResponseBody(conversation = CONVERSATION_ID, muteStatus = 1, version = 7)
+        coEvery { httpService.fetchConversationSet(any()) } returns BaseResponse(ver = 1, status = 0, reason = null, data = echo)
+        coEvery { settingsApplier.applyServerSnapshot(any(), any(), any()) } returns
+            ConversationSettingUpdate(conversationId = CONVERSATION_ID, muteStatus = 1)
         val vm = viewModel()
 
         vm.mute()
 
         assertEquals(1, vm.conversationSet.value?.muteStatus)
-        // An echoed body is persisted as narrowly as an empty one: only the requested columns, so
-        // a concurrent change to any other column survives.
-        verify(exactly = 1) {
-            dbRoomStore.updateConversationSettings(
-                roomId = CONVERSATION_ID,
-                muteStatus = 1,
-                blockStatus = null,
-                confidentialMode = null,
-                messageExpiry = null,
-                messageClearAnchor = null
-            )
-        }
+        coVerify(exactly = 1) { settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromEcho(echo), SnapshotSource.Echo, any()) }
+        verify(exactly = 0) { dbRoomStore.updateConversationSettings(any(), any(), any(), any(), any(), any(), any()) }
     }
 
     /**
@@ -210,27 +215,76 @@ class ChatSettingViewModelMuteFailureTest {
     }
 
     /**
-     * The merged config reaches [ChatSettingViewModel.conversationSet] before the request persists
-     * it, so a config update landing during that database hop is no longer overwritten by the
-     * snapshot the request started from.
+     * A gated or stale echo makes the applier write nothing and emit nothing; the flow then stays
+     * where it was instead of being overwritten from the request's own snapshot.
      */
     @Test
-    fun `an accepted mute request emits before it persists`() {
+    fun `an accepted mute request whose echo the applier drops leaves conversationSet untouched`() {
         coEvery { httpService.fetchConversationSet(any()) } returns BaseResponse(
             ver = 1,
             status = 0,
             reason = null,
             data = ConversationSetResponseBody(conversation = CONVERSATION_ID, muteStatus = 1),
         )
+        every { dbRoomStore.getRoom(CONVERSATION_ID) } returns RoomModel().apply { roomId = CONVERSATION_ID }
         val vm = viewModel()
-        var muteStatusAtWrite: Int? = null
-        every { dbRoomStore.updateConversationSettings(any(), any(), any(), any(), any(), any()) } answers {
-            muteStatusAtWrite = vm.conversationSet.value?.muteStatus
-        }
+        vm.seedUnmutedConfig()
 
         vm.mute()
 
-        assertEquals(1, muteStatusAtWrite)
+        assertEquals(0, vm.conversationSet.value?.muteStatus)
+        coVerify(exactly = 1) { settingsApplier.applyServerSnapshot(any(), SnapshotSource.Echo, any()) }
+    }
+
+    /**
+     * A contact never chatted with has no room row. Rather than keeping an in-memory copy with its
+     * own merge rules, the view model creates the row first (exactly as opening the chat does) so
+     * the echo and the init pull land in the row through the applier like everywhere else.
+     */
+    @Test
+    fun `the init pull creates the room row before the applier runs`() {
+        val pulled = ConversationSetResponseBody(conversation = CONVERSATION_ID, muteStatus = 1, version = 6, messageExpiry = 3_600L)
+        coEvery { httpService.fetchGetConversationSet(any()) } returns
+            BaseResponse(ver = 1, status = 0, reason = null, data = GetConversationSetResponseBody(listOf(pulled)))
+
+        viewModel()
+
+        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) {
+            settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromPull(pulled), SnapshotSource.Pull, any())
+        }
+        coVerifyOrder {
+            dbRoomStore.createRoomIfNotExist(For.Account(CONVERSATION_ID))
+            settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromPull(pulled), SnapshotSource.Pull, any())
+        }
+    }
+
+    @Test
+    fun `an echo creates the room row before the applier runs`() {
+        val echo = ConversationSetResponseBody(conversation = CONVERSATION_ID, muteStatus = 1, version = 6)
+        coEvery { httpService.fetchConversationSet(any()) } returns BaseResponse(ver = 1, status = 0, reason = null, data = echo)
+        val vm = viewModel()
+        // The init pull brings nothing, so only the echo path creates a row in this test.
+        coVerify(timeout = VERIFY_TIMEOUT_MS, exactly = 1) { httpService.fetchGetConversationSet(any()) }
+        verify(exactly = 0) { dbRoomStore.createRoomIfNotExist(any()) }
+
+        vm.mute()
+
+        coVerifyOrder {
+            dbRoomStore.createRoomIfNotExist(For.Account(CONVERSATION_ID))
+            settingsApplier.applyServerSnapshot(ServerConfigSnapshot.fromEcho(echo), SnapshotSource.Echo, any())
+        }
+    }
+
+    /** A pull that changes nothing in the row still seeds a flow that never loaded. */
+    @Test
+    fun `an unchanged pull seeds an empty flow`() {
+        val pulled = ConversationSetResponseBody(conversation = CONVERSATION_ID, muteStatus = 0, version = 6, messageExpiry = 3_600L)
+        coEvery { httpService.fetchGetConversationSet(any()) } returns
+            BaseResponse(ver = 1, status = 0, reason = null, data = GetConversationSetResponseBody(listOf(pulled)))
+        val vm = viewModel()
+
+        runBlocking { withTimeout(JOIN_TIMEOUT_MS) { while (vm.conversationSet.value == null) kotlinx.coroutines.delay(10) } }
+        assertEquals(3_600L, vm.conversationSet.value?.messageExpiry)
     }
 
     /**

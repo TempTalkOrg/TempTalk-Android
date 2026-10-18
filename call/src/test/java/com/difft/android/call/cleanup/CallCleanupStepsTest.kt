@@ -1,6 +1,6 @@
 package com.difft.android.call.cleanup
 
-import android.app.Application
+import com.difft.android.call.LCallEngine
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.feedback.CallFeedbackBinder
 import com.difft.android.call.handler.CallTimeoutMonitor
@@ -16,6 +16,10 @@ import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
 import com.github.TempTalkOrg.audio_pipeline.AudioPipelineProcessor
 import io.livekit.android.audio.AudioSwitchHandler
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,7 +33,7 @@ class CallCleanupStepsTest {
     @Test
     fun `dispatcher jobs are cancelled before room release and timer stop`() {
         val stepNames = CallCleanupSteps.build(
-            application = mockk<Application>(relaxed = true),
+            sessionId = 1L,
             audioProcessor = mockk<AudioPipelineProcessor>(relaxed = true),
             audioHandler = mockk<AudioSwitchHandler>(relaxed = true),
             audioSetup = mockk<CallAudioSetup>(relaxed = true),
@@ -64,5 +68,46 @@ class CallCleanupStepsTest {
         // the room is released.
         val resetNetworkQualityIndex = requiredStepIndex("resetNetworkQuality")
         assertTrue(resetNetworkQualityIndex < disconnectAndReleaseIndex)
+
+        // The ongoing-call service belongs to the session's own end, keyed by its id.
+        assertTrue("no service step", stepNames.none { it.contains("Service") })
     }
+
+    @Test
+    fun `the process-wide slots are released for this session only`() = runTest {
+        val statistics = mockk<CallStatisticsLogManager>(relaxed = true)
+        val steps = buildSteps(sessionId = 1L, statistics = statistics).associateBy { it.name }
+        LCallEngine.claimConnectedServerUrl(2L)
+        LCallEngine.setConnectedServerUrl("wss://newer-call")
+
+        steps.getValue("flushStatisticsLogs").action()
+        steps.getValue("clearConnectedServerUrl").action()
+
+        verify(exactly = 1) { statistics.releaseRoom(1L) }
+        verify(exactly = 0) { statistics.setRoomId(any()) }
+        assertEquals("a newer call's URL is kept", "wss://newer-call", LCallEngine.serverUrlConnected.value)
+
+        buildSteps(sessionId = 2L, statistics = statistics).single { it.name == "clearConnectedServerUrl" }.action()
+        assertNull(LCallEngine.serverUrlConnected.value)
+    }
+
+    private fun buildSteps(sessionId: Long, statistics: CallStatisticsLogManager) = CallCleanupSteps.build(
+        sessionId = sessionId,
+        audioProcessor = mockk(relaxed = true),
+        audioHandler = mockk(relaxed = true),
+        audioSetup = mockk(relaxed = true),
+        timerManager = mockk(relaxed = true),
+        timeoutMonitor = mockk(relaxed = true),
+        roomCtl = mockk(relaxed = true),
+        speakerState = mockk(relaxed = true),
+        screenShareFloatingSpeakerStateHolder = null,
+        screenSharePreWarmer = mockk(relaxed = true),
+        roomEventDispatcher = null,
+        callTypeCoordinator = null,
+        networkQualityCoordinator = null,
+        statisticsLogManager = statistics,
+        feedbackBinder = mockk(relaxed = true),
+        shouldTriggerFeedbackView = {},
+        clearE2eeKey = {},
+    )
 }

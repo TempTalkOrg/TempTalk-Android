@@ -302,14 +302,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
         }
         mBinding.includeFullInput.ivFullInputConfidential.setOnClickListener { view ->
             val confidentialMode = if (view.tag == 0) 1 else 0
-            chatSettingViewModel.setConversationConfigs(
-                this,
-                chatViewModel.forWhat.id,
-                null,
-                null,
-                null,
-                confidentialMode
-            )
+            chatSettingViewModel.setConfidentialMode(confidentialMode)
         }
 
         updateConfidential()

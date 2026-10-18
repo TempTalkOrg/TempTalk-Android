@@ -26,6 +26,9 @@ class StopCriticalAlertSoundReceiver: BroadcastReceiver() {
                     context.applicationContext
                 )
                 val criticalAlertManager = entryPoint.criticalAlertManager()
+                // The user swiped the alert away: cancel under the repost lock so a late duplicate FCM
+                // that raced the swipe cannot leave it restored (#1347).
+                entryPoint.notificationRepostGuard().cancel(id)
                 criticalAlertManager.stopSoundIfMatch(id)
                 FlashLightBlinker.stopBlinking()
             } catch (e: Exception) {
