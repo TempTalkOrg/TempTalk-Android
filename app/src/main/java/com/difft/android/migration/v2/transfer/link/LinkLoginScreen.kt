@@ -16,7 +16,7 @@ import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.migration.ui.component.MigrationBodyText
 import com.difft.android.migration.ui.component.MigrationCaption
-import com.difft.android.migration.ui.component.MigrationCard
+import com.difft.android.base.migration.ui.MigrationCard
 import com.difft.android.migration.ui.component.MigrationCardDivider
 import com.difft.android.migration.ui.component.MigrationGap
 import com.difft.android.migration.ui.component.MigrationIconTile

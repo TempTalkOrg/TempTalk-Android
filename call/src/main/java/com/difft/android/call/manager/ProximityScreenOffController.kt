@@ -6,8 +6,6 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.PowerManager
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ProximityNearRule
 import kotlinx.coroutines.CoroutineDispatcher
@@ -51,16 +49,14 @@ internal fun shouldHoldProximityLock(
  * - Pressing the power key while covered turns the screen back on
  *   (`PowerManagerService.interceptPowerKeyDown`) — an escape hatch a window-flag dim never had.
  *
- * The lock is held only while the lifecycle is at least STARTED (call UI visible, including
- * picture-in-picture — Signal and Telegram hold it for the whole call, the system dialer only lets
- * go when the phone lies flat) and [shouldHold] is true. It is released
- * with [PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY] so the screen does not light up against
- * the user's face when the call ends or the route changes. While held, the sensor is also read
- * for diagnostics only (see [ProximityDiagnostics]); it never drives the screen.
+ * Owned by the call session, not the call page: the lock is held for the whole call whenever
+ * [shouldHold] is true, page visible or not — as Signal and Telegram hold it for the whole call.
+ * It is released with [PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY] so the screen does not
+ * light up against the user's face when the call ends or the route changes. While held, the
+ * sensor is also read for diagnostics only (see [ProximityDiagnostics]); it never drives the screen.
  */
 class ProximityScreenOffController(
     context: Context,
-    private val lifecycle: Lifecycle,
     private val scope: CoroutineScope,
     private val shouldHold: Flow<Boolean>,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -68,41 +64,38 @@ class ProximityScreenOffController(
     private val appContext: Context = context.applicationContext
     private var job: Job? = null
 
-    /** Start observing; safe to call once per Activity instance, from the main thread. */
+    /** Start observing; called once per call session, from the main thread. */
     fun start() {
         job?.cancel()
         job = scope.launch {
             // isWakeLockLevelSupported is a Binder call — keep lock setup off the main thread.
             val lock = withContext(ioDispatcher) { createLock() } ?: return@launch
             val diagnostics = ProximityDiagnostics(appContext)
-            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                try {
-                    shouldHold.distinctUntilChanged().collect { hold ->
-                        withContext(ioDispatcher) {
-                            if (hold) {
-                                acquire(lock)
-                                diagnostics.start()
-                            } else {
-                                release(lock)
-                                diagnostics.stop()
-                            }
+            try {
+                shouldHold.distinctUntilChanged().collect { hold ->
+                    withContext(ioDispatcher) {
+                        if (hold) {
+                            acquire(lock)
+                            diagnostics.start()
+                        } else {
+                            release(lock)
+                            diagnostics.stop()
                         }
                     }
-                } finally {
-                    // Leaving STARTED (call UI fully hidden, destroy): drop the lock so a call UI
-                    // that is no longer visible cannot keep the screen off. The wait-for-far flag
-                    // still applies: if the phone is at the ear right now the screen lights up once
-                    // it is moved away, not against the face (power key overrides either way).
-                    withContext(NonCancellable + ioDispatcher) {
-                        release(lock)
-                        diagnostics.stop()
-                    }
+                }
+            } finally {
+                // Released or the session's Job cancelled: drop the lock. The wait-for-far flag
+                // still applies: if the phone is at the ear right now the screen lights up once it
+                // is moved away, not against the face (power key overrides either way).
+                withContext(NonCancellable + ioDispatcher) {
+                    release(lock)
+                    diagnostics.stop()
                 }
             }
         }
     }
 
-    /** Stop observing and release the lock. Called from Activity teardown. */
+    /** Stop observing and release the lock. Called from the session's teardown. */
     fun release() {
         job?.cancel()
         job = null

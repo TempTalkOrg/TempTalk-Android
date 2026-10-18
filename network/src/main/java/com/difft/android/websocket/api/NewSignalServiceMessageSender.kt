@@ -637,6 +637,9 @@ class NewSignalServiceMessageSender @Inject constructor(
             msgType = Envelope.MsgType.MSG_CLIENT_NOTIFY_VALUE
         } else if (content.hasForwardNotice()) {
             msgType = Envelope.MsgType.MSG_FORWARD_NOTICE_VALUE
+        } else if (content.hasActivityNotice()) {
+            // #1347: the server keys its push policy off msgType; activity notices were sent as NORMAL.
+            msgType = Envelope.MsgType.MSG_ACTIVITY_NOTICE_VALUE
         }
         return msgType
     }

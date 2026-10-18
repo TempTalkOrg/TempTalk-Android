@@ -105,6 +105,7 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.models.GroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import com.difft.android.chat.util.MessageNotificationUtil
+import com.difft.android.chat.util.MessageSoundLabel
 import javax.inject.Inject
 import com.difft.android.base.widget.ToastUtil
 const val KEY_GROUP_ID = "groupId"
@@ -182,6 +183,26 @@ class GroupInfoActivity : BaseActivity() {
             it.create(For.Group(groupId))
         }
     })
+
+    override fun onResume() {
+        super.onResume()
+        refreshNotificationSound()
+    }
+
+    /** Shows the sound this group plays; re-read on return from the system category page. */
+    private fun refreshNotificationSound() {
+        if (!messageNotificationUtil.supportConversationNotification() || groupId.isBlank()) return
+        lifecycleScope.launch {
+            try {
+                val label = withContext(Dispatchers.IO) { MessageSoundLabel.readForConversation(applicationContext, groupId) }
+                binding.tvNotificationSound.text = label
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: RuntimeException) {
+                L.w { "[GroupInfo] notification sound read failed error=${e.javaClass.simpleName}" }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

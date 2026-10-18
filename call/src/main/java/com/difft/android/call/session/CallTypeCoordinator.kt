@@ -34,10 +34,10 @@ internal class CallTypeCoordinator(
     private val scope: CoroutineScope,
     // A nullable provider, not the Room itself: `roomCtl.room` is a fail-loud getter that throws
     // once the call is released, and this class is constructed lazily — first touch can be
-    // `LCallViewModel.getCallRoomName()` during a recomposition that races teardown, or after
+    // `CallSession.getCallRoomName()` during a recomposition that races teardown, or after
     // `startRoomDependentWiring` aborted before wiring us up. It returns null once the room is
     // released/not-yet-created (backed by `roomCtl.roomOrNull()`), because the `room.metadata`
-    // collector started in [start] outlives release: it lives in `viewModelScope`, which a
+    // collector started in [start] outlives release: it lives in the session's main scope, which a
     // user-initiated hangup (`doExitClear`) does not cancel, so a metadata emission can arrive
     // after `disconnectAndRelease()` flipped `released`. Every method below drops that late
     // emission on a null room instead of crashing on the fail-loud getter.
@@ -71,11 +71,12 @@ internal class CallTypeCoordinator(
     private var renamedToInstant = false
 
     /**
-     * The coroutines this coordinator launches in [scope] (`viewModelScope`): the display-name
-     * prefetch and the `room.metadata` collector. Tracked so [cancelJobs] can stop them at teardown
-     * — a user-initiated hangup (`doExitClear`) does NOT cancel `viewModelScope`, so without this the
-     * collector would otherwise linger until `onCleared`. The [roomProvider]-null guards already make
-     * a lingering collector crash-safe; cancelling it promptly is the belt-and-suspenders cleanup.
+     * The coroutines this coordinator launches in [scope] (the session's main scope): the display-name
+     * prefetch and the `room.metadata` collector. Tracked so [cancelJobs] can stop them at teardown:
+     * the session's end cancels its scope only as the cleanup's last step, after the room is
+     * released, so the collector would otherwise run on past the release. The [roomProvider]-null
+     * guards already make a lingering collector crash-safe; cancelling it promptly is the
+     * belt-and-suspenders cleanup.
      */
     private var prefetchJob: Job? = null
     private var metadataJob: Job? = null
@@ -109,7 +110,7 @@ internal class CallTypeCoordinator(
     /**
      * Cancels the coroutines started by [start] at call teardown. Called from `CallCleanupSteps`
      * alongside the other collaborators' `cancelJobs()`, so the metadata collector stops promptly
-     * on a user-initiated hangup instead of lingering in `viewModelScope` until `onCleared`.
+     * when the session ends instead of lingering until the session scope is cancelled.
      * Idempotent and safe to call even if [start] never ran (both jobs stay null).
      */
     fun cancelJobs() {

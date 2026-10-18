@@ -11,7 +11,6 @@ import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
-import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.AutoLeave
@@ -26,7 +25,6 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.data.AvatarData
-import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.handler.InviteRequestState
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.ContactorCacheManager
@@ -34,7 +32,6 @@ import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.call.util.ScreenDeviceUtil
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
@@ -48,7 +45,6 @@ import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.util.ForegroundServiceUtil
 import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.util.UnableToStartException
-import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.config.GlobalConfigsManager
@@ -61,7 +57,6 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.RealSource
 import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.TextMessage
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -69,7 +64,6 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
 import org.difft.app.database.models.GroupModel
 import util.AppForegroundObserver
-import util.ScreenLockUtil
 import java.util.ArrayList
 import java.util.Optional
 import javax.inject.Inject
@@ -85,7 +79,6 @@ class LCallToChatControllerImpl @Inject constructor(
     private val conversationManager: ConversationManager,
     private val encryptionDataManager: EncryptionDataManager,
     private val localMessageCreator: LocalMessageCreator,
-    private val dbRoomStore: DBRoomStore,
     private val inComingCallStateManager: InComingCallStateManager,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val criticalAlertStateManager: CriticalAlertStateManager,
@@ -94,6 +87,7 @@ class LCallToChatControllerImpl @Inject constructor(
     private val contactorCacheManager: ContactorCacheManager,
     private val globalConfigsManager: GlobalConfigsManager,
     private val groupUtil: GroupUtil,
+    private val joinStarter: CallJoinStarter,
 ) : LCallToChatController {
 
     private val callService by lazy { httpClient.getService(LCallHttpService::class.java) }
@@ -127,51 +121,7 @@ class LCallToChatControllerImpl @Inject constructor(
         callType: CallType,
         conversationId: String?,
         isNeedAppLock: Boolean,
-    ): Boolean {
-        withContext(Dispatchers.Main) { CallWaitDialogUtil.show(context) }
-
-        return try {
-            withContext(Dispatchers.IO) {
-                conversationId?.let { messageNotificationUtil.cancelCriticalAlertNotification(it) }
-                dismissCriticalAlertIfActive()
-                conversationId?.let { dbRoomStore.clearCriticalAlert(it) }
-
-                val body = StartCallRequestBody(
-                    callType.type, LCallConstants.CALL_VERSION,
-                    System.currentTimeMillis(),
-                    conversation = conversationId, roomId = roomId,
-                )
-
-                val callData = callDataManager.getCallData(roomId)
-                val callRole = if (callData?.caller?.uid == mySelfId && callData.caller.did == DEFAULT_DEVICE_ID)
-                    CallRole.CALLER else CallRole.CALLEE
-
-                val startCallParams = createStartCallParams(body)
-                LCallManager.checkQuicFeatureGrayStatus()
-
-                val intent = CallIntent.Builder(application, LCallActivity::class.java)
-                    .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .withAction(CallIntent.Action.JOIN_CALL)
-                    .withRoomName(roomName)
-                    .withCallType(callType.type)
-                    .withCallRole(callRole.type)
-                    .withCallerId(mySelfId)
-                    .withConversationId(conversationId)
-                    .withStartCallParams(startCallParams)
-                    .withNeedAppLock(isNeedAppLock)
-                    .withCallWaitDialogShown(true)
-                    .build()
-
-                startCallInternal(context, intent)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            L.e(e) { "[Call] joinCall unexpected error:" }
-            withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss() }
-            false
-        }
-    }
+    ): Boolean = joinStarter.joinCall(context, roomId, roomName, callerId, callType, conversationId, isNeedAppLock)
 
     override suspend fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?) =
         controlMessageSender.rejectCall(callerId, callRole, type, roomId, conversationId)
@@ -216,10 +166,9 @@ class LCallToChatControllerImpl @Inject constructor(
     // region Notification
 
     override fun cancelNotificationById(notificationId: Int) {
-        if (messageNotificationUtil.hasPendingCallNotification(notificationId) ||
-            messageNotificationUtil.isNotificationShowing(notificationId)) {
-            messageNotificationUtil.cancelNotificationsById(notificationId)
-        }
+        // Unconditional: the cancel also records the #1347 repost tombstone, which must exist even
+        // when the notification is not (yet) visible to activeNotifications.
+        messageNotificationUtil.cancelNotificationsById(notificationId)
     }
 
     override fun showCallNotification(roomId: String, callName: String, callerId: String, conversationId: String?, callType: CallType, isNeedAppLock: Boolean) =
@@ -332,7 +281,7 @@ class LCallToChatControllerImpl @Inject constructor(
         // [IncomingCallServiceManager.showIncomingCallUI] so pulling the full-screen ringing UI over
         // the chat does not interrupt an in-progress recording.
         // Also suppressed once a call is in progress (isInCalling), mirroring Case 2: when the user
-        // answers from a notification, joinCall launches LCallActivity (which sets isInCalling=true)
+        // answers from a notification, joinCall starts the call session (which sets isInCalling=true)
         // over the still-showing ringing Activity; without this guard the foreground-restore would
         // reorder the ringing screen back above the live call screen and strand the user there.
         if (inComingCallStateManager.isActivityShowing()) {
@@ -458,15 +407,7 @@ class LCallToChatControllerImpl @Inject constructor(
         }
     }
 
-    override fun dismissCriticalAlertIfActive() {
-        if (criticalAlertStateManager.isShowing()) {
-            application.sendBroadcast(Intent(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS).apply {
-                `package` = application.packageName
-            })
-        } else {
-            messageNotificationUtil.cancelCriticalAlertNotification()
-        }
-    }
+    override fun dismissCriticalAlertIfActive() = joinStarter.dismissCriticalAlertIfActive()
 
     override fun dismissCriticalAlert(conversationId: String) {
         if (criticalAlertStateManager.isShowing()) {
@@ -481,17 +422,4 @@ class LCallToChatControllerImpl @Inject constructor(
         messageNotificationUtil.cancelCriticalAlertNotification(conversationId)
 
     // endregion
-
-    private suspend fun startCallInternal(context: Context, intent: Intent): Boolean =
-        withContext(Dispatchers.Main) {
-            try {
-                ScreenLockUtil.temporarilyDisabled = true
-                context.applicationContext.startActivity(intent)
-                true
-            } catch (e: Exception) {
-                L.e(e) { "[Call] joinCall startCallInternal failed:" }
-                CallWaitDialogUtil.dismiss()
-                false
-            }
-        }
 }

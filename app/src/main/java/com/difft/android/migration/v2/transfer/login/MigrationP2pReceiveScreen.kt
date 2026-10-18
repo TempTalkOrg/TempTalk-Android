@@ -23,8 +23,8 @@ import androidx.compose.ui.unit.dp
 import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.migration.ui.component.MigrationAction
-import com.difft.android.migration.ui.component.MigrationBanner
-import com.difft.android.migration.ui.component.MigrationBannerTone
+import com.difft.android.base.migration.ui.MigrationBanner
+import com.difft.android.base.migration.ui.MigrationBannerTone
 import com.difft.android.migration.ui.component.MigrationBodyText
 import com.difft.android.migration.ui.component.MigrationConfirmDialog
 import com.difft.android.migration.ui.component.MigrationGap

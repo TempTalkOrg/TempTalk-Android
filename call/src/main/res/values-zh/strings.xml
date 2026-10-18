@@ -129,14 +129,8 @@
     <string name="call_microphone_permission_deny_content">请在系统设置中允许 %1$s 使用麦克风，然后返回 %1$s 重试。</string>
     <string name="call_camera_permission_deny_content">请在系统设置中允许 %1$s 使用摄像头，然后返回 %1$s 重试。</string>
     <string name="call_permission_button_settings">设置</string>
-    <string name="fullscreen_notification_settings_huawei_tip">请在应用设置-其他权限-允许“后台弹窗”权限，以便在锁屏时显示来电界面。</string>
-    <string name="fullscreen_notification_settings_xiaomi_tip">请在应用设置-其他权限-允许“后台弹出界面”权限，以便在锁屏时显示来电界面。</string>
-    <string name="fullscreen_notification_settings_mainland_default_tip">请确保在应用设置中开启“横幅通知”，以便在锁屏时显示来电界面。</string>
-    <string name="fullscreen_notification_settings_oversea_tip">请允许“全屏通知”权限，以便在锁屏时显示来电界面。</string>
-    <string name="fullscreen_notification_no_permission_oversea_tip">请为%s开启“全屏通知”权限，以确保您在设备锁屏时也能正常接听来电。</string>
-    <string name="fullscreen_notification_no_permission_huawei_tip">请为%s开启“后台弹窗”权限，以确保您在设备锁屏时也能正常接听来电。</string>
-    <string name="fullscreen_notification_no_permission_xiaomi_tip">请为%s开启“后台弹出界面”权限，以确保您在设备锁屏时也能正常接听来电。</string>
-    <string name="fullscreen_notification_no_permission_china_default_tip">请为%s启用“横幅通知”，以确保您在设备锁屏时也能正常接听来电。</string>
+    <string name="notification_hint_oem_xiaomi">允许“后台弹出界面”和“锁屏显示”（通常在“其他权限”中）。找不到时，见设置指引。</string>
+    <string name="notification_prompt_full_screen">请允许%s全屏显示来电，以确保您在设备锁屏时也能正常接听来电。</string>
     <string name="notification_critical_alert_title_default">紧急联络</string>
     <string name="notification_critical_alert_content_default">点击立即联系。</string>
     <string name="notification_critical_alert_content_from">来自 %s 的紧急联络。</string>

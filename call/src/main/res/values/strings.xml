@@ -131,14 +131,8 @@
     <string name="call_microphone_permission_deny_content">Allow %1$s to use your microphone in system settings, then return to %1$s and try again.</string>
     <string name="call_camera_permission_deny_content">Allow %1$s to use your camera in system settings, then return to %1$s and try again.</string>
     <string name="call_permission_button_settings">Settings</string>
-    <string name="fullscreen_notification_settings_huawei_tip">Please go to App Settings → Other Permissions and enable “Background Popup” to allow incoming calls to appear on the lock screen.</string>
-    <string name="fullscreen_notification_settings_xiaomi_tip">Please go to App Settings → Other Permissions and enable “Background Popup Interface” to allow incoming calls to appear on the lock screen.</string>
-    <string name="fullscreen_notification_settings_mainland_default_tip">Please make sure “Banner Notifications” are enabled in the app settings to allow incoming calls to appear on the lock screen.</string>
-    <string name="fullscreen_notification_settings_oversea_tip">Please enable the “Full-Screen Notifications” permission to allow incoming calls to appear on the lock screen.</string>
-    <string name="fullscreen_notification_no_permission_oversea_tip">Please allow the “Full-Screen Notifications” permission for %s so you can receive calls while your device is locked.</string>
-    <string name="fullscreen_notification_no_permission_huawei_tip">Please allow the “Background Popup” permission for %s so you can receive calls while your device is locked.</string>
-    <string name="fullscreen_notification_no_permission_xiaomi_tip">Please allow the “Background Popup Interface” permission for %s so you can receive calls while your device is locked.</string>
-    <string name="fullscreen_notification_no_permission_china_default_tip">Please allow “Banner Notifications” for %s so you can receive calls while your device is locked.</string>
+    <string name="notification_hint_oem_xiaomi">Allow “Display pop-up windows while running in the background” and “Show on lock screen” (usually under “Other permissions”). If you can\'t find it, see the setup guide.</string>
+    <string name="notification_prompt_full_screen">Please allow %s to show incoming calls in full screen, so you can answer calls while your device is locked.</string>
     <string name="notification_critical_alert_title_default">Urgent Call</string>
     <string name="notification_critical_alert_content_default">Tap to connect now.</string>
     <string name="notification_critical_alert_content_from">Critical Alert from %s.</string>

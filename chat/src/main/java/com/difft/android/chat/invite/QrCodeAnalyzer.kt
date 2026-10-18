@@ -25,6 +25,10 @@ class QrCodeAnalyzer(
     @Volatile
     private var loggedErrorThisRun = false
 
+    /** A code the screen has already declined; it usually stays in frame, so it is passed over. */
+    @Volatile
+    private var ignored: String? = null
+
     @OptIn(ExperimentalGetImage::class)
     override fun analyze(image: ImageProxy) {
         if (handled.get()) {
@@ -42,7 +46,7 @@ class QrCodeAnalyzer(
                 }
                 null
             }
-            if (text != null && handled.compareAndSet(false, true)) {
+            if (text != null && text != ignored && handled.compareAndSet(false, true)) {
                 L.i { "[Scan] decoded len=${text.length}" } // length only — never content
                 onDecoded(text)
             }
@@ -60,6 +64,12 @@ class QrCodeAnalyzer(
      */
     fun rearm() {
         loggedErrorThisRun = false
+        handled.set(false)
+    }
+
+    /** Keeps scanning after [text] was declined, without delivering that same code again. */
+    fun skip(text: String) {
+        ignored = text
         handled.set(false)
     }
 

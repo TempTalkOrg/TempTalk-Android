@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -120,6 +121,27 @@ class SendActivityNoticeBehaviorTest {
             "1v1-to-other must carry syncContent so server stamps both envelopes uniformly",
             captured.captured.syncContent
         )
+    }
+
+    // -----------------------------------------------------------------
+    // #1347: the outgoing envelope is typed MSG_ACTIVITY_NOTICE, not MSG_NORMAL.
+    // -----------------------------------------------------------------
+    @Test
+    fun `activity notice is sent with msgType MSG_ACTIVITY_NOTICE`() = runTest {
+        val captured = slot<NewOutgoingPushMessage>()
+        coEvery {
+            messageSendRepository.sendMessage(capture(captured), any())
+        } returns successResponse()
+
+        sender.sendActivityNoticeMessage(
+            recipient = For.Account(PEER_UID),
+            room = For.Account(PEER_UID),
+            message = sampleProto(),
+            sendSyncToSelf = false,
+            sendTimestamp = 1_700_000_000_004L,
+        )
+
+        assertEquals(15, captured.captured.msgType)
     }
 
     // -----------------------------------------------------------------

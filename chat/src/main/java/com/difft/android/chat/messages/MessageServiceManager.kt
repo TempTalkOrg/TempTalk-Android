@@ -8,12 +8,16 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.monitor.FgsStartFailure
+import com.difft.android.base.monitor.ForegroundServiceFailureRecorder
+import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.launch
 import com.difft.android.chat.util.DeviceProperties
 import com.difft.android.chat.util.ForegroundServiceUtil
+import com.difft.android.chat.util.UnableToStartException
 import com.difft.android.chat.websocket.monitor.WebSocketHealthMonitor
 import util.AppForegroundObserver
 import javax.inject.Inject
@@ -45,7 +49,9 @@ class MessageServiceManager @Inject constructor(
     @param:ApplicationContext
     private val context: Context,
     private val userManager: UserManager,
-    private val webSocketHealthMonitor: WebSocketHealthMonitor
+    private val webSocketHealthMonitor: WebSocketHealthMonitor,
+    private val fgsFailureRecorder: ForegroundServiceFailureRecorder,
+    private val healthCounters: KeepAliveHealthCounters
 ) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -189,6 +195,8 @@ class MessageServiceManager @Inject constructor(
      */
     private fun setKeepAlive(enabled: Boolean) {
         userManager.update { keepAliveEnabled = enabled }
+        // #1328: a non-sampled install stopped collecting at startup; start again until the next report decision.
+        if (enabled) healthCounters.collecting = true
     }
 
     /**
@@ -228,6 +236,9 @@ class MessageServiceManager @Inject constructor(
         // 1. Reset retry count, next reconnect executes immediately (no backoff delay)
         // 2. If currently in backoff wait, interrupt and trigger reconnect
         webSocketHealthMonitor.onAlarmTriggered()
+
+        // #1328: persist health counters on this existing wakeup instead of scheduling one.
+        healthCounters.onAlarmTick()
     }
 
     /**
@@ -250,6 +261,7 @@ class MessageServiceManager @Inject constructor(
             // Start failed, handle all exceptions uniformly
             // Possible exceptions: UnableToStartException, SecurityException, IllegalStateException, etc.
             L.w { "[MessageService] Direct start failed: ${e.stackTraceToString()}, deferring to background coroutine" }
+            fgsFailureRecorder.record(directFailureType(e))
 
             // Retry in background coroutine (avoid blocking main thread)
             appScope.launch {
@@ -259,9 +271,17 @@ class MessageServiceManager @Inject constructor(
                 } catch (e: Exception) {
                     // Background retry also failed, log it (keep-alive will continue trying)
                     L.e { "[MessageService] Unable to start service even after background retry: ${e.stackTraceToString()}" }
+                    fgsFailureRecorder.record(FgsStartFailure.RETRY_FAILED)
                 }
             }
         }
+    }
+
+    /** #1328: coarse failure type for the background-connection health counter. */
+    private fun directFailureType(e: Exception): FgsStartFailure = when {
+        e is UnableToStartException -> FgsStartFailure.DIRECT_NOT_ALLOWED
+        e is SecurityException -> FgsStartFailure.DIRECT_SECURITY
+        else -> FgsStartFailure.DIRECT_OTHER
     }
 
     /**

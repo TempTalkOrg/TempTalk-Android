@@ -7,6 +7,8 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
@@ -16,39 +18,28 @@ import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.AutoLeave
 import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
-import com.difft.android.base.user.CountdownTimer
-import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.user.defaultBarrageTexts
 import com.difft.android.base.utils.OrientationDisplayWatcher
 import com.difft.android.base.utils.OrientationPolicy
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.permission.CallMediaPermission
-import com.difft.android.call.handler.CallActionHandler
-import com.difft.android.call.handler.CallErrorHandler
-import com.difft.android.call.handler.CallExitHandler
 import com.difft.android.call.handler.InviteCallHandler
 import com.difft.android.call.manager.CallCleanupManager
-import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.CallDialogManager
 import com.difft.android.call.manager.CallLifecycleObserver
-import com.difft.android.call.manager.CallRingtoneManager
 import com.difft.android.call.manager.CallScreenshotController
-import com.difft.android.call.manager.CallServiceManager
 import com.difft.android.call.manager.CallVibrationManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.PictureInPictureManager
-import com.difft.android.call.manager.ProximityScreenOffController
-import com.difft.android.call.receiver.CallActivityBroadcastReceiver
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
-import com.difft.android.call.data.VoicePreset
+import com.difft.android.call.service.OngoingCallServiceController
+import com.difft.android.call.session.CallSession
+import com.difft.android.call.session.CallSessionHolder
+import com.difft.android.call.session.resolveCallSession
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.base.utils.hideNavigationBar
-import com.difft.android.network.config.GlobalConfigsManager
-import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
 import javax.inject.Inject
@@ -78,7 +69,7 @@ class LCallActivity : AppCompatActivity() {
     internal lateinit var callToChatController: LCallToChatController
 
     @Inject
-    internal lateinit var globalConfigsManager: GlobalConfigsManager
+    internal lateinit var sessionHolder: CallSessionHolder
 
     @Inject
     internal lateinit var userManager: UserManager
@@ -87,33 +78,26 @@ class LCallActivity : AppCompatActivity() {
     internal lateinit var onGoingCallStateManager: OnGoingCallStateManager
 
     @Inject
-    internal lateinit var callDataManagerLazy: Lazy<CallDataManager>
-
-    @Inject
     internal lateinit var vibrationManager: CallVibrationManager
-
-    @Inject
-    internal lateinit var ringtoneManager: CallRingtoneManager
 
     @Inject
     internal lateinit var contactorCacheManager: ContactorCacheManager
 
-    internal val callDataManager: CallDataManager by lazy { callDataManagerLazy.get() }
+    @Inject
+    internal lateinit var ongoingCallService: OngoingCallServiceController
 
+    /** The live session this page attaches to, resolved in [onCreate]. */
+    internal lateinit var session: CallSession
+
+    /** The call this page shows: the session's start/join intent, whatever intent opened the page. */
     internal lateinit var callIntent: CallIntent
 
-    internal val callRole: CallRole by lazy {
-        if (callIntent.callRole == CallRole.CALLER.type) CallRole.CALLER else CallRole.CALLEE
-    }
+    /** The intent that opened this page; only its wait-dialog flag is read. */
+    internal lateinit var launchIntent: CallIntent
 
-    internal val callConfig: CallConfig by lazy {
-        globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(
-            autoLeave = AutoLeave(promptReminder = PromptReminder()),
-            chatPresets = defaultBarrageTexts,
-            chat = CallChat(),
-            countdownTimer = CountdownTimer()
-        )
-    }
+    internal val callRole: CallRole get() = session.params.callRole
+
+    internal val callConfig: CallConfig get() = session.params.callConfig
 
     internal val autoHideTimeout: Long by lazy {
         callConfig.chat?.autoHideTimeout ?: CallChat().autoHideTimeout
@@ -122,10 +106,6 @@ class LCallActivity : AppCompatActivity() {
     internal val muteOtherEnabled: Boolean by lazy { callConfig.muteOtherEnabled }
 
     internal var pictureInPictureManager: PictureInPictureManager? = null
-    internal var proximityScreenOffController: ProximityScreenOffController? = null
-    internal var callErrorHandler: CallErrorHandler? = null
-    internal var callExitHandler: CallExitHandler? = null
-    internal var callActionHandler: CallActionHandler? = null
     internal var callLifecycleObserver: CallLifecycleObserver? = null
 
     /**
@@ -136,16 +116,11 @@ class LCallActivity : AppCompatActivity() {
     internal var lastScreenClickMs: Long = 0L
     internal var callDialogManager: CallDialogManager? = null
     internal var inviteCallManager: InviteCallHandler? = null
-    internal var callServiceManager: CallServiceManager? = null
     internal var callCleanupManager: CallCleanupManager? = null
-    internal var callActivityBroadcastReceiver: CallActivityBroadcastReceiver? = null
     internal var screenUnlockBroadcastReceiver: ScreenUnlockBroadcastReceiver? = null
     internal var screenshotController: CallScreenshotController? = null
 
     internal lateinit var backPressedCallback: OnBackPressedCallback
-    internal lateinit var appUnlockListener: (Boolean) -> Unit
-
-    internal val callbackId = "LCallActivity_${System.identityHashCode(this)}"
 
     // Registered at construction time (required before RESUMED). Results route through
     // LCallActivityMediaPermissions.onMediaPermissionResult; taps come from the Compose toolbar
@@ -164,18 +139,7 @@ class LCallActivity : AppCompatActivity() {
         }
 
     internal val viewModel: LCallViewModel by viewModels(extrasProducer = {
-        defaultViewModelCreationExtras.withCreationCallback<LCallViewModelFactory> {
-            it.create(
-                e2eeEnable = true,
-                callIntent = callIntent,
-                callConfig = callConfig,
-                callRole = callRole,
-                initialVoicePreset = VoicePreset.fromSdkKey(
-                    userManager.getUserData()?.callVoiceChangerPreset
-                        ?: VoicePreset.ORIGINAL.sdkKey
-                ),
-            )
-        }
+        defaultViewModelCreationExtras.withCreationCallback<LCallViewModelFactory> { it.create(session) }
     })
 
     /**
@@ -198,8 +162,8 @@ class LCallActivity : AppCompatActivity() {
      * Activity creation and bootstrapping.
      *
      * Sequence (extension implementations live in `LCallActivityInitializer.kt`):
-     * 1. Handle illegal recreation after process death.
-     * 2. Parse Intent; bring up error/exit/action handlers.
+     * 1. Resolve the live call session, or finish when this page has none.
+     * 2. Attach to the session and bring up the session finish effect.
      * 3. Initialize call state and UI.
      * 4. Initialize managers, lifecycle observer and cleanup manager.
      * 5. Register listeners and configure window attributes.
@@ -217,14 +181,16 @@ class LCallActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         if (heldForUnfold) OrientationPolicy.scheduleUnfoldRelock(this) { reapplyOrientationPolicyIfOwned() }
 
-        // Restored from the call task with no call behind it — typically after process death, which
-        // wipes all in-memory call state; continuing would start a ghost ForegroundService. The log
-        // states the observed condition, not process death: a config-change recreation lands here too.
-        if (savedInstanceState != null && !onGoingCallStateManager.isInCalling()) {
-            L.w { "[Call] LCallActivity: restored with savedInstanceState but no active call, finishing" }
+        // The call's entry point started the session before launching this page. No live session (a
+        // restore after process death, a call that already ended) or a launch for another session
+        // means there is nothing to show: finish without touching call state.
+        val resolved = resolveCallSession(sessionHolder.current.value, CallIntent(intent).sessionKey)
+        if (resolved == null) {
+            L.w { "[Call] LCallActivity: no live session for this page, finishing restored=${savedInstanceState != null}" }
             finish()
             return
         }
+        session = resolved
 
         // Placeholder content to ensure ViewTreeLifecycleOwner is installed,
         // avoiding "ViewTreeLifecycleOwner not found" crashes when CallWaitDialogUtil
@@ -232,9 +198,7 @@ class LCallActivity : AppCompatActivity() {
         setContentView(android.widget.FrameLayout(this))
 
         handleIntent(savedInstanceState)
-        initializeErrorHandler()
-        initializeExitHandler()
-        initializeCallActionHandler()
+        initializeSessionEffects()
         initializeState()
         initializeView()
         initializeManagers()
@@ -286,41 +250,26 @@ class LCallActivity : AppCompatActivity() {
     }
 
     /**
-     * Activity teardown. Delegates to [CallCleanupManager] and then nulls out local references to
-     * prevent leaks. A configuration-change recreation releases only Activity-scoped resources.
+     * Activity teardown. Delegates to [CallCleanupManager], which releases only this page
+     * instance's resources (the call itself belongs to the session), then nulls out local
+     * references to prevent leaks.
      */
     override fun onDestroy() {
-        // `!isFinishing`: a hang-up racing a configuration change must still tear the call down.
-        val isConfigurationChange = isChangingConfigurations && !isFinishing
         super.onDestroy()
-        L.i { "[Call] LCallActivity onDestroy start. isConfigurationChange:$isConfigurationChange" }
+        L.i { "[Call] LCallActivity onDestroy start. isChangingConfigurations:$isChangingConfigurations" }
 
         callCleanupManager?.cleanup(
             lifecycleObserver = callLifecycleObserver,
             dialogManager = callDialogManager,
-            proximityScreenOffController = proximityScreenOffController,
             pictureInPictureManager = pictureInPictureManager,
-            callActivityBroadcastReceiver = callActivityBroadcastReceiver,
             screenUnlockBroadcastReceiver = screenUnlockBroadcastReceiver,
-            serviceManager = callServiceManager,
-            onGoingCallStateManager = onGoingCallStateManager,
-            callDataManager = callDataManager,
-            ringtoneManager = ringtoneManager,
-            vibrationManager = vibrationManager,
-            contactorCacheManager = contactorCacheManager,
-            callControlMessageManager = onGoingCallStateManager,
-            viewModel = viewModel,
             backPressedCallback = if (::backPressedCallback.isInitialized) backPressedCallback else null,
-            isConfigurationChange = isConfigurationChange
         )
 
         callLifecycleObserver = null
         callDialogManager = null
-        proximityScreenOffController = null
         pictureInPictureManager = null
-        callActivityBroadcastReceiver = null
         screenUnlockBroadcastReceiver = null
-        callServiceManager = null
         callCleanupManager = null
         screenshotController?.release()
         screenshotController = null
@@ -342,18 +291,28 @@ class LCallActivity : AppCompatActivity() {
         enterPipOnUserLeaveHint()
     }
 
+    /**
+     * Re-entry (singleInstance) changes no call state and the new Intent is not adopted (no
+     * setIntent). A START/JOIN launched for another session reached this page while it was going
+     * away: this page closes and the launch is replayed so a new page attaches to that session.
+     */
     override fun onNewIntent(intent: Intent) {
-        // Note: this intentionally reads `this.intent` (the old Intent still
-        // held by the Activity) BEFORE calling super.onNewIntent(), to preserve
-        // the historical semantics. Android does not auto-setIntent(); if the
-        // new Intent ever needs to be honored, call setIntent(intent)
-        // explicitly and read the new value here.
-        // Renamed to `oldCallIntent` to avoid shadowing the class-level
-        // `callIntent` field.
-        val oldCallIntent = CallIntent(this.intent)
         super.onNewIntent(intent)
-        L.d { "[Call] LCallActivity logIntent:$oldCallIntent" }
-        processIntent(oldCallIntent)
+        val key = CallIntent(intent).sessionKey
+        if (!::session.isInitialized || key == null || key == session.params.launchKey) {
+            L.i { "[Call] LCallActivity onNewIntent" }
+            return
+        }
+        L.w { "[Call] LCallActivity onNewIntent for another session, relaunching id=${session.id}" }
+        finishAndRemoveTask()
+        val app = applicationContext
+        Handler(Looper.getMainLooper()).post {
+            try {
+                app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {
+                L.e(e) { "[Call] LCallActivity relaunch failed" }
+            }
+        }
     }
 
     override fun onPause() {
@@ -366,9 +325,11 @@ class LCallActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         L.i { "[Call] LCallActivity onResume" }
-        if (onGoingCallStateManager.isInCalling()) {
-            callServiceManager?.updateForegroundServiceType()
-        }
+        // A visible page: issue a start the session deferred, then refresh the service type. Both
+        // are keyed to this page's session and do nothing unless it owns the service.
+        val sessionId = viewModel.sessionId
+        ongoingCallService.ensureStarted(sessionId)
+        ongoingCallService.updateServiceType(sessionId)
 
         onGoingCallStateManager.setIsInForeground(true)
 
@@ -419,11 +380,11 @@ class LCallActivity : AppCompatActivity() {
     /**
      * End the call and release resources.
      *
-     * Marks the exit state, triggers the ViewModel cleanup (heavy I/O runs
-     * inside viewModelScope) and closes the Activity immediately.
+     * Marks the exit state, ends the call session (its cleanup, heavy I/O included, runs on
+     * `appScope` + IO) and closes the Activity immediately.
      */
     internal fun endCallAndClearResources() {
-        onGoingCallStateManager.setIsInCallEnding(true)
+        viewModel.markEnding()
         runOnUiThread {
             viewModel.doExitClear()
             finishAndRemoveTask()
@@ -447,7 +408,7 @@ class LCallActivity : AppCompatActivity() {
      * the corresponding runtime permission has been granted.
      */
     fun updateForegroundServiceType() {
-        callServiceManager?.updateForegroundServiceType()
+        ongoingCallService.updateServiceType(viewModel.sessionId)
     }
 
     /**
@@ -501,9 +462,6 @@ class LCallActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val ACTION_IN_CALLING_CONTROL = "ACTION_IN_CALLING_CONTROL"
-        const val EXTRA_CONTROL_TYPE = "EXTRA_CONTROL_TYPE"
-        const val EXTRA_PARAM_ROOM_ID = "EXTRA_PARAM_ROOM_ID"
         private const val DEFAULT_FONT_SCALE = 1.0f
     }
 }

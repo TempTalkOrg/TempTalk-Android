@@ -19,7 +19,7 @@ import org.junit.Test
  */
 class RoomMetadataTest {
 
-    /** Must mirror the instance built in `LCallViewModel`. */
+    /** Must mirror the instance built in `CallSessionGraph`. */
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true

@@ -22,6 +22,7 @@ import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.After
@@ -53,6 +54,14 @@ class ProxySettingsViewModelTest {
     // class declares both a `val isInCalling` property and an `isInCalling()` function,
     // whose name clash defeats MockK's `every {}` recorder.
     private lateinit var callState: OnGoingCallStateManager
+
+    // `isInCalling` is written only by the call session (through an internal, fenced writer this
+    // module cannot reach), so the test drives the private backing flow the public read exposes.
+    @Suppress("UNCHECKED_CAST")
+    private fun setInCalling(value: Boolean) {
+        val field = OnGoingCallStateManager::class.java.getDeclaredField("_isInCalling").apply { isAccessible = true }
+        (field.get(callState) as MutableStateFlow<Boolean>).value = value
+    }
 
     private val dummyConfig: ProxyConfig = mockk(relaxed = true)
 
@@ -540,7 +549,7 @@ class ProxySettingsViewModelTest {
         every { provider.savedShareLink } returns "ytp://saved"
         every { provider.isEnabledByUser } returns false
         every { provider.isEnabled } returns false
-        callState.setIsInCalling(true)
+        setInCalling(true)
 
         val vm = buildViewModel()
         val state = vm.awaitState { it.readOnly }
@@ -564,7 +573,7 @@ class ProxySettingsViewModelTest {
         every { provider.savedShareLink } returns "ytp://saved"
         every { provider.isEnabledByUser } returns false
         every { provider.isEnabled } returns false
-        callState.setIsInCalling(true)
+        setInCalling(true)
 
         val vm = buildViewModel()
         vm.awaitState { it.readOnly }
@@ -584,7 +593,7 @@ class ProxySettingsViewModelTest {
         every { provider.savedShareLink } returns "ytp://saved"
         every { provider.isEnabledByUser } returns false
         every { provider.isEnabled } returns false
-        callState.setIsInCalling(true)
+        setInCalling(true)
 
         val vm = buildViewModel()
         vm.awaitState { it.readOnly }
@@ -601,12 +610,12 @@ class ProxySettingsViewModelTest {
     @Test
     fun `ending call clears readonly`() = runTest {
         every { provider.savedShareLink } returns "ytp://saved"
-        callState.setIsInCalling(true)
+        setInCalling(true)
 
         val vm = buildViewModel()
         vm.awaitState { it.readOnly }
 
-        callState.setIsInCalling(false)
+        setInCalling(false)
         val state = vm.awaitState { !it.readOnly }
         assertTrue(!state.readOnly)
     }

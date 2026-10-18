@@ -14,8 +14,8 @@ import com.difft.android.call.util.StringUtil
 import java.text.BreakIterator
 
 /**
- * Renderable payload produced by [CallBarrageFormatter]. The caller is responsible
- * for dispatching each variant to the matching `CallUiController` sink.
+ * Renderable payload produced by [CallBarrageFormatter]; [dispatchTo] routes each variant to the
+ * matching [CallUiController] sink.
  */
 sealed interface BarrageRenderable {
     data class Default(val message: BarrageMessage) : BarrageRenderable
@@ -23,38 +23,21 @@ sealed interface BarrageRenderable {
     data class Text(val message: TextBubbleMessage) : BarrageRenderable
 }
 
+/** Delivers a formatted barrage / bubble to the [CallUiController] sink for its variant. */
+fun BarrageRenderable.dispatchTo(ui: CallUiController) = when (this) {
+    is BarrageRenderable.Default -> ui.setBarrageMessage(message)
+    is BarrageRenderable.Emoji -> ui.setEmojiBubbleMessage(message)
+    is BarrageRenderable.Text -> ui.setTextBubbleMessage(message)
+}
+
 /**
- * Pure formatting helper for call barrage / bubble messages.
- *
- * Encapsulates the text/emoji classification, display-name truncation and
- * bubble animation parameter calculation that was previously inlined in
- * `LCallViewModel.showCallBarrageMessage`.
+ * Pure formatting helper for call barrage / bubble messages: text/emoji classification,
+ * display-name truncation and bubble animation parameters. The call session formats off main and
+ * hands the result to the UI as a [BarrageRenderable].
  */
 object CallBarrageFormatter {
 
     private const val DISPLAY_NAME_MAX_LENGTH = 10
-
-    /**
-     * Formats and dispatches a barrage/bubble message to the appropriate
-     * [CallUiController] sink in one step. Returns silently if the message
-     * is empty or the identity is null.
-     */
-    suspend fun formatAndDispatch(
-        identityValue: String?,
-        message: String,
-        type: Int?,
-        callConfig: CallConfig,
-        contactorCacheManager: ContactorCacheManager,
-        uiController: CallUiController,
-    ) {
-        if (identityValue == null || message.isEmpty()) return
-        when (val rendered = format(identityValue, message, type, callConfig, contactorCacheManager)) {
-            is BarrageRenderable.Default -> uiController.setBarrageMessage(rendered.message)
-            is BarrageRenderable.Emoji -> uiController.setEmojiBubbleMessage(rendered.message)
-            is BarrageRenderable.Text -> uiController.setTextBubbleMessage(rendered.message)
-            null -> Unit
-        }
-    }
 
     suspend fun format(
         identityValue: String,

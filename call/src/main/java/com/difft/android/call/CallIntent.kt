@@ -20,6 +20,11 @@ class CallIntent(private val intent: Intent) {
         private fun getExtraString(extra: Extra): String {
             return "$CALL_INTENT_PREFIX.${extra.code}"
         }
+
+        /** Tags a START/JOIN launch with the key of the session its entry point started. */
+        fun putSessionKey(intent: Intent, key: String) {
+            intent.putExtra(getExtraString(Extra.CALL_SESSION_KEY), key)
+        }
     }
 
     val action: Action by lazy { Action.fromIntent(intent) }
@@ -51,6 +56,7 @@ class CallIntent(private val intent: Intent) {
         CALL_WAIT_DIALOG_SHOWN("CALL_WAIT_DIALOG_SHOWN"),
         CALL_CLIENT_CALL_ID("CALL_CLIENT_CALL_ID"),
         CALL_FULL_SCREEN_LAUNCH("CALL_FULL_SCREEN_LAUNCH"),
+        CALL_SESSION_KEY("CALL_SESSION_KEY"),
     }
 
     /**
@@ -166,6 +172,9 @@ class CallIntent(private val intent: Intent) {
     val callWaitDialogShown: Boolean by lazy { intent.getBooleanExtra(getExtraString(Extra.CALL_WAIT_DIALOG_SHOWN), false) }
 
     val clientCallId: String? by lazy { intent.getStringExtra(getExtraString(Extra.CALL_CLIENT_CALL_ID)) }
+
+    /** The launching session's key on a START/JOIN launch; null on a return to the call (BACK_TO_CALL). */
+    val sessionKey: String? get() = intent.getStringExtra(getExtraString(Extra.CALL_SESSION_KEY))
 
     override fun toString(): String {
         return """

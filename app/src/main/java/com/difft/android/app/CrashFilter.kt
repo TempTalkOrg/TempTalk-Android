@@ -34,6 +34,9 @@ import com.difft.android.base.log.lumberjack.L
  *    into an emulator. No native library exists in such an install, so whichever library is
  *    touched first fails and the app can never work; the process is stopped without a report
  *    (see [isMissingNativeLibraryCrash] / [isBaseOnlyInstall]).
+ * 6. `NoSuchMethodError` for a listed framework method on a device whose `SDK_INT` says the method
+ *    must exist — the ROM misreports its version (device spoofing tools). The process is stopped
+ *    without a report; any other missing method keeps reporting (see [isSpoofedSdkFrameworkMiss]).
  *
  * Crashlytics initializes via ContentProvider (before Application.onCreate()),
  * so calling [install] in Application.onCreate() guarantees our handler wraps theirs.
@@ -77,6 +80,9 @@ object CrashFilter {
             android.os.Process.killProcess(android.os.Process.myPid())
         } else if (isMissingNativeLibraryCrash(throwable)) {
             L.w { "[CrashFilter] Suppressed missing native library crash on base-only install: ${throwable.message}" }
+            android.os.Process.killProcess(android.os.Process.myPid())
+        } else if (isSpoofedSdkFrameworkMiss(throwable)) {
+            L.w { "[CrashFilter] Suppressed framework API miss on a ROM that misreports its SDK level: ${throwable.message}" }
             android.os.Process.killProcess(android.os.Process.myPid())
         } else if (isFinalizerWatchdogTimeout(thread, throwable)) {
             // Daemon-thread timeout, not a main-thread crash: swallow it. The watchdog thread
@@ -145,6 +151,19 @@ object CrashFilter {
     private const val SPLITS_REQUIRED_META_DATA = "com.android.vending.splits.required"
     private const val MAX_CAUSE_DEPTH = 8
 
+    /** D8 routes calls to framework APIs newer than minSdk through synthetic classes with this name. */
+    private const val API_MODEL_OUTLINE_MARKER = "\$\$ExternalSyntheticApiModelOutline"
+
+    /** ART's message: `No static method name(args)ret in class Lowner; or its super classes ...`. */
+    private val NO_SUCH_METHOD_MESSAGE =
+        Regex("""No (?:static|virtual|direct|interface) method (\w+)\([^)]*\)\S* in class (L[^;]+;)""")
+
+    /** `owner.method` → API level that introduced it (Crashlytics 41c8b4ad / 85d9ee38). Exact entries only. */
+    private val SPOOFED_SDK_SIGNATURES = mapOf(
+        "Landroid/view/WindowInsets\$Type;.systemOverlays" to Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+        "Landroid/app/NotificationManager;.canUseFullScreenIntent" to Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+    )
+
     /**
      * True when the base APK declares that split APKs are required but none is installed. Only a
      * Play-built base APK carries the meta-data, so universal APKs (official / F-Droid channels)
@@ -183,6 +202,22 @@ object CrashFilter {
         return generateSequence(throwable) { it.cause }
             .take(MAX_CAUSE_DEPTH)
             .any { it is UnsatisfiedLinkError && it.message?.contains("dlopen failed") == true && it.message?.contains("not found") == true }
+    }
+
+    /**
+     * A listed method missing although [sdkInt] is at or above the level that introduced it. The
+     * `SDK_INT` gate matters: an unguarded call on an older device misses the same method through
+     * the same outline, and that is a real defect that must keep reporting.
+     */
+    @VisibleForTesting
+    internal fun isSpoofedSdkFrameworkMiss(throwable: Throwable, sdkInt: Int = Build.VERSION.SDK_INT): Boolean {
+        val error = generateSequence(throwable) { it.cause }
+            .take(MAX_CAUSE_DEPTH)
+            .firstOrNull { it is NoSuchMethodError } ?: return false
+        if (error.stackTrace.firstOrNull()?.className?.contains(API_MODEL_OUTLINE_MARKER) != true) return false
+        val (method, owner) = NO_SUCH_METHOD_MESSAGE.find(error.message.orEmpty())?.destructured ?: return false
+        val introducedIn = SPOOFED_SDK_SIGNATURES["$owner.$method"] ?: return false
+        return sdkInt >= introducedIn
     }
 
     /**

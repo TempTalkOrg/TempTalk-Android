@@ -60,4 +60,14 @@
     <string name="base_bottom_sheet_drag_handle">拖动条</string>
     <string name="dual_pane_rail_collapse_hint">收起导航栏</string>
     <string name="dual_pane_rail_expand_hint">展开导航栏</string>
+
+    <!-- 通知类别显示名（系统设置中可见） -->
+    <string name="notification_channel_message">消息</string>
+    <string name="notification_channel_message_summary">消息汇总</string>
+    <string name="notification_channel_call">来电</string>
+    <string name="notification_channel_ongoing_call">通话中</string>
+    <string name="notification_channel_background">后台连接</string>
+    <string name="notification_channel_critical_alert">重要提醒</string>
+    <string name="notification_channel_account">账号</string>
+    <string name="notification_channel_group_message">消息</string>
 </resources>

@@ -121,6 +121,33 @@ object LCallEngine {
         _serverUrlConnected.value = url
     }
 
+    // The call session the connected URL belongs to. Claimed on main, cleared from a cleanup step
+    // on IO: both are synchronized so a clear can never undo a claim that landed in between.
+    private var serverUrlOwnerSessionId: Long = NO_SERVER_URL_OWNER
+
+    /** Session [sessionId] starts: it owns the connected URL from now on, which starts empty. */
+    @Synchronized
+    fun claimConnectedServerUrl(sessionId: Long) {
+        serverUrlOwnerSessionId = sessionId
+        _serverUrlConnected.value = null
+    }
+
+    /**
+     * Session [sessionId]'s cleanup: clears the connected URL only while it still owns it, so a late
+     * cleanup of an ended call never clears the URL of the call that started after it.
+     */
+    @Synchronized
+    fun clearConnectedServerUrl(sessionId: Long) {
+        if (serverUrlOwnerSessionId != sessionId) {
+            L.i { "[Call] LCallEngine clearConnectedServerUrl skipped: owner=$serverUrlOwnerSessionId session=$sessionId" }
+            return
+        }
+        serverUrlOwnerSessionId = NO_SERVER_URL_OWNER
+        _serverUrlConnected.value = null
+    }
+
+    private const val NO_SERVER_URL_OWNER = -1L
+
     /**
      * Reports a connection failure (currently used for logging and triggering config refresh).
      */

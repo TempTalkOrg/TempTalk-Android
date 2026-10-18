@@ -104,6 +104,15 @@ class RoomModel {
     var confidentialMode: Int = 0
 
     /**
+     * Version of the server conversation config (`v1/conversation/get|set`, notify type 4)
+     * last applied to this row. Snapshots with an older version are ignored; see
+     * `ConversationSettingsApplier`. 0 means no versioned snapshot has been applied yet.
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var conversationConfigVersion: Int = 0
+
+    /**
      * Critical Alert 类型（用于会话列表显示）
      * 0: 无未读 Critical Alert
      * 1: 有未读 Critical Alert

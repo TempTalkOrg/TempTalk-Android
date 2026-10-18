@@ -11,7 +11,6 @@ import com.difft.android.base.user.CallConfig
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.data.CallStatus
-import com.difft.android.call.handler.CallErrorHandler
 import com.difft.android.call.state.OnGoingCallStateManager
 import kotlinx.coroutines.launch
 
@@ -23,7 +22,6 @@ class CallLifecycleObserver(
     private val viewModel: LCallViewModel,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val callToChatController: LCallToChatController,
-    private val callErrorHandler: CallErrorHandler?,
     private val callDialogManager: CallDialogManager?,
     private val callConfig: CallConfig
 ) : DefaultLifecycleObserver {
@@ -37,9 +35,6 @@ class CallLifecycleObserver(
         owner.lifecycleScope.launch {
             owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    observeErrorState()
-                }
-                launch {
                     observeScreenSharingState()
                 }
                 launch {
@@ -49,16 +44,6 @@ class CallLifecycleObserver(
                     observeNoSpeakTimeout()
                 }
             }
-        }
-    }
-
-    /**
-     * 观察错误状态
-     * 当 ViewModel 发生错误时，委托给 CallErrorHandler 处理
-     */
-    private suspend fun observeErrorState() {
-        viewModel.error.collect { error ->
-            callErrorHandler?.handleError(error)
         }
     }
 

@@ -20,7 +20,7 @@ import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.MigrationImportLauncher
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.migration.ui.component.MigrationCard
+import com.difft.android.base.migration.ui.MigrationCard
 import com.difft.android.migration.ui.component.MigrationCardDivider
 import com.difft.android.migration.ui.component.MigrationConfirmDialog
 import com.difft.android.migration.ui.component.MigrationGap

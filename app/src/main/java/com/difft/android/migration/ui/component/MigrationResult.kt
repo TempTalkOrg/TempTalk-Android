@@ -1,5 +1,7 @@
 package com.difft.android.migration.ui.component
 
+import com.difft.android.base.R as BaseR
+import com.difft.android.base.migration.ui.MigrationCard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -76,7 +78,7 @@ fun MigrationStateMark(tone: MigrationResultTone, modifier: Modifier = Modifier)
         MigrationResultTone.INFO -> R.drawable.migration_ic_transfer to DifftTheme.colors.icon
         MigrationResultTone.SUCCESS -> R.drawable.migration_ic_circle_check to DifftTheme.colors.textSuccess
         MigrationResultTone.ERROR -> R.drawable.migration_ic_alert_circle to DifftTheme.colors.textError
-        MigrationResultTone.WARNING -> R.drawable.migration_ic_alert_triangle to DifftTheme.colors.textCaution
+        MigrationResultTone.WARNING -> BaseR.drawable.migration_ic_alert_triangle to DifftTheme.colors.textCaution
     }
     Icon(
         painter = painterResource(iconRes),

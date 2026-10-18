@@ -1,7 +1,5 @@
 package com.difft.android.call.cleanup
 
-import android.app.Application
-import android.content.Intent
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.LCallEngine
 import com.difft.android.call.core.CallRoomController
@@ -13,7 +11,6 @@ import com.difft.android.call.manager.SpeakerStateHolder
 import com.difft.android.call.manager.TimerManager
 import com.difft.android.call.media.CallAudioSetup
 import com.difft.android.call.network.NetworkQualityCoordinator
-import com.difft.android.call.service.ForegroundService
 import com.difft.android.call.session.CallTypeCoordinator
 import com.difft.android.call.ui.screenshare.ScreenShareFloatingSpeakerStateHolder
 import com.difft.android.call.ui.screenshare.ScreenSharePreWarmer
@@ -24,10 +21,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Assembles the ordered list of cleanup [CallCleanupExecutor.Step]s used both
- * for user-initiated exit and `onCleared()` teardown.
+ * Assembles the ordered list of cleanup [CallCleanupExecutor.Step]s a call session runs when it
+ * ends. Process-wide slots (statistics room ids, the connected server URL) are cleared only while
+ * [sessionId] still owns them.
  *
- * Kept stateless (a plain builder object) so the VM only pays the cost of one
+ * Kept stateless (a plain builder object) so the session only pays the cost of one
  * call to produce the list rather than carrying ~30 lines of setup in the
  * class body.
  */
@@ -35,7 +33,7 @@ internal object CallCleanupSteps {
 
     @Suppress("LongParameterList")
     fun build(
-        application: Application,
+        sessionId: Long,
         audioProcessor: AudioPipelineProcessor,
         audioHandler: AudioSwitchHandler,
         audioSetup: CallAudioSetup,
@@ -55,8 +53,7 @@ internal object CallCleanupSteps {
     ): List<CallCleanupExecutor.Step> = listOf(
         CallCleanupExecutor.Step("flushStatisticsLogs") {
             statisticsLogManager.flushAll()
-            statisticsLogManager.setRoomLocalId(null)
-            statisticsLogManager.setRoomId(null)
+            statisticsLogManager.releaseRoom(sessionId)
         },
         CallCleanupExecutor.Step("shouldTriggerFeedbackView") { shouldTriggerFeedbackView() },
         CallCleanupExecutor.Step("cancelCallTimeoutCheck") { timeoutMonitor.cancelIfActive() },
@@ -84,15 +81,7 @@ internal object CallCleanupSteps {
             timerManager.stopCallTimer()
             timerManager.stopCountdown()
         },
-        CallCleanupExecutor.Step("stopService") {
-            if (ForegroundService.isServiceRunning) {
-                L.i { "[Call] CallCleanupSteps stop ongoing call service." }
-                withContext(Dispatchers.Main) {
-                    application.stopService(Intent(application, ForegroundService::class.java))
-                }
-            }
-        },
-        CallCleanupExecutor.Step("clearConnectedServerUrl") { LCallEngine.setConnectedServerUrl(null) },
+        CallCleanupExecutor.Step("clearConnectedServerUrl") { LCallEngine.clearConnectedServerUrl(sessionId) },
         CallCleanupExecutor.Step("resetFeedbackBinder") { feedbackBinder.reset() },
         CallCleanupExecutor.Step("cancelSpeakerStateJobs") { speakerState.cancelJobs() },
         CallCleanupExecutor.Step("cancelScreenShareFloatingSpeaker") { screenShareFloatingSpeakerStateHolder?.cancel() },

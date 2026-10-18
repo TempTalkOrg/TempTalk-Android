@@ -162,7 +162,7 @@ class CallRoomController(
     /**
      * Lock-free, non-throwing room accessor for async collectors that can legitimately race with
      * teardown (e.g. [com.difft.android.call.session.CallTypeCoordinator]'s `room.metadata`
-     * collector, which lives in `viewModelScope` and is not cancelled synchronously with release).
+     * collector, which lives in the session's `mainScope` and is not cancelled synchronously with release).
      * Returns null before [createRoom] and after release, so a metadata emission that lands after
      * `disconnectAndRelease()` is dropped instead of crashing on the fail-loud [room] getter.
      */
@@ -495,7 +495,7 @@ class CallRoomController(
 
     /**
      * Lock-free. True from the instant a release is requested (set before disconnectAndRelease takes the lock).
-     * Called by production Phase B wiring ([com.difft.android.call.LCallViewModel.startRoomDependentWiring]),
+     * Called by production Phase B wiring (the session's room setup, `CallRoomWiring.kt`),
      * so this is `internal` (not `@VisibleForTesting`) — same-module tests still reach it.
      */
     internal fun isReleaseIntended(): Boolean = releaseIntended

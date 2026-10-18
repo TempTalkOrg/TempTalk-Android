@@ -103,7 +103,7 @@ class PushScreenShotSendJobTest {
 
         // Record what actually reached the store, so the assertions read the row's real field
         // values rather than a matcher's view of them.
-        every { messageStore.putWhenNonExist(capture(persisted)) } just Runs
+        every { messageStore.putWhenNonExist(capture(persisted)) } returns 1
 
         every { dataMessageCreator.createFrom(any()) } returns
             SignalServiceProtos.DataMessage.newBuilder().setTimestamp(timeStamp).build()

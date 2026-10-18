@@ -1,31 +1,26 @@
 package com.difft.android.call.handler
 
-import android.content.Context
-import android.content.Intent
 import com.difft.android.base.call.CallRole
-import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.manager.CallTimeoutManager
 import com.difft.android.call.state.OnGoingCallStateManager
 
 /**
- * Encapsulates the call-level timeout state machine that was previously in
- * `LCallViewModel` (the `TimeoutCheckState` + `start1V1CallTimeout` +
- * `cancelCallTimeoutCheck` + `sendTimeoutBroadcast` trio).
+ * The call-level timeout state machine: arms the 1v1 ongoing-call and remote-left timeouts and
+ * reports a fired one through [onTimeout] while the call is live in the timed room.
  *
  * Named `Monitor` to avoid confusion with the lower-level
  * [CallTimeoutManager] which is the actual execution backend.
  */
 class CallTimeoutMonitor(
-    private val appContext: Context,
     private val roomCtl: CallRoomController,
     private val callTimeoutManager: CallTimeoutManager,
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val callRole: CallRole,
     private val roomIdGetter: () -> String?,
+    private val onTimeout: (roomId: String) -> Unit,
 ) {
 
     private enum class State { NONE, PARTICIPANT_LEAVE, ONGOING_CALL }
@@ -42,7 +37,7 @@ class CallTimeoutMonitor(
             CallTimeoutManager.CallState.ONGOING_CALL,
             CallTimeoutManager.DEF_ONGOING_CALL_TIMEOUT,
             rid,
-        ) { sendTimeoutBroadcast(rid) }
+        ) { fireTimeout(rid) }
     }
 
     /**
@@ -58,7 +53,7 @@ class CallTimeoutMonitor(
             CallTimeoutManager.CallState.LEAVE_CALL,
             CallTimeoutManager.DEF_LEAVE_CALL_TIMEOUT,
             rid,
-        ) { status -> if (status) sendTimeoutBroadcast(rid) }
+        ) { status -> if (status) fireTimeout(rid) }
     }
 
     /** Cancel any active timeout check. Idempotent. */
@@ -68,7 +63,7 @@ class CallTimeoutMonitor(
         state = State.NONE
     }
 
-    private fun sendTimeoutBroadcast(roomId: String) {
+    private fun fireTimeout(roomId: String) {
         val currentRoomId = onGoingCallStateManager.getCurrentRoomId()
         if (!onGoingCallStateManager.isInCalling() ||
             onGoingCallStateManager.isInCallEnding() ||
@@ -76,7 +71,7 @@ class CallTimeoutMonitor(
             currentRoomId != roomId
         ) {
             L.i {
-                "[Call] CallTimeoutMonitor skip timeout broadcast. " +
+                "[Call] CallTimeoutMonitor skip timeout. " +
                     "inCalling=${onGoingCallStateManager.isInCalling()} " +
                     "isEnding=${onGoingCallStateManager.isInCallEnding()} " +
                     "currentRoomId=$currentRoomId roomId=$roomId"
@@ -84,14 +79,9 @@ class CallTimeoutMonitor(
             return
         }
         L.i {
-            "[Call] CallTimeoutMonitor send timeout broadcast. " +
-                "roomId=$roomId role=${callRole.type} status=${roomCtl.callStatus.value} " +
-                "callType=${roomCtl.callType.value} timeoutState=$state"
+            "[Call] CallTimeoutMonitor timeout roomId=$roomId role=${callRole.type} " +
+                "status=${roomCtl.callStatus.value} callType=${roomCtl.callType.value} timeoutState=$state"
         }
-        val intent = Intent(LCallConstants.CALL_ONGOING_TIMEOUT).apply {
-            putExtra(LCallConstants.BUNDLE_KEY_ROOM_ID, roomId)
-            setPackage(ApplicationHelper.instance.packageName)
-        }
-        appContext.sendBroadcast(intent)
+        onTimeout(roomId)
     }
 }

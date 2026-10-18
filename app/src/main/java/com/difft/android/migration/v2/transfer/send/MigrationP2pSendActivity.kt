@@ -2,7 +2,6 @@ package com.difft.android.migration.v2.transfer.send
 
 import android.app.Activity
 import android.app.KeyguardManager
-import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -18,6 +17,7 @@ import androidx.lifecycle.ViewModelProvider.NewInstanceFactory
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.R
+import com.difft.android.chat.invite.ScanActivity
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.PeerApps
@@ -144,7 +144,7 @@ class MigrationP2pSendActivity : BaseActivity() {
     private val scanLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                val raw = result.data?.getStringExtra(SCAN_RESULT_EXTRA)
+                val raw = result.data?.getStringExtra(ScanActivity.EXTRA_SCAN_RESULT)
                 if (raw != null) {
                     viewModel.onIntent(MigrationP2pSendIntent.QrScanned(raw))
                 } else {
@@ -382,7 +382,7 @@ class MigrationP2pSendActivity : BaseActivity() {
      * screen has nothing more to do than get out of the way.
      */
     private fun rescanLink() {
-        val intent = Intent().apply { component = ComponentName(packageName, SCAN_ACTIVITY_CLASS) }
+        val intent = Intent(this, ScanActivity::class.java)
         runCatching { startActivity(intent) }
             .onFailure {
                 L.w { "[MigrationV2][P2P][Tx] rescan launch failed: ${it.stackTraceToString()}" }
@@ -431,9 +431,10 @@ class MigrationP2pSendActivity : BaseActivity() {
     }
 
     private fun launchScan() {
-        val intent = Intent().apply {
-            component = ComponentName(packageName, SCAN_ACTIVITY_CLASS)
-            putExtra(SCAN_RETURN_RESULT_EXTRA, true)
+        val intent = Intent(this, ScanActivity::class.java).apply {
+            putExtra(ScanActivity.EXTRA_RETURN_RESULT, true)
+            putExtra(ScanActivity.EXTRA_DECLINE_COMPUTER_EXPORT_CODE, true)
+            putExtra(ScanActivity.EXTRA_MIGRATION_STYLE, true)
         }
         runCatching { scanLauncher.launch(intent) }
             .onFailure {
@@ -447,8 +448,5 @@ class MigrationP2pSendActivity : BaseActivity() {
         /** Set only by this app's own guide page when it opens the confirmation page (old-app-first path). */
         const val EXTRA_LEGACY_INITIATED = "extra_legacy_initiated"
 
-        private const val SCAN_ACTIVITY_CLASS = "com.difft.android.chat.invite.ScanActivity"
-        private const val SCAN_RETURN_RESULT_EXTRA = "extra_return_result"
-        private const val SCAN_RESULT_EXTRA = "extra_scan_result"
     }
 }

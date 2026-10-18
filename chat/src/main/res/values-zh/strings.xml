@@ -1,6 +1,4 @@
 <resources>
-    <string name="attendee_external_label">外部</string>
-    <string name="attendee_host_prefix">主持人・</string>
     <!-- LearnMoreTextView -->
     <string name="LearnMoreTextView_learn_more">了解更多</string>
     <string name="SpanUtil__read_more">查看更多</string>
@@ -218,7 +216,6 @@
     <string name="chat_option_create_group">创建群组</string>
     <string name="chat_option_scan">扫一扫</string>
     <string name="chat_option_add_contact">添加联系人</string>
-    <string name="chat_option_instant_call">即时会议</string>
     <string name="chat_option_mark_all_as_read">全部标为已读</string>
     <!-- Topic -->
     <!--
@@ -383,7 +380,6 @@
     <string name="invite_regenerate_dialog_content">旧的邀请码将过期。您确定要继续吗？</string>
     <string name="invite_regenerate_dialog_cancel">取消</string>
     <string name="invite_regenerate_dialog_ok">重新生成</string>
-    <string name="invite_ok">好的</string>
     <!--    <string name="invite_disable_only_moderators">%1$s invite_disable_only_moderators</string>-->
     <string name="invite_only_moderators_can_add">此群组仅允许协调人邀请。</string>
     <string name="invite_code">%s邀请码</string>
@@ -393,6 +389,7 @@
     <!--    scan-->
     <string name="scan_scan">扫描</string>
     <string name="scan_camera_open_failed">打开相机失败，请重试。</string>
+    <string name="scan_computer_export_code_hint">如需从电脑迁移聊天记录，请在接收手机登录时的迁移页面选择「从电脑迁移」。</string>
     <string name="link_device">连接这个设备吗？</string>
     <string name="link_device_tips">此设备将能够查看您的群组和联系人、读取您的所有消息并代表您发送消息。</string>
     <string name="link_new_device">链接新设备</string>
@@ -436,8 +433,25 @@
     <string name="notification_go_to_settings">设置</string>
     <string name="notification_title">通知</string>
     <string name="notification_group_chat_notification">群通知</string>
-    <string name="notification_settings">通知</string>
-    <string name="notification_full_screen_settings">全屏通知</string>
+    <string name="notification_message_notifications">消息通知</string>
+    <string name="notification_call_notifications">来电通知</string>
+    <string name="notification_group_lock_screen_caption">来电和紧急联络在锁屏时弹出所需</string>
+    <string name="notification_full_screen_display">全屏显示</string>
+    <string name="notification_oem_popup">系统弹出与锁屏权限</string>
+    <string name="notification_vendor_settings">厂商弹出与锁屏设置</string>
+    <string name="notification_banner_off">通知已关闭，消息和来电都无法提醒</string>
+    <string name="notification_banner_enable">去开启</string>
+    <string name="critical_alerts_content">允许 %s 访问并启用“免打扰”权限（某些设备上称为“模式访问”权限）。开启后，紧急联络可突破静音和勿扰模式。</string>
+    <string name="critical_alert_delivery_caption">当前无法接收推送，需开启后台连接，紧急联络才能送达。</string>
+    <string name="notification_level_no_banner">不弹出横幅</string>
+    <string name="notification_level_silent">已静默</string>
+    <string name="notification_level_lock_hidden">锁屏不显示</string>
+    <string name="notification_level_check">需要检查</string>
+    <string name="notification_status_ok">正常</string>
+    <string name="notification_status_check">需要检查</string>
+    <string name="notification_status_problem">需要处理</string>
+    <string name="background_activity_check">后台运行</string>
+    <string name="background_vendor_settings">厂商后台设置</string>
     <string name="notification_settings_open_fail">此设备没有通知设置页面</string>
     <string name="notification_enable">已开启</string>
     <string name="notification_disable">已关闭</string>
@@ -457,6 +471,8 @@
     <string name="notification_update_default_group_setting">更新群默认设置</string>
     <string name="notification_custom_settings">自定义设置</string>
     <string name="notification_message_sounds">消息提示音</string>
+    <string name="notification_sound_none">无</string>
+    <string name="notification_sound_custom">自定义铃声</string>
     <string name="notification_message_notification">消息通知</string>
     <string name="notification_critical_alert_title">%s 的未接呼叫</string>
     <string name="notification_critical_alert_content">紧急：请立即接听。</string>
@@ -469,11 +485,6 @@
     <string name="file_expired">文件已过期</string>
     <string name="file_expired_cannot_view">文件已过期，无法查看</string>
     <string name="uploading">上传中</string>
-    <string name="members">成员</string>
-    <string name="meetings_action_start">发起</string>
-    <string name="meetings_action_invite">邀请</string>
-    <string name="invite_participants">邀请成员</string>
-    <string name="install_call_btn_add">添加</string>
     <string name="add_participants">添加新成员</string>
 
     <string name="MediaReviewFragment__add_a_message">添加消息</string>
@@ -558,6 +569,8 @@
 
     <string name="auto_start_check">自启动权限</string>
     <string name="auto_start_need_check">需要检查</string>
+    <string name="background_connection_guide_prompt">仍然收不到消息或来电？</string>
+    <string name="background_connection_guide_link">查看设置指引</string>
 
     <string name="exact_alarm_check">精确闹钟</string>
     <string name="exact_alarm_granted">正常</string>
@@ -565,10 +578,6 @@
 
     <string name="background_connection_check_failed">请先确保以下设置项为正常状态，再开启后台连接</string>
 
-    <string name="critical_alert_notification_permission_check_failed">请先开启通知权限，以确保紧急联络正常接收。</string>
-    <string name="critical_alert_background_connection_permission_check_failed">请先开启后台连接，以确保紧急联络正常接收。</string>
-    <string name="critical_alert_all_permission_check_failed">请先开启通知、全屏提醒和后台连接权限，以确保紧急联络能够及时送达。</string>
-    <string name="critical_alert_fullscreen_permission_check_failed">请先开启全屏通知权限，以确保紧急联络正常接收。</string>
 
     <string name="disappearing_messages">倒计时</string>
     <string name="disappearing_messages_tips">消息在被阅读后会自动过期，它们将会被删除，无法以任何方式查看。</string>
@@ -580,8 +589,6 @@
     <string name="group_remove_member_confirm">移出</string>
     <string name="chat_group_in_common">共同群</string>
     <string name="critical_alerts">紧急联络</string>
-    <string name="critical_alerts_content">允许 %s 访问并启用“免打扰”权限（某些设备上称为“模式访问”权限）。开启后，紧急联络可突破静音和勿扰模式。</string>
-    <string name="critical_alerts_off">关</string>
     <!-- Chat Archive Settings -->
     <string name="chat_archive_extend_time_title">延长时间设置？</string>
     <string name="chat_archive_extend_time_message">你正在延长会话的消息销毁时长。请注意：此前已被销毁的消息无法恢复。</string>

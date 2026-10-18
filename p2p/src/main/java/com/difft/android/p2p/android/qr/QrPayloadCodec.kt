@@ -2,8 +2,6 @@ package com.difft.android.p2p.android.qr
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.net.Uri
-import android.util.Base64
 import androidx.core.graphics.createBitmap
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.Base45
@@ -72,33 +70,14 @@ object QrPayloadCodec {
     }
 
     /**
-     * The payload bytes carried inside the legacy device-transfer link, or null when [raw] is not such
-     * a link (the ordinary case — then it is the payload itself).
-     *
-     * iOS publishes its pairing code as `chative://transfer?version=1&…&migrationV2=<base64url(bytes)>`:
-     * the legacy link an old iOS still understands, with the pairing payload appended. The encoding is
-     * base64url without padding, so the padding is restored before decoding, and the alphabet is
-     * checked first — `Uri` has already percent-decoded the value, and anything outside the alphabet
-     * means this is not that parameter.
-     *
-     * Never logs the decoded bytes: the payload carries the transfer key.
+     * The payload bytes carried inside the legacy device-transfer link (see
+     * [PeerApps.envelopePayloadBytes]), or null when [raw] is not such a link — the ordinary case, where
+     * [raw] is the payload itself.
      */
     private fun unwrapCompatibleEnvelope(raw: String): ByteArray? {
-        val uri = runCatching { Uri.parse(raw.trim()) }.getOrNull() ?: return null
-        if (uri.scheme?.lowercase() !in PeerApps.ENVELOPE_SCHEMES) return null
-        if (!PeerApps.ENVELOPE_HOST.equals(uri.host, ignoreCase = true)) return null
-        val encoded = runCatching { uri.getQueryParameter(PeerApps.ENVELOPE_PAYLOAD_QUERY) }
-            .getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
-        if (!encoded.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '-' || it == '_' }) {
-            L.w { "[P2P][QR] envelope payload is not base64url" }
-            return null
+        if (!PeerApps.looksLikeMigrationQr(raw) || MigrationQrWire.looksLikeBarePayload(raw)) return null
+        return PeerApps.envelopePayloadBytes(raw).also {
+            if (it == null) L.w { "[P2P][QR] envelope payload rejected" }
         }
-        val padded = encoded + "=".repeat((4 - encoded.length % 4) % 4)
-        val bytes = runCatching { Base64.decode(padded, Base64.URL_SAFE or Base64.NO_WRAP) }.getOrNull()
-        if (bytes == null || bytes.isEmpty() || bytes.size > MigrationQrWire.MAX_PAYLOAD_BYTES) {
-            L.w { "[P2P][QR] envelope payload rejected (size=${bytes?.size})" }
-            return null
-        }
-        return bytes
     }
 }

@@ -181,10 +181,10 @@ object LanguageUtils {
     /**
      * Used by `TempTalkApplication.attachBaseContext` and `BaseActivity.attachBaseContext`.
      *
-     * Returns a [Context] whose [Configuration] is set to the user's locale with night-mode
-     * cleared (we manage night-mode separately via [androidx.appcompat.app.AppCompatDelegate])
-     * and font-scale pinned to 1.0 (we don't honor system font scaling — see existing UX
-     * contract preserved from the prior implementation).
+     * Returns a [Context] whose [Configuration] overrides only the user's locale and pins
+     * font-scale to 1.0 (we don't honor system font scaling — see existing UX contract preserved
+     * from the prior implementation). Night mode is left to
+     * [androidx.appcompat.app.AppCompatDelegate]; density and screen size follow the system.
      *
      * From `Application.attachBaseContext` (the cold-start case), the locale cache is
      * empty and we cannot do disk I/O safely here — so we resolve via [getLanguage],
@@ -194,13 +194,14 @@ object LanguageUtils {
      */
     fun createConfiguredContext(context: Context): Context {
         warmUpPreferences(context)
-        val newLocale = getLanguage(context)
-        val configuration = context.resources.configuration
-        configuration.setLocale(newLocale)
-        configuration.uiMode = configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK.inv() or Configuration.UI_MODE_NIGHT_UNDEFINED
-        configuration.fontScale = 1.0f
-        return context.createConfigurationContext(configuration)
+        // Only the overridden fields may be set: every set field of an override configuration is
+        // re-applied over each later system configuration, so copying the full current one froze
+        // the Application's density and screen size at process start (and an Activity's at
+        // attach whenever AppCompat added no overlay of its own).
+        val override = Configuration()
+        override.setLocale(getLanguage(context))
+        override.fontScale = 1.0f
+        return context.createConfigurationContext(override)
     }
 
     /**

@@ -27,7 +27,7 @@ import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRema
 import com.difft.android.migration.ui.component.MigrationAction
 import com.difft.android.migration.ui.component.MigrationBodyText
 import com.difft.android.migration.ui.component.MigrationCaption
-import com.difft.android.migration.ui.component.MigrationCard
+import com.difft.android.base.migration.ui.MigrationCard
 import com.difft.android.migration.ui.component.MigrationCardDivider
 import com.difft.android.migration.ui.component.MigrationConfirmDialog
 import com.difft.android.migration.ui.component.MigrationGap

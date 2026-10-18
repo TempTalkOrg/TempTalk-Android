@@ -1022,8 +1022,9 @@ class ImageEditorFragment : Fragment(), ImageEditorHudV2.EventListener, MediaSen
 
         private const val SELECT_STICKER_REQUEST_CODE = 124
 
-        private val DRAW_HUD_PROTECTION = ViewUtil.dpToPx(72)
-        private val CROP_HUD_PROTECTION = ViewUtil.dpToPx(144)
+        // Getters: the system density changes with the display-size setting while the process lives.
+        private val DRAW_HUD_PROTECTION get() = ViewUtil.dpToPx(72)
+        private val CROP_HUD_PROTECTION get() = ViewUtil.dpToPx(144)
 
         @JvmStatic
         fun newInstanceForAvatarCapture(imageUri: Uri): ImageEditorFragment {

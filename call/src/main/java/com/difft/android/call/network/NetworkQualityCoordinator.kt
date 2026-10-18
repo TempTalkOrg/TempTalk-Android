@@ -4,8 +4,8 @@ import android.os.Looper
 import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.BuildConfig
-import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.MediaSendIssueState
+import com.difft.android.call.session.CallSessionUiState
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.util.flow
@@ -47,7 +47,7 @@ internal class NetworkQualityCoordinator(
     private val mediaSendIssue: StateFlow<MediaSendIssueState>,
     private val localQualityProvider: () -> ConnectionQuality,
     private val remoteQualityProvider: () -> Map<String, ConnectionQuality>,
-    private val callUiController: CallUiController,
+    private val uiState: CallSessionUiState,
     /**
      * MUST stay a monotonic clock. A wall clock jumps backwards on time sync (a hint would stick
      * forever) and forwards on sleep/wake (the hysteresis delays would be skipped). Injectable only
@@ -207,7 +207,7 @@ internal class NetworkQualityCoordinator(
         tickJob = null
     }
 
-    private fun publish() = callUiController.setNetworkQuality(tracker.view())
+    private fun publish() = uiState.setNetworkQuality(tracker.view())
 
     /**
      * Publish + one transition log. Kept separate from [publish] on purpose: the log is gated on an
@@ -215,7 +215,7 @@ internal class NetworkQualityCoordinator(
      */
     private fun publishWithLog() {
         val view = tracker.view()
-        callUiController.setNetworkQuality(view)
+        uiState.setNetworkQuality(view)
         L.i { "[Call] NetworkQuality published local=${view.local} badRemotes=${view.badRemoteIdentities.size}" }
     }
 
@@ -240,7 +240,7 @@ internal class NetworkQualityCoordinator(
         fun create(
             scope: CoroutineScope,
             room: Room,
-            callUiController: CallUiController,
+            uiState: CallSessionUiState,
             mediaSendIssue: StateFlow<MediaSendIssueState>,
         ) =
             NetworkQualityCoordinator(
@@ -257,7 +257,7 @@ internal class NetworkQualityCoordinator(
                         }
                         .toMap()
                 },
-                callUiController = callUiController,
+                uiState = uiState,
             )
     }
 }

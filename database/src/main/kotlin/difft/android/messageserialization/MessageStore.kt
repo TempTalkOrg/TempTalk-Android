@@ -7,9 +7,12 @@ import difft.android.messageserialization.model.TranslateData
 
 interface MessageStore {
     /**
-     * Only put messages when the message is not exist in the DB store
+     * Only put messages when the message is not exist in the DB store.
+     *
+     * @return how many messages were newly inserted; existing ones and ones skipped because the
+     *   same id is being processed concurrently are not counted.
      */
-    fun putWhenNonExist(vararg messages: Message)
+    fun putWhenNonExist(vararg messages: Message): Int
 
     fun deleteMessage(messageIds: List<String>)
 

@@ -7,15 +7,22 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.difft.android.base.log.lumberjack.L
 import java.lang.ref.WeakReference
 
 
 object CallComposeUiUtil {
 
     /**
-     * 将ComposeView添加到Activity的根布局中
+     * 将ComposeView添加到Activity的根布局中。
+     * A host that is not a [LifecycleOwner] is skipped: it has no owners, and Compose would
+     * crash on first attach.
      */
     fun addComposeViewToActivity(activity: Activity, composeView: androidx.compose.ui.platform.ComposeView) {
+        if (activity !is LifecycleOwner) {
+            L.w { "[Call] addComposeViewToActivity skipped, host is not a LifecycleOwner: ${activity::class.java.name}" }
+            return
+        }
         val rootView = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
         val frameLayout = android.widget.FrameLayout(activity).apply {
             layoutParams = android.view.ViewGroup.LayoutParams(
@@ -23,11 +30,8 @@ object CallComposeUiUtil {
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
             addView(composeView)
-            // The host may never have called setContentView (e.g. a routing-only
-            // startup Activity), so ComponentActivity never installed the ViewTree
-            // owners on the decor. Compose resolves the recomposer lifecycle by
-            // walking up from this content child, so install the owners here.
-            (activity as? LifecycleOwner)?.let { setViewTreeLifecycleOwner(it) }
+            // The host may never have called setContentView, so install the owners on the wrapper.
+            setViewTreeLifecycleOwner(activity)
             (activity as? ViewModelStoreOwner)?.let { setViewTreeViewModelStoreOwner(it) }
             (activity as? SavedStateRegistryOwner)?.let { setViewTreeSavedStateRegistryOwner(it) }
         }

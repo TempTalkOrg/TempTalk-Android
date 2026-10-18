@@ -25,10 +25,13 @@ import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.LCallConstants.CALL_NOTIFICATION_OPERATION_REJECT
 import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationFixJump
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NotificationContentDisplayType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.IMessageNotificationUtil
+import com.difft.android.base.utils.NotificationRepostGuard
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.storage.AppStateDefaults
@@ -73,7 +76,6 @@ import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.receiver.InComingCallNotificationReceiver
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.FlashLightBlinker
-import com.difft.android.call.util.FullScreenPermissionHelper
 import com.difft.android.chat.messages.MessageForegroundService
 import util.AppForegroundObserver
 
@@ -90,19 +92,19 @@ class MessageNotificationUtil @Inject constructor(
     private val onGoingCallStateManager: OnGoingCallStateManager,
     private val groupUtil: dagger.Lazy<GroupUtil>,
     private val criticalAlertNotificationBuilder: CriticalAlertNotificationBuilder,
+    private val channelManager: NotificationChannelManager,
+    private val repostGuard: NotificationRepostGuard,
 ) : IMessageNotificationUtil {
 
     companion object {
         private const val NOTIFICATION_GROUP_KEY = "NOTIFICATION_GROUP_KEY"
         private const val MESSAGE_SUMMARY_NOTIFICATION_ID = 10000
 
-        private const val CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY = "MESSAGE_SUMMARY"
-        private const val CHANNEL_CONFIG_NAME_MESSAGE = "MESSAGE"
-        private const val CHANNEL_CONFIG_NAME_CALL = "CALL"
-        private const val CHANNEL_CONFIG_NAME_ONGOING_CALL = "ONGOING_CALL"
-        private const val CHANNEL_CONFIG_NAME_BACKGROUND = "BACKGROUND"
-        private const val CHANNEL_CONFIG_NAME_CRITICAL_ALERT = "CRITICAL_ALERT_V2"
-        private const val CHANNEL_CONFIG_MESSAGE_GROUP = "MESSAGE_GROUP"
+        private const val CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY = NotificationChannelIds.MESSAGE_SUMMARY
+        private const val CHANNEL_CONFIG_NAME_MESSAGE = NotificationChannelIds.MESSAGE
+        private const val CHANNEL_CONFIG_NAME_CALL = NotificationChannelIds.CALL
+        private const val CHANNEL_CONFIG_NAME_CRITICAL_ALERT = NotificationChannelIds.CRITICAL_ALERT
+        private const val CHANNEL_CONFIG_MESSAGE_GROUP = NotificationChannelIds.MESSAGE_GROUP
         const val STOP_CRITICAL_ALERT_SOUND = "STOP_CRITICAL_ALERT_SOUND"
         private const val CRITICAL_ALERT_VALID_WINDOW_MS = 8 * 60 * 60 * 1000L
     }
@@ -114,27 +116,24 @@ class MessageNotificationUtil @Inject constructor(
     private val pendingCallNotifyJobs = ConcurrentHashMap<Int, Job>()
 
 
+    /** Re-submits channel display names when the app language no longer matches them; cheap otherwise. */
+    fun refreshChannelNames() = channelManager.ensureChannels()
+
+    /**
+     * Startup entry: creates missing channels and refreshes localized names synchronously (channels
+     * must exist before any post), then applies the one-time legacy fix-up off the main thread.
+     */
     fun checkAndCreateNotificationChannels() {
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-//            nm.notificationChannels.forEach {
-//                if (it.id !in listOf(
-//                        CHANNEL_CONFIG_NAME_MESSAGE,
-//                        CHANNEL_CONFIG_NAME_CALL,
-//                        CHANNEL_CONFIG_NAME_ONGOING_CALL,
-//                        CHANNEL_CONFIG_NAME_BACKGROUND,
-//                    )
-//                ) {
-//                    deleteNotificationChannelSafely(it.id)
-//                }
-//            }
-//        }
-        createNotificationChannelGroup()
-        checkSummaryChannel()
-        checkMessageChannel()
-        checkCallChannel()
-        checkOngoingCallChannel()
-        checkBackgroundChannel()
-        checkCriticalAlertChannel()
+        channelManager.ensureChannels()
+        appScope.launch(Dispatchers.IO) {
+            try {
+                channelManager.migrateIfNeeded()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.e { "[MessageNotificationUtil] channel migration failed: ${e.stackTraceToString()}" }
+            }
+        }
 
         // 启动时异步清理过期缓存
         try {
@@ -144,147 +143,6 @@ class MessageNotificationUtil @Inject constructor(
             }
         } catch (e: Exception) {
             L.e(e) { "[MessageNotificationUtil] Failed to start cleanup task:" }
-        }
-    }
-
-
-    private fun checkSummaryChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY)
-            if (existingChannel == null) {
-                val notificationChannel = NotificationChannel(
-                    CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY,
-                    CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY,
-                    NotificationManager.IMPORTANCE_DEFAULT
-                )
-                notificationChannel.group = CHANNEL_CONFIG_MESSAGE_GROUP
-                notificationChannel.setShowBadge(false)
-                notificationChannel.enableVibration(false)
-                notificationChannel.setSound(null, null)
-                nm.createNotificationChannel(notificationChannel)
-            }
-        }
-    }
-
-    private fun checkMessageChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_MESSAGE)
-            if (existingChannel == null || !existingChannel.canShowBadge() || existingChannel.group == null) {
-                deleteNotificationChannelSafely(CHANNEL_CONFIG_NAME_MESSAGE)
-                val notificationChannel = NotificationChannel(
-                    CHANNEL_CONFIG_NAME_MESSAGE,
-                    CHANNEL_CONFIG_NAME_MESSAGE,
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-                notificationChannel.group = CHANNEL_CONFIG_MESSAGE_GROUP
-                notificationChannel.setShowBadge(true)
-                notificationChannel.enableVibration(true)
-                nm.createNotificationChannel(notificationChannel)
-            }
-        }
-    }
-
-    private fun checkCriticalAlertChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
-            if (existingChannel == null || existingChannel.canShowBadge()) {
-                deleteNotificationChannelSafely(CHANNEL_CONFIG_NAME_CRITICAL_ALERT)
-                val notificationChannel = NotificationChannel(
-                    CHANNEL_CONFIG_NAME_CRITICAL_ALERT,
-                    CHANNEL_CONFIG_NAME_CRITICAL_ALERT,
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-                notificationChannel.setShowBadge(false)
-                notificationChannel.enableVibration(true)
-                notificationChannel.setBypassDnd(true)
-//                val ringtoneUri = Uri.parse("android.resource://${context.packageName}/${R.raw.critical_alert}")
-//                notificationChannel.setSound(ringtoneUri,
-//                    AudioAttributes.Builder()
-//                        .setUsage(AudioAttributes.USAGE_ALARM)
-//                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-//                        .build())
-                notificationChannel.vibrationPattern = longArrayOf(0, 100)
-                nm.createNotificationChannel(notificationChannel)
-            }
-        }
-    }
-
-    private fun checkCallChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_CALL)
-            if (existingChannel == null || existingChannel.canShowBadge()) {
-                deleteNotificationChannelSafely(CHANNEL_CONFIG_NAME_CALL)
-                val notificationChannel = NotificationChannel(
-                    CHANNEL_CONFIG_NAME_CALL,
-                    CHANNEL_CONFIG_NAME_CALL,
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-                notificationChannel.setShowBadge(false)
-                notificationChannel.enableVibration(true)
-                notificationChannel.vibrationPattern = longArrayOf(0, 100)
-                nm.createNotificationChannel(notificationChannel)
-            }
-        }
-    }
-
-    private fun checkOngoingCallChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingChannel = nm.getNotificationChannel(
-                CHANNEL_CONFIG_NAME_ONGOING_CALL
-            )
-            if (existingChannel == null || existingChannel.canShowBadge()) {
-                deleteNotificationChannelSafely(CHANNEL_CONFIG_NAME_ONGOING_CALL)
-                val notificationChannel = NotificationChannel(
-                    CHANNEL_CONFIG_NAME_ONGOING_CALL,
-                    CHANNEL_CONFIG_NAME_ONGOING_CALL,
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    setShowBadge(false)
-                    setSound(null, null) // 不设置声音
-                    enableVibration(false) // 不震动
-                }
-                nm.createNotificationChannel(notificationChannel)
-            }
-        }
-    }
-
-    private fun checkBackgroundChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val existingChannel = nm.getNotificationChannel(CHANNEL_CONFIG_NAME_BACKGROUND)
-            if (existingChannel == null || existingChannel.canShowBadge()) {
-                deleteNotificationChannelSafely(CHANNEL_CONFIG_NAME_BACKGROUND)
-                val notificationChannel = NotificationChannel(
-                    CHANNEL_CONFIG_NAME_BACKGROUND,
-                    CHANNEL_CONFIG_NAME_BACKGROUND,
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    setShowBadge(false)
-                    setSound(null, null)
-                    enableVibration(false)
-                }
-                nm.createNotificationChannel(notificationChannel)
-            }
-        }
-    }
-
-    private fun createNotificationChannelGroup() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                val group = NotificationChannelGroup(CHANNEL_CONFIG_MESSAGE_GROUP, CHANNEL_CONFIG_MESSAGE_GROUP)
-                nm.createNotificationChannelGroup(group)
-            } catch (e: Exception) {
-                L.e(e) { "[MessageNotificationUtil] create notification channel group $CHANNEL_CONFIG_MESSAGE_GROUP fail" }
-            }
-        }
-    }
-
-    private fun deleteNotificationChannelSafely(channelId: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                nm.deleteNotificationChannel(channelId)
-            } catch (e: Exception) {
-                L.e(e) { "[MessageNotificationUtil] delete notification channel $channelId fail" }
-            }
         }
     }
 
@@ -802,6 +660,7 @@ class MessageNotificationUtil @Inject constructor(
             L.i { "[Call] showCallNotificationNew notificationID:$notificationID roomId:$roomId style=inbox+2actions" }
             if (!isActive) return@launch
             try {
+                repostGuard.onPosted(notificationID)
                 nm.notify(notificationID, builder.build())
             } catch (e: Exception) {
                 L.e { "[Call] showCallNotificationNew failed: ${e.stackTraceToString()}" }
@@ -810,7 +669,7 @@ class MessageNotificationUtil @Inject constructor(
         pendingCallNotifyJobs.put(notificationID, job)?.cancel()
         job.invokeOnCompletion { throwable ->
             val stillOwner = pendingCallNotifyJobs.remove(notificationID, job)
-            if (throwable != null && stillOwner) nm.cancel(notificationID)
+            if (throwable != null && stillOwner) repostGuard.cancel(notificationID)
         }
         job.start()
     }
@@ -842,7 +701,7 @@ class MessageNotificationUtil @Inject constructor(
 
     override fun cancelAllNotifications() {
         L.i { "[MessageNotificationUtil] cancelAllNotifications" }
-        nm.cancelAll()
+        repostGuard.cancelAll()
 
         // 异步清理所有缓存，避免主线程阻塞
         appScope.launch(Dispatchers.IO) {
@@ -878,7 +737,7 @@ class MessageNotificationUtil @Inject constructor(
     fun cancelNotificationsById(id: Int) {
         val pendingCancelled = pendingCallNotifyJobs.remove(id)?.also { it.cancel() } != null
         L.i { "[MessageNotificationUtil] cancelNotificationsById id=$id pendingCancelled=$pendingCancelled" }
-        nm.cancel(id)
+        repostGuard.cancel(id)
     }
 
     fun hasPendingCallNotification(id: Int): Boolean = pendingCallNotifyJobs.containsKey(id)
@@ -924,26 +783,6 @@ class MessageNotificationUtil @Inject constructor(
         } catch (e: Exception) {
             L.i { "[MessageNotificationUtil] openNotificationSettings fail:" + e.stackTraceToString() }
             ToastUtil.show(R.string.notification_settings_open_fail)
-        }
-    }
-
-    fun openFullScreenNotificationSettings(activity: Activity) {
-        try {
-            if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
-                FullScreenPermissionHelper.jumpToPermissionSettingActivity(activity)
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                        setData(("package:" + activity.packageName).toUri())
-                    }
-                    activity.startActivity(intent)
-                } else {
-                    openNotificationSettings(activity)
-                }
-            }
-        } catch (e: Exception) {
-            L.i { "[MessageNotificationUtil] openFullScreenNotificationSettings fail:" + e.stackTraceToString() }
-            openNotificationSettings(activity)
         }
     }
 
@@ -1013,19 +852,6 @@ class MessageNotificationUtil @Inject constructor(
         return true
     }
 
-    fun hasFullScreenNotificationPermission(): Boolean {
-        return if (FullScreenPermissionHelper.isMainStreamChinaMobile()) {
-            FullScreenPermissionHelper.canBackgroundStart(context)
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-//            userManager.getUserData()?.supportFullScreenNotification == false
-                nm.canUseFullScreenIntent()
-            } else {
-                true
-            }
-        }
-    }
-
     fun isNotificationsEnabled(): Boolean {
         return nm.areNotificationsEnabled()
     }
@@ -1069,26 +895,17 @@ class MessageNotificationUtil @Inject constructor(
         fun messageNotificationUtil(): MessageNotificationUtil
         fun activityProvider(): ActivityProvider
         fun criticalAlertManager(): CriticalAlertManager
+        fun notificationRepostGuard(): NotificationRepostGuard
     }
 
     /**
      * 跳转到默认消息通知设置页面
      */
     fun openMessageNotificationChannelSettings(context: Activity, conversationId: String? = null) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL_CONFIG_NAME_MESSAGE)
-
-                if (conversationId != null && supportConversationNotification()) {
-                    putExtra(Settings.EXTRA_CONVERSATION_ID, conversationId)
-                }
-            }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            L.d { "[MessageNotificationUtil] Opening default message notification settings" }
-        } else {
-            openNotificationSettings(context)
+        val conversation = conversationId?.takeIf { supportConversationNotification() }
+        if (!NotificationFixJump.openMessageCategory(context, conversation)) {
+            L.w { "[MessageNotificationUtil] open message category settings failed conversation=${conversation != null}" }
+            ToastUtil.show(R.string.notification_settings_open_fail)
         }
     }
 
@@ -1120,6 +937,8 @@ class MessageNotificationUtil @Inject constructor(
         // 先检查本地缓存中是否已经处理过该通知（最快检查）
         if (criticalAlertManager.isCriticalAlertNotificationProcessed(forWhat.id, notificationId)) {
             L.w { "[CriticalAlert] Critical alert notification (id=$notificationId) already processed in cache, skip.}"}
+            // #1347: a late duplicate FCM silently refreshes the alert while it is still showing.
+            repostGuard.repostIfActive(notificationId)
             return
         }
 
@@ -1128,6 +947,7 @@ class MessageNotificationUtil @Inject constructor(
             L.w { "[CriticalAlert] Critical alert notification (id=$notificationId) is already showing, skip.}"}
             // 即使系统显示中，也要添加到缓存，防止重复处理
             criticalAlertManager.addCriticalAlertNotification(forWhat.id, notificationId)
+            repostGuard.repostIfActive(notificationId)
             return
         }
 
@@ -1173,6 +993,7 @@ class MessageNotificationUtil @Inject constructor(
         try {
             val notification = criticalAlertNotificationBuilder.build(payload, CHANNEL_CONFIG_NAME_CRITICAL_ALERT, presentation)
             L.i { "[CriticalAlert] Notifying critical alert: notificationId=${payload.notificationId} timestamp=${payload.timestamp} presentation=$presentation" }
+            repostGuard.onPosted(payload.notificationId)
             nm.notify(payload.notificationId, notification)
             true
         } catch (e: Exception) {
@@ -1211,7 +1032,7 @@ class MessageNotificationUtil @Inject constructor(
                             try {
                                 // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
                                 // 移除 isNotificationShowing() 检查以避免阻塞主线程
-                                nm.cancel(notificationId)
+                                repostGuard.cancel(notificationId)
                                 L.d { "[MessageNotificationUtil] cancel notificationId=$notificationId for conversationId=$conversationId" }
                                 // 停止匹配的声音
                                 criticalAlertManager.stopSoundIfMatch(notificationId)
@@ -1229,7 +1050,7 @@ class MessageNotificationUtil @Inject constructor(
                             try {
                                 // 直接取消通知，不需要检查是否存在（nm.cancel() 是安全的）
                                 // 移除 isNotificationShowing() 检查以避免阻塞主线程
-                                nm.cancel(notificationId)
+                                repostGuard.cancel(notificationId)
                                 L.d { "[MessageNotificationUtil] cancel notificationId=$notificationId" }
                                 // 停止匹配的声音
                                 criticalAlertManager.stopSoundIfMatch(notificationId)

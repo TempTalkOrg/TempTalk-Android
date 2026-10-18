@@ -3,15 +3,11 @@ package com.difft.android.call.handler
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.call.CallType
 import com.difft.android.base.utils.ApplicationHelper
-import com.difft.android.call.connect.CallConnectionCoordinator
-import com.difft.android.call.core.CallRoomController
 import com.difft.android.call.data.CallStatus
-import com.difft.android.call.network.NetworkQualityCoordinator
 import com.difft.android.call.service.TestScopeApplication
 import com.difft.android.test.TestDispatcherRule
 import com.difft.android.test.rules.GlobalStaticMockRule
 import io.livekit.android.events.RoomEvent
-import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
@@ -57,76 +53,29 @@ class RoomEventDispatcherConnectionQualityTest {
     @get:Rule(order = 1)
     val globalMocks = GlobalStaticMockRule()
 
-    private lateinit var room: Room
-    private lateinit var roomCtl: CallRoomController
-    private lateinit var coordinator: CallConnectionCoordinator
-    private lateinit var timeoutMonitor: CallTimeoutMonitor
-    private lateinit var networkQuality: NetworkQualityCoordinator
+    private lateinit var f: RoomEventDispatcherFixture
+    private val room get() = f.room
+    private val roomCtl get() = f.roomCtl
+    private val timeoutMonitor get() = f.timeoutMonitor
+    private val networkQuality get() = f.networkQuality
 
     /** Every host.onNetworkPoorStateChanged(poor) value, in order. */
-    private val networkPoorCalls = mutableListOf<Boolean>()
+    private val networkPoorCalls get() = f.networkPoorCalls
 
     @Before
     fun setUp() {
         ApplicationHelper.init(ApplicationProvider.getApplicationContext())
-        room = mockk(relaxed = true)
-        roomCtl = mockk(relaxed = true)
-        coordinator = mockk(relaxed = true)
-        timeoutMonitor = mockk(relaxed = true)
-        networkQuality = mockk(relaxed = true)
-        every { coordinator.isRetryUrlConnecting } returns false
-        every { roomCtl.callStatus } returns MutableStateFlow(CallStatus.CONNECTED)
-        every { room.state } returns Room.State.CONNECTED
+        f = RoomEventDispatcherFixture(CoroutineScope(dispatcherRule.testDispatcher))
     }
 
     @After
     fun tearDown() {
         unmockkAll()
-        networkPoorCalls.clear()
     }
 
-    private fun buildDispatcher(): RoomEventDispatcher {
-        val host = RoomEventHost(
-            showBarrageFn = { _, _, _ -> },
-            setMicEnabledFn = { _, _, _ -> },
-            setCameraEnabledFn = {},
-            resetNoBodySpeakCheckFn = {},
-            sendHangUpBroadcastFn = {},
-            stopRingToneAndTimeoutCheckFn = {},
-            resolveCallTypeFn = {},
-            handleConnectedStateFn = {},
-            startCallDurationTimerFn = {},
-            onFeedbackIdentityResolvedFn = { _, _, _ -> },
-            onNetworkPoorStateChangedFn = { poor -> networkPoorCalls.add(poor) },
-            getCurrentCallTypeFn = { CallType.ONE_ON_ONE.type },
-            getCurrentRoomIdFn = { "room-1" },
-        )
-        return RoomEventDispatcher(
-            scope = CoroutineScope(dispatcherRule.testDispatcher),
-            room = room,
-            roomCtl = roomCtl,
-            rtm = mockk(relaxed = true),
-            connectionCoordinator = coordinator,
-            callUiController = mockk(relaxed = true),
-            participantManager = mockk(relaxed = true),
-            screenSharePreWarmer = mockk(relaxed = true),
-            timeoutMonitor = timeoutMonitor,
-            timerManager = mockk(relaxed = true),
-            speakerState = mockk(relaxed = true),
-            callDataManager = mockk(relaxed = true),
-            statisticsLogManager = mockk(relaxed = true),
-            mySelfId = "self",
-            networkQuality = networkQuality,
-            host = host,
-        )
-    }
+    private fun buildDispatcher(): RoomEventDispatcher = f.build(CallType.ONE_ON_ONE.type)
 
-    private fun dispatch(dispatcher: RoomEventDispatcher, event: RoomEvent) {
-        val method = RoomEventDispatcher::class.java
-            .getDeclaredMethod("dispatch", RoomEvent::class.java)
-        method.isAccessible = true
-        method.invoke(dispatcher, event)
-    }
+    private fun dispatch(dispatcher: RoomEventDispatcher, event: RoomEvent) = f.dispatch(dispatcher, event)
 
     private fun localParticipant(): LocalParticipant = mockk<LocalParticipant>(relaxed = true).also {
         every { it.identity } returns Participant.Identity("self.1")

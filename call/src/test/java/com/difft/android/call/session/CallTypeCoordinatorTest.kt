@@ -102,10 +102,13 @@ class CallTypeCoordinatorTest {
         unmockkAll()
     }
 
-    private fun buildCoordinator(callRole: CallRole = CallRole.CALLEE): CallTypeCoordinator {
+    private fun buildCoordinator(
+        callRole: CallRole = CallRole.CALLEE,
+        roomProvider: () -> Room? = { room },
+    ): CallTypeCoordinator {
         val coordinator = CallTypeCoordinator(
             scope = CoroutineScope(Dispatchers.Unconfined),
-            roomProvider = { room },
+            roomProvider = roomProvider,
             roomCtl = roomCtl,
             callDataManager = callDataManager,
             contactorCacheManager = mockk(relaxed = true),
@@ -176,6 +179,24 @@ class CallTypeCoordinatorTest {
         )
 
         assertEquals(ROOM_NAME, coordinator.currentRoomName)
+    }
+
+    // T2-17. The metadata collector outlives release (`doExitClear` keeps the session scope), so
+    // an emission can arrive once `roomOrNull()` is null. resolveNow() runs the collector's apply
+    // path, both before it reads the room and with the release landing between read and landing.
+    @Test
+    fun `T2-17 a metadata emission after release is dropped without throwing`() {
+        seedCallData(CallType.ONE_ON_ONE.type)
+        stubMetadata("""{"callType":"instant"}""")
+
+        buildCoordinator(roomProvider = { null }).resolveNow()
+
+        var reads = 0
+        buildCoordinator(roomProvider = { room.takeIf { reads++ == 0 } }).resolveNow()
+
+        assertEquals(CallType.ONE_ON_ONE.type, callTypeFlow.value)
+        assertEquals(CallType.ONE_ON_ONE.type, callDataManager.getCallListData()[ROOM_ID]?.type)
+        verify(exactly = 0) { roomCtl.updateCallType(any()) }
     }
 
     // ---------------------------------------------------------------------------------

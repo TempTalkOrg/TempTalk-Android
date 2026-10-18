@@ -21,6 +21,7 @@
 
     <!-- Header 叠加在上层 -->
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/header"
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:background="@color/bg1">
@@ -52,41 +53,11 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Optional caller-supplied guidance (the migration pairing page's scan state); hidden unless the caller passes hints. -->
-    <LinearLayout
-        android:id="@+id/ll_hint"
+    <!-- Guidance card from the caller and the declined-code banner (ScanGuidance); empty on the plain home scanner. -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_guidance"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:orientation="vertical"
-        android:paddingStart="32dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="32dp"
-        android:paddingBottom="48dp"
-        android:visibility="gone"
-        tools:visibility="visible">
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_hint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:alpha="0.86"
-            android:textColor="@color/t.white"
-            android:textSize="14sp"
-            tools:text="hint" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_hint_secondary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:alpha="0.6"
-            android:textColor="@color/t.white"
-            android:textSize="12sp"
-            tools:text="secondary" />
-
-    </LinearLayout>
+        android:layout_gravity="bottom" />
 
 </FrameLayout>

@@ -8,7 +8,6 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.difft.android.base.R
-import com.difft.android.base.utils.dp
 import kotlin.math.*
 
 class PatternLockView @JvmOverloads constructor(
@@ -42,6 +41,10 @@ class PatternLockView @JvmOverloads constructor(
 
     // Properties
     private var dotCount = 3
+    // dp conversions use this view's own resources: the app-wide density can be stale after a
+    // display-size change while the process stays alive, which mis-sized the dots and the cap.
+    private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
+
     private val dotSize = 16.dp // 固定16dp
     private val outerCircleSize = 32.dp // 外圈直径32dp
     private val pathWidth = 6.dp // 固定6dp
@@ -134,9 +137,8 @@ class PatternLockView @JvmOverloads constructor(
             else -> availableWidth // 如果高度没有约束，使用宽度（保证正方形）
         }
 
-        // 正方形尺寸：取宽高的最小值
-        // 这样在宽屏设备上，如果高度小于宽度，会使用高度作为边长
-        val size = minOf(availableWidth, availableHeight)
+        // Square of the smaller available side, never larger than MAX_SIZE_DP
+        val size = minOf(availableWidth, availableHeight, MAX_SIZE_DP.dp)
         setMeasuredDimension(size, size)
     }
 
@@ -457,5 +459,11 @@ class PatternLockView @JvmOverloads constructor(
 
     fun setPathEndAnimationDuration(duration: Long) {
         pathEndAnimationDuration = duration
+    }
+
+    private companion object {
+        // Caps the grid on wide windows (foldable inner screens, tablets) so the thumb can still
+        // span it; equals the size on the widest common phones (448dp wide minus 56dp margins).
+        const val MAX_SIZE_DP = 336
     }
 }

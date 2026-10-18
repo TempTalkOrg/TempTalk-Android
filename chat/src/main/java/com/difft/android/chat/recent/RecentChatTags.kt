@@ -94,15 +94,14 @@ private const val AVATAR_BLOCK_DP = 64          // avatar frame 48 + its marginS
 private const val TEXT_COLUMN_MARGIN_DP = 28    // text column marginStart 12 + marginEnd 16
 private const val TAG_MARGIN_END_DP = 4         // textview_at marginEnd
 private const val DETAIL_MARGIN_END_DP = 16     // textview_detail marginEnd (applies even when the badge is GONE)
-private const val CALL_BAR_RESERVE_DP = 88      // call_bar_duration marginEnd 16 + paddingH 16 + widest "1:02:33" @12sp
 private const val BADGE_RESERVE_DP = 24         // textview_missed_number minWidth 18 + padding 3 per side, "99+" @10sp
 private const val BADGE_RESERVE_LARGE_DP = 30   // same at 12sp (see updateTextSizes)
 private const val PREVIEW_FLOOR_DP = 56         // ~4 CJK / ~7 latin chars @14sp
 private const val PREVIEW_FLOOR_LARGE_DP = 84   // 56 * 21/14
 private const val SAFETY_SLACK_DP = 4           // emoji width variance across ROMs
-// imageview_sending 16 + its marginEnd 4. Single tier on purpose (like CALL_BAR_RESERVE_DP,
-// unlike the two-tier badge): the icon is fixed-size regardless of text scale.
+// imageview_sending 16 + its marginEnd 4. Single tier on purpose (unlike the two-tier badge): the icon is fixed-size regardless of text scale.
 private const val SENDING_ICON_RESERVE_DP = 20
+private const val PINNED_ICON_RESERVE_DP = 18    // imageview_pinned
 
 /**
  * Width the tag TextView may occupy before the preview stops being readable. Deliberately
@@ -113,17 +112,17 @@ fun computeTagAvailableWidthPx(
     rowWidthPx: Int,
     density: Float,
     hasUnreadBadge: Boolean,
-    hasCallBar: Boolean,
     isLargerText: Boolean,
     hasSendingIcon: Boolean = false,
+    hasPinnedIcon: Boolean = false,
 ): Float {
     fun dp(v: Int) = v * density
     val reserved = dp(AVATAR_BLOCK_DP) + dp(TEXT_COLUMN_MARGIN_DP) +
         dp(TAG_MARGIN_END_DP) + dp(DETAIL_MARGIN_END_DP) + dp(SAFETY_SLACK_DP) +
         dp(if (isLargerText) PREVIEW_FLOOR_LARGE_DP else PREVIEW_FLOOR_DP) +
-        (if (hasCallBar) dp(CALL_BAR_RESERVE_DP) else 0f) +
         (if (hasUnreadBadge) dp(if (isLargerText) BADGE_RESERVE_LARGE_DP else BADGE_RESERVE_DP) else 0f) +
-        (if (hasSendingIcon) dp(SENDING_ICON_RESERVE_DP) else 0f)
+        (if (hasSendingIcon) dp(SENDING_ICON_RESERVE_DP) else 0f) +
+        (if (hasPinnedIcon) dp(PINNED_ICON_RESERVE_DP) else 0f)
     return rowWidthPx - reserved
 }
 

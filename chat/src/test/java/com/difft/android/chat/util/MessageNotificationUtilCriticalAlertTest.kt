@@ -7,6 +7,7 @@ import android.service.notification.StatusBarNotification
 import com.difft.android.base.application.ScopeApplication
 import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.NotificationRepostGuard
 import com.difft.android.call.LCallManager
 import com.difft.android.call.manager.CriticalAlertManager
 import difft.android.messageserialization.For
@@ -43,6 +44,7 @@ class MessageNotificationUtilCriticalAlertTest {
     private lateinit var criticalAlertManager: CriticalAlertManager
     private lateinit var builder: CriticalAlertNotificationBuilder
     private lateinit var notification: Notification
+    private lateinit var repostGuard: NotificationRepostGuard
     private lateinit var util: MessageNotificationUtil
 
     @Before
@@ -71,6 +73,8 @@ class MessageNotificationUtilCriticalAlertTest {
         builder = mockk()
         every { builder.build(any(), any(), any()) } returns notification
 
+        repostGuard = mockk(relaxed = true)
+
         util = MessageNotificationUtil(
             context = context,
             userManager = mockk(relaxed = true),
@@ -81,6 +85,8 @@ class MessageNotificationUtilCriticalAlertTest {
             onGoingCallStateManager = mockk(relaxed = true),
             groupUtil = mockk(relaxed = true),
             criticalAlertNotificationBuilder = builder,
+            channelManager = mockk(relaxed = true),
+            repostGuard = repostGuard,
         )
     }
 
@@ -104,9 +110,11 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 1) { builder.build(payload(), "CRITICAL_ALERT_V2", CriticalAlertPresentation.SILENT_COMPANION) }
         verify(exactly = 0) { builder.build(any(), any(), CriticalAlertPresentation.FULL_SCREEN) }
         verifyOrder {
+            repostGuard.onPosted(notificationId)
             nm.notify(notificationId, notification)
             criticalAlertManager.startCriticalAlertActivity(conversationId, alertTitle, alertContent, notificationId, "r1")
         }
+        verify(exactly = 0) { repostGuard.repostIfActive(any()) }
         verify(exactly = 1) { nm.notify(any(), any()) }
         verify(exactly = 1) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
         verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any()) }
@@ -173,9 +181,39 @@ class MessageNotificationUtilCriticalAlertTest {
         }
     }
 
+    // #1347: a late duplicate FCM for an already-processed alert goes through the repost guard,
+    // which decides (active, not cancelled in-process) whether to refresh it.
+    @Test
+    fun `cache hit asks the guard to re-post the alert`() {
+        every { criticalAlertManager.isCriticalAlertNotificationProcessed(conversationId, notificationId) } returns true
+
+        show()
+
+        verify(exactly = 1) { repostGuard.repostIfActive(notificationId) }
+        verify(exactly = 0) { repostGuard.onPosted(any()) }
+    }
+
+    @Test
+    fun `fresh alert does not ask the guard to re-post`() {
+        every { AppForegroundObserver.isForegrounded() } returns false
+
+        show()
+
+        verify(exactly = 0) { repostGuard.repostIfActive(any()) }
+        verify(exactly = 1) { repostGuard.onPosted(notificationId) }
+    }
+
+    @Test
+    fun `cancelling a call notification goes through the guard`() {
+        util.cancelNotificationsById(notificationId)
+
+        verify(exactly = 1) { repostGuard.cancel(notificationId) }
+        verify(exactly = 0) { nm.cancel(any<Int>()) }
+    }
+
     // N7
     @Test
-    fun `already showing only records the id in cache`() {
+    fun `already showing records the id in cache and asks the guard to re-post`() {
         val sbn = mockk<StatusBarNotification>()
         every { sbn.id } returns notificationId
         every { nm.activeNotifications } returns arrayOf(sbn)
@@ -183,6 +221,7 @@ class MessageNotificationUtilCriticalAlertTest {
         show()
 
         verify(exactly = 1) { criticalAlertManager.addCriticalAlertNotification(conversationId, notificationId) }
+        verify(exactly = 1) { repostGuard.repostIfActive(notificationId) }
         verify(exactly = 0) { nm.notify(any(), any()) }
         verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
     }
@@ -229,6 +268,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 1) { builder.build(payload(), "CRITICAL_ALERT_V2", CriticalAlertPresentation.FULL_SCREEN) }
         verify(exactly = 0) { builder.build(any(), any(), CriticalAlertPresentation.SILENT_COMPANION) }
         verifyOrder {
+            repostGuard.onPosted(notificationId)
             nm.notify(notificationId, notification)
             criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
         }

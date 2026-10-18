@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.R
+import com.difft.android.p2p.engine.model.TransferDirection
+import com.difft.android.p2p.engine.model.direction
+import com.difft.android.chat.R as ChatR
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.PeerApps
 import com.difft.android.migration.v2.export.ExportEstimate
@@ -272,6 +275,14 @@ class MigrationP2pSendViewModel(
         val payload = QrPayloadCodec.decode(raw)
         if (payload == null) {
             emit(MigrationP2pSendEffect.Toast(appContext.getString(R.string.migration_p2p_send_scan_not_p2p)))
+            _state.update { MigrationP2pSendState.Idle }
+            return
+        }
+        // A computer's export code reaching this screen by any route other than its scanner: this
+        // device would send to the computer, which only gives.
+        if (payload.direction == TransferDirection.DOWNLOAD) {
+            L.w { "[MigrationV2][P2P][Tx] scan declined kind=computer_export" }
+            emit(MigrationP2pSendEffect.Toast(appContext.getString(ChatR.string.scan_computer_export_code_hint)))
             _state.update { MigrationP2pSendState.Idle }
             return
         }

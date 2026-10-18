@@ -87,6 +87,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
             receiptMessageHelper = mockk(relaxed = true),
             messageNotificationUtil = mockk(relaxed = true),
             conversationSettingsManager = mockk(relaxed = true),
+            settingsApplier = mockk(relaxed = true),
             localMessageCreator = localMessageCreator,
             groupCryptoRepo = mockk(relaxed = true),
             groupUtil = mockk(relaxed = true),

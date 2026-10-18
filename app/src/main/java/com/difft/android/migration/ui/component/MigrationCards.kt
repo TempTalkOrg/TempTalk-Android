@@ -1,11 +1,11 @@
 package com.difft.android.migration.ui.component
 
+import com.difft.android.base.migration.ui.MigrationCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,32 +18,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.difft.android.R
 import com.difft.android.base.ui.compose.DifftSwitch
 import com.difft.android.base.ui.theme.DifftTheme
-
-/**
- * A grouped card. Cells inside carry their own inset and are separated by [MigrationCardDivider];
- * a card holding prose rather than cells sets [padded] instead.
- */
-@Composable
-fun MigrationCard(
-    modifier: Modifier = Modifier,
-    padded: Boolean = false,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val card = modifier
-        .fillMaxWidth()
-        .clip(DifftTheme.radius.largeShape)
-        .background(DifftTheme.colors.background)
-    Column(
-        modifier = if (padded) card.padding(16.dp) else card,
-        content = content,
-    )
-}
 
 /** The hairline between two cells of a card. */
 @Composable

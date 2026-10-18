@@ -124,6 +124,7 @@ class MessageContentProcessorConversationCrossCheckTest {
             receiptMessageHelper = mockk(relaxed = true),
             messageNotificationUtil = mockk(relaxed = true),
             conversationSettingsManager = mockk(relaxed = true),
+            settingsApplier = mockk(relaxed = true),
             localMessageCreator = localMessageCreator,
             groupCryptoRepo = mockk(relaxed = true),
             groupUtil = mockk(relaxed = true),
@@ -139,6 +140,7 @@ class MessageContentProcessorConversationCrossCheckTest {
             newMessageDecryptionUtil = decryptionUtil,
             messageContentProcessor = processor,
             dbMessageStore = envelopeDbMessageStore,
+            healthCounters = mockk(relaxed = true),
         )
         incomingConversationProcessor = IncomingConversationMessageProcessor(
             webSocket = mockk(relaxed = true),
@@ -344,7 +346,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val peer = "+15558888"
         val group = "j".repeat(32)
 
-        val helper = PendingMessageHelper(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
+        val helper = PendingMessageHelper(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
         val pending = PendingMessage(
             type = 1, relay = null, timestamp = 100L, source = peer, sourceDevice = 1,
             content = null, systemShowTimestamp = 100L, sequenceId = 0L, notifySequenceId = 0L,

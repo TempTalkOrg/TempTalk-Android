@@ -40,7 +40,7 @@ class LoggedOutNotifier @Inject constructor(
             if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                CHANNEL_ID,
+                context.getString(com.difft.android.base.R.string.notification_channel_account),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply { setShowBadge(false) }
             notificationManager.createNotificationChannel(channel)

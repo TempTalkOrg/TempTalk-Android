@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.os.Build
 import com.difft.android.base.log.lumberjack.L
+import java.net.URLDecoder
 import java.security.MessageDigest
+import java.util.Base64
 
 /**
  * The two package families this app ships as — the legacy `org.difft.chative` and the current
@@ -184,6 +186,44 @@ object PeerApps {
      */
     fun looksLikeMigrationQr(raw: String): Boolean =
         MigrationQrWire.looksLikeBarePayload(raw) || looksLikeCompatibleEnvelope(raw)
+
+    /**
+     * Whether [raw] is a pairing code whose displayer holds the data: a computer's export code. Only
+     * a phone that is signing in can take that data (the sign-in migration page), so an account-holding
+     * scanner must decline it rather than start a send the computer will refuse. Reads the flags byte
+     * only; whoever acts on a code still decodes and validates it.
+     */
+    fun isComputerExportQr(raw: String): Boolean {
+        val payload = if (looksLikeCompatibleEnvelope(raw)) {
+            envelopePayloadBytes(raw)
+        } else {
+            MigrationQrWire.stripLineBreaks(raw).takeIf(MigrationQrWire::looksLikeBarePayload)?.let(Base45::decode)
+        }
+        return payload?.let(MigrationQrWire::isDownloadPayload) == true
+    }
+
+    /**
+     * The pairing payload carried inside the legacy device-transfer link, or null when [raw] is not
+     * such a link or its payload is not acceptable. The one reader of the envelope: the codec and the
+     * scanner's [isComputerExportQr] both use it, so they always agree on what the link holds.
+     *
+     * iOS publishes its pairing code as `chative://transfer?version=1&…&migrationV2=<base64url(bytes)>`:
+     * the legacy link an old iOS still understands, with the payload appended. The value is read
+     * without a URL parser: fragment dropped, percent-decoded, unpadded base64url alphabet only.
+     *
+     * Never logs the decoded bytes: the payload carries the transfer key.
+     */
+    fun envelopePayloadBytes(raw: String): ByteArray? {
+        if (!looksLikeCompatibleEnvelope(raw)) return null
+        val value = raw.trim().substringBefore('#').substringAfter('?', "").split('&')
+            .firstOrNull { it.startsWith("$ENVELOPE_PAYLOAD_QUERY=") }
+            ?.substringAfter('=')
+            ?.let { runCatching { URLDecoder.decode(it, Charsets.UTF_8.name()) }.getOrNull() }
+            ?.takeIf { v -> v.isNotEmpty() && v.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '-' || it == '_' } }
+            ?: return null
+        return runCatching { Base64.getUrlDecoder().decode(value) }.getOrNull()
+            ?.takeIf { it.size <= MigrationQrWire.MAX_PAYLOAD_BYTES }
+    }
 
     /**
      * The envelope's fingerprint, tested on the string so no URL parser is needed: our transfer

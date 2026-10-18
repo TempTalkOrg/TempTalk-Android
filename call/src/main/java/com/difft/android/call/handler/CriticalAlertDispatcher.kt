@@ -8,8 +8,8 @@ import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.R
-import com.difft.android.call.core.CallUiController
 import com.difft.android.call.manager.ParticipantManager
+import com.difft.android.call.session.CallSessionUiState
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.requests.CriticalAlertDestination
@@ -36,7 +36,7 @@ class CriticalAlertDispatcher(
     private val httpClientProvider: () -> ChativeHttpClient,
     private val callToChatController: LCallToChatController,
     private val participantManager: ParticipantManager,
-    private val callUiController: CallUiController,
+    private val uiState: CallSessionUiState,
     private val room: Room,
     private val roomIdGetter: () -> String?,
     private val showBarrage: (identity: io.livekit.android.room.participant.Participant, message: String) -> Unit,
@@ -125,7 +125,7 @@ class CriticalAlertDispatcher(
         }
     }
 
-    /** Refreshes the group's critical-alert flag and updates the UI controller. */
+    /** Refreshes the group's critical-alert flag in the session UI state. */
     fun refreshGroupStatus(callIntent: CallIntent) {
         if (callIntent.callType != CallType.GROUP.type) return
         val conversationId = callIntent.conversationId ?: return
@@ -133,7 +133,7 @@ class CriticalAlertDispatcher(
             val group = callToChatController.getSingleGroupInfo(conversationId)
             val status = group?.criticalAlert ?: false
             withContext(Dispatchers.Main) {
-                callUiController.setCriticalAlertEnable(status)
+                uiState.setGroupCriticalAlert(status)
             }
         }
     }

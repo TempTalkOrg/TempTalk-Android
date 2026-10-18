@@ -88,7 +88,7 @@ class LocalTranslateMessageCreatorTest {
 
     private suspend fun create(value: Int, forWhat: For = For.Group(ROOM)): NotifyMessage {
         val captured = slot<Message>()
-        every { messageStore.putWhenNonExist(capture(captured)) } just Runs
+        every { messageStore.putWhenNonExist(capture(captured)) } returns 1
 
         creator.createTranslateSettingChangedMessage(forWhat, value)
 
@@ -164,7 +164,7 @@ class LocalTranslateMessageCreatorTest {
 
     @Test
     fun `each call goes through putWhenNonExist, where the store does the deduplication`() = runTest {
-        every { messageStore.putWhenNonExist(any<Message>()) } just Runs
+        every { messageStore.putWhenNonExist(any<Message>()) } returns 1
 
         creator.createTranslateSettingChangedMessage(For.Group(ROOM), 1)
         creator.createTranslateSettingChangedMessage(For.Group(ROOM), 1)

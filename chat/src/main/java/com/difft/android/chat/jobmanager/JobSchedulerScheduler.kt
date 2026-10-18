@@ -7,10 +7,17 @@ import android.app.job.JobParameters
 import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
+import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
 import androidx.annotation.Keep
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.util.WakeLockUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -159,51 +166,61 @@ class JobSchedulerScheduler(
     }
 
     /**
-     * The persisted job is a wake-up signal, not an execution container: it pokes the job
-     * runner and releases the binding within milliseconds. Staying bound for the whole queue
-     * drain is what exposes a background process to `onStopJob` / the 10-minute cap while the
-     * OEM has it frozen, which the framework reports as an ANR against us.
-     *
-     * Every wake therefore asks the framework to keep the job (linear 5-minute backoff), and the
-     * idle transition that follows cancels the groups whose storage has drained — see
-     * [JobController.cancelIdleWakeUps]. So the system contacts the process only while that group
-     * still has work, and no application-side decision races the asynchronous `jobFinished`.
+     * A wake-up signal, not an execution container. A bound JobService in a frozen process
+     * becomes an `onStopJob` ANR, so each run is completed as soon as our own wake lock is held,
+     * without waiting for JobManager init. Every run asks to be rescheduled (linear 5-minute
+     * backoff); drained groups are cancelled by [JobController.cancelIdleWakeUps].
      */
     @SuppressLint("SpecifyJobSchedulerIdRange")
     class SystemService : JobService() {
 
         /**
-         * The run that currently owns each jobId. One jobId exists per constraint-key set (the
-         * constraint-less id and the network id are both live today), and the framework binds
-         * them to the SAME service instance. A single instance-wide flag would let the first
-         * completion swallow the second job's `jobFinished` — leaving it bound — and make its
-         * `onStopJob` report "finished", losing the reschedule for that group.
-         *
-         * The value is the run's own [JobParameters] and every consumer removes conditionally on
-         * it. If the management dispatcher wedges past the framework's 10-minute cap the run is
-         * stopped and the same id is re-run on this still-bound instance; the earlier run's late
-         * completion must not consume the later run's entry and leave that run un-finished.
+         * The run that owns each jobId, so `jobFinished` is issued at most once per run. Keyed per
+         * id because all ids share one service instance, and removed only by the owning run so a
+         * stale run cannot finish a later one.
          */
         private val inFlight = ConcurrentHashMap<Int, JobParameters>()
 
+        private val mainHandler = Handler(Looper.getMainLooper())
+
         override fun onStartJob(params: JobParameters): Boolean {
-            // Registered on the framework thread, before the executor hop, so an onStopJob that
-            // arrives immediately can never observe a missing entry.
+            // Main thread does constant-time work only; wake lock and JobManager lookup can block.
             inFlight[params.jobId] = params
             L.i { "[JobScheduler] onStartJob id=${params.jobId} inFlight=${inFlight.size}" }
 
-            completionScope.launch {
-                runCatching { ApplicationDependencies.getJobManager().wakeUpFromSystem() }
-                    .onFailure {
-                        L.w { "[JobScheduler] wakeUp failed id=${params.jobId}: ${it.stackTraceToString()}" }
-                    }
+            // Completes the run if acquiring the wake lock stalls. postAtTime: the token overload
+            // of postDelayed is API 28+.
+            val fallbackToken = Any()
+            mainHandler.postAtTime(
+                { finishSafely(params, reschedule = true) },
+                fallbackToken,
+                SystemClock.uptimeMillis() + FINISH_FALLBACK_MS
+            )
+
+            val context = applicationContext
+            wakeScope.launch {
+                // Held before completing, since completion releases the framework's wake lock.
+                val wakeLock = runCatching { acquireWakeLock(context) }.getOrNull()
                 finishSafely(params, reschedule = true)
+                mainHandler.removeCallbacksAndMessages(fallbackToken)
+                try {
+                    runCatching { ApplicationDependencies.getJobManager().wakeUpFromSystem() }
+                        .onFailure {
+                            L.w { "[JobScheduler] wakeUp failed id=${params.jobId}: ${it.stackTraceToString()}" }
+                        }
+                } finally {
+                    WakeLockUtil.release(wakeLock, WAKE_LOCK_TAG)
+                }
             }
 
             return true
         }
 
-        /** `true` means "not finished, please reschedule" — evaluated per run, not per jobId. */
+        /**
+         * Always reschedules. A stop queued before our async `jobFinished` can arrive after the
+         * entry is released; returning `false` there would drop the job. Drained groups are
+         * retired by [cancelAllExcept] instead.
+         */
         override fun onStopJob(params: JobParameters): Boolean {
             val unfinished = inFlight.remove(params.jobId, params)
             // getStopReason is only public from API 31; older releases give no reason at all.
@@ -213,7 +230,7 @@ class JobSchedulerScheduler(
                 "unavailable"
             }
             L.w { "[JobScheduler] onStopJob id=${params.jobId} reason=$reason unfinished=$unfinished" }
-            return unfinished
+            return true
         }
 
         @Keep
@@ -224,8 +241,7 @@ class JobSchedulerScheduler(
         }
 
         private fun finishSafely(params: JobParameters, reschedule: Boolean) {
-            // Atomic hand-off: exactly one of this path and onStopJob may complete a run, and only
-            // while that run still owns the id.
+            // Exactly one of the background path, the fallback and onStopJob completes a run.
             if (!inFlight.remove(params.jobId, params)) return
             // jobFinished throws if the job was already completed or the service was torn down.
             runCatching { jobFinished(params, reschedule) }
@@ -233,15 +249,24 @@ class JobSchedulerScheduler(
                 .onFailure { L.w { "[JobScheduler] jobFinished failed id=${params.jobId}: ${it.stackTraceToString()}" } }
         }
 
-        private companion object {
-            /**
-             * Process lifetime, never cancelled. Every started job ends via `jobFinished` or
-             * `onStopJob` before the framework unbinds this service, and a completion that lands
-             * after a teardown is already a no-op through the per-run hand-off in [finishSafely]
-             * plus the `runCatching` around `jobFinished`. A service-scoped job would instead risk
-             * cancelling the coroutine before the wake-up ever reached storage.
-             */
-            private val completionScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        internal companion object {
+            /** Process lifetime: the wake outlives the binding. */
+            private val wakeScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+            /** How long the main-thread fallback waits before completing a run itself. */
+            private const val FINISH_FALLBACK_MS = 2_000L
+
+            /** Upper bound on holding our wake lock if the JobManager init never finishes. */
+            private const val WAKE_SIGNAL_TIMEOUT_MS = 30_000L
+
+            private const val WAKE_LOCK_TAG = "JobSchedulerScheduler:wake"
+
+            /** Replaced in tests to model a stalled acquisition. */
+            @VisibleForTesting
+            @Volatile
+            internal var acquireWakeLock: (Context) -> PowerManager.WakeLock? = { context ->
+                WakeLockUtil.acquire(context, PowerManager.PARTIAL_WAKE_LOCK, WAKE_SIGNAL_TIMEOUT_MS, WAKE_LOCK_TAG)
+            }
         }
     }
 

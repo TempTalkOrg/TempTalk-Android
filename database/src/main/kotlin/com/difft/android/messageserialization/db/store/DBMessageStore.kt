@@ -54,9 +54,10 @@ constructor(
      */
     private val translateWriteMutex = Mutex()
 
-    override fun putWhenNonExist(vararg messages: Message) {
+    override fun putWhenNonExist(vararg messages: Message): Int {
         L.d { "[Message] putWhenNonExist size:${messages.size}" }
         val startTime = System.currentTimeMillis()
+        var inserted = 0
         try {
             // #971: batch-granularity Performance trace (one start/stop per batch on the
             // ingest thread) so p99 ingest latency is visible without per-message observer cost.
@@ -69,7 +70,7 @@ constructor(
                     }
                     try {
                         val room = dbRoomStore.createRoomIfNotExist(message.forWhat)
-                        wcdb.putMessageIfNotExists(message, room.readPosition)
+                        if (wcdb.putMessageIfNotExists(message, room.readPosition)) inserted++
                     } finally {
                         processingMessageIds.remove(message.id)
                     }
@@ -83,6 +84,7 @@ constructor(
             if (tookTime > SLOW_INSERT_MS || messages.size > 1) {
                 L.i { "[Message] putWhenNonExist batch took ${tookTime}ms for ${messages.size} messages" }
             }
+            return inserted
         } catch (e: Exception) {
             L.e { "[Message] Failed to put messages: ${e.stackTraceToString()}" }
             throw e

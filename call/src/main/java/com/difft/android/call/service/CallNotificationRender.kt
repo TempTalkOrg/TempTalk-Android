@@ -22,9 +22,10 @@ internal data class CallNotificationState(
  * teardown has begun — the last of which would otherwise re-post a live call notification over a
  * call the user has already ended.
  *
- * The room id gates rendering too. The notification's hang-up action is routed by room id, so a
- * notification posted before one is assigned — an outgoing 1v1 call has a status well before the
- * create-call response supplies the id — would carry an inert control. The id is also cleared when
+ * The room id gates rendering too. The notification's hang-up action reaches the call session,
+ * which drops a hang-up while no room id is published, so a notification posted before one is
+ * assigned — an outgoing 1v1 call has a status well before the create-call response supplies the
+ * id — would carry an inert control. The id is also cleared when
  * the call ends, which suppresses a status arriving after teardown has already reset the ending
  * flag.
  */

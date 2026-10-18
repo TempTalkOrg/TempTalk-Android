@@ -183,6 +183,27 @@ class QrCodeAnalyzerTest {
         verify(exactly = 1) { second.close() }
     }
 
+    @Test
+    fun `skip resumes scanning but passes over the declined code`() {
+        val declined = "https://x.test/declined"
+        val other = "https://x.test/other"
+        val results = mutableListOf<String>()
+        val analyzer = QrCodeAnalyzer { results.add(it) }
+        fun frame(content: String) = encode(content).let { fakeImageProxy(lumaBuffer(it, it.width), it.width, it.width, it.height) }
+
+        analyzer.analyze(frame(declined))
+        assertEquals(listOf(declined), results)
+
+        // The screen declined it; the code is still in frame and must not be delivered again.
+        analyzer.skip(declined)
+        analyzer.analyze(frame(declined))
+        assertEquals(listOf(declined), results)
+
+        // A different code is still picked up without waiting for a lifecycle edge.
+        analyzer.analyze(frame(other))
+        assertEquals(listOf(declined, other), results)
+    }
+
     // ── T-A1: framework assumption — Y-plane rowStride > width (padded) still decodes ──────────
     @Test
     fun `T-A1 - a padded Y-plane with rowStride greater than width decodes correctly`() {

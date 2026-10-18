@@ -154,7 +154,7 @@ class LocalMessageCreatorForwardNoticeTest {
             messageCount = 5
         )
         val captured = slot<Message>()
-        every { messageStore.putWhenNonExist(capture(captured)) } just Runs
+        every { messageStore.putWhenNonExist(capture(captured)) } returns 1
 
         val result = creator.createForwardNoticeMessage(
             operatorId = operatorOther,
@@ -193,7 +193,7 @@ class LocalMessageCreatorForwardNoticeTest {
     @Test
     fun `createForwardNoticeMessage stores NotifyMessage type so unread query excludes it`() = runTest {
         val captured = slot<Message>()
-        every { messageStore.putWhenNonExist(capture(captured)) } just Runs
+        every { messageStore.putWhenNonExist(capture(captured)) } returns 1
 
         creator.createForwardNoticeMessage(
             operatorId = MY_ID,
@@ -220,7 +220,7 @@ class LocalMessageCreatorForwardNoticeTest {
     @Test
     fun `messageId format follows generateMessageId three-tuple`() = runTest {
         val captured = slot<Message>()
-        every { messageStore.putWhenNonExist(capture(captured)) } just Runs
+        every { messageStore.putWhenNonExist(capture(captured)) } returns 1
 
         val timestamp = 1_700_000_000_123L
         val deviceId = 1
@@ -247,7 +247,7 @@ class LocalMessageCreatorForwardNoticeTest {
     @Test
     fun `duplicate invocations produce identical messageId — idempotent dedup key`() = runTest {
         val stored = mutableListOf<Message>()
-        every { messageStore.putWhenNonExist(capture(stored)) } just Runs
+        every { messageStore.putWhenNonExist(capture(stored)) } returns 1
 
         val notice = ForwardNoticeData(ForwardNoticeData.Scene.SINGLE, listOf(authorAlice), 1)
         val timestamp = 1_700_000_000_999L
@@ -276,7 +276,7 @@ class LocalMessageCreatorForwardNoticeTest {
     @Test
     fun `showContent is rendered with self operator as You and authors listed`() = runTest {
         val captured = slot<Message>()
-        every { messageStore.putWhenNonExist(capture(captured)) } just Runs
+        every { messageStore.putWhenNonExist(capture(captured)) } returns 1
 
         creator.createForwardNoticeMessage(
             operatorId = MY_ID,
@@ -319,7 +319,7 @@ class LocalMessageCreatorForwardNoticeTest {
     @Test
     fun `serialized notice JSON contains the substring the preview-exclusion LIKE filter matches`() = runTest {
         val stored = mutableListOf<Message>()
-        every { messageStore.putWhenNonExist(capture(stored)) } just Runs
+        every { messageStore.putWhenNonExist(capture(stored)) } returns 1
 
         creator.createForwardNoticeMessage(
             operatorId = MY_ID,

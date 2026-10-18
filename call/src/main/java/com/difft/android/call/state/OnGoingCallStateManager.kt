@@ -1,7 +1,9 @@
 package com.difft.android.call.state
 
+import androidx.annotation.MainThread
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.CallStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,6 +15,12 @@ import javax.inject.Singleton
 /**
  * 统一管理通话相关的全局状态
  * 替代 LCallActivity companion object 中的全局状态，提供更好的状态管理和线程安全
+ *
+ * The call's session fields (presence, ending, room id, call identity, type, duration, status) are
+ * a projection of the live call session: they have public reads only and are written through
+ * [publish], which runs only for the session that owns the projection (the newest one to call
+ * [bindSession]). The window/UI flags keep their public setters. `controlMessage` is the
+ * incoming-call page's signal: written by the call message handler, cleared by that page.
  */
 @Singleton
 class OnGoingCallStateManager @Inject constructor() {
@@ -38,25 +46,13 @@ class OnGoingCallStateManager @Inject constructor() {
     private val _isInCalling = MutableStateFlow(false)
     val isInCalling: StateFlow<Boolean> = _isInCalling.asStateFlow()
 
-    fun setIsInCalling(value: Boolean) {
-        _isInCalling.value = value
-    }
-
     // 是否正在结束通话
     private val _isInCallEnding = MutableStateFlow(false)
     val isInCallEnding: StateFlow<Boolean> = _isInCallEnding.asStateFlow()
 
-    fun setIsInCallEnding(value: Boolean) {
-        _isInCallEnding.value = value
-    }
-
     // 当前房间ID
     private val _currentRoomId = MutableStateFlow<String?>(null)
     val currentRoomId: StateFlow<String?> = _currentRoomId.asStateFlow()
-
-    fun setCurrentRoomId(roomId: String?) {
-        _currentRoomId.value = roomId
-    }
 
     fun getCurrentRoomId(): String? = _currentRoomId.value
 
@@ -65,34 +61,19 @@ class OnGoingCallStateManager @Inject constructor() {
     private val _clientCallId = MutableStateFlow<String?>(null)
     val clientCallId: StateFlow<String?> = _clientCallId.asStateFlow()
 
-    fun setClientCallId(clientCallId: String?) {
-        _clientCallId.value = clientCallId
-        // 新去电会话身份建立 = 起点清零门闩，作为 reset() 之外的第二道保险：即使某次结束时
-        // reset() 未跑到（@Singleton 状态可能残留），也不会用上一通的取消意图污染这一通去电。
-        _initiatorPreConnectCancelled.set(false)
-    }
-
     fun getClientCallId(): String? = _clientCallId.value
 
     // 主叫在信令未连上（窗口 W）就退出的取消意图门闩。CallExitHandler 在决定取消的第一刻
     // 同步置位；CallSessionStarter 拿到建房响应后据此跳过响铃/始通话消息，并用已知 roomId
     // 补发权威取消——保证无论"取消"与"建房完成"谁先跑，取消都能赢。
-    // 生命周期：起点由 setClientCallId 清零、终点由 reset() 清零，杜绝跨通污染。
+    // 生命周期：起点由 setClientCallId 清零、终点由 endPresence() 或另一会话 bindSession() 接管时清零，杜绝跨通污染。
     private val _initiatorPreConnectCancelled = AtomicBoolean(false)
-
-    fun markInitiatorPreConnectCancelled() {
-        _initiatorPreConnectCancelled.set(true)
-    }
 
     fun isInitiatorPreConnectCancelled(): Boolean = _initiatorPreConnectCancelled.get()
 
     // 当前会话ID
     private val _conversationId = MutableStateFlow<String?>(null)
     val conversationId: StateFlow<String?> = _conversationId.asStateFlow()
-
-    fun setConversationId(conversationId: String?) {
-        _conversationId.value = conversationId
-    }
 
     fun getConversationId(): String? = _conversationId.value
 
@@ -117,29 +98,9 @@ class OnGoingCallStateManager @Inject constructor() {
     private val _callType = MutableStateFlow("")
     val callType: StateFlow<String> = _callType.asStateFlow()
 
-    fun setCallType(value: String) {
-        _callType.value = value
-    }
-
     // 通话时长显示
     private val _callingTime = MutableStateFlow<Pair<String, String>?>(null)
     val callingTime: StateFlow<Pair<String, String>?> = _callingTime.asStateFlow()
-
-    /**
-     * 更新通话时长显示
-     * @param roomId 房间ID
-     * @param callingTime 显示的时间字符串
-     */
-    fun updateCallingTime(roomId: String, callingTime: String) {
-        _callingTime.value = Pair(roomId, callingTime)
-    }
-
-    /**
-     * 重置通话时长显示
-     */
-    fun resetCallingTime() {
-        _callingTime.value = null
-    }
 
     /**
      * 获取指定房间的通话时长
@@ -160,11 +121,6 @@ class OnGoingCallStateManager @Inject constructor() {
     private val _callConnectedAt = MutableStateFlow(0L)
     val callConnectedAt: StateFlow<Long> = _callConnectedAt.asStateFlow()
 
-    /** Idempotent: reconnects and server switches must not re-stamp a connected call. */
-    fun markCallConnected() {
-        if (_callConnectedAt.value == 0L) _callConnectedAt.value = System.currentTimeMillis()
-    }
-
     fun callConnectedAt(): Long = _callConnectedAt.value
 
     /**
@@ -174,10 +130,6 @@ class OnGoingCallStateManager @Inject constructor() {
      */
     private val _callStatus = MutableStateFlow(CallStatus.UNKNOWN)
     val callStatus: StateFlow<CallStatus> = _callStatus.asStateFlow()
-
-    fun updateCallStatus(status: CallStatus) {
-        _callStatus.value = status
-    }
 
     // 聊天头部通话视图可见性
     private val _chatHeaderCallVisibility = MutableStateFlow(false)
@@ -209,7 +161,7 @@ class OnGoingCallStateManager @Inject constructor() {
      * 
      * @param message 控制消息，null 表示清空
      */
-    fun updateControlMessage(message: ControlMessage?) {
+    internal fun updateControlMessage(message: ControlMessage?) {
         _controlMessage.value = message
     }
 
@@ -220,26 +172,146 @@ class OnGoingCallStateManager @Inject constructor() {
         _controlMessage.value = null
     }
 
+    // Written on main (bind/endPresence), read by any-thread publishes.
+    @Volatile private var ownerSessionId: Long = NO_SESSION
+    private val writer = MirrorWriter()
+
     /**
-     * 重置所有状态（在通话结束时调用）
+     * [sessionId] owns the projection from now on; the newest session to bind wins. Taking over from
+     * a different live owner first resets the session fields (keeping `controlMessage` and the
+     * window/UI flags), so nothing the previous session wrote survives into the new one even when
+     * the previous page's [endPresence] runs late or never. Re-binding the current owner is a no-op,
+     * which keeps the fields across a configuration-change re-create.
      */
-    fun reset() {
+    internal fun bindSession(sessionId: Long) {
+        val previous = ownerSessionId
+        if (previous == sessionId) return
+        // Owner first, then reset: a publish from the previous owner that starts after this point
+        // is rejected by owns(), so it cannot land on top of the cleared fields.
+        ownerSessionId = sessionId
+        if (previous != NO_SESSION) {
+            L.i { "[Call][Projection] bind takeover: session=$sessionId previous=$previous, resetting session fields" }
+            resetSessionFields()
+        }
+    }
+
+    /**
+     * Runs [block] only while [sessionId] owns the projection; returns whether it ran. The owner check
+     * and the write are not atomic: a write racing a re-bind or [endPresence] can land once.
+     * No lock, because the writes may resume collectors inline.
+     */
+    internal fun publish(sessionId: Long, block: MirrorWriter.() -> Unit): Boolean {
+        if (!owns(sessionId)) return false
+        writer.block()
+        return true
+    }
+
+    /**
+     * The call session ended: resets the session fields, except `controlMessage` (the
+     * incoming-call page's), restores `needAppLock` and hides the chat-header call view, then
+     * releases ownership so the session's later writes are dropped. The page flags belong to the
+     * call pages ([callPageDetached]). A no-op returning false when another session owns the projection.
+     */
+    internal fun endPresence(sessionId: Long): Boolean {
+        if (!owns(sessionId)) return false
+        resetSessionFields()
         _needAppLock.set(true)
+        _chatHeaderCallVisibility.value = false
+        ownerSessionId = NO_SESSION
+        return true
+    }
+
+    // Live call-page view models across all sessions; main-confined.
+    private var callPageCount = 0
+
+    /** A call page's view model was created; a configuration change keeps it and never calls this again. */
+    @MainThread
+    fun callPageAttached() {
+        callPageCount++
+    }
+
+    /**
+     * A call page's view model was cleared. When none is left, the page flags (`isInForeground`,
+     * `isInPipMode`, `isInScreenSharing`) are reset: no page is left to write or clear them.
+     * Counted across sessions, so an older page going away never clears a newer page's flags.
+     */
+    @MainThread
+    fun callPageDetached() {
+        callPageCount = (callPageCount - 1).coerceAtLeast(0)
+        if (callPageCount > 0) return
         _isInForeground.value = false
+        _isInPipMode.value = false
+        _isInScreenSharing.value = false
+    }
+
+    private fun owns(sessionId: Long) = sessionId != NO_SESSION && sessionId == ownerSessionId
+
+    /** The projection's setters; reachable only through [publish]. */
+    internal inner class MirrorWriter {
+        fun setIsInCalling(value: Boolean) {
+            _isInCalling.value = value
+        }
+
+        fun setIsInCallEnding(value: Boolean) {
+            _isInCallEnding.value = value
+        }
+
+        fun setCurrentRoomId(roomId: String?) {
+            _currentRoomId.value = roomId
+        }
+
+        fun setClientCallId(clientCallId: String?) {
+            _clientCallId.value = clientCallId
+            // 新去电会话身份建立 = 起点清零门闩，作为 endPresence() 之外的第二道保险：即使某次结束时
+            // endPresence() 未跑到（@Singleton 状态可能残留），也不会用上一通的取消意图污染这一通去电。
+            _initiatorPreConnectCancelled.set(false)
+        }
+
+        fun markInitiatorPreConnectCancelled() {
+            _initiatorPreConnectCancelled.set(true)
+        }
+
+        fun setConversationId(conversationId: String?) {
+            _conversationId.value = conversationId
+        }
+
+        fun setCallType(value: String) {
+            _callType.value = value
+        }
+
+        /** 更新通话时长显示：[callingTime] 为房间 [roomId] 显示的时间字符串 */
+        fun updateCallingTime(roomId: String, callingTime: String) {
+            _callingTime.value = Pair(roomId, callingTime)
+        }
+
+        /**
+         * Idempotent within a session: reconnects and server switches must not re-stamp a connected
+         * call. Returns the connect instant in force afterwards, the value the notification publishes
+         * as `when`. The instant is cleared whenever ownership ends ([endPresence]) or passes to
+         * another session ([bindSession]), so a new session always stamps its own.
+         */
+        fun markCallConnected(): Long {
+            if (_callConnectedAt.value == 0L) _callConnectedAt.value = System.currentTimeMillis()
+            return _callConnectedAt.value
+        }
+
+        fun updateCallStatus(status: CallStatus) {
+            _callStatus.value = status
+        }
+    }
+
+    /** The fields a session writes through [publish]; `controlMessage` and the window/UI flags excluded. */
+    private fun resetSessionFields() {
         _isInCalling.value = false
         _isInCallEnding.value = false
         _currentRoomId.value = null
         _clientCallId.value = null
         _initiatorPreConnectCancelled.set(false)
         _conversationId.value = null
-        _isInPipMode.value = false
-        _isInScreenSharing.value = false
         _callType.value = ""
         _callingTime.value = null
         _callConnectedAt.value = 0L
         _callStatus.value = CallStatus.UNKNOWN
-        _chatHeaderCallVisibility.value = false
-        _controlMessage.value = null
     }
 
     /**
@@ -282,4 +354,7 @@ class OnGoingCallStateManager @Inject constructor() {
      */
     fun callType(): String = _callType.value
 
+    private companion object {
+        const val NO_SESSION = -1L
+    }
 }

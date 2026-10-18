@@ -2,12 +2,14 @@ package com.difft.android.base.utils
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -30,6 +32,8 @@ import kotlin.test.assertTrue
  *      in-memory cache is updated.
  *   5. **Migration failures never crash** — caught and reported, falling back to
  *      the system locale.
+ *   6. **Configured context pins only locale and font scale** — density, screen size and
+ *      night mode keep following the system, and the caller's configuration is not mutated.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -191,5 +195,24 @@ class LanguageUtilsTest {
     fun `with no stored preference a Simplified Chinese system locale is current for zh-CN`() {
         assertTrue(LanguageUtils.isCurrentChoice(context, Locale.CHINA))
         assertFalse(LanguageUtils.isCurrentChoice(context, Locale.US))
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "en-rUS-mdpi")
+    fun `configured context pins locale and font scale but follows later display changes`() {
+        LanguageUtils.saveLanguage(context, Locale.CHINA)
+        val configured = LanguageUtils.createConfiguredContext(context)
+        assertEquals(Locale.US, context.resources.configuration.locales[0])
+
+        RuntimeEnvironment.setQualifiers("+w600dp-night-hdpi")
+        RuntimeEnvironment.setFontScale(1.5f)
+
+        val config = configured.resources.configuration
+        assertEquals(Locale.CHINA, config.locales[0])
+        assertEquals(1.0f, config.fontScale)
+        assertEquals(240, config.densityDpi)
+        assertEquals(1.5f, configured.resources.displayMetrics.density)
+        assertEquals(600, config.screenWidthDp)
+        assertEquals(Configuration.UI_MODE_NIGHT_YES, config.uiMode and Configuration.UI_MODE_NIGHT_MASK)
     }
 }

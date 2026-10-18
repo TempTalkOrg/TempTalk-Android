@@ -2,12 +2,14 @@ package com.difft.android.chat.messages
 
 import android.app.AlarmManager
 import android.content.Context
+import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.chat.websocket.monitor.WebSocketHealthMonitor
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.unmockkAll
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -45,6 +47,7 @@ class MessageServiceManagerAlarmChainTest {
     private lateinit var userManager: UserManager
     private lateinit var userData: UserData
     private lateinit var manager: MessageServiceManager
+    private lateinit var healthCounters: KeepAliveHealthCounters
 
     @Before
     fun setUp() {
@@ -60,7 +63,8 @@ class MessageServiceManagerAlarmChainTest {
         val monitor = mockk<WebSocketHealthMonitor>(relaxed = true)
         every { monitor.monitorWakeTicks } returns MutableSharedFlow()
 
-        manager = MessageServiceManager(context, userManager, monitor)
+        healthCounters = mockk(relaxed = true)
+        manager = MessageServiceManager(context, userManager, monitor, mockk(relaxed = true), healthCounters)
     }
 
     @After
@@ -76,6 +80,19 @@ class MessageServiceManagerAlarmChainTest {
 
     private fun advanceMinutes(minutes: Long) {
         ShadowSystemClock.advanceBy(Duration.ofMinutes(minutes))
+    }
+
+    @Test
+    fun `enabling keep-alive resumes health collection that a non-sampled start had stopped`() {
+        manager.startService()
+        verify(exactly = 1) { healthCounters.collecting = true }
+    }
+
+    @Test
+    fun `disabling keep-alive leaves the collection flag to the next reporter decision`() {
+        manager.stopService()
+        manager.onFcmAvailable()
+        verify(exactly = 0) { healthCounters.collecting = any() }
     }
 
     @Test

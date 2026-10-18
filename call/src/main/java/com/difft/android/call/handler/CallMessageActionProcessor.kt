@@ -69,7 +69,7 @@ internal fun CallMessageHandler.handleRejectMessage(
     if (onGoingCallStateManager.isInCalling() &&
         onGoingCallStateManager.getCurrentRoomId() == roomId
     ) {
-        updateControlMessage(CallActionType.REJECT, roomId)
+        endOngoingCall(CallActionType.REJECT, roomId)
     }
 
     // Case B: this device is a callee and another device of the current user
@@ -84,11 +84,11 @@ internal fun CallMessageHandler.handleHangupMessage(
     L.i { "[Call] handleCallMessage, hasHangup Message:${content.hangup.roomId}" }
 
     // Case A: this device is already in the call (e.g. the host hangs up the
-    // whole call) — route the action to the ongoing-call UI.
+    // whole call) — end the ongoing call session.
     if (onGoingCallStateManager.isInCalling() &&
         onGoingCallStateManager.getCurrentRoomId() == roomId
     ) {
-        updateControlMessage(CallActionType.HANGUP, roomId)
+        endOngoingCall(CallActionType.HANGUP, roomId)
     }
 
     // Case B: this device is a callee still being rung — cancel the

@@ -62,6 +62,7 @@ open class RecordingJobServiceShadow : ShadowService() {
 
     @Implementation
     protected fun jobFinished(params: JobParameters, needsReschedule: Boolean) {
+        onFinish?.invoke()
         if (throwOnFinish) {
             // Recorded before the throw so a row exercising the failure still has an event to
             // synchronise on — nothing follows the completion any more.
@@ -77,9 +78,14 @@ open class RecordingJobServiceShadow : ShadowService() {
         @Volatile
         var throwOnFinish: Boolean = false
 
+        /** Lets a row record the completion's position among other steps it observes. */
+        @Volatile
+        var onFinish: (() -> Unit)? = null
+
         fun reset() {
             events.clear()
             throwOnFinish = false
+            onFinish = null
         }
     }
 }

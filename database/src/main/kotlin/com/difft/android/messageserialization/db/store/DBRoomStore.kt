@@ -208,6 +208,12 @@ class DBRoomStore @Inject constructor(
         return wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))?.confidentialMode ?: 0
     }
 
+    fun getRoom(roomId: String): RoomModel? = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(roomId))
+
+    /** The [For] a bare conversation id stands for: a known group id is a group, anything else an account. */
+    fun resolveFor(roomId: String): For =
+        if (wcdb.group.getFirstObject(DBGroupModel.gid.eq(roomId)) != null) For.Group(roomId) else For.Account(roomId)
+
     fun updateConfidentialMode(roomId: String, confidentialMode: Int) {
         L.i { "[DBRoomStore] updateConfidentialMode id:$roomId confidentialMode: $confidentialMode" }
         wcdb.room.updateValue(confidentialMode, DBRoomModel.confidentialMode, DBRoomModel.roomId.eq(roomId))
@@ -229,6 +235,8 @@ class DBRoomStore @Inject constructor(
      * @param confidentialMode Confidential mode
      * @param messageExpiry Message expiry time
      * @param messageClearAnchor Message clear anchor
+     * @param conversationConfigVersion Server config version the written fields came from; written in
+     * the same statement so a crash can never leave the version ahead of the fields
      */
     fun updateConversationSettings(
         roomId: String,
@@ -236,11 +244,18 @@ class DBRoomStore @Inject constructor(
         blockStatus: Int? = null,
         confidentialMode: Int? = null,
         messageExpiry: Long? = null,
-        messageClearAnchor: Long? = null
+        messageClearAnchor: Long? = null,
+        conversationConfigVersion: Int? = null
     ) {
         val values = mutableListOf<Value>()
         val fields = mutableListOf<Column>()
         val fieldNames = mutableListOf<String>()
+
+        conversationConfigVersion?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.conversationConfigVersion)
+            fieldNames.add("conversationConfigVersion")
+        }
 
         muteStatus?.let {
             values.add(Value(it))

@@ -552,7 +552,8 @@ fun MessageModel.forwardContext(): ForwardContext? = forwardContextDatabaseId?.l
 // Extension functions on WCDB for CRUD Operations
 // ---------------------------
 
-fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L) {
+/** @return true if the message was inserted, false if a row with the same id already existed. */
+fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L): Boolean {
     // #971: wrap the single-message cascade (existence check + putMessage's ~11 child inserts)
     // in ONE transaction so it is atomic — no "half message" (e.g. message row inserted but its
     // attachment/mention/reaction rows missing, or vice-versa) on partial failure. Per-message
@@ -563,15 +564,18 @@ fun WCDB.putMessageIfNotExists(message: Message, roomReadPosition: Long = 0L) {
     // runTransaction rolls back AND re-throws, so the exception still propagates to
     // putWhenNonExist → process.classify → FailedMessage retry — the message-loss safety net is
     // preserved unchanged.
+    var inserted = false
     this.db.runTransaction {
         val existing = this.message.getFirstObject(DBMessageModel.id.eq(message.id))
         if (existing == null) {
             putMessage(message, roomReadPosition)
+            inserted = true
         } else {
             L.i { "[Message] message existing:${message.timeStamp}" }
         }
         true // commit
     }
+    return inserted
 }
 
 private fun WCDB.putMessage(message: Message, roomReadPosition: Long = 0L) {
