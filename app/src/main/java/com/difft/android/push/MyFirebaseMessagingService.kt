@@ -48,9 +48,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     " dataKeys=${remoteMessage.data.keys.joinToString(",")}"
             }
             runCatching {
+                val sentHigh = remoteMessage.originalPriority == RemoteMessage.PRIORITY_HIGH
                 entryPoint.keepAliveHealthCounters.onFcmReceived(
-                    deprioritized = remoteMessage.originalPriority == RemoteMessage.PRIORITY_HIGH &&
-                        remoteMessage.priority != RemoteMessage.PRIORITY_HIGH
+                    deprioritized = sentHigh && remoteMessage.priority != RemoteMessage.PRIORITY_HIGH,
+                    highPrioritySentTimeMs = if (sentHigh) remoteMessage.sentTime else 0L
                 )
             }
             val customContent = remoteMessage.data["custom_content"]

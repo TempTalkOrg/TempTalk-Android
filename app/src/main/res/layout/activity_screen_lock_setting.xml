@@ -195,4 +195,19 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Below the group, like the other settings descriptions; shown together with the group -->
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/tv_pattern_show_path_desc"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@null"
+        android:paddingStart="32dp"
+        android:paddingEnd="28dp"
+        android:text="@string/settings_pattern_show_path_desc"
+        android:textColor="@color/t.third"
+        android:textSize="12sp"
+        android:visibility="gone"
+        tools:visibility="visible" />
 </LinearLayout>

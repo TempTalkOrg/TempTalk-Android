@@ -7,7 +7,10 @@ import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.NotificationRepostGuard
 import com.difft.android.base.utils.appScope
+import com.difft.android.call.state.CriticalAlertCallGate
+import com.difft.android.call.state.CriticalAlertRoomRegistry
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.util.FlashLightBlinker
@@ -30,6 +33,9 @@ class CriticalAlertManager @Inject constructor(
     private val inComingCallStateManager: InComingCallStateManager,
     private val userManager: UserManager,
     private val criticalAlertSoundPlayer: CriticalAlertSoundPlayer,
+    private val criticalAlertCallGate: CriticalAlertCallGate,
+    private val criticalAlertRoomRegistry: CriticalAlertRoomRegistry,
+    private val repostGuard: NotificationRepostGuard,
     ) {
     companion object {
         private const val CRITICAL_ALERT_RETENTION_DAYS = 7L // 7天清理一次
@@ -206,16 +212,92 @@ class CriticalAlertManager @Inject constructor(
      */
     fun stopSoundIfMatch(notificationId: Int) = criticalAlertSoundPlayer.stopSoundIfMatch(notificationId)
 
+    /**
+     * Stops the alert sound only when [notificationId] owns the current play token (#1387); another
+     * alert's playback is left alone. Its flashlight is not stopped here: a silenced alert's blinking
+     * ends itself on its next blink (FlashLightBlinker re-checks admission), so another alert's
+     * flashlight is never cut. Safe on any thread.
+     */
+    fun stopIfOwner(notificationId: Int) {
+        criticalAlertSoundPlayer.stopIfOwner(notificationId)
+    }
+
+    /** An alert for [roomId] was published as [notificationId], so a call end can find it (#1387). */
+    fun recordRoomAlert(roomId: String, notificationId: Int) =
+        criticalAlertRoomRegistry.record(roomId, notificationId)
+
+    /**
+     * The call of [roomId] was cancelled or ended: stops what its critical alerts present (#1387).
+     *
+     * The room is marked ended first, so every later admission of one of its alerts (publish, sound,
+     * flashlight, page create or new intent) is silenced, and only then is the page's id read: either
+     * the page sees the ended room or this sees its id. Then the page showing one of the room's alerts
+     * is closed, and each recorded alert's notification is cancelled and its sound stopped when it
+     * owns the current play token; its flashlight ends itself on the next blink. The local chat message and the conversation
+     * highlight are not touched. Best effort: failures are logged, never thrown into the caller.
+     */
+    fun dismissForRoom(roomId: String) {
+        if (roomId.isEmpty()) return
+        try {
+            val ids = criticalAlertRoomRegistry.end(roomId)
+            val pageId = criticalAlertStateManager.getPageNotificationId()
+            if (pageId != null && pageId in ids) {
+                context.sendBroadcast(Intent(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_NOTIFICATION_ID).apply {
+                    `package` = context.packageName
+                    putExtra(LCallConstants.CRITICAL_ALERT_PARAM_NOTIFICATION_ID, pageId)
+                })
+            }
+            ids.forEach { id ->
+                repostGuard.cancel(id)
+                stopIfOwner(id)
+            }
+            L.i { "[CriticalAlert] dismissForRoom roomId=$roomId alerts=${ids.size} pageClosed=${pageId != null && pageId in ids}" }
+        } catch (e: Exception) {
+            L.e { "[CriticalAlert] dismissForRoom failed roomId=$roomId error=${e.stackTraceToString()}" }
+        }
+    }
+
+    /**
+     * The alert page for [notificationId] publishes itself (#1387). The page registers its dismissal
+     * receiver before calling this; the id is published before the silence check, so a room end
+     * landing at any point either shows up in the check or finds the id in [dismissForRoom].
+     *
+     * @return true when the alert must not be shown: its call is current (#1381) or ended (#1387)
+     */
+    fun publishPageAndCheckSilence(notificationId: Int, conversationId: String, roomId: String?): Boolean {
+        criticalAlertStateManager.setPageNotificationId(notificationId)
+        return criticalAlertCallGate.shouldSilence(conversationId, roomId)
+    }
+
+    /**
+     * The page that showed [notificationId] is gone. A page finished because its call is current
+     * or ended releases only what it owns: its id and state fields, and with [stopOwnedAlert] the
+     * sound when it owns the play token (#1387), so another alert keeps ringing.
+     */
+    fun releasePage(notificationId: Int, conversationId: String?, stopOwnedAlert: Boolean) {
+        if (stopOwnedAlert) stopIfOwner(notificationId)
+        criticalAlertStateManager.clearPage(notificationId, conversationId)
+    }
+
+    /**
+     * Whether IndexActivity coming to the front should dismiss the running alert (#213): the user
+     * opened the app's home while an alert rings or is shown, and is not joining it. The alert's own
+     * page still being resumed does not count: its translucent window sits above IndexActivity, which
+     * starts underneath it when the incoming-call page closes (#1387). Leaving the page for another
+     * activity pauses it first, so that still stops the alert.
+     */
+    fun shouldDismissWhenIndexStarts(): Boolean {
+        val snapshot = criticalAlertStateManager.getStateSnapshot()
+        return (snapshot.isPlayingSound || snapshot.isShowing) && !snapshot.isJoining && !snapshot.isPageVisible &&
+            // A page finishing for its ended or current call uncovers IndexActivity; that is not the user leaving.
+            !(snapshot.pageClosingSilentlyId != null && snapshot.pageClosingSilentlyId == snapshot.pageNotificationId)
+    }
+
     fun isCriticalAlertShowing(conversationId: String?): Boolean {
         if(conversationId == null) return false
         // 使用原子性快照确保线程安全，避免并发状态更新导致的不一致
         val snapshot = criticalAlertStateManager.getStateSnapshot()
         return (snapshot.conversationId == conversationId) && (snapshot.isPlayingSound || snapshot.isShowing)
-    }
-
-    fun isCriticalAlertRunning(): Boolean {
-        val snapshot = criticalAlertStateManager.getStateSnapshot()
-        return snapshot.isPlayingSound || snapshot.isShowing
     }
 
     fun startCriticalAlertActivity(conversationId: String, title: String, content: String, notificationId: Int, roomId: String? = null) {
@@ -254,13 +336,21 @@ class CriticalAlertManager @Inject constructor(
         FlashLightBlinker.stopBlinking()
     }
 
-    fun playSoundAndFlashLight(conversationId: String, notificationId: Int) {
+    fun playSoundAndFlashLight(conversationId: String, notificationId: Int, roomId: String? = null) {
         appScope.launch(Dispatchers.IO) {
             // 播放critical alert声音（循环铃声 + 同步循环震动 + 30s 兜底）
-            criticalAlertSoundPlayer.playSound(conversationId, notificationId)
-            // 启动闪光灯
-            if (FlashLightBlinker.hasCameraPermission(context)) {
-                FlashLightBlinker.startBlinking(context, durationMs = 30000)
+            // #1381: the flashlight starts only once the sound admitted this alert, and re-checks before blinking
+            // (#1387: also for an ended room).
+            criticalAlertSoundPlayer.playSound(conversationId, notificationId, roomId) {
+                // 启动闪光灯
+                if (FlashLightBlinker.hasCameraPermission(context)) {
+                    // #1387: the flashlight follows this alert's sound: it ends on its next blink once the alert is
+                    // silenced or no longer owns the play token, so stopping a sound never needs a global flash stop.
+                    FlashLightBlinker.startBlinking(context, durationMs = 30000) {
+                        !criticalAlertCallGate.shouldSilence(conversationId, roomId) &&
+                            criticalAlertSoundPlayer.ownsPlayToken(notificationId)
+                    }
+                }
             }
         }
     }

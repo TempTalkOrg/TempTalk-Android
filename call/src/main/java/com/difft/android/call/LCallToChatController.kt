@@ -119,7 +119,12 @@ interface LCallToChatController {
 
     fun getGroupsUpdateListener(): Flow<GroupModel>
 
-    fun startForegroundService(context: Context, intent: Intent)
+    /**
+     * Starts a foreground service. False when the start could not be issued because no notification
+     * channel can carry its notification (#1354). A start deferred to a background retry returns
+     * true; [onDeferredFailure] runs (off main) if that retry is not issued either.
+     */
+    fun startForegroundService(context: Context, intent: Intent, onDeferredFailure: () -> Unit = {}): Boolean
 
     fun getIncomingCallRoomId(): String?
 

@@ -239,7 +239,9 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
     }
 
     private fun startDownloadService(context: Context, url: String, apkHash: String, filePath: String, isForce: Boolean) {
-        context.startService(AppUpgradeService.startIntent(context, url, apkHash, filePath, isForce))
+        if (!AppUpgradeService.start(context, url, apkHash, filePath, isForce)) {
+            ToastUtil.showLong(getString(R.string.status_upgrade_downolad_failed))
+        }
     }
 
     private fun clearDownloadedApk(dirPath: String, excludeFileName: String) {

@@ -11,6 +11,7 @@ import com.difft.android.R
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.PackageUtil
+import com.difft.android.base.utils.liftAboveKeyboard
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivitySetPasscodeBinding
 import com.difft.android.login.PasscodeUtil
@@ -62,6 +63,10 @@ class SetPasscodeActivity : BaseActivity() {
         }
 
         mBinding.tvPasscodeTips1.text = getString(R.string.settings_passcode_tips, PackageUtil.getAppName())
+        // Short windows: keep the current step's button above the keyboard.
+        mBinding.root.liftAboveKeyboard(
+            field = { if (mBinding.llStep1.isVisible) mBinding.etPasscode1 else mBinding.etPasscode2 }
+        ) { if (mBinding.llStep1.isVisible) mBinding.btnNext else mBinding.btnConfirm }
 
         mBinding.etPasscode1.doAfterTextChanged {
             val passcode = it.toString().trim()

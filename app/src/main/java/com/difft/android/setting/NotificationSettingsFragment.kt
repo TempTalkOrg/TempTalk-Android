@@ -15,7 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.notification.NotificationFix
 import com.difft.android.base.notification.NotificationFixJump
-import com.difft.android.base.notification.NotificationReadinessProvider
+import com.difft.android.base.notification.NotificationTestRepository
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NotificationContentDisplayType
@@ -33,6 +33,7 @@ import com.difft.android.chat.util.NotificationChannelManager
 import com.difft.android.databinding.ActivityNotificationSettingsBinding
 import com.difft.android.push.FcmInitResult
 import com.difft.android.push.PushUtil
+import com.difft.android.setting.notificationtest.NotificationTestActivity
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -65,7 +66,7 @@ class NotificationSettingsFragment : Fragment() {
     lateinit var pushUtil: PushUtil
 
     @Inject
-    lateinit var readinessProvider: NotificationReadinessProvider
+    lateinit var notificationTestRepository: NotificationTestRepository
 
     @Inject
     lateinit var channelManager: NotificationChannelManager
@@ -85,7 +86,7 @@ class NotificationSettingsFragment : Fragment() {
             CriticalAlertBypass.NOT_APPLICABLE
         }
         NotificationSettingsUiState(
-            readiness = readinessProvider.readBlocking(),
+            readiness = notificationTestRepository.readReadiness(),
             sdkInt = Build.VERSION.SDK_INT,
             dndAccessGranted = messageNotificationUtil.isNotificationPolicyAccessGranted(),
             bypass = bypass,
@@ -111,9 +112,14 @@ class NotificationSettingsFragment : Fragment() {
     }
 
     private fun openFix(fix: NotificationFix) {
-        if (!NotificationFixJump.open(requireActivity(), fix)) {
-            L.w { "[NotificationSettings] fix jump failed fix=$fix" }
-            ToastUtil.show(R.string.notification_settings_open_fail)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val appContext = requireContext().applicationContext
+            val groupBlocked = fix == NotificationFix.MESSAGE_CATEGORY &&
+                withContext(Dispatchers.IO) { NotificationFixJump.isMessageGroupBlocked(appContext) }
+            if (!NotificationFixJump.open(requireActivity(), fix, groupBlocked)) {
+                L.w { "[NotificationSettings] fix jump failed fix=$fix" }
+                ToastUtil.show(R.string.notification_settings_open_fail)
+            }
         }
     }
 
@@ -169,6 +175,7 @@ class NotificationSettingsFragment : Fragment() {
                                     BackgroundConnectionHelpLink.build(BackgroundConnectionHelpLink.Source.NOTIFICATION_SETTINGS)
                                 )
                             },
+                            onNotificationTest = { NotificationTestActivity.start(requireActivity()) },
                         ),
                     )
                 }

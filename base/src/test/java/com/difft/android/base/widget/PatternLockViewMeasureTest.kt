@@ -14,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.coroutines.CoroutineContext
 
-/** Grid sizing: square of the smaller available side, capped at 336dp on wide windows (#1340). */
+/** Grid sizing: square of the smaller available side, capped at 260dp. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], qualifiers = "mdpi", application = PatternLockViewMeasureTest.TestScopeApplication::class)
 class PatternLockViewMeasureTest {
@@ -42,16 +42,23 @@ class PatternLockViewMeasureTest {
     }
 
     @Test
-    fun `wide window is capped at 336dp`() {
+    fun `wide window is capped at 260dp`() {
         // Xiaomi 18 Fold inner screen: 608dp wide minus 56dp side margins.
-        assertEquals(336 to 336, measure(496, 700))
+        assertEquals(260 to 260, measure(496, 700))
     }
 
     @Test
-    fun `common phone width keeps its full size`() {
-        // 360dp and 448dp phones minus 56dp side margins.
+    fun `common phone width is capped at 260dp`() {
+        // 412dp, 424dp (Xiaomi 18 Fold outer screen) and 448dp phones minus 56dp side margins.
+        assertEquals(260 to 260, measure(300, 600))
+        assertEquals(260 to 260, measure(312, 600))
+        assertEquals(260 to 260, measure(336, 600))
+    }
+
+    @Test
+    fun `narrow window keeps its full width`() {
+        // 360dp phone minus 56dp side margins.
         assertEquals(248 to 248, measure(248, 600))
-        assertEquals(336 to 336, measure(336, 600))
     }
 
     @Test

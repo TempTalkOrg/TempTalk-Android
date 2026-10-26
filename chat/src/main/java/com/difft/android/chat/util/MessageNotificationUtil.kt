@@ -74,6 +74,7 @@ import javax.inject.Singleton
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.receiver.InComingCallNotificationReceiver
+import com.difft.android.call.state.CriticalAlertCallGate
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.FlashLightBlinker
 import com.difft.android.chat.messages.MessageForegroundService
@@ -94,13 +95,13 @@ class MessageNotificationUtil @Inject constructor(
     private val criticalAlertNotificationBuilder: CriticalAlertNotificationBuilder,
     private val channelManager: NotificationChannelManager,
     private val repostGuard: NotificationRepostGuard,
+    private val criticalAlertCallGate: CriticalAlertCallGate,
 ) : IMessageNotificationUtil {
 
     companion object {
         private const val NOTIFICATION_GROUP_KEY = "NOTIFICATION_GROUP_KEY"
         private const val MESSAGE_SUMMARY_NOTIFICATION_ID = 10000
 
-        private const val CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY = NotificationChannelIds.MESSAGE_SUMMARY
         private const val CHANNEL_CONFIG_NAME_MESSAGE = NotificationChannelIds.MESSAGE
         private const val CHANNEL_CONFIG_NAME_CALL = NotificationChannelIds.CALL
         private const val CHANNEL_CONFIG_NAME_CRITICAL_ALERT = NotificationChannelIds.CRITICAL_ALERT
@@ -355,14 +356,11 @@ class MessageNotificationUtil @Inject constructor(
             L.d { "Summary notification already exists, no need to create again." }
             return
         }
-        val summaryNotification = NotificationCompat.Builder(context, CHANNEL_CONFIG_NAME_MESSAGE_SUMMARY)
-            .setContentTitle(PackageUtil.getAppName())
-            .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
-            .setGroup(NOTIFICATION_GROUP_KEY)
-            .setGroupSummary(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        nm.notify(MESSAGE_SUMMARY_NOTIFICATION_ID, summaryNotification)
+        if (!channelManager.ensureMessageChannel()) {
+            L.w { "[MessageNotificationUtil] summary skipped: channel missing id=$CHANNEL_CONFIG_NAME_MESSAGE" }
+            return
+        }
+        nm.notify(MESSAGE_SUMMARY_NOTIFICATION_ID, buildMessageSummaryNotification(context, NOTIFICATION_GROUP_KEY))
     }
 
     private fun getUnreadMessageNumber(): Int {
@@ -959,6 +957,16 @@ class MessageNotificationUtil @Inject constructor(
             return
         }
 
+        // #1381: an alert for the call being joined or already active is handled without showing; #1387: so is
+        // one whose call has already ended.
+        if (criticalAlertCallGate.shouldSilence(forWhat.id, roomId)) {
+            L.i { "[CriticalAlert] skip reason=silenced notificationId=$notificationId roomId=$roomId" }
+            return
+        }
+
+        // #1387: recorded before it is posted, so a call end can find and dismiss it.
+        if (!roomId.isNullOrEmpty()) criticalAlertManager.recordRoomAlert(roomId, notificationId)
+
         // 清除之前的InComing通知
         if (!roomId.isNullOrEmpty()) {
             LCallManager.dismissIncomingNotificationByRoomId(roomId)
@@ -984,8 +992,16 @@ class MessageNotificationUtil @Inject constructor(
             }
             L.i { "[CriticalAlert] App is in background, show critical alert notification" }
             if (postCriticalAlertNotification(payload, CriticalAlertPresentation.FULL_SCREEN)) {
-                criticalAlertManager.playSoundAndFlashLight(forWhat.id, notificationId)
+                criticalAlertManager.playSoundAndFlashLight(forWhat.id, notificationId, roomId)
             }
+        }
+
+        // #1381: a join that began meanwhile may have cancelled alerts before this post; undo it here. #1387: same
+        // for a call end. A page already started guards itself in CriticalAlertActivity.
+        if (criticalAlertCallGate.shouldSilence(forWhat.id, roomId)) {
+            L.i { "[CriticalAlert] undo reason=silenced_during_publish notificationId=$notificationId roomId=$roomId" }
+            repostGuard.cancel(notificationId)
+            criticalAlertManager.stopSoundIfMatch(notificationId)
         }
     }
 

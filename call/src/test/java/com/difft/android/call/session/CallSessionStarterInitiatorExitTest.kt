@@ -107,6 +107,30 @@ class CallSessionStarterInitiatorExitTest {
     }
 
     @Test
+    fun `valid start response re-cancels while session is ending and keeps local state empty`() = runTest {
+        every { callIntent.action } returns CallIntent.Action.START_CALL
+        every { callIntent.callType } returns CallType.ONE_ON_ONE.type
+        every { callIntent.callerId } returns SELF_ID
+        val starter = buildStarter()
+        publisher.publish { markInitiatorPreConnectCancelled() }
+        sessionEnding = true
+
+        starter.handleStartCallResponse(startResponse(ROOM_ID))
+
+        coVerify(exactly = 1) {
+            callToChatController.cancelCall(
+                callerId = SELF_ID,
+                callRole = CallRole.CALLER,
+                type = any(),
+                roomId = ROOM_ID,
+                conversationId = CONVERSATION_ID,
+            )
+        }
+        coVerify(exactly = 0) { ringtone.startRingTone(any()) }
+        assertNull(onGoingCallStateManager.getCurrentRoomId())
+    }
+
+    @Test
     fun `group upgrades to end-for-all hangup when initiator already exited`() = runTest {
         every { callIntent.callType } returns CallType.GROUP.type
         val starter = buildStarter()

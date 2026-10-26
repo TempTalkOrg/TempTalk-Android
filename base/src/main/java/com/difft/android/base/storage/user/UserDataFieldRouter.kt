@@ -166,9 +166,6 @@ internal object UserDataFieldRouter {
             if (prev.autoStartMessageService != new.autoStartMessageService) {
                 add(AppStateChange.BooleanChange(AppStateKeys.AUTO_START_MESSAGE_SERVICE, new.autoStartMessageService))
             }
-            if (prev.messageServiceTipsShowedVersion != new.messageServiceTipsShowedVersion) {
-                add(AppStateChange.StringChange(AppStateKeys.MESSAGE_SERVICE_TIPS_SHOWED_VERSION, new.messageServiceTipsShowedVersion.orEmpty()))
-            }
             if (prev.floatingWindowPermissionTipsShowedVersion != new.floatingWindowPermissionTipsShowedVersion) {
                 add(AppStateChange.StringChange(AppStateKeys.FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION, new.floatingWindowPermissionTipsShowedVersion.orEmpty()))
             }
@@ -177,9 +174,6 @@ internal object UserDataFieldRouter {
             }
             if (prev.globalNotification != new.globalNotification) {
                 add(AppStateChange.IntChange(AppStateKeys.GLOBAL_NOTIFICATION, new.globalNotification))
-            }
-            if (prev.checkNotificationPermission != new.checkNotificationPermission) {
-                add(AppStateChange.StringChange(AppStateKeys.CHECK_NOTIFICATION_PERMISSION, new.checkNotificationPermission.orEmpty()))
             }
             if (prev.hasShownConfidentialTip != new.hasShownConfidentialTip) {
                 add(AppStateChange.BooleanChange(AppStateKeys.HAS_SHOWN_CONFIDENTIAL_TIP, new.hasShownConfidentialTip))
@@ -279,14 +273,10 @@ internal object UserDataFieldRouter {
             AppStateKeys.CALL_VOICE_CHANGER_PRESET -> base.copy(callVoiceChangerPreset = value as String)
             AppStateKeys.KEEP_ALIVE_ENABLED -> base.copy(keepAliveEnabled = value as Boolean)
             AppStateKeys.AUTO_START_MESSAGE_SERVICE -> base.copy(autoStartMessageService = value as Boolean)
-            AppStateKeys.MESSAGE_SERVICE_TIPS_SHOWED_VERSION ->
-                base.copy(messageServiceTipsShowedVersion = (value as String).takeIf { it.isNotEmpty() })
             AppStateKeys.FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION ->
                 base.copy(floatingWindowPermissionTipsShowedVersion = (value as String).takeIf { it.isNotEmpty() })
             AppStateKeys.NOTIFICATION_CONTENT_DISPLAY_TYPE -> base.copy(notificationContentDisplayType = value as Int)
             AppStateKeys.GLOBAL_NOTIFICATION -> base.copy(globalNotification = value as Int)
-            AppStateKeys.CHECK_NOTIFICATION_PERMISSION ->
-                base.copy(checkNotificationPermission = (value as String).takeIf { it.isNotEmpty() })
             AppStateKeys.HAS_SHOWN_CONFIDENTIAL_TIP -> base.copy(hasShownConfidentialTip = value as Boolean)
             AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE -> base.copy(imageEditorMarkerPercentage = value as Int)
             AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE -> base.copy(imageEditorHighlighterPercentage = value as Int)
@@ -347,14 +337,10 @@ internal object UserDataFieldRouter {
             callVoiceChangerPreset = appState[AppStateKeys.CALL_VOICE_CHANGER_PRESET] ?: base.callVoiceChangerPreset,
             keepAliveEnabled = appState[AppStateKeys.KEEP_ALIVE_ENABLED] ?: base.keepAliveEnabled,
             autoStartMessageService = appState[AppStateKeys.AUTO_START_MESSAGE_SERVICE] ?: base.autoStartMessageService,
-            messageServiceTipsShowedVersion = appState[AppStateKeys.MESSAGE_SERVICE_TIPS_SHOWED_VERSION]?.takeIf { it.isNotEmpty() }
-                ?: base.messageServiceTipsShowedVersion,
             floatingWindowPermissionTipsShowedVersion = appState[AppStateKeys.FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION]?.takeIf { it.isNotEmpty() }
                 ?: base.floatingWindowPermissionTipsShowedVersion,
             notificationContentDisplayType = appState[AppStateKeys.NOTIFICATION_CONTENT_DISPLAY_TYPE] ?: base.notificationContentDisplayType,
             globalNotification = appState[AppStateKeys.GLOBAL_NOTIFICATION] ?: base.globalNotification,
-            checkNotificationPermission = appState[AppStateKeys.CHECK_NOTIFICATION_PERMISSION]?.takeIf { it.isNotEmpty() }
-                ?: base.checkNotificationPermission,
             hasShownConfidentialTip = appState[AppStateKeys.HAS_SHOWN_CONFIDENTIAL_TIP] ?: base.hasShownConfidentialTip,
             imageEditorMarkerPercentage = appState[AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE] ?: base.imageEditorMarkerPercentage,
             imageEditorHighlighterPercentage = appState[AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE] ?: base.imageEditorHighlighterPercentage,

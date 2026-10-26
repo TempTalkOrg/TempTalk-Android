@@ -117,6 +117,43 @@ class UrlManagerServiceRoutingTest {
         assertEquals("wss://best.host/chat/v1/websocket/", urlManager.getChatWebsocketUrl())
     }
 
+    // -- servicePathFor: the live path the routing interceptor swaps in per request --
+
+    @Test
+    fun `servicePathFor returns the live resolver path per service`() {
+        every { globalConfigsManager.getNewGlobalConfigs() } returns
+            config(Data(domains = prodDomains, services = prodServices))
+
+        assertEquals("/chat", urlManager.servicePathFor(ChatService.CHAT))
+        assertEquals("/call", urlManager.servicePathFor(ChatService.CALL))
+        assertEquals("/fileshare", urlManager.servicePathFor(ChatService.FILE_SHARING))
+    }
+
+    @Test
+    fun `servicePathFor falls back to the end default and is empty for the default client`() {
+        every { globalConfigsManager.getNewGlobalConfigs() } returns null
+
+        assertEquals("/chat", urlManager.servicePathFor(ChatService.CHAT))
+        assertEquals("", urlManager.servicePathFor(ChatService.DEFAULT))
+    }
+
+    @Test
+    fun `servicePathFor drops a trailing slash and follows a live config refresh`() {
+        every { globalConfigsManager.getNewGlobalConfigs() } returns config(
+            Data(domains = prodDomains, services = listOf(Service(name = "chat", path = "/chatv2/", domains = listOf("chat1"))))
+        )
+
+        assertEquals("/chatv2", urlManager.servicePathFor(ChatService.CHAT))
+    }
+
+    @Test
+    fun `currentHostFor is the coordinator best host regardless of service`() {
+        every { globalConfigsManager.getNewGlobalConfigs() } returns null
+        every { coordinator.getBestHostSync() } returns "ranked.host"
+
+        ChatService.entries.forEach { assertEquals("ranked.host", urlManager.currentHostFor(it)) }
+    }
+
     // -- live refresh: path follows config swap (by lazy freeze removed) --
 
     @Test

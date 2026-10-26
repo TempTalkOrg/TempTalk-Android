@@ -18,7 +18,13 @@ data class HealthVerdict(
     val samples: Int,
     val fcmSamples: Int,
     /** Share of FCM-channel samples slower than 30 min, whole percent; null without samples. */
-    val fcmSlowPercent: Int?
+    val fcmSlowPercent: Int?,
+    /** High-priority FCM transit samples; diagnostic only, never part of [samples] or a rule. */
+    val fcmTransitSamples: Int = 0,
+    /** Share of FCM transit samples slower than 30 min, whole percent; null without samples. */
+    val fcmTransitSlowPercent: Int? = null,
+    /** App stalls longer than 2 h; diagnostic only. */
+    val stallsOver2h: Int = 0
 ) {
     companion object {
         val NA = HealthVerdict("na", emptyList(), 0, 0, 0, null)
@@ -50,9 +56,12 @@ object KeepAliveHealthWindow {
     private const val FGS_FAIL_SHARE_PERCENT = 50
     private const val MIN_PULL_FAILS = 5
 
-    /** Counter keys kept per day: 18 latency buckets, FCM/pull outcomes and foreground-service outcomes. */
+    /**
+     * Counter keys kept per day: 18 latency buckets, 6 FCM transit buckets, 4 stall counters, FCM/pull
+     * outcomes and foreground-service outcomes.
+     */
     val DAILY_KEYS: Set<String> = (
-        HealthEventKeys.ALL_LATENCY_KEYS + listOf(
+        HealthEventKeys.ALL_LATENCY_KEYS + HealthEventKeys.ALL_FCM_TRANSIT_KEYS + HealthEventKeys.ALL_STALL_KEYS + listOf(
             HealthEventKeys.FCM_RECV, HealthEventKeys.FCM_DEPRIO,
             HealthEventKeys.PULL_OK, HealthEventKeys.PULL_FAIL,
             HealthEventKeys.FGS_STARTS, HealthEventKeys.FGS_FAIL
@@ -109,7 +118,8 @@ object KeepAliveHealthWindow {
         val events = KeepAliveHealthModel.merge(KeepAliveHealthCodec.decode(prefs[AppStateKeys.BG_HEALTH_EVENT_COUNTS]), add)
         if (events.isEmpty()) prefs.remove(AppStateKeys.BG_HEALTH_EVENT_COUNTS)
         else prefs[AppStateKeys.BG_HEALTH_EVENT_COUNTS] = KeepAliveHealthCodec.encode(events)
-        return mergeDaily(prefs, add, nowWall)
+        // Power counters only feed the 24 h report, not the 7-day verdict slots.
+        return mergeDaily(prefs, add.filterKeys { !BackgroundPowerModel.isPowerKey(it) }, nowWall)
     }
 
     fun verdict(slots: List<DailySlot>, nowWall: Long): HealthVerdict {
@@ -124,10 +134,17 @@ object KeepAliveHealthWindow {
         val verySlow = DeliveryChannel.entries.sumOf { count(HealthEventKeys.latencyKey(it, HealthEventKeys.LATENCY_MORE)) }
         val fcmSamples = channelCount(DeliveryChannel.FCM)
         val fcmSlowPercent = if (fcmSamples > 0) channelSlow(DeliveryChannel.FCM) * 100 / fcmSamples else null
+        val transitSamples = HealthEventKeys.ALL_FCM_TRANSIT_KEYS.sumOf { count(it) }
+        val transitSlow = count(HealthEventKeys.fcmTransitKey("2h")) + count(HealthEventKeys.fcmTransitKey(HealthEventKeys.LATENCY_MORE))
+        val transitSlowPercent = if (transitSamples > 0) transitSlow * 100 / transitSamples else null
+        fun result(value: String, why: List<String>) = HealthVerdict(
+            value, why, slots.size, samples, fcmSamples, fcmSlowPercent,
+            transitSamples, transitSlowPercent, count(HealthEventKeys.STALL_MORE)
+        )
 
         val start = windowStart(slots)
         val mature = start != null && nowWall - start >= MIN_OBSERVATION_MS
-        if (!mature) return HealthVerdict("na", emptyList(), slots.size, samples, fcmSamples, fcmSlowPercent)
+        if (!mature) return result("na", emptyList())
 
         val why = buildList {
             if (samples >= MIN_LATENCY_SAMPLES &&
@@ -137,7 +154,7 @@ object KeepAliveHealthWindow {
             if (attempts >= MIN_FGS_ATTEMPTS && count(HealthEventKeys.FGS_FAIL) * 100 >= attempts * FGS_FAIL_SHARE_PERCENT) add("F")
             if (count(HealthEventKeys.PULL_FAIL) >= MIN_PULL_FAILS) add("P")
         }
-        return HealthVerdict(if (why.isEmpty()) "0" else "1", why, slots.size, samples, fcmSamples, fcmSlowPercent)
+        return result(if (why.isEmpty()) "0" else "1", why)
     }
 
     /** `day@t0=NAME:n,NAME:n;day@t0=...`. */

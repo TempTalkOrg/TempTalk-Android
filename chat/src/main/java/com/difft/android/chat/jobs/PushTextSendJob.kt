@@ -1,6 +1,5 @@
 package com.difft.android.chat.jobs
 
-import android.os.Bundle
 import android.text.TextUtils
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
@@ -19,7 +18,6 @@ import com.difft.android.websocket.api.messages.TTNotifyMessage
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
 import com.difft.android.websocket.internal.push.OutgoingPushMessage
 import com.difft.android.websocket.internal.push.exceptions.AccountOfflineException
-import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.gson.Gson
 import com.tencent.wcdb.base.Value
 import dagger.assisted.Assisted
@@ -310,9 +308,7 @@ class PushTextSendJob @AssistedInject constructor(
         // A recovery that finds nothing throws: mark the row FAILED first, exactly as an upload
         // failure below does, so the bubble does not keep rendering a transfer that will never run.
         val path = try {
-            attachment.path?.takeIf { File(it).let { file -> file.isFile && file.length() > 0 } }
-                ?: attachmentIdentity.resendSourcePath(attachment)
-                ?: return
+            attachmentIdentity.uploadSourcePath(attachment) ?: return
         } catch (e: Exception) {
             L.e { "[PushTextSendJob] upload source unresolvable, messageId=${textMessage.id}: ${e.stackTraceToString()}" }
             attachment.status = AttachmentStatus.FAILED.code
@@ -417,20 +413,12 @@ class PushTextSendJob @AssistedInject constructor(
 
     private fun reportSendCostTime() {
         L.i { "[Message] send text cost time totally: ${System.currentTimeMillis() - parameters.createTime}, the actually cost time: ${System.currentTimeMillis() - startExecuteTime}" }
-        Bundle().apply {
-            putLong(MESSAGE_SENT_COST_TIME, System.currentTimeMillis() - parameters.createTime)
-            putLong(MESSAGE_SENT_COST_TIME_ACTUALLY, System.currentTimeMillis() - startExecuteTime)
-        }.let {
-            FirebaseAnalytics.getInstance(context).logEvent(MESSAGE_SENT_COST_TIME, it)
-        }
     }
 
     companion object {
         const val KEY = "PushTextSendJob"
         private const val KEY_MESSAGE_OUT = "message_out"
         private const val KEY_NOTIFICATION = "notification"
-        private const val MESSAGE_SENT_COST_TIME = "message_sent_cost_time"
-        private const val MESSAGE_SENT_COST_TIME_ACTUALLY = "message_sent_cost_time_actually"
 
         private fun buildParameters(forWhat: For, isAttachment: Boolean): Parameters {
             return Parameters.Builder()

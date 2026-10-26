@@ -2,6 +2,7 @@ package com.difft.android.chat.websocket
 
 import com.difft.android.chat.messages.IncomingMessageObserver
 import com.difft.android.websocket.api.AppWebSocketHelper
+import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import com.difft.android.websocket.internal.websocket.WebSocketConnection
 import io.mockk.every
@@ -102,7 +103,7 @@ class WebSocketManagerTest {
         manager.reconnectAfterProxyChange()
 
         verify(exactly = 0) { conn.evictConnectionPool() }
-        verify(exactly = 0) { conn.cancelConnection() }
+        verify(exactly = 0) { conn.cancelConnection(any()) }
     }
 
     // --- reconnectAfterProxyChange: CONNECTED -> evict then cancel ---
@@ -116,10 +117,10 @@ class WebSocketManagerTest {
 
         verifyOrder {
             conn.evictConnectionPool()
-            conn.cancelConnection()
+            conn.cancelConnection(LocalDisconnectReason.PROXY_CHANGE)
         }
         verify(exactly = 1) { conn.evictConnectionPool() }
-        verify(exactly = 1) { conn.cancelConnection() }
+        verify(exactly = 1) { conn.cancelConnection(LocalDisconnectReason.PROXY_CHANGE) }
     }
 
     // --- reconnectAfterProxyChange: CONNECTING -> evict then cancel (THE Finding 1 case) ---
@@ -133,10 +134,10 @@ class WebSocketManagerTest {
 
         verifyOrder {
             conn.evictConnectionPool()
-            conn.cancelConnection()
+            conn.cancelConnection(LocalDisconnectReason.PROXY_CHANGE)
         }
         verify(exactly = 1) { conn.evictConnectionPool() }
-        verify(exactly = 1) { conn.cancelConnection() }
+        verify(exactly = 1) { conn.cancelConnection(LocalDisconnectReason.PROXY_CHANGE) }
     }
 
     // --- reconnectAfterProxyChange: DISCONNECTED -> no-op ---
@@ -149,7 +150,7 @@ class WebSocketManagerTest {
         manager.reconnectAfterProxyChange()
 
         verify(exactly = 0) { conn.evictConnectionPool() }
-        verify(exactly = 0) { conn.cancelConnection() }
+        verify(exactly = 0) { conn.cancelConnection(any()) }
     }
 
     // --- reconnectAfterProxyChange: FAILED -> no-op ---
@@ -162,7 +163,7 @@ class WebSocketManagerTest {
         manager.reconnectAfterProxyChange()
 
         verify(exactly = 0) { conn.evictConnectionPool() }
-        verify(exactly = 0) { conn.cancelConnection() }
+        verify(exactly = 0) { conn.cancelConnection(any()) }
     }
 
     // --- reconnectAfterProxyChange: UNKNOWN_HOST_FAILED -> no-op ---
@@ -175,6 +176,6 @@ class WebSocketManagerTest {
         manager.reconnectAfterProxyChange()
 
         verify(exactly = 0) { conn.evictConnectionPool() }
-        verify(exactly = 0) { conn.cancelConnection() }
+        verify(exactly = 0) { conn.cancelConnection(any()) }
     }
 }

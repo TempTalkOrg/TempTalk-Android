@@ -16,6 +16,7 @@ import com.difft.android.setting.data.CheckUpdateResponse
 import com.difft.android.setting.repo.SettingRepo
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ComposeDialog
+import com.difft.android.base.widget.DialogCloseReason
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,12 @@ class UpdateManager @Inject constructor(
     private val delivery: UpdateDelivery
 ) {
     private var foreUpdateMessageDialog: ComposeDialog? = null
+
+    /**
+     * Called on every delivery hand-off; the startup update checker ignores it unless a forced offer
+     * currently blocks the app, and then lets that gate expire (#1355).
+     */
+    var onForcedHandOff: (() -> Unit)? = null
 
 
     fun checkUpdate(context: FragmentActivity, isFromSetting: Boolean) {
@@ -104,20 +111,36 @@ class UpdateManager @Inject constructor(
     }
 
     /** Hooks the delivery's completion events to [activity]; call once from the host's onCreate. */
-    fun attach(activity: FragmentActivity) = delivery.attach(activity, ::closeForceUpdateDialog)
+    fun attach(activity: FragmentActivity) = delivery.attach(activity, ::handOff)
 
-    private fun showUpdateDialog(context: Context, response: CheckUpdateResponse) {
-        ComposeDialogManager.showMessageDialog(
-            context = context,
-            title = context.getString(R.string.settings_check_new_version),
-            message = response.notes,
-            confirmText = context.getString(R.string.settings_dialog_update),
-            cancelText = context.getString(R.string.settings_dialog_cancel),
-            onConfirm = { confirmUpdate(context, response.toOffer(), isForce = false) }
-        )
-    }
+    /**
+     * The optional-update dialog. The startup prompt host passes [onClosed] and runs the update
+     * itself through [confirmOptionalUpdate] once its outcome is recorded; other callers keep the
+     * direct confirm.
+     */
+    fun showUpdateDialog(
+        context: Context,
+        response: CheckUpdateResponse,
+        onClosed: ((DialogCloseReason) -> Unit)? = null,
+    ): ComposeDialog? = ComposeDialogManager.showMessageDialog(
+        context = context,
+        title = context.getString(R.string.settings_check_new_version),
+        message = response.notes,
+        confirmText = context.getString(R.string.settings_dialog_update),
+        cancelText = context.getString(R.string.settings_dialog_cancel),
+        onConfirm = { if (onClosed == null) confirmOptionalUpdate(context, response) },
+        onClosed = onClosed,
+    )
 
-    private fun showForceUpdateDialog(context: FragmentActivity, response: CheckUpdateResponse) {
+    fun confirmOptionalUpdate(context: Context, response: CheckUpdateResponse) =
+        confirmUpdate(context, response.toOffer(), isForce = false)
+
+    /**
+     * Non-dismissable; closed when the delivery hands off (see [attach]) or by
+     * [dismissForceUpdateDialog]. A new offer replaces the one on screen, never stacks on it.
+     */
+    fun showForceUpdateDialog(context: FragmentActivity, response: CheckUpdateResponse) {
+        closeForceUpdateDialog()
         foreUpdateMessageDialog = ComposeDialogManager.showMessageDialog(
             context = context,
             title = context.getString(R.string.settings_check_new_version),
@@ -135,8 +158,16 @@ class UpdateManager @Inject constructor(
             ToastUtil.show(R.string.status_upgrade_downloading)
             return
         }
-        delivery.deliver(context, offer, isForce, ::closeForceUpdateDialog)
+        delivery.deliver(context, offer, isForce, ::handOff)
     }
+
+    private fun handOff() {
+        closeForceUpdateDialog()
+        onForcedHandOff?.invoke()
+    }
+
+    /** The forced offer was withdrawn: take its dialog down. */
+    fun dismissForceUpdateDialog() = closeForceUpdateDialog()
 
     private fun closeForceUpdateDialog() {
         foreUpdateMessageDialog?.dismiss()

@@ -49,6 +49,19 @@ sealed class FcmInitResult {
 }
 
 /**
+ * Turns off FCM delivery-metrics export to BigQuery. The SDK persists this flag, and older builds
+ * enabled it, so it must be reset on every process start rather than only when the FCM token is
+ * fetched: a push can wake the process and log delivery before any Activity runs (#1407).
+ */
+fun disableFcmDeliveryMetricsExport() {
+    try {
+        FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(false)
+    } catch (e: Exception) {
+        L.w { "[Push][fcm] disable delivery metrics export failed: ${e.stackTraceToString()}" }
+    }
+}
+
+/**
  * Push 工具类，负责 FCM 初始化和 Token 管理
  * 使用 Dagger 注入，支持协程
  */
@@ -61,24 +74,6 @@ class PushUtil @Inject constructor(
     // FCM 初始化状态 StateFlow (发布所有状态，供其他模块监听)
     private val _fcmInitResult = MutableStateFlow<FcmInitResult>(FcmInitResult.Idle)
     val fcmInitResult: StateFlow<FcmInitResult> = _fcmInitResult.asStateFlow()
-
-    // FCM 不可用弹窗标记（Application 生命周期内只弹一次）
-    private var fcmUnavailableDialogShown = false
-
-    /**
-     * 检查是否可以显示 FCM 不可用弹窗
-     * @return true 表示可以显示，false 表示已经显示过
-     */
-    fun canShowFcmUnavailableDialog(): Boolean {
-        return !fcmUnavailableDialogShown
-    }
-
-    /**
-     * 标记 FCM 不可用弹窗已显示
-     */
-    fun markFcmUnavailableDialogShown() {
-        fcmUnavailableDialogShown = true
-    }
 
     /**
      * 初始化 FCM Push (非阻塞方式)
@@ -154,9 +149,6 @@ class PushUtil @Inject constructor(
 
                     // 成功时自动上报token到服务器
                     sendRegistrationToServer(token, attempt)
-
-                    // 设置 Firebase Metrics
-                    FirebaseMessaging.getInstance().setDeliveryMetricsExportToBigQuery(true)
 
                     reportPushTelemetry(gmsAvailable = true, fcmTokenAvailable = true)
                     _fcmInitResult.value = FcmInitResult.Success(token)

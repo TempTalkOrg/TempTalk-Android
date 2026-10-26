@@ -3,153 +3,135 @@ package com.difft.android.base.widget.sideBar
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.Typeface
 import android.util.AttributeSet
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.difft.android.base.R
+import kotlin.math.min
+import kotlin.math.roundToInt
 
+/**
+ * Vertical A-Z index rail. Shows the letters passed to [reset], sized to its content; on short
+ * windows it scales the text down, then condenses with dots, then stops drawing and ignores
+ * touches (#1374).
+ */
 class SideBar @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyle: Int = 0
 ) : View(context, attrs, defStyle) {
-    // 触摸事件
+
+    interface OnTouchingLetterChangedListener {
+        fun onTouchingLetterChanged(s: String)
+    }
+
     private var onTouchingLetterChangedListener: OnTouchingLetterChangedListener? = null
-    private var choose = -1 // 选中
-    private val paint = Paint()
-    private var mTextDialog: TextView? = null
-    private var mTextSizePressed = 0
-    private var mWidth = 0
-    private var mHeight = 0
-    private var mItemHeight = 0
-    fun setTextView(mTextDialog: TextView?) {
-        this.mTextDialog = mTextDialog
+    private var letters: List<String> = emptyList()
+    private var slots: List<SideBarSlot> = emptyList()
+    private var slotHeight = 0f
+    private var contentTop = 0f
+
+    /** Index into [letters] of the letter under the finger, or -1. */
+    private var chosen = -1
+
+    private val maxTextSize = resources.getDimension(R.dimen.chat_sidebar_text_size_normal_default)
+    private val preferredItemHeight = PREFERRED_ITEM_HEIGHT_DP * resources.displayMetrics.density
+    private val minItemHeight = MIN_ITEM_HEIGHT_DP * resources.displayMetrics.density
+    private val normalColor = ContextCompat.getColor(context, R.color.t_info)
+    private val selectedColor = ContextCompat.getColor(context, R.color.blue_200)
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+
+    fun setOnTouchingLetterChangedListener(listener: OnTouchingLetterChangedListener?) {
+        onTouchingLetterChangedListener = listener
     }
 
-    init {
-        //初始化默认属性
-        val resources = context.resources
-        mTextSizePressed = resources.getDimensionPixelSize(R.dimen.chat_sidebar_text_size_normal_default)
-    }
-
-    private fun init(context: Context) {
-        //初始化默认属性
-        val resources = context.resources
-        mTextSizePressed = resources.getDimensionPixelSize(R.dimen.chat_sidebar_text_size_normal_default)
-    }
-
-    /**
-     * 重写这个方法
-     */
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        // 获取焦点改变背景颜色.
-        val height = height // 获取对应高度
-        val width = width // 获取对应宽度
-        val singleHeight = height / b.size // 获取每一个字母的高度
-        for (i in b.indices) {
-            paint.color = ContextCompat.getColor(context, R.color.t_info)
-            // paint.setColor(Color.WHITE);
-            paint.typeface = Typeface.DEFAULT
-            paint.isAntiAlias = true
-            paint.textSize = mTextSizePressed.toFloat()
-            // 选中的状态
-            if (i == choose) {
-                paint.color = ContextCompat.getColor(context, R.color.blue_200)
-                paint.isFakeBoldText = true
-            }
-            // x坐标等于中间-字符串宽度的一半.
-            val xPos = width / 2 - paint.measureText(b[i]) / 2
-            val yPos = (singleHeight * i + singleHeight).toFloat()
-            canvas.drawText(b[i], xPos, yPos, paint)
-            paint.reset() // 重置画笔
-        }
+    fun reset(letters: List<String>) {
+        if (this.letters == letters) return
+        this.letters = letters
+        chosen = -1
+        // Slots must match the new letters before the next touch, which can arrive ahead of the
+        // relayout requested below.
+        updateSlots()
+        // Intrinsic height depends on the letter count.
+        requestLayout()
+        invalidate()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-        mWidth = measuredWidth
-        mHeight = measuredHeight
-        if (b.isNotEmpty()) mItemHeight = (mHeight - paddingTop - paddingBottom) / b.size
-        //如果没有指定具体的宽度，修改宽度为Item高度+paddingLeft+paddingRight
-        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.EXACTLY) mWidth = mItemHeight + paddingLeft + paddingRight
-        setMeasuredDimension(mWidth, mHeight)
+        val desiredHeight = (letters.size * preferredItemHeight).roundToInt() + paddingTop + paddingBottom
+        setMeasuredDimension(
+            getDefaultSize(suggestedMinimumWidth, widthMeasureSpec),
+            resolveSize(desiredHeight, heightMeasureSpec)
+        )
     }
 
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        val action = event.action
-        val y = event.y // 点击y坐标
-        val oldChoose = choose
-        val listener = onTouchingLetterChangedListener
-        val c = (y / height * b.size).toInt() // 点击y坐标所占总高度的比例*b数组的长度就等于点击b中的个数.
-        when (action) {
-            MotionEvent.ACTION_UP -> {
-//                setBackgroundDrawable(ColorDrawable(0x00000000))
-                choose = -1 //
-                invalidate()
-                if (mTextDialog != null) {
-                    mTextDialog?.visibility = INVISIBLE
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        updateSlots()
+    }
+
+    private fun updateSlots() {
+        val available = (height - paddingTop - paddingBottom).toFloat()
+        slots = SideBarLayout.slots(letters.size, available, minItemHeight)
+        slotHeight = if (slots.isEmpty()) 0f else min(preferredItemHeight, available / slots.size)
+        contentTop = paddingTop + (available - slotHeight * slots.size) / 2
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (slots.isEmpty()) return
+        paint.textSize = min(maxTextSize, slotHeight * TEXT_TO_SLOT_RATIO)
+        val centerX = paddingLeft + (width - paddingLeft - paddingRight) / 2f
+        val baselineOffset = -(paint.fontMetrics.ascent + paint.fontMetrics.descent) / 2
+        slots.forEachIndexed { i, slot ->
+            val (text, selected) = when (slot) {
+                is SideBarSlot.Letter -> letters[slot.index] to (slot.index == chosen)
+                is SideBarSlot.Dot -> DOT to (chosen in slot.fromIndex..slot.toIndex)
+            }
+            paint.color = if (selected) selectedColor else normalColor
+            paint.isFakeBoldText = selected
+            canvas.drawText(text, centerX, contentTop + slotHeight * (i + 0.5f) + baselineOffset, paint)
+        }
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (slots.isEmpty()) return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                val index = SideBarLayout.letterIndexAt(slots, slotHeight, event.y - contentTop)
+                if (index >= 0 && index != chosen) {
+                    chosen = index
+                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    onTouchingLetterChangedListener?.onTouchingLetterChanged(letters[index])
+                    invalidate()
                 }
             }
 
-            else -> {
-//                setBackgroundResource(R.drawable.chat_contact_sidebar_background)
-                if (oldChoose != c) {
-                    if (c >= 0 && c < b.size) {
-                        listener?.onTouchingLetterChanged(b[c])
-                        if (mTextDialog != null) {
-                            mTextDialog?.text = b[c]
-                            mTextDialog?.y = calPositionY(b[c], c)
-                            mTextDialog?.visibility = VISIBLE
-                        }
-                        choose = c
-                        invalidate()
-                    }
-                }
+            MotionEvent.ACTION_UP -> {
+                chosen = -1
+                invalidate()
+                performClick()
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                chosen = -1
+                invalidate()
             }
         }
         return true
     }
 
-    private fun calPositionY(str: String, index: Int): Float {
-        val rect = Rect()
-        paint.getTextBounds(str, 0, str.length, rect)
-        return (mItemHeight * index + (mItemHeight + rect.height()) / 2 + paddingTop).toFloat()
-    }
+    override fun performClick(): Boolean = super.performClick()
 
-    /**
-     * 向外公开的方法
-     *
-     * @param onTouchingLetterChangedListener
-     */
-    fun setOnTouchingLetterChangedListener(
-        onTouchingLetterChangedListener: OnTouchingLetterChangedListener?
-    ) {
-        this.onTouchingLetterChangedListener = onTouchingLetterChangedListener
+    private companion object {
+        const val PREFERRED_ITEM_HEIGHT_DP = 16f
+        const val MIN_ITEM_HEIGHT_DP = 12f
+        const val TEXT_TO_SLOT_RATIO = 0.8f
+        const val DOT = "•"
     }
-
-    /**
-     * 接口
-     *
-     * @author coder
-     */
-    interface OnTouchingLetterChangedListener {
-        fun onTouchingLetterChanged(s: String)
-    }
-
-    fun reset(letters: Array<String>) {
-        b = letters
-        invalidate()
-    }
-
-    // 26个字母
-    var b: Array<String> = arrayOf(
-        "A", "B", "C", "D", "E", "F", "G", "H", "I",
-        "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
-        "W", "X", "Y", "Z", "#"
-    )
 }

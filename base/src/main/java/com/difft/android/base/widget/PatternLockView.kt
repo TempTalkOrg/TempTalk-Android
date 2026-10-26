@@ -3,7 +3,9 @@ package com.difft.android.base.widget
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
+import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
@@ -47,7 +49,8 @@ class PatternLockView @JvmOverloads constructor(
 
     private val dotSize = 16.dp // 固定16dp
     private val outerCircleSize = 32.dp // 外圈直径32dp
-    private val pathWidth = 6.dp // 固定6dp
+    // Bold and one text tone stronger than the dots so the fading trail stays visible.
+    private val pathWidth = 14.dp
     private var normalStateColor = Color.GRAY
     private var disabledStateColor = Color.GRAY
     private var selectedStateColor = Color.BLUE
@@ -67,12 +70,20 @@ class PatternLockView @JvmOverloads constructor(
     private val listeners = mutableListOf<PatternLockViewListener>()
     private var isPatternDrawingStarted = false
     private var isTouchActive = false // 标记触摸是否处于激活状态
+    // Set on release in transient mode: the finished gesture is no longer drawn.
+    private var isSelectionHidden = false
+    private val releaseFade = PatternReleaseFade()
     private var currentX = 0f
     private var currentY = 0f
-    private var lastX = 0f
-    private var lastY = 0f
     private val touchRadius = 48.dp / 2f // 固定触摸半径，Android推荐的最小触摸目标（24dp）
     private val initialTouchRadius = 72.dp.toFloat() // 初始触摸半径（72dp），配合路径检测机制
+    private val startSlideMaxDistance = 100.dp.toFloat()
+
+    private var grid = PatternGrid(dotCount)
+    private var selector = newSelector()
+    private var legacyTracker = newLegacyTracker()
+    private val trail = PatternTrailState()
+    private val delayedClear = Runnable { clearPattern() }
 
     // Paint objects
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -117,7 +128,16 @@ class PatternLockView @JvmOverloads constructor(
                 dots.add(Dot(id, row, col))
             }
         }
+        selectedDots.clear()
+        trail.reset()
+        grid = PatternGrid(dotCount)
+        selector = newSelector()
+        legacyTracker = newLegacyTracker()
     }
+
+    private fun newSelector() = PatternSelector(grid, touchRadius, initialTouchRadius, startSlideMaxDistance)
+
+    private fun newLegacyTracker() = LegacyPatternTracker(grid, touchRadius, initialTouchRadius, startSlideMaxDistance)
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val widthMode = MeasureSpec.getMode(widthMeasureSpec)
@@ -128,7 +148,7 @@ class PatternLockView @JvmOverloads constructor(
         // 获取可用宽度
         val availableWidth = when (widthMode) {
             MeasureSpec.EXACTLY, MeasureSpec.AT_MOST -> widthSize
-            else -> 280.dp // Default size if no constraints
+            else -> MAX_SIZE_DP.dp // Default size if no constraints
         }
 
         // 获取可用高度
@@ -165,82 +185,117 @@ class PatternLockView @JvmOverloads constructor(
             val col = index % dotCount
             dot.centerX = outerRadius + col * horizontalSpacing
             dot.centerY = outerRadius + row * verticalSpacing
+            grid.centerX[index] = dot.centerX
+            grid.centerY[index] = dot.centerY
         }
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
+        val now = SystemClock.uptimeMillis()
         if (!isInStealthMode) {
-            drawPath(canvas)
+            drawPath(canvas, now)
         }
-        drawDots(canvas)
+        drawDots(canvas, now)
+        drawReleaseFade(canvas, now)
+        if (!isSelectionHidden && trail.isAnimating(now, isInStealthMode)) {
+            postInvalidateOnAnimation()
+        }
     }
 
-    private fun drawPath(canvas: Canvas) {
+    private fun drawReleaseFade(canvas: Canvas, now: Long) {
+        val factor = releaseFade.factor(now)
+        if (factor <= 0f) return
+        releaseFade.dots.forEach { d -> drawLitDot(canvas, d[0], d[1], d[2] * factor) }
+        postInvalidateOnAnimation()
+    }
+
+    // Captures the lit dots as the gesture ends, before the selection is hidden; the path itself
+    // disappears at once.
+    private fun captureReleaseFade(now: Long) {
+        releaseFade.clear()
+        dots.forEach { dot ->
+            val alpha = dotLitAlpha(dot, now)
+            if (alpha > 0f) releaseFade.dots.add(floatArrayOf(dot.centerX, dot.centerY, alpha))
+        }
+        releaseFade.start(now)
+    }
+
+    private fun drawPath(canvas: Canvas, now: Long) {
         if (selectedDots.size < 2 && !isPatternDrawingStarted) return
 
-        // 线条颜色固定为t_third
-        pathPaint.color = ContextCompat.getColor(context, R.color.t_third)
-
+        val pathColor = ContextCompat.getColor(context, R.color.t_secondary)
         val outerRadius = outerCircleSize.toFloat() / 2
 
-        // Draw lines between selected dots
-        for (i in 0 until selectedDots.size - 1) {
-            val fromDot = selectedDots[i]
-            val toDot = selectedDots[i + 1]
-
-            // 计算从外圈边缘到外圈边缘的连线
-            val (startX, startY) = getEdgePoint(fromDot.centerX, fromDot.centerY, toDot.centerX, toDot.centerY, outerRadius)
-            val (endX, endY) = getEdgePoint(toDot.centerX, toDot.centerY, fromDot.centerX, fromDot.centerY, outerRadius)
-
-            canvas.drawLine(startX, startY, endX, endY, pathPaint)
+        forEachVisibleSegment(now) { x1, y1, x2, y2, alpha ->
+            pathPaint.color = withAlpha(pathColor, alpha)
+            canvas.drawLine(x1, y1, x2, y2, pathPaint)
         }
 
         // Draw line to current touch position if pattern is being drawn
         if (isPatternDrawingStarted && selectedDots.isNotEmpty()) {
             val lastDot = selectedDots.last()
-            val (startX, startY) = getEdgePoint(lastDot.centerX, lastDot.centerY, currentX, currentY, outerRadius)
+            val (startX, startY) = PatternGrid.edgePoint(lastDot.centerX, lastDot.centerY, currentX, currentY, outerRadius)
+            pathPaint.color = pathColor
             canvas.drawLine(startX, startY, currentX, currentY, pathPaint)
         }
     }
 
-    /**
-     * 计算从点(centerX, centerY)沿着指向(targetX, targetY)方向，距离为radius的边缘点坐标
-     */
-    private fun getEdgePoint(centerX: Float, centerY: Float, targetX: Float, targetY: Float, radius: Float): Pair<Float, Float> {
-        val dx = targetX - centerX
-        val dy = targetY - centerY
-        val distance = sqrt(dx * dx + dy * dy)
-
-        if (distance == 0f) {
-            return Pair(centerX, centerY)
+    // Segments between selected dots, edge of ring to edge of ring, the fading ones wiped from their start.
+    private inline fun forEachVisibleSegment(now: Long, block: (Float, Float, Float, Float, Float) -> Unit) {
+        val outerRadius = outerCircleSize.toFloat() / 2
+        for (i in 0 until selectedDots.size - 1) {
+            val alpha = pathAlpha(i, now)
+            if (alpha <= 0f) continue
+            val fromDot = selectedDots[i]
+            val toDot = selectedDots[i + 1]
+            val (startX, startY) = PatternGrid.edgePoint(fromDot.centerX, fromDot.centerY, toDot.centerX, toDot.centerY, outerRadius)
+            val (endX, endY) = PatternGrid.edgePoint(toDot.centerX, toDot.centerY, fromDot.centerX, fromDot.centerY, outerRadius)
+            val wipe = trail.wipeProgress(i, now)
+            block(startX + (endX - startX) * wipe, startY + (endY - startY) * wipe, endX, endY, alpha)
         }
-
-        // 归一化方向向量，然后乘以半径
-        val edgeX = centerX + (dx / distance) * radius
-        val edgeY = centerY + (dy / distance) * radius
-
-        return Pair(edgeX, edgeY)
     }
 
-    private fun drawDots(canvas: Canvas) {
-        dots.forEach { dot ->
-            if (dot.isSelected) {
-                // 选中的点：绘制外圈 + 内圈
-                // 绘制外圈（32dp直径，bg_disable颜色）
-                dotPaint.color = outerCircleColor
-                canvas.drawCircle(dot.centerX, dot.centerY, outerCircleSize.toFloat() / 2, dotPaint)
+    private fun withAlpha(color: Int, alpha: Float): Int =
+        Color.argb((Color.alpha(color) * alpha).roundToInt(), Color.red(color), Color.green(color), Color.blue(color))
 
-                // 绘制内圈（16dp直径，t_primary颜色）
-                dotPaint.color = selectedStateColor
-                canvas.drawCircle(dot.centerX, dot.centerY, dotSize.toFloat() / 2, dotPaint)
-            } else {
+    // Opacity of the segment between selected dots [index] and [index] + 1.
+    private fun pathAlpha(index: Int, now: Long): Float = when {
+        isSelectionHidden -> 0f
+        else -> trail.segmentAlpha(index, now)
+    }
+
+    // Opacity of the selected look of a dot: 0 = plain dot, 1 = fully selected.
+    private fun dotLitAlpha(dot: Dot, now: Long): Float {
+        val index = selectedDots.indexOf(dot)
+        return when {
+            index < 0 -> 0f
+            isSelectionHidden -> 0f
+            isInStealthMode -> trail.pulseAlpha(index, now)
+            // Selected dots stay lit while only the line fades (AOSP): a used dot visibly cannot be re-added.
+            else -> 1f
+        }
+    }
+
+    private fun drawDots(canvas: Canvas, now: Long) {
+        dots.forEach { dot ->
+            val litAlpha = dotLitAlpha(dot, now)
+            if (litAlpha < 1f) {
                 // 未选中的点：根据是否禁用显示不同颜色
                 dotPaint.color = if (isInputEnabled) normalStateColor else disabledStateColor
                 canvas.drawCircle(dot.centerX, dot.centerY, dotSize.toFloat() / 2, dotPaint)
             }
+            if (litAlpha > 0f) drawLitDot(canvas, dot.centerX, dot.centerY, litAlpha)
         }
+    }
+
+    // Selected look: outer ring (32dp, bg_disable) + inner dot (16dp, t_primary).
+    private fun drawLitDot(canvas: Canvas, x: Float, y: Float, alpha: Float) {
+        dotPaint.color = withAlpha(outerCircleColor, alpha)
+        canvas.drawCircle(x, y, outerCircleSize.toFloat() / 2, dotPaint)
+        dotPaint.color = withAlpha(selectedStateColor, alpha)
+        canvas.drawCircle(x, y, dotSize.toFloat() / 2, dotPaint)
     }
 
     // Pattern-drawing gesture — view is not click-actionable.
@@ -258,7 +313,7 @@ class PatternLockView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                handleTouchMove()
+                handleTouchMove(event)
                 return true
             }
 
@@ -266,122 +321,88 @@ class PatternLockView @JvmOverloads constructor(
                 handleTouchEnd()
                 return true
             }
+
+            MotionEvent.ACTION_CANCEL -> {
+                handleTouchCancel()
+                return true
+            }
         }
         return false
     }
 
     private fun handleTouchStart() {
+        // A new gesture never merges with the previous one or its pending delayed clear.
+        removeCallbacks(delayedClear)
+        releaseFade.clear()
+        if (selectedDots.isNotEmpty() || isSelectionHidden) clearPattern()
+
         // 总是激活触摸追踪，提高响应性
         isTouchActive = true
-        lastX = currentX
-        lastY = currentY
-
-        // 使用较大的初始触摸半径
-        val dot = getDotAt(currentX, currentY, initialTouchRadius)
-        if (dot != null) {
+        legacyTracker.down(currentX, currentY)
+        if (applySelection(selector.down(currentX, currentY))) {
             isPatternDrawingStarted = true
-            selectDot(dot)
             notifyPatternStarted()
             // 立即重绘以提供视觉反馈
             invalidate()
         }
     }
 
-    private fun handleTouchMove() {
+    private fun handleTouchMove(event: MotionEvent) {
         if (!isTouchActive) return
 
-        if (!isPatternDrawingStarted) {
-            // 如果还没开始绘制，先检测当前位置
-            var dot = getDotAt(currentX, currentY, initialTouchRadius)
+        legacyTracker.move(currentX, currentY)
 
-            // 如果当前位置没有点，检查从起点滑动过来的路径上是否有点（只检查起点附近）
-            if (dot == null) {
-                dot = findDotNearStartPath(lastX, lastY, currentX, currentY)
-            }
+        // Historical samples first so a fast swipe cannot jump over a dot.
+        val countBefore = selectedDots.size
+        for (i in 0 until event.historySize) {
+            applySelection(selector.move(event.getHistoricalX(i), event.getHistoricalY(i)))
+        }
+        applySelection(selector.move(currentX, currentY))
 
-            if (dot != null) {
+        if (selectedDots.size > countBefore) {
+            if (!isPatternDrawingStarted) {
                 isPatternDrawingStarted = true
-                selectDot(dot)
                 notifyPatternStarted()
             }
-        } else {
-            // 已经开始绘制，只检测当前位置的点，使用正常半径
-            val dot = getDotAt(currentX, currentY, touchRadius)
-            if (dot != null && !dot.isSelected) {
-                selectDot(dot)
-                notifyPatternProgress()
-            }
+            // Dots beyond the start dot are progress, also when the same event started the pattern.
+            if (selectedDots.size > 1) notifyPatternProgress()
         }
 
         invalidate()
     }
 
-    /**
-     * 查找从起点附近滑动路径上的点
-     * 只检测距离起点很近的点，避免长距离滑动时误选
-     */
-    private fun findDotNearStartPath(startX: Float, startY: Float, currentX: Float, currentY: Float): Dot? {
-        // 只在短距离内检测（约100dp），避免误选远处的点
-        val moveDistance = sqrt((currentX - startX).pow(2) + (currentY - startY).pow(2))
-        if (moveDistance > 100.dp) return null
-
-        // 找出距离起点最近且在路径上的点
-        return dots.find { dot ->
-            // 点必须距离起点足够近
-            val distanceFromStart = sqrt((dot.centerX - startX).pow(2) + (dot.centerY - startY).pow(2))
-            if (distanceFromStart > initialTouchRadius) return@find false
-
-            // 点到路径的距离要小于半径
-            val distanceToPath = pointToLineDistance(dot.centerX, dot.centerY, startX, startY, currentX, currentY)
-            distanceToPath <= initialTouchRadius / 2
-        }
-    }
-
-    /**
-     * 计算点到线段的距离
-     */
-    private fun pointToLineDistance(px: Float, py: Float, x1: Float, y1: Float, x2: Float, y2: Float): Float {
-        val dx = x2 - x1
-        val dy = y2 - y1
-        val lengthSquared = dx * dx + dy * dy
-
-        if (lengthSquared == 0f) {
-            return sqrt((px - x1).pow(2) + (py - y1).pow(2))
-        }
-
-        var t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared
-        t = maxOf(0f, minOf(1f, t))
-
-        val projX = x1 + t * dx
-        val projY = y1 + t * dy
-
-        return sqrt((px - projX).pow(2) + (py - projY).pow(2))
-    }
-
     private fun handleTouchEnd() {
         if (isPatternDrawingStarted) {
             isPatternDrawingStarted = false
+            // The lit dots fade out from a snapshot; the path and the selection are hidden at once.
+            captureReleaseFade(SystemClock.uptimeMillis())
+            isSelectionHidden = true
             notifyPatternComplete()
+            invalidate()
         }
         // 重置触摸激活状态
         isTouchActive = false
     }
 
-    private fun getDotAt(x: Float, y: Float, radius: Float = touchRadius): Dot? {
-        // 使用指定的触摸半径进行检测
-        return dots.find { dot ->
-            val distance = sqrt((x - dot.centerX).pow(2) + (y - dot.centerY).pow(2))
-            distance <= radius
-        }
+    // A cancelled gesture is dropped: nothing is reported as complete.
+    private fun handleTouchCancel() {
+        clearPattern()
+    }
+
+    // Selects the dots in order and reports whether any was new.
+    private fun applySelection(ids: List<Int>): Boolean {
+        ids.forEach { selectDot(dots[it]) }
+        return ids.isNotEmpty()
     }
 
     private fun selectDot(dot: Dot) {
         if (!dot.isSelected) {
             dot.isSelected = true
             selectedDots.add(dot)
+            trail.onDotAdded(SystemClock.uptimeMillis())
 
             if (isTactileFeedbackEnabled) {
-                performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             }
 
             invalidate()
@@ -413,9 +434,31 @@ class PatternLockView @JvmOverloads constructor(
         listeners.remove(listener)
     }
 
+    /**
+     * Dots the retired selection rule would have picked for the last gesture (see
+     * [LegacyPatternTracker]); valid inside [PatternLockViewListener.onComplete].
+     */
+    val legacyPattern: List<Dot> get() = legacyTracker.selected.map { dots[it] }
+
+    /** Clears after [delayMs]; a new touch or an explicit clear cancels it. */
+    fun clearPatternDelayed(delayMs: Long) {
+        removeCallbacks(delayedClear)
+        postDelayed(delayedClear, delayMs)
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(delayedClear)
+        super.onDetachedFromWindow()
+    }
+
     fun clearPattern() {
+        removeCallbacks(delayedClear)
         dots.forEach { it.isSelected = false }
         selectedDots.clear()
+        selector.reset()
+        legacyTracker.reset()
+        trail.reset()
+        isSelectionHidden = false
         isPatternDrawingStarted = false
         isTouchActive = false
         currentViewMode = PatternViewMode.CORRECT
@@ -461,9 +504,9 @@ class PatternLockView @JvmOverloads constructor(
         pathEndAnimationDuration = duration
     }
 
-    private companion object {
-        // Caps the grid on wide windows (foldable inner screens, tablets) so the thumb can still
-        // span it; equals the size on the widest common phones (448dp wide minus 56dp margins).
-        const val MAX_SIZE_DP = 336
+    companion object {
+        // Whole view including the outer rings; narrow or short windows (split screen, small
+        // phones) still shrink it.
+        const val MAX_SIZE_DP = 260
     }
 }

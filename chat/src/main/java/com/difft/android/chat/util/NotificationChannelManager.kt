@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.storage.AppStateDefaults
 import com.difft.android.base.storage.AppStateKeys
 import com.difft.android.base.storage.di.AppStateDataStore
@@ -32,14 +33,28 @@ enum class CriticalAlertBypass {
     NEEDS_USER_ACTION,
 }
 
+/** Outcome of deleting one obsolete channel during [NotificationChannelManager.migrateIfNeeded]. */
+enum class ChannelDeletion {
+    DELETED,
+    ABSENT,
+
+    /** Retried at the next process start: a foreground service still holds it, or a summary sits on it below API 31. */
+    DEFERRED,
+
+    /** Unexpected error; not retried within this run. */
+    FAILED,
+}
+
 /**
- * Creates, renames and repairs the app's own notification channels.
+ * Creates, renames and retires the app's own notification channels (#1354: five channels plus
+ * per-conversation ones).
  *
- * - [ensureChannels] runs at every start: creates what is missing and refreshes localized display
- *   names in place (`createNotificationChannel` on an existing id only updates name and
- *   description, never the user's importance/sound choices).
- * - [migrateIfNeeded] runs once per [CHANNEL_VERSION] and only drops the obsolete legacy
- *   critical-alert channel; no channel in use is ever deleted.
+ * - [ensureChannels] runs at every start: creates the [NotificationChannelIds.KEEP] channels that
+ *   are missing and refreshes localized display names in place (`createNotificationChannel` on an
+ *   existing id only updates name and description, never the user's importance/sound choices).
+ *   It never reads DataStore.
+ * - [migrateIfNeeded] runs off the main thread at every start and deletes whichever
+ *   [NotificationChannelIds.OBSOLETE] ids still exist; nothing outside that list is ever deleted.
  * - [reconcileCriticalAlertBypass] re-applies bypass-Do-Not-Disturb, which AOSP only honors on a
  *   later `createNotificationChannel` call and only while the user has not touched the category.
  */
@@ -50,25 +65,17 @@ class NotificationChannelManager @Inject constructor(
 ) {
 
     companion object {
-        /** Bump to run [migrateIfNeeded] once more after the next release. */
-        const val CHANNEL_VERSION = 1
+        /** Stamped once the first full retirement of [NotificationChannelIds.OBSOLETE] completed. */
+        const val CHANNEL_VERSION = 2
 
-        /** Remove the pre-V2 critical-alert channel id the app no longer posts to. */
-        const val DELETE_LEGACY_CRITICAL_ALERT = true
+        private val MESSAGE_GROUP_IDS = setOf(NotificationChannelIds.MESSAGE)
 
-        private val MESSAGE_GROUP_IDS = setOf(NotificationChannelIds.MESSAGE, NotificationChannelIds.MESSAGE_SUMMARY)
+        /** Shared channels whose spec lives in `:base` so `:call` and `:app` can ensure them. */
+        private val SHARED_SPEC_IDS = setOf(NotificationChannelIds.OTHER_ALERTS, NotificationChannelIds.RUNNING_IN_BACKGROUND)
 
-        /** Channels whose spec is silent; older builds may have created them audible. */
-        private val SILENT_CHANNELS = listOf(NotificationChannelIds.ONGOING_CALL, NotificationChannelIds.BACKGROUND)
-
-        private val CORE_CHANNELS = listOf(
-            NotificationChannelIds.MESSAGE_SUMMARY,
-            NotificationChannelIds.MESSAGE,
-            NotificationChannelIds.CALL,
-            NotificationChannelIds.ONGOING_CALL,
-            NotificationChannelIds.BACKGROUND,
-            NotificationChannelIds.CRITICAL_ALERT,
-        )
+        /** Not app-owned or per-conversation; never logged as unknown. */
+        private val UNKNOWN_EXEMPT_PREFIXES = listOf(NotificationChannelIds.MESSAGE, "android.")
+        private val UNKNOWN_EXEMPT_IDS = setOf("fcm_fallback_notification_channel", "livekit_screen_capture", "miscellaneous")
     }
 
     private val nm: NotificationManager by lazy {
@@ -79,34 +86,61 @@ class NotificationChannelManager @Inject constructor(
     fun ensureChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         ensureGroup()
-        CORE_CHANNELS.forEach { id ->
+        NotificationChannelIds.KEEP.forEach { id ->
             runCatching { ensureChannel(id) }
                 .onFailure { L.e { "[NotificationChannel] ensure failed id=$id error=${it.stackTraceToString()}" } }
         }
-        runCatching { renameExisting(NotificationChannelIds.ACCOUNT) }
-            .onFailure { L.w { "[NotificationChannel] rename failed id=${NotificationChannelIds.ACCOUNT}" } }
+    }
+
+    /** Creates the MESSAGE channel (and its group) when missing; returns whether it exists. Never throws. */
+    fun ensureMessageChannel(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        return try {
+            if (nm.getNotificationChannel(NotificationChannelIds.MESSAGE) == null) {
+                ensureGroup()
+                nm.createNotificationChannel(buildChannel(NotificationChannelIds.MESSAGE))
+            }
+            nm.getNotificationChannel(NotificationChannelIds.MESSAGE) != null
+        } catch (e: Exception) {
+            L.w { "[NotificationChannel] ensure failed id=${NotificationChannelIds.MESSAGE} error=${e.javaClass.simpleName}" }
+            false
+        }
     }
 
     /**
-     * One-time upkeep per [CHANNEL_VERSION]; never deletes a channel the app posts to (a delete
-     * cancels its notifications and re-creation restores the old settings anyway). It lowers the
-     * importance of channels meant to be silent that older builds created audible, and removes the
-     * obsolete critical-alert channel id when [DELETE_LEGACY_CRITICAL_ALERT] is on. Off the main
-     * thread: reads app_state. The version is stamped last, so an interrupted run retries.
+     * Deletes every [NotificationChannelIds.OBSOLETE] id that still exists. Runs at every start
+     * because existence, not the stamp, decides what is left: a downgrade that re-creates an old id
+     * or a run killed half-way heals on the next start. [CHANNEL_VERSION] is stamped only when
+     * nothing was deferred. Off the main thread: reads app_state.
      */
     suspend fun migrateIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val applied = appState.data.first()[AppStateKeys.NOTIFICATION_CHANNEL_VERSION]
-            ?: AppStateDefaults.NOTIFICATION_CHANNEL_VERSION
-        if (applied >= CHANNEL_VERSION) return
-        val lowered = lowerSilentChannels()
-        var deletedLegacy = false
-        if (DELETE_LEGACY_CRITICAL_ALERT && nm.getNotificationChannel(NotificationChannelIds.LEGACY_CRITICAL_ALERT) != null) {
-            deleteSafely(NotificationChannelIds.LEGACY_CRITICAL_ALERT)
-            deletedLegacy = true
+        val prefs = appState.data.first()
+        val applied = prefs[AppStateKeys.NOTIFICATION_CHANNEL_VERSION] ?: AppStateDefaults.NOTIFICATION_CHANNEL_VERSION
+        val existing = try {
+            nm.notificationChannels.orEmpty()
+        } catch (e: Exception) {
+            L.w { "[NotificationChannel] list failed error=${e.javaClass.simpleName}" }
+            return
         }
-        appState.edit { it[AppStateKeys.NOTIFICATION_CHANNEL_VERSION] = CHANNEL_VERSION }
-        L.i { "[NotificationChannel] migrated version=$CHANNEL_VERSION deletedLegacyCritical=$deletedLegacy loweredSilent=$lowered previous=$applied" }
+        val existingIds = existing.map { it.id }.toSet()
+        logUnknownOnce(existingIds, prefs[AppStateKeys.NOTIFICATION_CHANNEL_UNKNOWN_LOGGED] ?: AppStateDefaults.NOTIFICATION_CHANNEL_UNKNOWN_LOGGED)
+        val present = NotificationChannelIds.OBSOLETE.filter { it in existingIds }
+        val bgBlocked = existing.any {
+            it.id == NotificationChannelIds.OBSOLETE_BACKGROUND && it.importance == NotificationManager.IMPORTANCE_NONE
+        }
+        val results = present.associateWith { deleteSafely(it) }
+        val deferred = results.filterValues { it == ChannelDeletion.DEFERRED }.keys
+        val failed = results.filterValues { it == ChannelDeletion.FAILED }.keys
+        val deleted = results.count { it.value == ChannelDeletion.DELETED }
+        val stamp = deferred.isEmpty() && applied < CHANNEL_VERSION
+        if (stamp) appState.edit { it[AppStateKeys.NOTIFICATION_CHANNEL_VERSION] = CHANNEL_VERSION }
+        if (present.isNotEmpty() || stamp) {
+            L.i {
+                "[NotificationChannel] migrated version=$CHANNEL_VERSION deleted=$deleted deferred=$deferred" +
+                    " failed=$failed bgBlocked=$bgBlocked previous=$applied"
+            }
+        }
     }
 
     /**
@@ -136,22 +170,43 @@ class NotificationChannelManager @Inject constructor(
     }
 
     /**
-     * Older builds created ONGOING_CALL audible (DEFAULT). AOSP lets an app lower a channel's
-     * importance only while the user has not touched it, so the replica carries
-     * min(existing, spec): it never raises anything, and a user's own choice is kept by the system.
+     * Deletes one obsolete id. Below API 31 the summary channel is deleted only while no
+     * notification sits on it: there a channel delete that cancels a group summary also cancels
+     * its children. The state only clears, since nothing posts to that channel any more.
      */
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun lowerSilentChannels(): Int {
-        var lowered = 0
-        SILENT_CHANNELS.forEach { id ->
-            runCatching {
-                val existing = nm.getNotificationChannel(id) ?: return@runCatching
-                if (existing.importance <= NotificationManager.IMPORTANCE_LOW) return@runCatching
-                nm.createNotificationChannel(replica(existing, NotificationManager.IMPORTANCE_LOW))
-                lowered++
-            }.onFailure { L.w { "[NotificationChannel] lower failed id=$id error=${it.javaClass.simpleName}" } }
+    private fun deleteSafely(id: String): ChannelDeletion {
+        if (id == NotificationChannelIds.OBSOLETE_MESSAGE_SUMMARY && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            val inUse = try {
+                nm.activeNotifications.any { it.notification.channelId == id }
+            } catch (e: Exception) {
+                L.w { "[NotificationChannel] active lookup failed id=$id error=${e.javaClass.simpleName}" }
+                true
+            }
+            if (inUse) return ChannelDeletion.DEFERRED
         }
-        return lowered
+        return try {
+            nm.deleteNotificationChannel(id)
+            ChannelDeletion.DELETED
+        } catch (e: SecurityException) {
+            // API 31+: a foreground service still posts on it.
+            L.w { "[NotificationChannel] delete deferred id=$id error=${e.javaClass.simpleName}" }
+            ChannelDeletion.DEFERRED
+        } catch (e: Exception) {
+            L.e { "[NotificationChannel] delete failed id=$id error=${e.stackTraceToString()}" }
+            ChannelDeletion.FAILED
+        }
+    }
+
+    private suspend fun logUnknownOnce(existingIds: Set<String>, alreadyLogged: Boolean) {
+        if (alreadyLogged) return
+        val unknown = existingIds.filterNot { id ->
+            id in NotificationChannelIds.KEEP || id in NotificationChannelIds.OBSOLETE || id in UNKNOWN_EXEMPT_IDS ||
+                UNKNOWN_EXEMPT_PREFIXES.any { id.startsWith(it) }
+        }
+        if (unknown.isEmpty()) return
+        L.i { "[NotificationChannel] unknown ids=$unknown" }
+        appState.edit { it[AppStateKeys.NOTIFICATION_CHANNEL_UNKNOWN_LOGGED] = true }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -184,27 +239,18 @@ class NotificationChannelManager @Inject constructor(
         val existing = nm.getNotificationChannel(id) ?: return
         val name = displayName(id) ?: return
         if (existing.name?.toString() == name) return
-        nm.createNotificationChannel(replica(existing, existing.importance, name))
+        nm.createNotificationChannel(replica(existing, name))
         L.i { "[NotificationChannel] renamed id=$id" }
     }
 
-    /** A copy of [existing] to re-submit: same group and bypass flag, the given [importance] and name. */
+    /** A copy of [existing] to re-submit under [name]: same importance, group and bypass flag. */
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun replica(existing: NotificationChannel, importance: Int, name: String? = null): NotificationChannel {
+    private fun replica(existing: NotificationChannel, name: String): NotificationChannel {
         val id = existing.id
-        return NotificationChannel(id, name ?: displayName(id) ?: existing.name, minOf(importance, existing.importance)).apply {
+        return NotificationChannel(id, name, existing.importance).apply {
             // A legacy channel without a group gets one: AOSP assigns it only when the existing group is null.
             group = existing.group ?: NotificationChannelIds.MESSAGE_GROUP.takeIf { id in MESSAGE_GROUP_IDS }
             setBypassDnd(existing.canBypassDnd())
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    private fun deleteSafely(id: String) {
-        try {
-            nm.deleteNotificationChannel(id)
-        } catch (e: Exception) {
-            L.e { "[NotificationChannel] delete failed id=$id error=${e.stackTraceToString()}" }
         }
     }
 
@@ -212,15 +258,9 @@ class NotificationChannelManager @Inject constructor(
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun buildChannel(id: String): NotificationChannel {
+        if (id in SHARED_SPEC_IDS) return NotificationChannelSpecs.build(context, id)
         val name = displayName(id) ?: id
         return when (id) {
-            NotificationChannelIds.MESSAGE_SUMMARY ->
-                NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    group = NotificationChannelIds.MESSAGE_GROUP
-                    setShowBadge(false)
-                    enableVibration(false)
-                    setSound(null, null)
-                }
             NotificationChannelIds.MESSAGE ->
                 NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
                     group = NotificationChannelIds.MESSAGE_GROUP
@@ -239,12 +279,6 @@ class NotificationChannelManager @Inject constructor(
                     enableVibration(true)
                     setBypassDnd(true)
                     vibrationPattern = longArrayOf(0, 100)
-                }
-            NotificationChannelIds.ONGOING_CALL, NotificationChannelIds.BACKGROUND ->
-                NotificationChannel(id, name, NotificationManager.IMPORTANCE_LOW).apply {
-                    setShowBadge(false)
-                    setSound(null, null)
-                    enableVibration(false)
                 }
             else -> error("No channel spec for id=$id")
         }

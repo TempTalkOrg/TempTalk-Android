@@ -11,6 +11,7 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.ContactorCacheManager
+import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.repo.LCallHttpService
 import com.difft.android.call.session.command.CallSessionCommands
 import com.difft.android.call.state.InComingCallStateManager
@@ -54,6 +55,7 @@ class CallMessageHandler @Inject constructor(
     internal val callToChatController: LCallToChatController,
     internal val groupRepo: GroupRepo,
     internal val dbRoomStore: DBRoomStore,
+    internal val criticalAlertManager: CriticalAlertManager,
     // Lazy: CallSessionCommands → holder → session factory → LCallToChatController → this class.
     private val callSessionCommands: Lazy<CallSessionCommands>,
 ) {
@@ -99,6 +101,9 @@ class CallMessageHandler @Inject constructor(
      */
     fun handleCallEndNotification(roomId: String) {
         if (roomId.isEmpty()) return
+
+        // #1387: the call is over, so its critical alerts stop presenting.
+        criticalAlertManager.dismissForRoom(roomId)
 
         callDataManager.removeCallData(roomId)
         callToChatController.cancelNotificationById(roomId.hashCode())

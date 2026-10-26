@@ -8,15 +8,30 @@ import okhttp3.OkHttpClient
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 /**
  * [ProxyHttpConnectionRegistry] must evict the connection pool of every registered
  * client exactly once per [ProxyHttpConnectionRegistry.evictAll], dedupe repeat
  * registrations of the same client, and never let one client's eviction failure
- * mask the others.
+ * mask the others. Off the main thread it evicts inline; on the main thread it must hand
+ * the eviction to a background thread, because closing a pooled TLS socket there throws
+ * `NetworkOnMainThreadException` (#1400).
  */
 @RunWith(RobolectricTestRunner::class)
 class ProxyHttpConnectionRegistryTest {
+
+    /** Robolectric's test thread is the main thread; evict from a plain thread to exercise the inline path. */
+    private fun ProxyHttpConnectionRegistry.evictAllOffMain() {
+        val worker = Thread({ evictAll() }, "off-main-caller")
+        worker.start()
+        worker.join(5_000)
+    }
 
     private fun clientWith(pool: ConnectionPool): OkHttpClient =
         mockk(relaxed = true) { every { connectionPool } returns pool }
@@ -29,7 +44,7 @@ class ProxyHttpConnectionRegistryTest {
         registry.register(clientWith(poolA))
         registry.register(clientWith(poolB))
 
-        registry.evictAll()
+        registry.evictAllOffMain()
 
         verify(exactly = 1) { poolA.evictAll() }
         verify(exactly = 1) { poolB.evictAll() }
@@ -43,7 +58,7 @@ class ProxyHttpConnectionRegistryTest {
         registry.register(client)
         registry.register(client)
 
-        registry.evictAll()
+        registry.evictAllOffMain()
 
         verify(exactly = 1) { pool.evictAll() }
     }
@@ -56,7 +71,7 @@ class ProxyHttpConnectionRegistryTest {
         registry.register(clientWith(failingPool))
         registry.register(clientWith(healthyPool))
 
-        registry.evictAll() // must not throw
+        registry.evictAllOffMain() // must not throw
 
         verify(exactly = 1) { healthyPool.evictAll() }
     }
@@ -64,5 +79,62 @@ class ProxyHttpConnectionRegistryTest {
     @Test
     fun `evictAll with no registered clients is a no-op`() {
         ProxyHttpConnectionRegistry().evictAll()
+    }
+
+    /** Pool whose evictAll records the thread it ran on and releases [done]. */
+    private fun recordingPool(ranOn: AtomicReference<Thread>, done: CountDownLatch): ConnectionPool =
+        mockk {
+            every { evictAll() } answers {
+                ranOn.set(Thread.currentThread())
+                done.countDown()
+            }
+        }
+
+    @Test
+    fun `evictAll on the main thread runs the eviction on a background thread`() {
+        val registry = ProxyHttpConnectionRegistry()
+        val ranOn = AtomicReference<Thread>()
+        val done = CountDownLatch(1)
+        registry.register(clientWith(recordingPool(ranOn, done)))
+        val mainThread = Thread.currentThread() // Robolectric test thread owns the main looper
+
+        registry.evictAll()
+
+        assertTrue(done.await(5, TimeUnit.SECONDS), "eviction never ran")
+        assertNotEquals(mainThread, ranOn.get())
+        assertEquals("proxy-http-evict", ranOn.get().name)
+    }
+
+    @Test
+    fun `main thread evictions stay ordered on the single background thread`() {
+        val registry = ProxyHttpConnectionRegistry()
+        val order = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val done = CountDownLatch(4)
+        val first = mockk<ConnectionPool> { every { evictAll() } answers { order += "first"; done.countDown() } }
+        val second = mockk<ConnectionPool> { every { evictAll() } answers { order += "second"; done.countDown() } }
+        registry.register(clientWith(first))
+        registry.register(clientWith(second))
+
+        registry.evictAll()
+        registry.evictAll()
+
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        assertEquals(listOf("first", "second", "first", "second"), order.toList())
+    }
+
+    @Test
+    fun `evictAll off the main thread evicts inline on the calling thread`() {
+        val registry = ProxyHttpConnectionRegistry()
+        val ranOn = AtomicReference<Thread>()
+        val done = CountDownLatch(1)
+        registry.register(clientWith(recordingPool(ranOn, done)))
+        val caller = Thread({ registry.evictAll() }, "off-main-caller")
+
+        caller.start()
+        caller.join(5_000)
+
+        // Inline means the pool was already evicted when evictAll returned.
+        assertEquals(0L, done.count)
+        assertEquals(caller, ranOn.get())
     }
 }

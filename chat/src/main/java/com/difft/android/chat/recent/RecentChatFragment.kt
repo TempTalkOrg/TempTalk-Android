@@ -460,6 +460,10 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         if (navigationCallback?.isDualPaneMode == true) {
             mAdapter.selectedId = navigationCallback.currentSelectedConversationId
         }
+        // Adapter updates delivered while this ViewPager2 page was detached (another tab shown)
+        // leave the list's layout request stuck below the page root, so after the page is
+        // re-attached later updates stay unapplied until the next scroll. Re-request from the root.
+        view?.requestLayout()
     }
 
     override fun updateDualPaneSelection(selectedId: String?) {
@@ -694,9 +698,9 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
     }
 
     /**
-     * Retiring package only: the title-bar entry into the "move to the new app" guide. The first time
-     * the entry is open the guide page is shown once, whatever the new app's install state; after that
-     * the pill is the only entry. [LegacyMigrationGate] decides whether the entry is open, re-evaluated
+     * Retiring package only: the title-bar entry into the "move to the new app" guide. The guide opens
+     * once automatically, through the startup prompt coordinator, whatever the new app's install state;
+     * after that the pill is the only entry. [LegacyMigrationGate] decides whether the entry is open, re-evaluated
      * on every resume so a flag flipped while the app runs takes effect without a restart.
      */
     private fun setupLegacyMigrationEntry() {
@@ -711,11 +715,8 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         if (!PeerApps.isLegacy(requireContext())) return
         val open = LegacyMigrationGate.isOpen(requireContext(), globalConfigsManager)
         binding.migrateEntry.visibility = if (open) View.VISIBLE else View.GONE
-        if (!open || userManager.getUserData()?.legacyMigrationGuideShown == true) return
-        // Once: the guide page carries the reason and the one action; "later" on it is the exit and
-        // the page is never opened by itself again.
-        userManager.update { legacyMigrationGuideShown = true }
-        openLegacyMigrationGuide()
+        // The one automatic opening of the guide is the first startup-prompt slot (#1355), so it
+        // never stacks with another startup prompt.
     }
 
     private fun openLegacyMigrationGuide() {

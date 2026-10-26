@@ -39,6 +39,7 @@ import com.difft.android.call.session.CallSession
 import com.difft.android.call.session.CallSessionHolder
 import com.difft.android.call.session.resolveCallSession
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.call.ui.screenshare.applyScreenShareOrientation
 import com.difft.android.base.utils.hideNavigationBar
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -210,8 +211,13 @@ class LCallActivity : AppCompatActivity() {
 
     // The orientation value the policy last wrote for this activity (see BaseActivity's
     // twin field): re-applies happen only while requestedOrientation still equals it, so
-    // ScreenSharingView's deliberate landscape lock is never clobbered mid-share.
+    // a screen that set its own orientation is never clobbered (a share routes through
+    // [screenShareOrientationActive] instead).
     internal var policyAppliedOrientation: Int? = null
+
+    // Set by ScreenSharingView while a remote share is shown: re-applies then go through
+    // applyScreenShareOrientation, so a fold or unfold mid-share is not frozen by the share lock.
+    internal var screenShareOrientationActive = false
 
     // Same display-level replay BaseActivity has: a fold the OS answers with a letterbox delivers
     // no configuration change at all, and a call is the screen most likely to be open across a fold.
@@ -224,7 +230,7 @@ class LCallActivity : AppCompatActivity() {
      * activity's manifest configChanges swallow every fold key, so a mid-call unfold never
      * recreates it and the folded posture's portrait lock would otherwise stick on the inner
      * display. Not a BaseActivity, so it cannot inherit that re-apply. Skipped while pinned
-     * (PiP) and while another owner (screen-share landscape lock) holds the orientation.
+     * (PiP); while a share is shown the share variant decides.
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -233,6 +239,10 @@ class LCallActivity : AppCompatActivity() {
     }
 
     private fun reapplyOrientationPolicyIfOwned(display: Display? = null) {
+        if (screenShareOrientationActive) {
+            policyAppliedOrientation = applyScreenShareOrientation(this, display)
+            return
+        }
         val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
         if (owned) {
             policyAppliedOrientation = OrientationPolicy.applyTo(this, display)

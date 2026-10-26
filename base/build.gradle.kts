@@ -139,7 +139,6 @@ dependencies {
     // Retained for the legacy EncryptedSharedPreferences reader path used by storage
     // migration lambdas (issue #725 v(N+1) → v(N+4) retention window).
     api(libs.security.crypto)
-    api(libs.firebase.analytics.ktx)
 
     // Storage layer (issue #725): DataStore + Tink AEAD + kotlinx-serialization protobuf.
     // Exported as api(...) so :app, :network, :call, :chat, :database can inject the

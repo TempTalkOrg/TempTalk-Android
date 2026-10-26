@@ -5,9 +5,6 @@ import com.difft.android.base.network.CertValidationFailureDetector
 import com.difft.android.base.network.NetworkRiskNotifier
 import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Protocol
@@ -21,9 +18,12 @@ import java.io.IOException
 /**
  * HTTP Client Interceptor
  *
- * Responsibilities:
- * 1. Host failover - Switch to backup hosts when request fails (response code not in [100, 499])
- * 2. Response handling - Handle 204 No Content, transform non-success responses
+ * Response normalization: 204 No Content becomes a standard [BaseResponse], a 3xx/4xx carrying a
+ * `reason` becomes a 200, any other non-success becomes a [NetworkException], and a 5xx that
+ * [HostFailoverInterceptor] could not resolve on any host becomes `NetworkException(0)`.
+ *
+ * Host failover is deliberately not here: [HostFailoverInterceptor] sits inside this interceptor,
+ * so it sees the raw response or exception and this one normalizes only the final result (#1396).
  *
  * Auth is deliberately not here: [HeaderInterceptor] owns the credential and the 401 policy, so a
  * 401 passes straight through this interceptor (issue #1231).
@@ -36,33 +36,23 @@ class HttpClientInterceptor(
     private val pinnedConnection: Boolean = true
 ) : Interceptor {
 
-    @dagger.hilt.EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface EntryPoint {
-        val urlManager: UrlManager
-    }
-
     /**
      * Response processing result.
      *
      * Close responsibility:
      * - Success: Caller is responsible for closing the returned response
-     * - NeedsHostRetry: Original response has been closed
      * - Failed: Original response has been closed
      */
     private sealed class ResponseResult {
         /** Processing succeeded, caller is responsible for closing the returned response */
         data class Success(val response: Response) : ResponseResult()
 
-        /** Host retry needed (code >= 500), original response has been closed */
-        object NeedsHostRetry : ResponseResult()
-
         /** Processing failed, original response has been closed */
         data class Failed(val exception: Exception) : ResponseResult()
     }
 
     override fun intercept(chain: Interceptor.Chain): Response = try {
-        proceedWithFailover(chain)
+        normalize(chain)
     } catch (e: Exception) {
         // Callers log their own failure; for I/O errors one line with host and cause is enough,
         // anything else is unexpected and keeps its stack.
@@ -71,12 +61,10 @@ class HttpClientInterceptor(
         throw e.asNetworkException()
     }
 
-    private fun proceedWithFailover(chain: Interceptor.Chain): Response {
+    private fun normalize(chain: Interceptor.Chain): Response {
         val request = chain.request()
-        val response = chain.proceed(request)
-        return when (val result = processResponse(response, request)) {
+        return when (val result = processResponse(chain.proceed(request), request)) {
             is ResponseResult.Success -> result.response
-            is ResponseResult.NeedsHostRetry -> changeHostAndReSendRequest(request, chain)
             is ResponseResult.Failed -> throw result.exception
         }
     }
@@ -100,57 +88,11 @@ class HttpClientInterceptor(
     }
 
     /**
-     * Re-sends [request] against each ranked backup host until one answers usefully.
-     *
-     * The last failure is a local, so two concurrent requests through this shared interceptor can
-     * never surface each other's exception (issue #1231).
-     */
-    private fun changeHostAndReSendRequest(request: Request, chain: Interceptor.Chain): Response {
-        val originalUrl = request.url
-        val originalHost = originalUrl.host
-        val urlManager = EntryPointAccessors.fromApplication<EntryPoint>(application).urlManager
-        // Record failed host so other hosts are prioritized next time
-        urlManager.recordFailedHost(originalHost)
-        val hosts = urlManager.getAllHostsRanked()
-        val attemptedHosts = mutableSetOf<String>()
-        var lastError: Exception? = null
-        for (host in hosts) {
-            if (host == originalHost || host in attemptedHosts) continue
-            attemptedHosts.add(host)
-
-            val newUrl = originalUrl.newBuilder().host(host).build()
-            val newRequest = request.newBuilder().url(newUrl).build()
-            try {
-                when (val result = processResponse(chain.proceed(newRequest), newRequest)) {
-                    is ResponseResult.Success -> {
-                        // Success (including 204 conversion, 2xx, reason extraction), return directly
-                        return result.response
-                    }
-
-                    is ResponseResult.NeedsHostRetry -> {
-                        // Current backup host also returned >= 500, mark it and continue
-                        urlManager.recordFailedHost(host)
-                    }
-
-                    is ResponseResult.Failed -> {
-                        // Processing failed (3xx/4xx without reason), continue to next host
-                    }
-                }
-            } catch (e: Exception) {
-                lastError = e
-                L.w { "[HttpClientInterceptor] failover request failed host=${newRequest.url.host} ${e.describeForLog()}" }
-                handleException(e, newRequest)
-            }
-        }
-        throw lastError ?: NetworkException(0, application.getString(R.string.chat_net_error))
-    }
-
-    /**
      * Unified response processing, including:
      * - 204 No Content: Convert to standard BaseResponse
      * - 2xx Success: Return directly
      * - 401 Unauthorized: Pass through to [HeaderInterceptor]
-     * - >= 500 Server Error: Need host switch and retry
+     * - >= 500 Server Error: Failover already tried the other hosts, so it is the final failure
      * - Other non-2xx with reason field: Convert code to 200 and return
      * - Other non-2xx without reason: Return failure
      *
@@ -180,10 +122,11 @@ class HttpClientInterceptor(
                 ResponseResult.Success(response)
             }
 
-            // >= 500 Server Error - Need host switch
+            // >= 500 Server Error - HostFailoverInterceptor has already marked the host and tried the
+            // others; what reaches here is the last answer.
             response.code >= 500 -> {
                 response.close()
-                ResponseResult.NeedsHostRetry
+                ResponseResult.Failed(NetworkException(0, application.getString(R.string.chat_net_error)))
             }
 
             // Other non-2xx (3xx/4xx) - Try to extract reason field

@@ -392,18 +392,21 @@ class LCallToChatControllerImpl @Inject constructor(
 
     // region Service & critical alert
 
-    override fun startForegroundService(context: Context, intent: Intent) {
-        try {
+    override fun startForegroundService(context: Context, intent: Intent, onDeferredFailure: () -> Unit): Boolean {
+        return try {
             ForegroundServiceUtil.start(context, intent)
         } catch (_: UnableToStartException) {
             L.w { "[MessageForegroundService] Unable to start foreground service for websocket. Deferring to background to try with blocking" }
             appScope.launch(Dispatchers.IO) {
-                try {
+                val issued = try {
                     ForegroundServiceUtil.startWhenCapable(context, intent)
-                } catch (e: UnableToStartException) {
+                } catch (e: Exception) {
                     L.w(e) { "[MessageForegroundService] Unable to start foreground service for websocket!" }
+                    false
                 }
+                if (!issued) onDeferredFailure()
             }
+            true
         }
     }
 

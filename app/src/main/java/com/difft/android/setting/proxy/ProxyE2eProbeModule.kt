@@ -27,8 +27,8 @@ abstract class ProxyE2eProbeBindModule {
 @Module
 object ProxyE2eProbeProvideModule {
     /**
-     * 专用探针 client：chative-CA 内层信任（self 自签）+ 不带 token + 关闭 host-failover 拦截器
-     * + 走代理工厂。baseUrl 用字面量哨兵（探针恒用 @Url 传完整绝对 URL，baseUrl 不参与路由）。
+     * 专用探针 client：chative-CA 内层信任（self 自签）+ 不带 token + 不入 chat 池（不传 service，
+     * 无 host 路由与 failover，#1396）+ 不做响应归一化 + 走代理工厂。baseUrl 用字面量哨兵（探针恒用 @Url 传完整绝对 URL，baseUrl 不参与路由）。
      */
     @ProxyProbe
     @Provides
@@ -48,7 +48,7 @@ object ProxyE2eProbeProvideModule {
         removeHeader = true,                   // 不带 token
         connectTimeoutSeconds = 8L,            // 构造器签名是 Long，须用 Long 字面量
         readWriteTimeoutSeconds = 8L,
-        useHttpClientInterceptor = false,      // 不可改：关闭 host-failover/改写/token，保「任意响应(含5xx)=成功」
+        useHttpClientInterceptor = false,      // 不可改：不做 5xx 归一化，保「任意响应(含5xx)=成功」；service 保持 null（无路由/failover）
         proxyConfigProvider = proxyConfigProvider,
     )
 }

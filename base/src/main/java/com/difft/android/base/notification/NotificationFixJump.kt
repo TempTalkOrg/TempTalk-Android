@@ -1,9 +1,11 @@
 package com.difft.android.base.notification
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import androidx.annotation.WorkerThread
 import androidx.core.net.toUri
 
 /** The place a user has to go to fix a readiness issue. */
@@ -50,20 +52,31 @@ object NotificationFixJump {
         ReadinessIssue.OEM_POPUP_CHECK -> NotificationFix.OEM_POPUP
     }
 
-    fun open(context: Context, fix: NotificationFix): Boolean = OemSettingsLauncher.openInOrder(
-        context,
-        chain(context, fix, OemBrand.current()),
-        TAG,
-        fix = fix.name,
-    )
+    /**
+     * Opens the first page of [fix]'s chain that resolves. [messageGroupBlocked] comes from
+     * [isMessageGroupBlocked], read off the main thread by the caller; it only matters for
+     * [NotificationFix.MESSAGE_CATEGORY].
+     */
+    fun open(context: Context, fix: NotificationFix, messageGroupBlocked: Boolean = false): Boolean =
+        OemSettingsLauncher.openInOrder(
+            context,
+            chain(context, fix, OemBrand.current(), messageGroupBlocked = messageGroupBlocked),
+            TAG,
+            fix = fix.name,
+        )
 
     /**
      * Same walk as [open] for a launcher that reports back: [start] is the caller's launch (for
      * example an activity-result launcher), so a failing step still falls through to the next.
      */
-    fun openForResult(context: Context, fix: NotificationFix, start: (Intent) -> Unit): Boolean =
+    fun openForResult(
+        context: Context,
+        fix: NotificationFix,
+        messageGroupBlocked: Boolean = false,
+        start: (Intent) -> Unit,
+    ): Boolean =
         OemSettingsLauncher.startFirst(
-            chain(context, fix, OemBrand.current()),
+            chain(context, fix, OemBrand.current(), messageGroupBlocked = messageGroupBlocked),
             TAG,
             fix.name,
             start,
@@ -90,17 +103,28 @@ object NotificationFixJump {
         return listOf(category, appNotifications(pkg), OemSettingsLauncher.appDetailsIntent(context))
     }
 
+    /**
+     * [messageGroupBlocked]: the MESSAGE channel group is switched off. Its switch lives on the app's
+     * notification page, while the channel page only shows the channel's own (still on) switch, so
+     * the app page goes first.
+     */
     fun chain(
         context: Context,
         fix: NotificationFix,
         brand: OemBrand,
         sdkInt: Int = Build.VERSION.SDK_INT,
+        messageGroupBlocked: Boolean = false,
     ): List<Intent> {
         val pkg = context.packageName
         val details = OemSettingsLauncher.appDetailsIntent(context)
         return when (fix) {
             NotificationFix.APP_NOTIFICATIONS -> listOf(appNotifications(pkg), details)
-            NotificationFix.MESSAGE_CATEGORY -> listOf(channel(pkg, NotificationChannelIds.MESSAGE), appNotifications(pkg), details)
+            NotificationFix.MESSAGE_CATEGORY ->
+                if (messageGroupBlocked) {
+                    listOf(appNotifications(pkg), details)
+                } else {
+                    listOf(channel(pkg, NotificationChannelIds.MESSAGE), appNotifications(pkg), details)
+                }
             NotificationFix.CALL_CATEGORY -> listOf(channel(pkg, NotificationChannelIds.CALL), appNotifications(pkg), details)
             NotificationFix.CRITICAL_ALERT_CATEGORY ->
                 listOf(channel(pkg, NotificationChannelIds.CRITICAL_ALERT), appNotifications(pkg), details)
@@ -138,6 +162,13 @@ object NotificationFixJump {
         } else {
             emptyList()
         }
+
+    /** Whether the MESSAGE channel group is switched off. A binder call: never on the main thread. */
+    @WorkerThread
+    fun isMessageGroupBlocked(context: Context): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            context.getSystemService(NotificationManager::class.java)
+                ?.getNotificationChannelGroup(NotificationChannelIds.MESSAGE_GROUP)?.isBlocked == true
 
     private fun appNotifications(pkg: String) =
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg)

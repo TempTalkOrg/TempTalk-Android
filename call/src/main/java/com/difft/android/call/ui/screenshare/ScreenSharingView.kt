@@ -1,6 +1,5 @@
 package com.difft.android.call.ui.screenshare
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -29,8 +28,7 @@ import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.Track
 
-// Screen sharing requires landscape on phones; restored on dispose.
-@SuppressLint("SourceLockedOrientationActivity")
+// Screen sharing turns phones landscape (see applyScreenShareOrientation); restored on dispose.
 @Composable
 fun ScreenSharingView(
     room: Room,
@@ -45,9 +43,15 @@ fun ScreenSharingView(
     DisposableEffect(Unit) {
         WindowCompat.setDecorFitsSystemWindows(activity.window, false)
         hideSystemBars(activity.window)
-        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        room.localParticipant.deviceRotation = 90
+        val callActivity = activity as? LCallActivity
+        callActivity?.screenShareOrientationActive = true
+        val policyWritten = applyScreenShareOrientation(activity)
+        callActivity?.policyAppliedOrientation = policyWritten
+        // Sensor landscape can sit at 90 or 270 and a large display rotates freely, so the camera
+        // reads the display's real rotation per frame; a fixed 90 renders upside down at 270.
+        room.localParticipant.deviceRotation = null
         onDispose {
+            callActivity?.screenShareOrientationActive = false
             WindowCompat.setDecorFitsSystemWindows(activity.window, true)
             WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
                 show(WindowInsetsCompat.Type.statusBars())
@@ -59,7 +63,7 @@ fun ScreenSharingView(
             // hand-written restore would leave policyAppliedOrientation stale, silencing
             // every later re-apply for the rest of the call.
             val restored = OrientationPolicy.applyTo(activity)
-            (activity as? LCallActivity)?.policyAppliedOrientation = restored
+            callActivity?.policyAppliedOrientation = restored
             room.localParticipant.deviceRotation =
                 if (restored == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) 0 else null
         }

@@ -312,6 +312,8 @@ class AutoTranslateCoordinatorTest : AutoTranslateCoordinatorTestBase() {
         coordinator.onWindowAssembled(listOf(target))
         coordinator.translateManually(target, TranslateTargetLanguage.ZH)
         assertEquals(TranslateStatus.Translating, coordinator.overlay.value.getValue("m0").translateStatus)
+        // Cancel only once the launched body is suspended in the wait; cancelling before dispatch skips its rollback.
+        coVerify(timeout = BARRIER_MS) { modelStore.awaitReady(TranslateLang.ZH) }
 
         scope.cancel()
 

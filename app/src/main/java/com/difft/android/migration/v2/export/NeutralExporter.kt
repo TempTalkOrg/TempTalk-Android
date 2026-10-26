@@ -459,6 +459,10 @@ class NeutralExporterImpl @Inject constructor(
         legacyOwnerKey: String?,
     ): BytePlan? {
         val fileName = am.fileName?.takeIf { it.isNotEmpty() } ?: return null
+        // The at-rest file is ciphertext under the row's key. A send whose upload failed leaves that
+        // file behind but never records the key (#1378), so carrying it would hand the destination a
+        // file it can never decrypt, shown as present. Pointer-only instead: it lands as expired.
+        if (!EncryptedAttachmentAccess.isUsableKey(am.key)) return null
         // Attachments left behind by choice: no byte plan → pointer-only, voice notes excepted.
         if (!includeAttachments && !isVoiceNote(am)) return null
         // Current address first: the attachment's own localId.

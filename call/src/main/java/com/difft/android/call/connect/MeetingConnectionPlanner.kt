@@ -13,8 +13,9 @@ import com.difft.android.network.proxy.ProxyConfigProvider
  * - WSS (WebSocket) is only used with the domain (from [UrlInfo.domain]); WSS over IP is not allowed.
  *
  * Attempt order:
- * - QUIC enabled: primary.addrs (QUIC) → primary.domain (WSS) → each fallback in the same order
- * - QUIC enabled + proxy QUIC relay: primary.domain (QUIC) → primary.domain (WSS) → each fallback domain (QUIC→WSS)
+ * - QUIC enabled: primary.addrs (QUIC) → each fallback.addrs (QUIC); the SDK falls back to
+ *   WSS on the domain inside each QUIC attempt, so no separate WSS attempt is added
+ * - QUIC enabled + proxy QUIC relay: primary.domain (QUIC) → each fallback.domain (QUIC)
  * - QUIC disabled: primary.domain (WSS) → each fallback.domain (WSS)
  *
  * [ConnectionAttempt.serverHost] is used for TLS/SNI (typically the certificate domain);
@@ -46,23 +47,28 @@ object MeetingConnectionPlanner {
 
     private fun appendNodeAttempts(out: ArrayList<ConnectionAttempt>, node: UrlInfo, quicEnabled: Boolean, nodeType: String) {
         val domain = node.domain.trim().ifEmpty { null } ?: return
-        if (quicEnabled) {
-            if (ProxyConfigProvider.isProxyForCallQuicEnabled) {
-                // QUIC-over-proxy (MASQUE-lite, §9.6): connect via the DOMAIN, not the
-                // node IPs. The relay forwards by the tunnel's CONNECT target host and
-                // enforces a domain-suffix allowlist — an IP literal would be denied.
-                normalizeConnectUrl(domain)?.let { url ->
-                    out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
-                }
-            } else {
-                for (raw in node.addrs) {
-                    val url = normalizeConnectUrl(raw) ?: continue
-                    out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
-                }
+        val domainUrl = normalizeConnectUrl(domain) ?: return
+        if (!quicEnabled) {
+            out += ConnectionAttempt(serverHost = domain, connectUrl = domainUrl, useQuic = false, nodeType = nodeType)
+            return
+        }
+        val sizeBefore = out.size
+        if (ProxyConfigProvider.isProxyForCallQuicEnabled) {
+            // QUIC-over-proxy (MASQUE-lite, §9.6): connect via the DOMAIN, not the
+            // node IPs. The relay forwards by the tunnel's CONNECT target host and
+            // enforces a domain-suffix allowlist — an IP literal would be denied.
+            out += ConnectionAttempt(serverHost = domain, connectUrl = domainUrl, useQuic = true, nodeType = nodeType)
+        } else {
+            for (raw in node.addrs) {
+                val url = normalizeConnectUrl(raw) ?: continue
+                out += ConnectionAttempt(serverHost = domain, connectUrl = url, useQuic = true, nodeType = nodeType)
             }
         }
-        val domainUrl = normalizeConnectUrl(domain) ?: return
-        out += ConnectionAttempt(serverHost = domain, connectUrl = domainUrl, useQuic = false, nodeType = nodeType)
+        // The SDK falls back to WSS on the domain inside every QUIC attempt, so a separate
+        // WSS attempt is only needed when this node produced no QUIC attempt at all.
+        if (out.size == sizeBefore) {
+            out += ConnectionAttempt(serverHost = domain, connectUrl = domainUrl, useQuic = false, nodeType = nodeType)
+        }
     }
 
     private fun dedupePreserveOrder(attempts: List<ConnectionAttempt>): List<ConnectionAttempt> {

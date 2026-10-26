@@ -9,6 +9,7 @@ import androidx.core.net.toUri
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.R
+import com.difft.android.call.state.CriticalAlertCallGate
 import com.difft.android.call.state.CriticalAlertStateManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,7 @@ class CriticalAlertSoundPlayer @Inject constructor(
     private val context: Context,
     private val criticalAlertStateManager: CriticalAlertStateManager,
     private val callVibrationManager: CallVibrationManager,
+    private val criticalAlertCallGate: CriticalAlertCallGate,
 ) {
     // JVM 锁替代协程 Mutex，使 stop 操作可同步调用而无需 launch 协程。
     // 严格只用于状态变更（微秒级），永不在持锁状态下执行 Ringtone 的 IPC。
@@ -54,6 +56,10 @@ class CriticalAlertSoundPlayer @Inject constructor(
     // 铃声重播循环任务（仅 API < 28 使用，因 Ringtone.isLooping 需要 API 28+）
     @Volatile
     private var ringtoneLoopJob: Job? = null
+
+    // Notification id of the alert that took the current play token at Phase 1 (#1387); null once the token is
+    // invalidated. Unlike currentNotificationId it also covers a play that is still pending. Guarded by soundLock.
+    private var playTokenOwnerId: Int? = null
 
     // 循环震动波形：延迟0ms → 震动1000ms → 停顿1000ms，循环播放
     private val vibrationPattern = longArrayOf(0, 1000, 1000)
@@ -190,13 +196,27 @@ class CriticalAlertSoundPlayer @Inject constructor(
      * 播放 Critical Alert 声音（循环）+ 同步循环震动，并安排 30s 自动停止。
      * @param conversationId 会话ID
      * @param notificationId 通知ID
+     * @param roomId room id of the alert, if any
+     * @param onAdmitted runs once this play passed its silence check (#1381 current call, #1387 ended call) and installed its token
      */
-    fun playSound(conversationId: String, notificationId: Int) {
+    fun playSound(conversationId: String, notificationId: Int, roomId: String? = null, onAdmitted: () -> Unit = {}) {
+        if (criticalAlertCallGate.shouldSilence(conversationId, roomId)) {
+            L.i { "[Call] CriticalAlertSoundPlayer skip play reason=silenced id=$notificationId roomId=$roomId" }
+            return
+        }
         val token = System.currentTimeMillis()
         appScope.launch(Dispatchers.IO) {
             // Phase 1: 锁内仅做状态变更与 stop 提交，不持锁做 IPC
             synchronized(soundLock) {
+                // #1381: checked again under soundLock, before this play touches any state. A join publishes its
+                // marker before it stops alert sound (CallJoinStarter.dismissCriticalAlertIfActive), so either this
+                // check sees the marker or that later stop resets the token or stops the started ringtone.
+                if (criticalAlertCallGate.shouldSilence(conversationId, roomId)) {
+                    L.i { "[Call] CriticalAlertSoundPlayer skip queued play reason=silenced id=$notificationId roomId=$roomId" }
+                    return@launch
+                }
                 criticalAlertStateManager.setCurrentPlayToken(token)
+                playTokenOwnerId = notificationId
                 val old = currentRingtone
                 currentRingtone = null
                 if (old != null) {
@@ -209,6 +229,7 @@ class CriticalAlertSoundPlayer @Inject constructor(
                     stopVibration()
                 }
             }
+            onAdmitted()
 
             try {
                 val ringtoneUri =
@@ -224,6 +245,21 @@ class CriticalAlertSoundPlayer @Inject constructor(
                 synchronized(soundLock) {
                     if (token != criticalAlertStateManager.getCurrentPlayToken()) {
                         L.i { "[Call] CriticalAlertSoundPlayer Ignored old play call for id=$notificationId (token=$token)" }
+                        if (ringtone != null) {
+                            postRingtoneAction { safeStopRingtone(ringtone) }
+                        }
+                        return@synchronized
+                    }
+
+                    // #1387: a call end that landed after the Phase 1 check must not start this alert's ringtone.
+                    // The room is marked ended before the dismisser looks for the token owner, so either this check
+                    // sees it or stopIfOwner finds this id as the owner.
+                    if (criticalAlertCallGate.shouldSilence(conversationId, roomId)) {
+                        L.i { "[Call] CriticalAlertSoundPlayer skip install reason=silenced id=$notificationId roomId=$roomId" }
+                        criticalAlertStateManager.setCurrentPlayToken(0L)
+                        playTokenOwnerId = null
+                        // Phase 1 already stopped the previous alert's ringtone; clear its playing state too.
+                        criticalAlertStateManager.resetSoundState()
                         if (ringtone != null) {
                             postRingtoneAction { safeStopRingtone(ringtone) }
                         }
@@ -265,6 +301,7 @@ class CriticalAlertSoundPlayer @Inject constructor(
     fun stopSound() {
         synchronized(soundLock) {
             criticalAlertStateManager.setCurrentPlayToken(0L)
+            playTokenOwnerId = null
             // 取消 30s 自动停止与铃声循环任务
             alertAutoStopJob?.cancel()
             alertAutoStopJob = null
@@ -288,6 +325,7 @@ class CriticalAlertSoundPlayer @Inject constructor(
         synchronized(soundLock) {
             if (notificationId == criticalAlertStateManager.getCurrentNotificationId()) {
                 criticalAlertStateManager.setCurrentPlayToken(0L)
+                playTokenOwnerId = null
                 // 取消 30s 自动停止与铃声循环任务
                 alertAutoStopJob?.cancel()
                 alertAutoStopJob = null
@@ -303,6 +341,35 @@ class CriticalAlertSoundPlayer @Inject constructor(
                 // 停止与铃声同步的循环震动
                 stopVibration()
             }
+        }
+    }
+
+    /**
+     * Stops the sound only when [notificationId] owns the current play token, pending or playing
+     * (#1387), and invalidates that token. An alert that took the token after it, while the
+     * current id was still stale, is left alone. Returns whether this call stopped the sound.
+     */
+    /** Whether [notificationId] owns the current play token, pending or playing (#1387). */
+    fun ownsPlayToken(notificationId: Int): Boolean = synchronized(soundLock) { playTokenOwnerId == notificationId }
+
+    fun stopIfOwner(notificationId: Int): Boolean {
+        synchronized(soundLock) {
+            if (playTokenOwnerId != notificationId) return false
+            playTokenOwnerId = null
+            criticalAlertStateManager.setCurrentPlayToken(0L)
+            alertAutoStopJob?.cancel()
+            alertAutoStopJob = null
+            ringtoneLoopJob?.cancel()
+            ringtoneLoopJob = null
+            val rt = currentRingtone
+            currentRingtone = null
+            criticalAlertStateManager.resetSoundState()
+            L.i { "[Call] CriticalAlertSoundPlayer Stopped by owner id=$notificationId" }
+            if (rt != null) {
+                postRingtoneAction { safeStopRingtone(rt) }
+            }
+            stopVibration()
+            return true
         }
     }
 }

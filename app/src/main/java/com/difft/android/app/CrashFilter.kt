@@ -39,7 +39,8 @@ import com.difft.android.base.log.lumberjack.L
  *    without a report; any other missing method keeps reporting (see [isSpoofedSdkFrameworkMiss]).
  *
  * Crashlytics initializes via ContentProvider (before Application.onCreate()),
- * so calling [install] in Application.onCreate() guarantees our handler wraps theirs.
+ * so calling [install] in Application.onCreate() guarantees our handler wraps theirs; it must
+ * precede any startup task that may spawn a thread.
  */
 object CrashFilter {
 
@@ -98,8 +99,8 @@ object CrashFilter {
      * provider is missing: `SecurityException: Failed to find provider
      * com.google.android.gsf.gservices`) is parcelled back and re-thrown inside play-services'
      * own main-thread Handler. No app frame is on the stack, so no call site can catch it, and
-     * Analytics cannot be kept from binding GMS at runtime (its init-time connect ignores
-     * `setAnalyticsCollectionEnabled(false)`). Crashlytics issue 8d782ca9.
+     * GMS connections that an SDK opens on its own cannot be gated by the app. Crashlytics issue
+     * 8d782ca9.
      *
      * Three-layer match: the type, a Binder origin (`android.os.Parcel.readException` family on
      * top, i.e. the remote side threw, not in-process permission enforcement), and a GmsClient

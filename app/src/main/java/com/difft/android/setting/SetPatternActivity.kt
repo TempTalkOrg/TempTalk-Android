@@ -6,7 +6,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.OnBackPressedCallback
 import com.difft.android.base.widget.PatternLockView
-import com.difft.android.login.PasscodeUtil
+import com.difft.android.login.PatternCredential
 import com.difft.android.R
 import com.difft.android.base.BaseActivity
 import com.difft.android.base.user.UserManager
@@ -56,6 +56,7 @@ class SetPatternActivity : BaseActivity() {
         }
 
         showFirstStep()
+        SetPatternLayoutPolicy(mBinding).attach()
 
         mBinding.patternLockView.addPatternLockListener(object : PatternLockView.PatternLockViewListener {
             override fun onStarted() {
@@ -68,6 +69,11 @@ class SetPatternActivity : BaseActivity() {
             }
 
             override fun onComplete(pattern: MutableList<PatternLockView.Dot>) {
+                // A single dot is an accidental touch, not an attempt: clear without feedback.
+                if (pattern.size <= 1) {
+                    mBinding.patternLockView.clearPattern()
+                    return
+                }
                 if (!isConfirmStep) {
                     // First step - record pattern
                     if (pattern.size < 4) {
@@ -80,10 +86,7 @@ class SetPatternActivity : BaseActivity() {
                     showConfirmStep()
                 } else {
                     // Second step - confirm pattern
-                    val currentPatternString = patternToString(pattern)
-                    val firstPatternString = patternToString(firstPattern)
-
-                    if (currentPatternString == firstPatternString) {
+                    if (pattern.map { it.id } == firstPattern?.map { it.id }) {
                         // Pattern confirmed, save it
                         savePattern(pattern)
 
@@ -131,17 +134,12 @@ class SetPatternActivity : BaseActivity() {
     }
 
     private fun savePattern(pattern: List<PatternLockView.Dot>) {
-        val patternString = patternToString(pattern)
-        val (salt, hashedPattern) = PasscodeUtil.createSaltAndHashByPassword(patternString)
-        val patternHash = "${hashedPattern}:${salt}"
+        // Marked as created under the current dot-selection rule, which turns off the unlock fallback.
+        val patternHash = PatternCredential.create(pattern.map { it.id }).format()
 
         userManager.update {
             this.pattern = patternHash
             this.patternShowPath = true // Default to show path
         }
-    }
-
-    private fun patternToString(pattern: List<PatternLockView.Dot>?): String {
-        return pattern?.joinToString(",") { it.id.toString() } ?: ""
     }
 }

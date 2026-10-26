@@ -4,6 +4,7 @@ import com.difft.android.base.utils.globalServices
 
 import android.content.Context
 import com.difft.android.base.utils.EnvironmentHelper
+import com.difft.android.network.ChatService
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.UrlManager
 import com.difft.android.network.auth.AuthTokenProvider
@@ -88,6 +89,7 @@ object ChativeHttpClientModule {
             applicationContext,
             urlManager.chat,
             null,
+            service = ChatService.CHAT,
             proxyConfigProvider = proxyConfigProvider,
             callTimeoutSeconds = AUTH_TOKEN_CALL_TIMEOUT_SECONDS
         )
@@ -107,6 +109,7 @@ object ChativeHttpClientModule {
             applicationContext,
             urlManager.default,
             authProvider,
+            service = ChatService.DEFAULT,
             proxyConfigProvider = proxyConfigProvider,
             authTokenProvider = authTokenProvider
         )
@@ -126,6 +129,7 @@ object ChativeHttpClientModule {
             applicationContext,
             urlManager.chat,
             authProvider,
+            service = ChatService.CHAT,
             proxyConfigProvider = proxyConfigProvider,
             authTokenProvider = authTokenProvider
         )
@@ -147,6 +151,7 @@ object ChativeHttpClientModule {
             authProvider,
             connectTimeoutSeconds = 5,
             readWriteTimeoutSeconds = 5,
+            service = ChatService.CALL,
             proxyConfigProvider = proxyConfigProvider,
             authTokenProvider = authTokenProvider
         )
@@ -173,6 +178,7 @@ object ChativeHttpClientModule {
             authProvider,
             connectTimeoutSeconds = 30,
             readWriteTimeoutSeconds = 30,
+            service = ChatService.FILE_SHARING,
             proxyConfigProvider = proxyConfigProvider,
             authTokenProvider = authTokenProvider,
             debugLogBodies = false
@@ -195,6 +201,7 @@ object ChativeHttpClientModule {
             removeHeader = true,
             connectTimeoutSeconds = 30,
             readWriteTimeoutSeconds = 30,
+            service = ChatService.CHAT,
             proxyConfigProvider = proxyConfigProvider
         )
     }
@@ -221,13 +228,16 @@ object ChativeHttpClientModule {
             removeHeader = true,
             connectTimeoutSeconds = 30,
             readWriteTimeoutSeconds = 300,
+            service = ChatService.CHAT,
             proxyConfigProvider = proxyConfigProvider
         )
     }
 
     /**
      * Signal API client — no [HttpClientInterceptor], preserving raw HTTP status codes
-     * for Repository-layer error mapping (device management, message sending fallback).
+     * for Repository-layer error mapping (device management, message sending fallback). It still
+     * routes and fails over a connection that never opened to the next host; a 5xx is marked and
+     * returned as is (#1396).
      */
     @SignalApi
     @Provides
@@ -245,6 +255,7 @@ object ChativeHttpClientModule {
             authProvider,
             useHttpClientInterceptor = false,
             serializeNulls = true,  // Match Jackson's default null-field serialization
+            service = ChatService.CHAT,
             proxyConfigProvider = proxyConfigProvider,
             authTokenProvider = authTokenProvider
         )

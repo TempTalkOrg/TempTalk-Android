@@ -13,8 +13,8 @@ import com.difft.android.base.log.lumberjack.L
  * fails while serving our binder calls and the failure comes back into the app as
  * `SecurityException("Failed to find provider com.google.android.gsf.gservices ...")` on whatever
  * thread the SDK's own Handler runs, where no app code can catch it. GMS IPC that the app itself
- * initiates (FCM token fetch, SmsRetriever) consults this first and skips; Analytics binds GMS on
- * its own at init and cannot be gated here, which is what `CrashFilter`'s main-looper resume covers.
+ * initiates (FCM token fetch, SmsRetriever) consults this first and skips; GMS binds an SDK opens
+ * on its own cannot be gated here, which is what `CrashFilter`'s main-looper resume covers.
  *
  * `GoogleApiAvailability` cannot tell: it validates the GMS package only and reports SUCCESS on
  * exactly these devices. The lookup needs `<queries><package android:name="com.google.android.gsf"/>`

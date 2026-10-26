@@ -102,6 +102,7 @@ class MessageContentProcessor @Inject constructor(
     private val weakContactReconciler: WeakContactReconciler,
     private val gson: Gson,
     private val conversationUnreadMarker: com.difft.android.chat.message.ConversationUnreadMarker,
+    private val criticalAlertHighlightWriter: CriticalAlertHighlightWriter,
 ) {
 
     /**
@@ -935,7 +936,7 @@ class MessageContentProcessor @Inject constructor(
                 }
 
                 // 本地生成 critical alert 文本消息
-                createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice)
+                createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice, data.roomId)
 
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_WEAK_CONTACT) {
                 val data = message.data
@@ -1103,12 +1104,14 @@ class MessageContentProcessor @Inject constructor(
      * @param forWhat 消息所属会话
      * @param showCriticalAlert 控制会话的 Critical Alert 高亮状态
      * @param sourceDevice 消息所属设备类型
+     * @param roomId room id of the alert, if any
      */
-    private suspend fun createCriticalAlertMessage(serverTimestamp: Long, timestamp: Long, source: String, forWhat: For, showCriticalAlert: Boolean, sourceDevice: Int) {
+    private suspend fun createCriticalAlertMessage(serverTimestamp: Long, timestamp: Long, source: String, forWhat: For, showCriticalAlert: Boolean, sourceDevice: Int, roomId: String?) {
         localMessageCreator.createCriticalAlertMessage(serverTimestamp, timestamp, For.Account(source), forWhat, sourceDevice)
         // 设置会话列表高亮（仅当消息未读时）
         if (source != globalServices.myId && showCriticalAlert) {
-            dbRoomStore.setCriticalAlertIfUnread(forWhat.id, serverTimestamp)
+            // #1381: none for the call being joined or already active
+            criticalAlertHighlightWriter.highlightIfUnread(forWhat.id, roomId, serverTimestamp)
         }
     }
 }

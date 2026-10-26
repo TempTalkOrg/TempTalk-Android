@@ -110,19 +110,19 @@ class UrlManager @Inject constructor(
     }
 
     /**
-     * The host every HTTP request must be pinned to while the proxy is
-     * active (from `proxy.tunnelDomains.chat`), or `null` when the proxy is off
-     * (caller leaves the request host untouched).
+     * The host a request of [service] must be sent to right now: the proxy-forced host from
+     * `proxy.tunnelDomains.chat` while the proxy is active, the best available ranked host
+     * otherwise.
      *
-     * Rationale: the `@Singleton` `ChativeHttpClient`s bake their Retrofit
-     * `baseUrl` host at construction (app start, proxy usually OFF), and a runtime
-     * proxy toggle does NOT rebuild them — so without a per-request rewrite HTTP
-     * would keep hitting the startup host instead of the
-     * whitelist-aligned proxy domain. [ProxyHostInterceptor] applies this. Mirrors
-     * [getChatWebsocketUrl]'s host selection (same [getBestHost]) so HTTP and WS
-     * stay on the same embedded host, including failover rotation.
+     * Rationale: the `@Singleton` `ChativeHttpClient`s bake their Retrofit `baseUrl` host at
+     * construction (app start, proxy usually OFF), and neither a proxy toggle nor a host marked
+     * unavailable rebuilds them, so [ChatPoolRoutingInterceptor] resolves the host per request
+     * from here (#1396). Mirrors [getChatWebsocketUrl]'s host selection (same [getBestHost]) so
+     * HTTP and WS stay on the same host, including failover rotation. All services share one host
+     * pool today; [service] keeps the call site stable if one ever gets its own.
      */
-    fun proxyForcedHostOrNull(): String? = if (isProxyForced()) getBestHost() else null
+    @Suppress("UNUSED_PARAMETER")
+    fun currentHostFor(service: ChatService): String = getBestHost()
 
     // Service paths come from the live GlobalConfig regardless of proxy state: the
     // path rides inside the encrypted connection and is NOT part of the host-based
@@ -141,20 +141,43 @@ class UrlManager @Inject constructor(
         ServiceUrlResolver.resolvePath(configData(), name)?.takeIf { it.isNotBlank() } ?: default
 
     /**
-     * Marks a host as unavailable for this session.
+     * The live path prefix of [service] (`/chat`, `/call`, ...) without a trailing slash; empty for
+     * [ChatService.DEFAULT]. Read per request so a config refresh reaches existing clients.
+     */
+    fun servicePathFor(service: ChatService): String {
+        val name = service.configName ?: return service.defaultPath
+        return servicePath(name, service.defaultPath).trimEnd('/')
+    }
+
+    /**
+     * Marks a host as unavailable for this session. Ignored while the device has no usable network
+     * and for hosts outside the chat pool (see [DomainSpeedTestCoordinator.markHostUnavailable]).
      */
     fun recordFailedHost(hostName: String) {
         coordinator.get().markHostUnavailable(hostName)
     }
 
+    /** Whether [host] is a chat-pool host, e.g. one an absolute URL built from [gifs] carries. */
+    fun isChatPoolHost(host: String): Boolean = coordinator.get().isInPool(host)
+
+    /** Whether the device has a usable network, the gate [recordFailedHost] marks behind. */
+    fun isNetworkAvailable(): Boolean = coordinator.get().isNetworkAvailable()
+
+    /** A host answered (any HTTP response below 500): clears a mark an earlier failure left on it. */
+    fun recordHealthyHost(hostName: String) {
+        coordinator.get().markHostHealthy(hostName)
+    }
+
     /**
-     * Returns all hosts ranked by latency for retry fallback. While the proxy is
-     * active, returns the embedded assets host set so retries also stay on the
+     * Returns the eligible hosts, best first, for retry fallback. While the proxy is active, returns
+     * the embedded assets host set (minus marked hosts) so retries also stay on the
      * whitelist-aligned hosts instead of speed-test results.
      */
     fun getAllHostsRanked(): List<String> {
         if (isProxyForced()) {
-            return proxyChatDomains().ifEmpty { listOf(protocol.defaultHost) }
+            val domains = proxyChatDomains()
+            if (domains.isEmpty()) return listOf(protocol.defaultHost)
+            return coordinator.get().eligibleHosts(domains)
         }
         return coordinator.get().getAllHostsRanked()
     }
@@ -173,14 +196,17 @@ class UrlManager @Inject constructor(
     private fun serviceUrl(name: String, defaultPath: String): String =
         "https://${getBestHost()}${servicePath(name, defaultPath)}/"
 
+    private fun serviceUrl(service: ChatService): String =
+        serviceUrl(service.configName.orEmpty(), service.defaultPath)
+
     val chat: String
-        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_CHAT, "/chat")
+        get() = serviceUrl(ChatService.CHAT)
 
     val call: String
-        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_CALL, "/call")
+        get() = serviceUrl(ChatService.CALL)
 
     val fileSharing: String
-        get() = serviceUrl(ServiceUrlResolver.SERVICE_NAME_FILE_SHARING, "/fileshare")
+        get() = serviceUrl(ChatService.FILE_SHARING)
 
     /**
      * GIF proxy base URL. GIF trending/search ride the server `/gifs/` proxy (masks
@@ -208,11 +234,17 @@ class UrlManager @Inject constructor(
 
     /**
      * Marks the last connected WebSocket host as unavailable; next connection will use another host.
+     * Like every mark, it is dropped while the device has no usable network (see [recordFailedHost]).
      */
     fun switchToNextChatWebsocketHost() {
         val failedHost = lastConnectedWsHost ?: return
         coordinator.get().markHostUnavailable(failedHost)
-        L.i { "[Net] UrlManager switchToNextChatWebsocketHost: marked unavailable host=$failedHost" }
+        L.i { "[Net] UrlManager switchToNextChatWebsocketHost: host=$failedHost" }
+    }
+
+    /** The WebSocket connected: the host it connected to is reachable, so clear any mark on it. */
+    fun recordChatWebsocketConnected() {
+        lastConnectedWsHost?.let { coordinator.get().markHostHealthy(it) }
     }
 
     // ==================== Other ====================

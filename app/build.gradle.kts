@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-val appVersionName = "2.4.7"
+val appVersionName = "2.4.8"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -113,7 +113,6 @@ android {
                 this["APP_SCHEME_VALUE1"] = "chative"
                 this["APP_SCHEME_VALUE2"] = "temptalk"
 
-                this["FIREBASE_ANALYTICS_ENABLED"] = true
                 this["FIREBASE_CRASHLYTICS_ENABLED"] = true
                 this["FIREBASE_PERFORMANCE_ENABLED"] = true
             }
@@ -136,7 +135,6 @@ android {
                 this["APP_SCHEME_VALUE1"] = "chative"
                 this["APP_SCHEME_VALUE2"] = "temptalk"
 
-                this["FIREBASE_ANALYTICS_ENABLED"] = true
                 this["FIREBASE_CRASHLYTICS_ENABLED"] = true
                 this["FIREBASE_PERFORMANCE_ENABLED"] = true
             }
@@ -331,6 +329,22 @@ extensions.configure<dev.detekt.gradle.extensions.DetektExtension> {
 hilt {
     enableAggregatingTask = true
 }
+// Firebase Analytics is removed (#1407). Keep it and its measurement runtime from coming back
+// transitively. firebase-measurement-connector stays: Crashlytics and Remote Config reference its
+// AnalyticsConnector interface at registration, and it collects nothing without Analytics.
+configurations.all {
+    exclude(group = "com.google.firebase", module = "firebase-analytics")
+    exclude(group = "com.google.firebase", module = "firebase-core")
+    listOf(
+        "play-services-measurement",
+        "play-services-measurement-api",
+        "play-services-measurement-base",
+        "play-services-measurement-impl",
+        "play-services-measurement-sdk",
+        "play-services-measurement-sdk-api",
+    ).forEach { exclude(group = "com.google.android.gms", module = it) }
+}
+
 dependencies {
     // 项目模块依赖
     implementation(project(":base"))

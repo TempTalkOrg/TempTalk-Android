@@ -20,7 +20,10 @@ enum class ReadinessItemId {
     /** Full-screen intent permission. */
     C2,
 
-    /** OEM "background pop-up / show on lock screen" switch; it cannot be read, so it is always "need check". */
+    /**
+     * OEM "background pop-up / show on lock screen" switch. It cannot be read; only the call pop-up
+     * test (#1350) can vouch for it, see [NotificationReadiness.callPopupLevel].
+     */
     C3,
 
     /** CRITICAL_ALERT_V2 category importance: critical alerts post through it, not through CALL. */
@@ -49,8 +52,15 @@ data class ReadinessItem(
     val issue: ReadinessIssue? = null,
 )
 
-/** What a message or call row shows: one shared vocabulary, one label per row. */
-enum class CategoryLevel { ON, OFF, NO_BANNER, LOCK_HIDDEN, SILENT, UNKNOWN }
+/**
+ * What a message or call row shows: one shared vocabulary, one label per row. [CONFIRMED] (message)
+ * and [TESTED_OK] (call) replace [UNKNOWN] on a skin with unreadable vendor switches when a still-valid
+ * notification test vouches for them (#1350).
+ */
+enum class CategoryLevel { ON, OFF, NO_BANNER, LOCK_HIDDEN, SILENT, UNKNOWN, CONFIRMED, TESTED_OK }
+
+/** What the call pop-up row (C3) shows: the last still-valid call test, if any (#1350). */
+enum class CallPopupLevel { TESTED_OK, NOT_SHOWN, UNTESTED }
 
 /** A notification category as read from the system. */
 data class ChannelReading(
@@ -80,31 +90,57 @@ data class ReadinessInput(
     /** Null where the permission does not exist as a runtime setting (below API 34). */
     val canUseFullScreenIntent: Boolean?,
     val oemBrand: OemBrand,
+    /** Still-valid notification test results; they never override a standard reading (#1350). */
+    val testResults: NotificationTestResults = NotificationTestResults.NONE,
 )
 
 data class NotificationReadiness(
     val items: List<ReadinessItem>,
     /** The skin the vendor-specific wording and C3 apply to. */
     val oemBrand: OemBrand = OemBrand.OTHER,
+    val testResults: NotificationTestResults = NotificationTestResults.NONE,
 ) {
     fun item(id: ReadinessItemId): ReadinessItem? = items.firstOrNull { it.id == id }
 
-    /** The message row: app notifications off wins, otherwise the MESSAGE category's own level. */
+    /**
+     * The message row: app notifications off wins, otherwise the MESSAGE category's own level. Both
+     * the banner and the lock-screen test must be confirmed to vouch for the vendor switches.
+     */
     val messageLevel: CategoryLevel
-        get() = if (item(ReadinessItemId.N1)?.status == ReadinessStatus.PROBLEM) CategoryLevel.OFF else levelOf(item(ReadinessItemId.N2))
+        get() = if (item(ReadinessItemId.N1)?.status == ReadinessStatus.PROBLEM) {
+            CategoryLevel.OFF
+        } else {
+            val confirmed = testResults.banner?.outcome == NotificationTestOutcome.OK &&
+                testResults.lockscreen?.outcome == NotificationTestOutcome.OK
+            levelOf(item(ReadinessItemId.N2), if (confirmed) CategoryLevel.CONFIRMED else null)
+        }
 
-    /** The call row, with the same rules and words as the message row. */
+    /** The call row, with the same rules and words as the message row; a passed call test vouches for it. */
     val callLevel: CategoryLevel
-        get() = if (item(ReadinessItemId.N1)?.status == ReadinessStatus.PROBLEM) CategoryLevel.OFF else levelOf(item(ReadinessItemId.C1))
+        get() = if (item(ReadinessItemId.N1)?.status == ReadinessStatus.PROBLEM) {
+            CategoryLevel.OFF
+        } else {
+            val tested = testResults.call?.outcome == NotificationTestOutcome.OK
+            levelOf(item(ReadinessItemId.C1), if (tested) CategoryLevel.TESTED_OK else null)
+        }
+
+    /** The call pop-up row: the last still-valid call test. Exists only where the evaluator added C3. */
+    val callPopupLevel: CallPopupLevel
+        get() = when (testResults.call?.outcome) {
+            NotificationTestOutcome.OK -> CallPopupLevel.TESTED_OK
+            NotificationTestOutcome.FAIL -> CallPopupLevel.NOT_SHOWN
+            null -> CallPopupLevel.UNTESTED
+        }
 
     /**
      * A standard "on" reading becomes [CategoryLevel.UNKNOWN] when the brand's vendor banner and
-     * lock-screen switches are not readable; negative levels are always shown as read.
+     * lock-screen switches are not readable, unless a valid test vouches for them ([testedLevel]);
+     * negative levels are always shown as read.
      */
-    private fun levelOf(item: ReadinessItem?): CategoryLevel = when {
+    private fun levelOf(item: ReadinessItem?, testedLevel: CategoryLevel?): CategoryLevel = when {
         item == null || item.status == ReadinessStatus.UNKNOWN -> CategoryLevel.UNKNOWN
         item.status == ReadinessStatus.OK ->
-            if (oemBrand.vendorAlertSwitchesReadable) CategoryLevel.ON else CategoryLevel.UNKNOWN
+            if (oemBrand.vendorAlertSwitchesReadable) CategoryLevel.ON else testedLevel ?: CategoryLevel.UNKNOWN
         else -> when (item.issue) {
             ReadinessIssue.MESSAGE_CATEGORY_OFF, ReadinessIssue.CALL_CATEGORY_OFF -> CategoryLevel.OFF
             ReadinessIssue.MESSAGE_CATEGORY_NO_BANNER, ReadinessIssue.CALL_CATEGORY_NO_BANNER -> CategoryLevel.NO_BANNER
@@ -138,7 +174,7 @@ object NotificationReadinessEvaluator {
             evaluateC3(input)?.let { add(it) }
             add(evaluateA1(input))
         }
-        return NotificationReadiness(items, input.oemBrand)
+        return NotificationReadiness(items, input.oemBrand, input.testResults)
     }
 
     private fun evaluateN1(input: ReadinessInput): ReadinessItem =
@@ -229,12 +265,15 @@ object NotificationReadinessEvaluator {
 
     /**
      * C3 exists only on skins that keep their own pop-up and lock-screen switches. Nothing readable
-     * backs it, so it is always "check" and the row leads to the place to confirm it.
+     * backs it: a still-valid call test makes it OK or a problem, otherwise it stays "check".
      */
-    private fun evaluateC3(input: ReadinessInput): ReadinessItem? =
-        if (input.oemBrand.isChinaOem) {
-            ReadinessItem(ReadinessItemId.C3, ReadinessStatus.UNKNOWN, ReadinessIssue.OEM_POPUP_CHECK)
-        } else {
-            null
+    private fun evaluateC3(input: ReadinessInput): ReadinessItem? {
+        if (!input.oemBrand.isChinaOem) return null
+        val status = when (input.testResults.call?.outcome) {
+            NotificationTestOutcome.OK -> ReadinessStatus.OK
+            NotificationTestOutcome.FAIL -> ReadinessStatus.PROBLEM
+            null -> ReadinessStatus.UNKNOWN
         }
+        return ReadinessItem(ReadinessItemId.C3, status, ReadinessIssue.OEM_POPUP_CHECK.takeIf { status != ReadinessStatus.OK })
+    }
 }

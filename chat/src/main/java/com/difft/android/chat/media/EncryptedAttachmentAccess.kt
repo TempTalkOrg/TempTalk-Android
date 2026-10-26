@@ -35,6 +35,15 @@ object EncryptedAttachmentAccess {
     private const val IV_SIZE = 16
     private const val MAC_SIZE = 32
 
+    /** AES-256 key followed by the HMAC-SHA256 key: the shortest key an at-rest file can be read with. */
+    private const val MIN_KEY_SIZE = 64
+
+    /**
+     * Whether [key] can decrypt an at-rest file. The single rule shared by the readers and the
+     * migration exporter, so an attachment is never carried that its destination cannot open.
+     */
+    fun isUsableKey(key: ByteArray?): Boolean = key != null && key.size >= MIN_KEY_SIZE
+
     /** The on-disk ciphertext file for a given plaintext base path. */
     fun encryptedFile(basePath: String): File = File("$basePath.encrypt")
 

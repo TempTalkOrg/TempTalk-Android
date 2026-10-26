@@ -9,5 +9,9 @@
             android:name="com.difft.android.setting.AppUpgradeService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name="com.difft.android.setting.AppUpgradeRetryReceiver"
+            android:exported="false" />
     </application>
 </manifest>

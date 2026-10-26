@@ -14,6 +14,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.notification.NotificationFix
 import com.difft.android.base.notification.NotificationReadiness
+import com.difft.android.base.notification.NotificationTestOutcome
+import com.difft.android.base.notification.NotificationTestResult
+import com.difft.android.base.notification.NotificationTestResults
 import com.difft.android.base.notification.OemBrand
 import com.difft.android.base.notification.ReadinessIssue
 import com.difft.android.base.notification.ReadinessItem
@@ -44,6 +47,7 @@ class NotificationSettingsContentTest {
     private val fixes = mutableListOf<NotificationFix>()
     private var criticalClicks = 0
     private var guideClicks = 0
+    private var testPageOpens = 0
 
     private fun item(id: ReadinessItemId, status: ReadinessStatus = ReadinessStatus.OK, issue: ReadinessIssue? = null) =
         ReadinessItem(id, status, issue)
@@ -56,11 +60,12 @@ class NotificationSettingsContentTest {
         bypass: CriticalAlertBypass = CriticalAlertBypass.ENABLED,
         fcmUnavailable: Boolean = false,
         running: Boolean = true,
+        tests: NotificationTestResults = NotificationTestResults.NONE,
     ) {
         val items = listOf(ReadinessItemId.N1, ReadinessItemId.N2, ReadinessItemId.C1, ReadinessItemId.C2, ReadinessItemId.A1)
             .filter { id -> overrides.none { it.id == id } }
             .map { item(it) } + overrides
-        val state = NotificationSettingsUiState(NotificationReadiness(items, brand), sdk, dnd, bypass, fcmUnavailable, running)
+        val state = NotificationSettingsUiState(NotificationReadiness(items, brand, tests), sdk, dnd, bypass, fcmUnavailable, running)
         composeTestRule.setContent {
             DifftTheme(applyWindowBackground = false) {
                 NotificationSettingsContent(
@@ -74,6 +79,7 @@ class NotificationSettingsContentTest {
                         onDisplayContent = {},
                         onBackgroundConnection = {},
                         onGuide = { guideClicks++ },
+                        onNotificationTest = { testPageOpens++ },
                     ),
                 )
             }
@@ -120,10 +126,12 @@ class NotificationSettingsContentTest {
         composeTestRule.onNodeWithTag(TAG_GROUP_LOCK_SCREEN).assertExists()
         composeTestRule.onAllNodesWithTag(TAG_ROW_FULL_SCREEN).assertCountEquals(0)
         composeTestRule.onNodeWithText("Other permissions", substring = true).assertExists()
-        composeTestRule.onNodeWithText(context.getString(R.string.notification_oem_popup)).assertExists()
+        composeTestRule.onNodeWithTag(TAG_ROW_OEM_POPUP)
+            .assertTextContains(context.getString(R.string.notification_oem_popup))
+            .assertTextContains(context.getString(R.string.notification_status_check))
         tap(TAG_ROW_OEM_POPUP)
         assertEquals(listOf(NotificationFix.OEM_POPUP), fixes)
-        assertEquals(0, guideClicks)
+        assertEquals(0, testPageOpens)
     }
 
     @Test
@@ -134,12 +142,50 @@ class NotificationSettingsContentTest {
             brand = OemBrand.VIVO,
         )
         composeTestRule.onNodeWithText(context.getString(R.string.notification_vendor_settings)).assertExists()
-        // The message and call rows also read "check" on a China skin.
+        // Message, call and vendor rows all read "check" on a China skin until tests vouch for them.
         composeTestRule.onAllNodesWithText(context.getString(R.string.notification_status_check)).assertCountEquals(3)
         composeTestRule.onAllNodesWithText("Other permissions", substring = true).assertCountEquals(0)
         tap(TAG_ROW_OEM_POPUP)
         assertEquals(1, guideClicks)
+        assertEquals(0, testPageOpens)
         assertEquals(emptyList(), fixes)
+    }
+
+    // #1350 T2, T9, T10: valid test results replace "check" on the rows of a China skin.
+    @Test
+    fun `test results show on the message, call and call pop-up rows`() {
+        val ok = NotificationTestResult(NotificationTestOutcome.OK, 1L, "fp")
+        show(
+            item(ReadinessItemId.C3, ReadinessStatus.OK),
+            sdk = 33,
+            brand = OemBrand.OPPO,
+            tests = NotificationTestResults(banner = ok, lockscreen = ok, call = ok),
+        )
+        composeTestRule.onNodeWithTag(TAG_ROW_MESSAGE).assertTextContains(context.getString(R.string.notification_level_confirmed))
+        composeTestRule.onNodeWithTag(TAG_ROW_CALL).assertTextContains(context.getString(R.string.notification_test_passed))
+        composeTestRule.onNodeWithTag(TAG_ROW_OEM_POPUP).performScrollTo()
+            .assertTextContains(context.getString(R.string.notification_test_passed))
+    }
+
+    @Test
+    fun `a failed call test shows did-not-pop-up on the call pop-up row only`() {
+        show(
+            item(ReadinessItemId.C3, ReadinessStatus.PROBLEM, ReadinessIssue.OEM_POPUP_CHECK),
+            sdk = 33,
+            brand = OemBrand.HUAWEI,
+            tests = NotificationTestResults(call = NotificationTestResult(NotificationTestOutcome.FAIL, 1L, "fp")),
+        )
+        composeTestRule.onNodeWithTag(TAG_ROW_OEM_POPUP).performScrollTo()
+            .assertTextContains(context.getString(R.string.notification_test_not_shown))
+        composeTestRule.onNodeWithTag(TAG_ROW_CALL).assertTextContains(context.getString(R.string.notification_status_check))
+    }
+
+    @Test
+    fun `the notification test link sits in the setup guide footer on every brand`() {
+        show(brand = OemBrand.OTHER)
+        composeTestRule.onNodeWithText(context.getString(R.string.notification_test_link), substring = true)
+            .performScrollTo()
+            .assertExists()
     }
 
     @Test
@@ -186,7 +232,7 @@ class NotificationSettingsContentTest {
                 NotificationSettingsContent(
                     state = null,
                     labels = NotificationSettingsLabels("All", "Name and content", messageSound = sound),
-                    actions = NotificationSettingsActions({}, {}, {}, {}, {}, {}, {}),
+                    actions = NotificationSettingsActions({}, {}, {}, {}, {}, {}, {}, {}),
                 )
             }
         }

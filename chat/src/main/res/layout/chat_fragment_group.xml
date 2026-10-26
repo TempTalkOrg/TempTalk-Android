@@ -20,7 +20,6 @@
             android:id="@+id/recyclerview_group"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scrollbars="vertical"
             tools:listitem="@layout/chat_item_group" />
     </com.scwang.smart.refresh.layout.SmartRefreshLayout>
 

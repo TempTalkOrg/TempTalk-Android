@@ -17,6 +17,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
+import com.difft.android.push.disableFcmDeliveryMetricsExport
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
 import androidx.datastore.core.DataStore
@@ -59,7 +60,6 @@ import com.difft.android.network.config.FeatureGrayManager
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
 import com.difft.android.security.SecurityLib
-import com.difft.android.setting.LoggedOutNotifier
 import com.github.anrwatchdog.ANRWatchDog
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.difft.android.base.utils.appScope
@@ -163,15 +163,16 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     @Inject
     lateinit var inactiveDeviceDialogPresenter: dagger.Lazy<InactiveDeviceDialogPresenter>
 
-    @Inject
-    lateinit var loggedOutNotifier: dagger.Lazy<LoggedOutNotifier>
-
     /**
      * Resolves a same-device handoff whose receipt never arrived here (the process died between the
      * transfer and the receipt). Lazy — only the retiring app family ever reconciles.
      */
     @Inject
     lateinit var migrationHandoffReconciler: dagger.Lazy<MigrationHandoffReconciler>
+
+    /** Foreground sessions for the startup prompts (#1355); registered next to the app lock's callbacks. */
+    @Inject
+    lateinit var promptSessionTracker: com.difft.android.startup.prompt.PromptSessionTracker
 
     // 追踪当前 resumed 的 Activity
     // @Volatile: hasResumedActivity() is read from the logout coroutine (IO) while this is only
@@ -187,6 +188,13 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     private var lockCheckJob: Job? = null
 
+    private val screenLockPending = ScreenLockPending()
+
+    /** True while an app-lock decision is scheduled but not applied; non-consuming (#1355). */
+    val screenLockPendingState: kotlinx.coroutines.flow.StateFlow<Boolean> get() = screenLockPending.state
+
+    fun isScreenLockPending(): Boolean = screenLockPending.state.value
+
     // Activity 计数，用于准确判断前后台切换
     private var startedActivityCount = 0
 
@@ -199,6 +207,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 ApplicationHelper.init(this)
             }
             .addBlocking("init log", this::initLog)
+            // Needs L; must precede every task that may spawn a thread.
+            .addBlocking("installCrashFilter") { CrashFilter.install(this) }
+            .addBlocking("disable FCM delivery export") { disableFcmDeliveryMetricsExport() }
             .addBlocking("init Logger", this::initializeLogging)
             .addBlocking("init tls provider", this::initTlsProvider)
             .addBlocking("init SecurityCheck") {
@@ -223,7 +234,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             }
             .addBlocking("init notification", this::initNotification)
             .addBlocking("prepareScreenLockListener", this::prepareScreenLockListener)
-            .addBlocking("installCrashFilter") { CrashFilter.install(this) }
+            .addBlocking("startup prompt sessions") { registerActivityLifecycleCallbacks(promptSessionTracker) }
             .addNonBlocking("reapply locale") {
                 // Refresh the Application's Configuration with the user locale so legacy
                 // callers that read `application.resources` directly see the right locale.
@@ -527,7 +538,6 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     private fun initNotification() {
         messageNotificationUtil.get().checkAndCreateNotificationChannels()
-        loggedOutNotifier.get().ensureChannel()
     }
 
     private fun initGlobalConfigs() {
@@ -601,6 +611,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         // 取消待处理的锁屏检查
         lockCheckJob?.cancel()
         lockCheckJob = null
+        screenLockPending.onDecided()
     }
 
     private fun prepareScreenLockListener() {
@@ -622,8 +633,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                     scheduleQuickScreenLockCheck()
                 }
 
-                // 进入会话列表时停止critical alert
-                if (activity is IndexActivity && criticalAlertManager.get().isCriticalAlertRunning() && !criticalAlertStateManager.get().isJoining()) {
+                // Opening the conversation list stops a running critical alert, unless its own page is visible (#213, #1387).
+                if (activity is IndexActivity && criticalAlertManager.get().shouldDismissWhenIndexStarts()) {
                     LCallManager.dismissCriticalAlertIfActive()
                 }
             }
@@ -757,6 +768,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     private fun scheduleQuickScreenLockCheck(restoreIncomingCallAfterCheck: Boolean = false) {
         // Cancel the previous check
         lockCheckJob?.cancel()
+        screenLockPending.onCheckScheduled()
 
         lockCheckJob = launch(Dispatchers.Main) {
             delay(100)
@@ -787,12 +799,15 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     private fun scheduleFullScreenLockCheck() {
         // 取消之前的检查
         lockCheckJob?.cancel()
+        screenLockPending.onCheckScheduled()
 
         lockCheckJob = launch(Dispatchers.Main) {
             // 第一次检查
             delay(100)
             L.d { "[ScreenLock] First check after 100ms" }
             showScreenLockIfNeeded()
+            // The second pass below can still start the lock.
+            screenLockPending.onCheckScheduled()
 
             // 第二次检查：等待 deeplink 目标页面启动
             delay(1000)
@@ -829,26 +844,31 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         // Never stack a second lock screen.
         if (activity is ScreenLockActivity) {
             L.d { "[ScreenLock] Already showing ScreenLockActivity" }
+            screenLockPending.onDecided()
             return
         }
 
         val userData = userManager.getUserData()
         if (userData == null || !shouldShowScreenLock(userData)) {
             L.d { "[ScreenLock] Lock not needed" }
+            screenLockPending.onDecided()
             return
         }
 
         if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
             L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
             ScreenLockActivity.startActivity(activity)
+            screenLockPending.onDecided()
         } else if (retriesLeft > 0 && startedActivityCount > 0) {
             L.i { "[ScreenLock] No valid activity yet, retrying (retriesLeft=$retriesLeft)" }
+            screenLockPending.onRetryScheduled()
             launch(Dispatchers.Main) {
                 delay(150)
                 showScreenLockIfNeeded(retriesLeft - 1)
             }
         } else {
             L.w { "[ScreenLock] Gave up starting ScreenLockActivity: retriesLeft=$retriesLeft, startedActivityCount=$startedActivityCount" }
+            screenLockPending.onDecided()
         }
     }
 

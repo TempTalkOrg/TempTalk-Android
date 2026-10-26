@@ -12,7 +12,7 @@ import org.junit.runner.Description
 /**
  * Answers every `EntryPointAccessors.fromApplication` with a relaxed mock, so classes that reach
  * the Hilt graph from a static initialiser (`UserAgentManager`) or a hot path
- * (`HttpClientInterceptor`'s `UrlManager` lookup) work without a Hilt test component.
+ * (`ChatPoolRoutingInterceptor`'s `UrlManager` lookup) work without a Hilt test component.
  *
  * Register a real stand-in with [put] when a test needs to control what an entry point returns.
  */

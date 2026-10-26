@@ -4,6 +4,7 @@ import com.difft.android.base.utils.application
 import com.difft.android.chat.attachment.AttachmentPathResolver
 import com.difft.android.chat.util.FileDecryptionUtil
 import com.difft.android.websocket.api.crypto.AttachmentCipherStreamUtil
+import com.difft.android.selector.basic.PictureSelectionPreviewModel
 import com.difft.android.selector.entity.LocalMedia
 import difft.android.messageserialization.model.Attachment
 
@@ -58,3 +59,11 @@ object AttachmentPreview {
         }
     }
 }
+
+/**
+ * Confidential media is view-only: the preview offers neither long-press save nor share (the share
+ * sheet also exposes save-to-album), matching iOS `MediaPageViewController`. Non-confidential media
+ * keeps both.
+ */
+fun PictureSelectionPreviewModel.applyExportPolicy(isConfidential: Boolean): PictureSelectionPreviewModel =
+    isHidePreviewDownload(isConfidential).isHidePreviewShare(isConfidential)

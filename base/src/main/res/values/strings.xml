@@ -77,11 +77,9 @@
 
     <!-- Notification category display names (shown in system settings) -->
     <string name="notification_channel_message">Messages</string>
-    <string name="notification_channel_message_summary">Message summary</string>
     <string name="notification_channel_call">Calls</string>
-    <string name="notification_channel_ongoing_call">Ongoing call</string>
-    <string name="notification_channel_background">Background connection</string>
     <string name="notification_channel_critical_alert">Critical alerts</string>
-    <string name="notification_channel_account">Account</string>
+    <string name="notification_channel_other_alerts">Other alerts</string>
+    <string name="notification_channel_running_in_background">Running in background</string>
     <string name="notification_channel_group_message">Messages</string>
 </resources>

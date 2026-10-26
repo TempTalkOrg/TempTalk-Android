@@ -94,13 +94,11 @@ data class UserData(
     // — Notification preferences + unread —
     var notificationContentDisplayType: Int = NotificationContentDisplayType.NAME_AND_CONTENT.value, //通知显示类型
     var globalNotification: Int = GlobalNotificationType.ALL.value, //全局通知开关类型
-    var checkNotificationPermission: String? = null, //上次检查通知权限的版本
     var unreadMsgNum: Int = 0, //未读消息数(原 SP_BYC_DOMAINS_TIME)
 
     // — Message-service preferences (chat module) —
     var keepAliveEnabled: Boolean = false, // Service保活机制是否启用
     var autoStartMessageService: Boolean = true, // 是否允许自动开启消息后台连接服务（默认true，用户手动关闭后为false）
-    var messageServiceTipsShowedVersion: String? = null, //上次提示开启消息后台连接服务的版本
     var floatingWindowPermissionTipsShowedVersion: String? = null, //上次提示开启悬浮窗权限的版本
 
     // — Chat misc —

@@ -132,7 +132,6 @@
             android:id="@+id/recycler_view_recent_message"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scrollbars="vertical"
             tools:listitem="@layout/chat_fragment_recent_chat_list_item" />
 
     </FrameLayout>

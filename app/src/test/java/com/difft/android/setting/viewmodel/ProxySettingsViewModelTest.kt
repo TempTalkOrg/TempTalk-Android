@@ -29,8 +29,13 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -43,90 +48,7 @@ import kotlin.test.assertTrue
  *
  * The probe is injected as a fake [ProxyE2eProbe]; no real network is touched.
  */
-class ProxySettingsViewModelTest {
-
-    @get:Rule
-    val dispatcherRule = TestDispatcherRule()
-
-    private lateinit var provider: ProxyConfigProvider
-    private lateinit var probe: ProxyE2eProbe
-    // Real instance (no-arg @Inject constructor): mocking is impractical because the
-    // class declares both a `val isInCalling` property and an `isInCalling()` function,
-    // whose name clash defeats MockK's `every {}` recorder.
-    private lateinit var callState: OnGoingCallStateManager
-
-    // `isInCalling` is written only by the call session (through an internal, fenced writer this
-    // module cannot reach), so the test drives the private backing flow the public read exposes.
-    @Suppress("UNCHECKED_CAST")
-    private fun setInCalling(value: Boolean) {
-        val field = OnGoingCallStateManager::class.java.getDeclaredField("_isInCalling").apply { isAccessible = true }
-        (field.get(callState) as MutableStateFlow<Boolean>).value = value
-    }
-
-    private val dummyConfig: ProxyConfig = mockk(relaxed = true)
-
-    @Before
-    fun setup() {
-        mockkObject(ProxyConnectivityChecker)
-        // checkConnectivity() now probes the SAVED address via ProxyConfig.parse()
-        // (→ ProxyLinkCodec.decodePlain), so the codec is mocked globally: blank →
-        // null (no probe), non-blank → a dummy config. Individual tests override.
-        mockkObject(ProxyLinkCodec)
-        provider = mockk(relaxed = true)
-        probe = mockk(relaxed = true)
-        callState = OnGoingCallStateManager()
-        // loadState() reads these in init{}; relaxed defaults are fine but pin them
-        // so the editable-form state is deterministic.
-        every { provider.savedShareLink } returns ""
-        every { provider.isEnabledByUser } returns true
-        every { provider.isEnabled } returns true
-        every { ProxyLinkCodec.decodePlain(any()) } answers {
-            if (firstArg<String>().isBlank()) null else dummyConfig
-        }
-        every { ProxyLinkCodec.isUnsupportedVersion(any()) } returns false
-        // Default stub so a stray probe never touches a real socket; tests override.
-        every { ProxyConnectivityChecker.check(any(), any()) } returns
-            ProxyConnectivityChecker.Outcome(ok = false, failure = ProxyConnectivityChecker.Failure.UNREACHABLE)
-    }
-
-    // Track built VMs so tearDown can cancel each viewModelScope. The PR3 call-state
-    // collector runs forever in viewModelScope; without cleanup it leaks across tests
-    // and surfaces as UncaughtExceptionsBeforeTest in the next runTest.
-    private val builtViewModels = mutableListOf<ProxySettingsViewModel>()
-
-    @After
-    fun tearDown() {
-        builtViewModels.forEach { it.viewModelScope.cancel() }
-        builtViewModels.clear()
-        unmockkObject(ProxyConnectivityChecker)
-        unmockkObject(ProxyLinkCodec)
-    }
-
-    private fun buildViewModel() =
-        ProxySettingsViewModel(provider, probe, callState).also { builtViewModels += it }
-
-    /**
-     * Awaits the terminal [ProxySettingsViewModel.UiState] via Turbine.
-     *
-     * [checkConnectivity] / [runE2eProbe] run in [viewModelScope] (a separate
-     * scope from the test's [runTest] scope) and use real `Dispatchers.IO` inside
-     * `withContext`. Therefore `runTest` does NOT await them and reading
-     * `uiState.value` immediately after construction observes the intermediate
-     * CHECKING frame. Turbine's `awaitItem()` suspends until the real emission
-     * arrives, so we drain until [predicate] holds.
-     */
-    private suspend fun ProxySettingsViewModel.awaitState(
-        predicate: (ProxySettingsViewModel.UiState) -> Boolean,
-    ): ProxySettingsViewModel.UiState {
-        var result: ProxySettingsViewModel.UiState? = null
-        uiState.test {
-            var item = awaitItem()
-            while (!predicate(item)) item = awaitItem()
-            result = item
-            cancelAndIgnoreRemainingEvents()
-        }
-        return result!!
-    }
+class ProxySettingsViewModelTest : ProxySettingsViewModelTestBase() {
 
     // T1: stage 1 fails → ProxyUnavailable, stage 2 must NOT trigger.
     @Test
@@ -359,14 +281,13 @@ class ProxySettingsViewModelTest {
         val vm = buildViewModel()
         fake.started[0].await()
 
-        every { provider.isEnabledByUser } returns false
-        every { provider.isEnabled } returns false
+        backSwitchWithState(initial = true)
         vm.onUseProxyChange(false)
         assertEquals(ProbeState.None, vm.uiState.value.probe)
 
         fake.released[0].complete(Unit)
 
-        verify { provider.setEnabled(false) }
+        verify(timeout = writeTimeoutMs) { provider.setEnabled(false) }
         assertEquals(ProbeState.None, vm.uiState.value.probe)
     }
 
@@ -385,11 +306,8 @@ class ProxySettingsViewModelTest {
         val vm = buildViewModel()
         fake.started[0].await()
 
-        every { provider.isEnabledByUser } returns false
-        every { provider.isEnabled } returns false
+        backSwitchWithState(initial = true)
         vm.onUseProxyChange(false)
-        every { provider.isEnabledByUser } returns true
-        every { provider.isEnabled } returns true
         vm.onUseProxyChange(true)
         fake.started[1].await()
 
@@ -417,7 +335,7 @@ class ProxySettingsViewModelTest {
         val vm = buildViewModel()
         vm.onUseProxyChange(false)
 
-        verify { provider.setEnabled(false) }
+        verify(timeout = writeTimeoutMs) { provider.setEnabled(false) }
     }
 
     // Toggling ON with NO saved address must prompt "save first" and NOT enable.
@@ -466,7 +384,7 @@ class ProxySettingsViewModelTest {
         val vm = buildViewModel()
         vm.onUseProxyChange(true)
 
-        verify { provider.setEnabled(true) }
+        verify(timeout = writeTimeoutMs) { provider.setEnabled(true) }
     }
 
     // Save with empty input and no saved address → toast "enter address", no write.
@@ -499,7 +417,7 @@ class ProxySettingsViewModelTest {
         vm.onAddressChange("")
         vm.save()
 
-        verify { provider.clear() }
+        verify(timeout = writeTimeoutMs) { provider.clear() }
         verify(exactly = 0) { provider.save(any(), any()) }
     }
 

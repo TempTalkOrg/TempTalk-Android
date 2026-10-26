@@ -1,12 +1,14 @@
 package com.difft.android.base.monitor
 
 import android.app.ActivityManager
+import android.app.AlarmManager
 import android.app.NotificationManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
@@ -29,8 +31,8 @@ class BackgroundConnectionHealthReport(message: String) : RuntimeException(messa
 
 /**
  * #1328: measure how often the OEM kills the background connection, per brand/model (Crashlytics
- * supplies the device dimensions). Firebase Analytics is unreachable from mainland China without a
- * proxy, so the data rides on one Crashlytics non-fatal per 24 h per keep-alive user, plus a
+ * supplies the device dimensions). The data rides on one Crashlytics non-fatal per 24 h per
+ * keep-alive user (Crashlytics reaches mainland China without a proxy), plus a
  * [KeepAliveHealthModel.CONTROL_SAMPLE_PERCENT] sample of keep-alive-off users as the FCM-only
  * control group.
  *
@@ -209,7 +211,11 @@ class KeepAliveHealthReporter @Inject constructor(
             }.getOrNull() else null,
             standbyBucket = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) runCatching {
                 (context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager).appStandbyBucket
-            }.getOrNull() else null
+            }.getOrNull() else null,
+            canScheduleExactAlarms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) runCatching {
+                (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+            }.getOrNull() else true,
+            adbEnabled = runCatching { Settings.Global.getInt(context.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1 }.getOrNull()
         )
     }
 }

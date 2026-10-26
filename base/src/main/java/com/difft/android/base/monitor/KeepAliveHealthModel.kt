@@ -29,7 +29,11 @@ data class HealthSnapshot(
     val notificationsEnabled: Boolean?,
     val canUseFullScreenIntent: Boolean?,
     /** `UsageStatsManager.STANDBY_BUCKET_*` value. */
-    val standbyBucket: Int?
+    val standbyBucket: Int?,
+    /** `AlarmManager.canScheduleExactAlarms`; sets the stall threshold, so it qualifies the `stall_*` counters. */
+    val canScheduleExactAlarms: Boolean? = null,
+    /** USB/wireless debugging on: a developer device whose power numbers adb skews (#1376). */
+    val adbEnabled: Boolean? = null
 )
 
 /** What the reporter should do on this launch. */
@@ -68,7 +72,10 @@ enum class FgsStartFailure(val terminal: Boolean) {
     RETRY_FAILED(terminal = true),
 
     /** The service started but `Service.startForeground` was refused (FGSNAE), then stopSelf(). */
-    STARTFG_REFUSED(terminal = true)
+    STARTFG_REFUSED(terminal = true),
+
+    /** No notification channel could carry the service notification, so the start was not issued (#1354). */
+    NO_CHANNEL(terminal = true)
 }
 
 /** Keys of the in-process event counters ([KeepAliveHealthCounters]); also the report field names. */
@@ -109,6 +116,27 @@ object HealthEventKeys {
     /** All per-channel latency keys, channel-major, in report order. */
     val ALL_LATENCY_KEYS: List<String> =
         DeliveryChannel.entries.flatMap { ch -> LATENCY_SUFFIXES.map { latencyKey(ch, it) } }
+
+    /**
+     * FCM transit latency (`receive - sentTime`) of high-priority messages, bucketed by
+     * [LATENCY_BOUNDS]. Separate from the per-channel latency, which only counts the channel that
+     * stored an envelope first and so hides a late FCM backlog behind the WebSocket reconnect.
+     */
+    fun fcmTransitKey(suffix: String): String = "fcmt_$suffix"
+
+    /** All FCM transit keys in report order. */
+    val ALL_FCM_TRANSIT_KEYS: List<String> = LATENCY_SUFFIXES.map { fcmTransitKey(it) }
+
+    /** App stalls (alarm chain found stale) by duration: `<= 30 min`, `<= 2 h`, longer. */
+    const val STALL_30M = "stall_30m"
+    const val STALL_2H = "stall_2h"
+    const val STALL_MORE = "stall_more"
+
+    /** Total stalled minutes across [STALL_30M], [STALL_2H] and [STALL_MORE]. */
+    const val STALL_MIN = "stall_min"
+
+    /** All stall keys in report order. */
+    val ALL_STALL_KEYS: List<String> = listOf(STALL_30M, STALL_2H, STALL_MORE, STALL_MIN)
 }
 
 /** Arrival path of an envelope; [key] is the infix of its latency counters (`lat_<key>_<bucket>`). */
@@ -136,10 +164,23 @@ object KeepAliveHealthModel {
 
     /** Bucket key for a server-to-device latency; negative values (clock noise) land in the first bucket. */
     fun latencyKey(channel: DeliveryChannel, latencyMs: Long): String =
-        HealthEventKeys.latencyKey(
-            channel,
-            HealthEventKeys.LATENCY_BOUNDS.firstOrNull { latencyMs <= it.first }?.second ?: HealthEventKeys.LATENCY_MORE
-        )
+        HealthEventKeys.latencyKey(channel, latencySuffix(latencyMs))
+
+    /** Bucket key for an FCM transit latency, same bounds and clamping as [latencyKey]. */
+    fun fcmTransitKey(latencyMs: Long): String = HealthEventKeys.fcmTransitKey(latencySuffix(latencyMs))
+
+    /** Bucket key for an app stall of [durationMs]. */
+    fun stallKey(durationMs: Long): String = when {
+        durationMs <= STALL_SHORT_MS -> HealthEventKeys.STALL_30M
+        durationMs <= STALL_LONG_MS -> HealthEventKeys.STALL_2H
+        else -> HealthEventKeys.STALL_MORE
+    }
+
+    private const val STALL_SHORT_MS = 30 * 60_000L
+    private const val STALL_LONG_MS = 2 * 60 * 60_000L
+
+    private fun latencySuffix(latencyMs: Long): String =
+        HealthEventKeys.LATENCY_BOUNDS.firstOrNull { latencyMs <= it.first }?.second ?: HealthEventKeys.LATENCY_MORE
 
     /** `ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE`. */
     private const val IMPORTANCE_FOREGROUND_SERVICE = 125
@@ -214,6 +255,7 @@ object KeepAliveHealthModel {
         append(" notif=").append(flag(snapshot.notificationsEnabled))
         append(" fsi=").append(flag(snapshot.canUseFullScreenIntent))
         append(" bucket=").append(standbyBucketName(snapshot.standbyBucket))
+        append(" exact_alarm=").append(flag(snapshot.canScheduleExactAlarms))
         append(" exits_total=").append(exitCounts.values.sum())
         exitCounts.toSortedMap().forEach { (k, v) -> append(" exit_").append(k).append('=').append(v) }
         append(" fgs_fail_total=").append(fgsFails.values.sum())
@@ -222,7 +264,7 @@ object KeepAliveHealthModel {
         (listOf(
             HealthEventKeys.FGS_STARTS, HealthEventKeys.FCM_RECV, HealthEventKeys.FCM_DEPRIO,
             HealthEventKeys.PULL_OK, HealthEventKeys.PULL_FAIL
-        ) + HealthEventKeys.ALL_LATENCY_KEYS).forEach {
+        ) + HealthEventKeys.ALL_LATENCY_KEYS + HealthEventKeys.ALL_FCM_TRANSIT_KEYS + HealthEventKeys.ALL_STALL_KEYS).forEach {
             append(' ').append(it).append('=').append(events[it] ?: 0)
         }
         append(" pv=").append(verdict.value)
@@ -231,8 +273,13 @@ object KeepAliveHealthModel {
         append(" pv_n=").append(verdict.samples)
         append(" pv_fcm_n=").append(verdict.fcmSamples)
         append(" pv_fcm_slow=").append(verdict.fcmSlowPercent?.toString() ?: "na")
+        append(" pv_fcmt_n=").append(verdict.fcmTransitSamples)
+        append(" pv_fcmt_slow=").append(verdict.fcmTransitSlowPercent?.toString() ?: "na")
+        append(" pv_stall_2h=").append(verdict.stallsOver2h)
         append(" fcm_state=").append(fcmState)
         append(" fcm_fail_h=").append(fcmFailHours.coerceAtLeast(0L))
+        append(" adb=").append(flag(snapshot.adbEnabled))
+        append(BackgroundPowerModel.formatSection(events))
     }
 
     const val FCM_STATE_OK = "ok"

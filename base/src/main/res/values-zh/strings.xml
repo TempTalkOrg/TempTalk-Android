@@ -63,11 +63,9 @@
 
     <!-- 通知类别显示名（系统设置中可见） -->
     <string name="notification_channel_message">消息</string>
-    <string name="notification_channel_message_summary">消息汇总</string>
     <string name="notification_channel_call">来电</string>
-    <string name="notification_channel_ongoing_call">通话中</string>
-    <string name="notification_channel_background">后台连接</string>
     <string name="notification_channel_critical_alert">重要提醒</string>
-    <string name="notification_channel_account">账号</string>
+    <string name="notification_channel_other_alerts">其他提醒</string>
+    <string name="notification_channel_running_in_background">后台运行</string>
     <string name="notification_channel_group_message">消息</string>
 </resources>

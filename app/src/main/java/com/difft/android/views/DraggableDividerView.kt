@@ -14,8 +14,8 @@ import kotlin.math.abs
  *
  * Used between the list pane and the detail pane in the dual-pane layout
  * (`layout-w673dp-h480dp/activity_index.xml`). The view itself is ~24dp wide for
- * a comfortable touch target; the visual line + drag handle pill are rendered via
- * the background drawable.
+ * a comfortable touch target; the drag handle pill is rendered by the background
+ * drawable and brightens while pressed.
  *
  * Touch is only accepted in a vertical center band ([ACTIVE_BAND_HEIGHT_DP]) so
  * accidental touches at the top / bottom of the long divider are ignored — only
@@ -62,7 +62,7 @@ class DraggableDividerView @JvmOverloads constructor(
         if (contentDescription == null) {
             contentDescription = context.getString(R.string.dual_pane_divider_drag_hint)
         }
-        // Make the view eligible for click feedback (ripple) without needing a click handler.
+        // Pressed state drives the handle's press colour; no click handler needed.
         isClickable = true
     }
 
@@ -94,7 +94,7 @@ class DraggableDividerView @JvmOverloads constructor(
         MotionEvent.ACTION_DOWN -> {
             if (!isInActiveBand(event.y)) {
                 // Touch fell outside the center drag handle area — ignore silently
-                // (no ripple, no drag). User has to grab the visible handle to drag.
+                // (no press feedback, no drag). User has to grab the visible handle to drag.
                 false
             } else {
                 lastX = event.rawX

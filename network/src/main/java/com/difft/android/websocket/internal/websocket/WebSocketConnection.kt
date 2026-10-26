@@ -1,7 +1,6 @@
 package com.difft.android.websocket.internal.websocket
 
 import android.content.Context
-import android.os.Bundle
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.network.CertValidationFailureDetector
@@ -12,7 +11,8 @@ import com.difft.android.network.ca.OfficialSSLSocketFactoryCreator
 import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.network.proxy.ProxyTunnelDns
 import com.difft.android.network.proxy.ProxyTunnelSocketFactory
-import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.perf.FirebasePerformance
+import com.google.firebase.perf.metrics.Trace
 import com.google.protobuf.InvalidProtocolBufferException
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -35,6 +35,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import okio.ByteString
 import com.difft.android.websocket.api.websocket.HealthMonitor
 import com.difft.android.websocket.api.websocket.KeepAliveSender
+import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketMessage
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
@@ -124,6 +125,28 @@ class WebSocketConnection @AssistedInject constructor(
     @Volatile
     private var startConnectTime = 0L
 
+    // Performance trace of the in-flight connect attempt, bound to the socket it measures so a
+    // late callback from a replaced socket cannot finish the current attempt's trace.
+    private var connectTrace: Pair<WebSocket, Trace>? = null
+
+    /**
+     * True when the last socket ended with a close frame from the server (idle timeout, server
+     * shutdown) rather than a transport failure or a local cancel: the host answered, so the
+     * reconnect can stay on it. Reset on every [connect].
+     */
+    @Volatile
+    var closedByServer: Boolean = false
+        private set
+
+    /**
+     * Why this app itself dropped the last socket via [cancelConnection] or [disconnectWhenConnected];
+     * null when it ended any other way. Lets the reconnect policy tell a host timeout from a
+     * proxy-change cancel or a stop. Reset on every [connect].
+     */
+    @Volatile
+    var localDisconnectReason: LocalDisconnectReason? = null
+        private set
+
     init {
         _webSocketConnectionState.tryEmit(WebSocketConnectionState.DISCONNECTED)
     }
@@ -148,6 +171,8 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     internal fun connect() {
         startConnectTime = System.currentTimeMillis()
+        closedByServer = false
+        localDisconnectReason = null
 
         if (currentWebsocket == null) {
             val filledUri = webSocketUrlGetter()
@@ -168,34 +193,66 @@ class WebSocketConnection @AssistedInject constructor(
             val websocketListener = ControllableWebSocketListener(this).also {
                 currentWebsocketListener = it
             }
-            currentWebsocket = okHttpClient.newWebSocket(requestBuilder.build(), websocketListener)
+            val webSocket = okHttpClient.newWebSocket(requestBuilder.build(), websocketListener)
+            currentWebsocket = webSocket
+            finishConnectTrace(owner = null, result = CONNECT_RESULT_CANCELED)
+            connectTrace = startConnectTrace()?.let { webSocket to it }
+        }
+    }
+
+    private fun startConnectTrace(): Trace? =
+        try {
+            FirebasePerformance.getInstance().newTrace(CONNECT_TRACE).apply { start() }
+        } catch (e: Exception) {
+            L.w { "$name start connect trace failed: ${e.message}" }
+            null
+        }
+
+    /**
+     * Stops the connect trace exactly once with [result]. With a non-null [owner], only the trace
+     * started for that socket is finished; null finishes whatever attempt is pending.
+     */
+    @Synchronized
+    private fun finishConnectTrace(owner: WebSocket?, result: String) {
+        val (traceOwner, trace) = connectTrace ?: return
+        if (owner != null && owner !== traceOwner) return
+        connectTrace = null
+        try {
+            trace.putAttribute(CONNECT_RESULT_ATTRIBUTE, result)
+            trace.stop()
+        } catch (e: Exception) {
+            L.w { "$name stop connect trace failed: ${e.message}" }
         }
     }
 
     @Synchronized
-    fun disconnectWhenConnected() {
-        L.i { "$name disconnect(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
+    fun disconnectWhenConnected(reason: LocalDisconnectReason) {
+        L.i { "$name disconnect(), reason=$reason current webSocketConnectionState: ${webSocketConnectionState.value}" }
         if (webSocketConnectionState.value == WebSocketConnectionState.CONNECTED) {
             currentWebsocket?.let {
                 L.i { "$name Client not null when disconnect" }
+                finishConnectTrace(owner = it, result = CONNECT_RESULT_CANCELED)
                 it.cancel() //use [cancel()] function instead of [close()] can terminate the connection immediately
                 currentWebsocket = null
                 currentWebsocketListener?.invalidate()
                 currentWebsocketListener = null
+                localDisconnectReason = reason
                 _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
             }
         }
     }
 
     @Synchronized
-    fun cancelConnection() {
-        L.i { "$name cancelConnection(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
+    fun cancelConnection(reason: LocalDisconnectReason) {
+        L.i { "$name cancelConnection(), reason=$reason current webSocketConnectionState: ${webSocketConnectionState.value}" }
         currentWebsocket?.let {
             L.i { "$name Client not null when cancelConnection" }
+            finishConnectTrace(owner = it, result = CONNECT_RESULT_CANCELED)
             it.cancel()
             currentWebsocket = null
             currentWebsocketListener?.invalidate()
             currentWebsocketListener = null
+            localDisconnectReason = reason
             _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
         }
     }
@@ -310,11 +367,7 @@ class WebSocketConnection @AssistedInject constructor(
             return
         }
         val connectCostTime = System.currentTimeMillis() - startConnectTime
-        Bundle().apply {
-            putLong(WEB_SOCKET_CONNECT_TIME, connectCostTime)
-        }.let {
-            FirebaseAnalytics.getInstance(context).logEvent(WEB_SOCKET_CONNECT_TIME, it)
-        }
+        finishConnectTrace(owner = webSocket, result = CONNECT_RESULT_SUCCESS)
         L.i { "$name onOpen() connected, time cost $connectCostTime" }
         _webSocketConnectionState.value = WebSocketConnectionState.CONNECTED
     }
@@ -347,6 +400,7 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         L.i { "$name onClose()" }
+        finishConnectTrace(owner = webSocket, result = CONNECT_RESULT_FAILED)
         if (webSocketConnectionState.value is WebSocketConnectionState.DISCONNECTED
             || webSocketConnectionState.value is WebSocketConnectionState.FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.UNKNOWN_HOST_FAILED
@@ -357,6 +411,7 @@ class WebSocketConnection @AssistedInject constructor(
             return
         }
         cleanupAfterShutdown()
+        closedByServer = true
         _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
     }
 
@@ -370,6 +425,7 @@ class WebSocketConnection @AssistedInject constructor(
         } else {
             L.w(t) { "$name onFailure() httpCode=${response?.code} alive=${System.currentTimeMillis() - startConnectTime}ms" }
         }
+        finishConnectTrace(owner = webSocket, result = CONNECT_RESULT_FAILED)
         if (webSocketConnectionState.value is WebSocketConnectionState.DISCONNECTED
             || webSocketConnectionState.value is WebSocketConnectionState.FAILED
             || webSocketConnectionState.value is WebSocketConnectionState.UNKNOWN_HOST_FAILED
@@ -446,6 +502,7 @@ class WebSocketConnection @AssistedInject constructor(
             return
         }
         cleanupAfterShutdown()
+        closedByServer = true
         _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
     }
 
@@ -467,7 +524,11 @@ class WebSocketConnection @AssistedInject constructor(
 
     companion object {
         const val KEEP_ALIVE_TIMEOUT_SECONDS: Int = 30
-        const val WEB_SOCKET_CONNECT_TIME = "web_socket_connect_time"
+        private const val CONNECT_TRACE = "ws_connect"
+        private const val CONNECT_RESULT_ATTRIBUTE = "result"
+        private const val CONNECT_RESULT_SUCCESS = "success"
+        private const val CONNECT_RESULT_FAILED = "failed"
+        private const val CONNECT_RESULT_CANCELED = "canceled"
     }
 }
 

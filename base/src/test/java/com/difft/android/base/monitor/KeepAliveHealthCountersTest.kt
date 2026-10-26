@@ -75,6 +75,51 @@ class KeepAliveHealthCountersTest {
     }
 
     @Test
+    fun `fcm transit buckets every bound, counts in foreground and falls back to the offset-corrected clock`() {
+        counters.lastFlushElapsed = elapsed
+        val now = 10 * 60 * 60_000L
+        serverNow = now
+        foreground = true // transit is counted regardless of foreground state
+        listOf(10_000L, 60_000L, 5 * 60_000L, 30 * 60_000L, 2 * 60 * 60_000L, 2 * 60 * 60_000L + 1)
+            .forEach { counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = now - it) }
+        assertEquals(
+            mapOf(
+                "fcm_recv" to 6,
+                "fcmt_10s" to 1, "fcmt_1m" to 1, "fcmt_5m" to 1, "fcmt_30m" to 1, "fcmt_2h" to 1, "fcmt_more" to 1
+            ),
+            counters.drain()
+        )
+
+        serverNow = null // cold FCM-woken process: offset-corrected wall clock instead of dropping the sample
+        counters.offsetCorrectedNow = { now }
+        counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = now - 3 * 60 * 60_000L)
+        counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = 0L)
+        assertEquals(mapOf("fcm_recv" to 2, "fcmt_more" to 1), counters.drain())
+    }
+
+    @Test
+    fun `app stalls bucket by duration and add up minutes`() {
+        counters.lastFlushElapsed = elapsed
+        counters.onAppStall(durationMs = 21 * 60_000L)
+        counters.onAppStall(durationMs = 30 * 60_000L)
+        counters.onAppStall(durationMs = 2 * 60 * 60_000L)
+        counters.onAppStall(durationMs = 9_645_000L) // the 2.7 h night freeze from the #1328 field log
+        assertEquals(
+            mapOf("stall_30m" to 2, "stall_2h" to 1, "stall_more" to 1, "stall_min" to 21 + 30 + 120 + 160),
+            counters.drain()
+        )
+    }
+
+    @Test
+    fun `transit and stalls record nothing while not collecting`() {
+        counters.lastFlushElapsed = elapsed
+        counters.collecting = false
+        counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = 50_000L)
+        counters.onAppStall(durationMs = 3 * 60 * 60_000L)
+        assertEquals(emptyMap(), counters.drain())
+    }
+
+    @Test
     fun `pull results count ok and fail`() {
         counters.lastFlushElapsed = elapsed
         counters.lastPullFlushElapsed = elapsed
@@ -114,6 +159,18 @@ class KeepAliveHealthCountersTest {
         assertEquals(
             mapOf("fcm_recv" to 1, "pull_ok" to 1),
             KeepAliveHealthCodec.decode(awaitPersisted { it == "fcm_recv:1,pull_ok:1" || it == "pull_ok:1,fcm_recv:1" })
+        )
+        assertEquals(emptyMap(), counters.drain())
+    }
+
+    @Test
+    fun `the first-event flush of an fcm wake carries its transit sample`() = runTest {
+        counters.drain()
+        serverNow = 10 * 60 * 60_000L
+        counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = serverNow!! - 2 * 60 * 60_000L - 1)
+        assertEquals(
+            mapOf("fcm_recv" to 1, "fcmt_more" to 1),
+            KeepAliveHealthCodec.decode(awaitPersisted { it.contains("fcm_recv:1") && it.contains("fcmt_more:1") })
         )
         assertEquals(emptyMap(), counters.drain())
     }

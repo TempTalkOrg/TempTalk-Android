@@ -58,7 +58,10 @@ fun MultiParticipantItem(
     muteOtherEnabled: Boolean,
     onClickMute: (displayName: String) -> Unit,
     coroutineScope: CoroutineScope,
-    cornerRadius: Dp = 8.dp
+    cornerRadius: Dp = 8.dp,
+    // Sole tile in the room: name and mic status sit under the avatar instead of in the
+    // bottom-start pill, matching iOS `ParticipantView(is1on1: rawCount == 1)`.
+    soloStyle: Boolean = false,
 ) {
     val entryPoint = remember {
         EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
@@ -177,55 +180,61 @@ fun MultiParticipantItem(
                                 .background(DifftTheme.colors.background),
                             contentAlignment = Alignment.Center
                         ) {
-                            userDisplayInfo.avatarData?.let { avatarData ->
-                                // No letterTextSizeDp on purpose: the 96dp tile avatar keeps the
-                                // same 22dp letter as the 1v1 and incoming-call 96dp avatars;
-                                // scaling large avatars is a design decision, not a fix.
-                                callToChatController.Avatar(data = avatarData, size = 96.dp)
+                            if (soloStyle) {
+                                SoloParticipantAvatarInfo(participant, uid, userDisplayInfo, speakingEnabled)
+                            } else {
+                                userDisplayInfo.avatarData?.let { avatarData ->
+                                    // No letterTextSizeDp on purpose: the 96dp tile avatar keeps the
+                                    // same 22dp letter as the 1v1 and incoming-call 96dp avatars;
+                                    // scaling large avatars is a design decision, not a fix.
+                                    callToChatController.Avatar(data = avatarData, size = 96.dp)
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // The name pill is the single-tap mute entry; the rest of the tile keeps toggling the
+            // The name pill (absent in soloStyle) is the single-tap mute entry; the rest of the tile keeps toggling the
             // overlays. The inner padding is transparent hit area only (minTouchTarget tall, bounded
             // by the tile edge below) — the pill keeps its 4dp / 4.33dp visual inset. The menu is
             // a child of the OUTER box so its Popup anchor shares the tap target's coordinate
             // space; inside the padded box the anchor would sit 20dp below the finger.
-            Box(
-                modifier = Modifier
-                    .constrainAs(statusView) {
-                        start.linkTo(parent.start)
-                        bottom.linkTo(parent.bottom)
-                    }
-                    .testTag("call_render_participant_status_$participantIndex")
-                    .muteMenuTapTarget(
-                        participant = participant,
-                        muteOtherEnabled = muteOtherEnabled,
-                        yieldToLongPress = true,
-                        onTap = { touch -> openMuteMenu(MuteMenuAnchor.PILL, touch) },
-                    )
-            ) {
-                Row(
+            if (!soloStyle) {
+                Box(
                     modifier = Modifier
-                        .padding(
-                            start = STATUS_PILL_INSET_START,
-                            // Tops the pill + bottom inset up to the minimum touch target.
-                            top = DifftTheme.spacing.minTouchTarget - STATUS_PILL_HEIGHT - STATUS_PILL_INSET_BOTTOM,
-                            end = STATUS_PILL_HIT_SLOP_END,
-                            bottom = STATUS_PILL_INSET_BOTTOM,
+                        .constrainAs(statusView) {
+                            start.linkTo(parent.start)
+                            bottom.linkTo(parent.bottom)
+                        }
+                        .testTag("call_render_participant_status_$participantIndex")
+                        .muteMenuTapTarget(
+                            participant = participant,
+                            muteOtherEnabled = muteOtherEnabled,
+                            yieldToLongPress = true,
+                            onTap = { touch -> openMuteMenu(MuteMenuAnchor.PILL, touch) },
                         )
-                        .wrapContentWidth()
-                        .height(STATUS_PILL_HEIGHT)
-                        .background(color = DifftTheme.colors.backgroundPagePrimary, shape = DifftTheme.radius.mediumShape)
-                        .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
-                    verticalAlignment = Alignment.Bottom,
                 ) {
-                    ShowSpeakerStatusView(participant, displayName, speakingEnabled = speakingEnabled)
+                    Row(
+                        modifier = Modifier
+                            .padding(
+                                start = STATUS_PILL_INSET_START,
+                                // Tops the pill + bottom inset up to the minimum touch target.
+                                top = DifftTheme.spacing.minTouchTarget - STATUS_PILL_HEIGHT - STATUS_PILL_INSET_BOTTOM,
+                                end = STATUS_PILL_HIT_SLOP_END,
+                                bottom = STATUS_PILL_INSET_BOTTOM,
+                            )
+                            .wrapContentWidth()
+                            .height(STATUS_PILL_HEIGHT)
+                            .background(color = DifftTheme.colors.backgroundPagePrimary, shape = DifftTheme.radius.mediumShape)
+                            .padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        ShowSpeakerStatusView(participant, displayName, speakingEnabled = speakingEnabled)
+                    }
+                    MuteMenuFor(MuteMenuAnchor.PILL)
                 }
-                MuteMenuFor(MuteMenuAnchor.PILL)
             }
         }
         MuteMenuFor(MuteMenuAnchor.TILE)
@@ -241,6 +250,41 @@ fun MultiParticipantItem(
             modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
         )
     }
+}
+
+/** The 1v1 avatar column (same avatar, name size and mic icon), fed by this tile's audio state. */
+@Composable
+private fun SoloParticipantAvatarInfo(
+    participant: Participant,
+    uid: String,
+    userDisplayInfo: CallUserDisplayInfo,
+    speakingEnabled: Boolean,
+) {
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication<LCallManager.EntryPoint>(ApplicationHelper.instance)
+    }
+    val isSpeaking by participant::isSpeaking.flow.collectAsState()
+    val audioTrackMap by participant::audioTrackPublications.flow.collectAsState(initial = emptyList())
+    val audioPub by remember {
+        derivedStateOf {
+            audioTrackMap.firstOrNull { (pub) -> pub.subscribed && pub.source == Track.Source.MICROPHONE }?.first
+        }
+    }
+    var audioMuted by remember { mutableStateOf(true) }
+    LaunchedEffect(audioPub) {
+        val pub = audioPub ?: return@LaunchedEffect
+        pub::muted.flow.collect { muted -> audioMuted = muted }
+    }
+
+    ParticipantAvatarInfo(
+        userDisplayInfo = userDisplayInfo,
+        userId = uid,
+        audioMuted = audioMuted,
+        isSpeaking = isSpeaking && speakingEnabled,
+        showAudioStatus = true,
+        imageLoader = LocalImageLoaderProvider.localImageLoader(),
+        callToChatController = entryPoint.callToChatController,
+    )
 }
 
 private enum class MuteMenuAnchor { PILL, TILE }

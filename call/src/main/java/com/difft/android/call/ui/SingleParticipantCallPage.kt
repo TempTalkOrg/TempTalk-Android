@@ -428,7 +428,7 @@ fun SingleParticipantItem(
 }
 
 @Composable
-private fun ParticipantAvatarInfo(
+internal fun ParticipantAvatarInfo(
     modifier: Modifier = Modifier,
     userDisplayInfo: CallUserDisplayInfo,
     userId: String,

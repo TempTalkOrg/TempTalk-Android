@@ -297,7 +297,8 @@ private fun WideScreenParticipantLayout(
                                 participantCount = participants.size,
                                 muteOtherEnabled = muteOtherEnabled,
                                 onClickMute = { name -> viewModel.toggleMute(participant, name) },
-                                coroutineScope = coroutineScope
+                                coroutineScope = coroutineScope,
+                                soloStyle = participants.size == 1,
                             )
                         }
                     }

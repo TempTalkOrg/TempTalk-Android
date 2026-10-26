@@ -30,7 +30,7 @@ import androidx.core.text.getSpans
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
-import androidx.core.widget.doOnTextChanged
+import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -48,6 +48,7 @@ import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelec
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.common.ScreenshotDetector
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.RecallResultTracker
@@ -59,6 +60,7 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.chat.jobs.AttachmentSendIdentity
 import com.difft.android.chat.gif.favorite.collectFavoriteEffects
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
@@ -241,7 +243,6 @@ class ChatMessageInputFragment : Fragment() {
 
     private var mentionsSearchKeyStartPos = -1
     private var mentionsSearchKey: String? = null
-    private var prevInputTextLength = 0
 
     private var currentDraft = Draft()   // hold in-memory copy
 
@@ -842,71 +843,88 @@ class ChatMessageInputFragment : Fragment() {
             handleStickerCommit(info, mimeType)
         }
 
-        binding.edittextInput.doOnTextChanged { text, start, before, count ->
-            currentDraft = currentDraft.copy(
-                // Store canonical newlines; mention offsets are re-derived at send.
-                content = text?.toString()?.normalizeNewlines(),
-                quote = quote,
-                mentions = mentions.toList(),
-            )
-            draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
-//            L.i { "======doOnTextChanged======" + text + "===" + start + "===" + before + "===" + count }
-            if (!TextUtils.isEmpty(text)) {
-                if (isGroup) { //处理@相关的逻辑
-                    if (count == 1 && text!!.substring(start, start + 1) == "@") {
-                        mentionsSearchKeyStartPos = start
-                        mentionsSearchKey = null // new @ session starts with no keyword
-                        mentionStatsGeneration.incrementAndGet() // invalidate any in-flight load first
-                        mentionStatsSnapshot = null // new @ session → reload stats once
+        var changeStart = 0
+        var changeBefore = 0
+        var changeCount = 0
+        var processingTextChange = false
+        binding.edittextInput.addTextChangedListener(
+            onTextChanged = { _, start, before, count ->
+                if (!processingTextChange) {
+                    changeStart = start
+                    changeBefore = before
+                    changeCount = count
+                }
+            },
+            afterTextChanged = { text ->
+                if (processingTextChange) return@addTextChangedListener
+                processingTextChange = true
+                try {
+                    val start = changeStart
+                    val before = changeBefore
+                    val count = changeCount
+                    // Mention deletion and truncation mutate the buffer; process them once after
+                    // the edit, then derive the draft and buttons from the final live text.
+                    if (!TextUtils.isEmpty(text)) {
+                        if (isGroup) { //处理@相关的逻辑
+                            if (count == 1 && text!!.substring(start, start + 1) == "@") {
+                                mentionsSearchKeyStartPos = start
+                                mentionsSearchKey = null // new @ session starts with no keyword
+                                mentionStatsGeneration.incrementAndGet() // invalidate any in-flight load first
+                                mentionStatsSnapshot = null // new @ session → reload stats once
+                                updateAtView(null)
+                            } else {
+                                var key: String? = null
+                                if (mentionsSearchKeyStartPos != -1) {
+                                    val keyStart = mentionsSearchKeyStartPos + 1
+                                    val keyEnd = mentionsSearchKeyStartPos + (start - mentionsSearchKeyStartPos) + count
+                                    if (text!!.length >= keyStart && text.length >= keyEnd && keyStart < keyEnd) {
+                                        key = text.substring(keyStart, keyEnd)
+                                    }
+                                    if (mentionsSearchKeyStartPos >= text.length) {
+                                        mentionsSearchKeyStartPos = -1
+                                        mentionsSearchKey = null
+                                    }
+                                }
+                                mentionsSearchKey = key
+                                updateAtView(key)
+                            }
+                        }
+                        // Check if text exceeds maximum file size (10MB) and truncate if needed
+                        val utf8Bytes = text.toString().toByteArray(Charsets.UTF_8)
+                        val truncated = utf8Bytes.size > MAX_TEXT_FILE_SIZE
+                        if (truncated) {
+                            val truncatedString = text.toString().utf8Substring(MAX_TEXT_FILE_SIZE)
+                            ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
+                            binding.edittextInput.setText(truncatedString)
+                            binding.edittextInput.setSelection(binding.edittextInput.text?.length ?: 0)
+                        }
+                        if (isGroup && mentions.isNotEmpty()) {
+                            // Truncation replaces the buffer, so reconcile against the final text
+                            // instead of deleting at an edit position that no longer applies.
+                            updateMentions(!truncated && before > count, start, saveDraft = false)
+                        }
+                    }
+                    if (isGroup && binding.edittextInput.text.isNullOrEmpty()) {
+                        mentions.clear()
+                        mentionsSelectedContacts.clear()
+                        mentionsSearchKeyStartPos = -1
+                        mentionsSearchKey = null
                         updateAtView(null)
-                    } else {
-                        var key: String? = null
-                        if (mentionsSearchKeyStartPos != -1) {
-                            val keyStart = mentionsSearchKeyStartPos + 1
-                            val keyEnd = mentionsSearchKeyStartPos + (start - mentionsSearchKeyStartPos) + count
-                            if (text!!.length >= keyStart && text.length >= keyEnd && keyStart < keyEnd) {
-                                key = text.substring(keyStart, keyEnd)
-                            }
-                            if (mentionsSearchKeyStartPos >= text.length) {
-                                mentionsSearchKeyStartPos = -1
-                                mentionsSearchKey = null
-                            }
-//                        L.i { "======mentionsSearchKeyStartPos======" + keyStart + "====" + keyEnd + "====" + key }
-                        }
-                        mentionsSearchKey = key
-                        updateAtView(key)
                     }
-                    val currentTextLength: Int = text?.length ?: 0
-                    if (currentTextLength < prevInputTextLength) { //删除操作
-                        if (mentions.isNotEmpty()) {
-                            updateMentions(true, start)
-                        }
-                    } else {
-                        if (mentions.isNotEmpty()) {
-                            updateMentions(false)
-                        }
-                    }
-                    prevInputTextLength = currentTextLength
-                }
-                // Check if text exceeds maximum file size (10MB) and truncate if needed
-                val utf8Bytes = text.toString().toByteArray(Charsets.UTF_8)
-                if (utf8Bytes.size > MAX_TEXT_FILE_SIZE) {
-                    val truncatedString = text.toString().utf8Substring(MAX_TEXT_FILE_SIZE)
-                    ToastUtil.show(getString(R.string.text_file_exceeds_10mb_limit))
-                    binding.edittextInput.setText(truncatedString)
-                    binding.edittextInput.setSelection(binding.edittextInput.text?.length ?: 0)
-                }
-            } else {
-                if (isGroup) { //处理@相关的逻辑
-                    mentionsSearchKeyStartPos = -1
-                    mentionsSearchKey = null
-                    updateAtView(null)
+
+                    currentDraft = currentDraft.copy(
+                        content = binding.edittextInput.text?.toString()?.normalizeNewlines(),
+                        quote = quote,
+                        mentions = mentions.toList(),
+                    )
+                    draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
+                    updateSubmitButtonView()
+                    updateInputViewSize()
+                } finally {
+                    processingTextChange = false
                 }
             }
-
-            updateSubmitButtonView()
-            updateInputViewSize()
-        }
+        )
 
         binding.edittextInput.setOnClickListener {
             // Don't hide panel here — keyboard will cover it as overlay.
@@ -1661,7 +1679,11 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
-    fun updateMentions(isDelete: Boolean, deletePos: Int = 0) {
+    /**
+     * [saveDraft] is false from the text watcher, which saves one draft from the final text:
+     * [DraftViewModel.updateDraft] drops an emit while the previous one is still buffered.
+     */
+    fun updateMentions(isDelete: Boolean, deletePos: Int = 0, saveDraft: Boolean = true) {
         val content = binding.edittextInput.text ?: return
 
         if (isDelete) {
@@ -1708,8 +1730,10 @@ class ChatMessageInputFragment : Fragment() {
             }
         }
 
-        currentDraft = currentDraft.copy(mentions = mentions.toList())
-        draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
+        if (saveDraft) {
+            currentDraft = currentDraft.copy(mentions = mentions.toList())
+            draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
+        }
     }
 
     /**
@@ -2487,7 +2511,6 @@ class ChatMessageInputFragment : Fragment() {
         if (clearInputBoundState) {
             mentionsSelectedContacts.clear()
             mentions.clear()
-            prevInputTextLength = 0
         }
     }
 
@@ -3028,19 +3051,28 @@ class ChatMessageInputFragment : Fragment() {
         }
     }
 
+    /**
+     * Runs in the app scope, not the view's: the source probe can copy a legacy staged file, and
+     * leaving the chat meanwhile must not drop a resend the user asked for.
+     */
     private fun resendMessage(messageID: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
+        val jobFactory = pushTextSendJobFactory
+        appScope.launch {
             try {
-                val message = withContext(Dispatchers.IO) {
-                    wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))?.convertToTextMessage()
+                val message = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageID))?.convertToTextMessage()
+                    ?: return@launch
+                // A never-uploaded attachment whose file is gone cannot be sent by any retry.
+                val attachment = message.attachments?.firstOrNull()
+                if (attachment != null && !AttachmentSendIdentity(message.id).hasUploadSource(attachment)) {
+                    L.w { "[ChatResend] resend declined id=${message.id} reason=source_missing" }
+                    ToastUtil.show(R.string.chat_resend_source_missing)
+                    return@launch
                 }
-                message?.let {
-                    ApplicationDependencies.getJobManager().add(pushTextSendJobFactory.create(null, it))
-                }
+                ApplicationDependencies.getJobManager().add(jobFactory.create(null, message))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                L.w { "[ChatMessageInputFragment] sendTextPush error: ${e.stackTraceToString()}" }
+                L.e { "[ChatResend] resend failed id=$messageID: ${e.stackTraceToString()}" }
             }
         }
     }

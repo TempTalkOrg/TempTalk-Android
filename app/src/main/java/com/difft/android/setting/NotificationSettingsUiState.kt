@@ -1,5 +1,6 @@
 package com.difft.android.setting
 
+import com.difft.android.base.notification.CallPopupLevel
 import com.difft.android.base.notification.CategoryLevel
 import com.difft.android.base.notification.NotificationFix
 import com.difft.android.base.notification.NotificationReadiness
@@ -37,11 +38,19 @@ internal class NotificationSettingsUiState(
     val fullScreenItem: ReadinessItem? =
         if (sdkInt >= API_U) readiness.item(ReadinessItemId.C2) else null
 
-    /** The vendor switch exists only on China OEM skins; the evaluator omits the item elsewhere. */
+    /**
+     * The vendor switch exists only on China OEM skins (the evaluator omits the item elsewhere). It
+     * cannot be read, so its value is the last valid call test result (#1350).
+     */
     val oemPopupItem: ReadinessItem? = readiness.item(ReadinessItemId.C3)
+
+    val callPopupLevel: CallPopupLevel = readiness.callPopupLevel
 
     /** Xiaomi opens its permission editor; every other vendor row opens the setup guide. */
     val oemPopupOpensGuide: Boolean = oemPopupItem != null && oemBrand != OemBrand.XIAOMI
+
+    /** Xiaomi keeps the caption naming its permission-editor switches. */
+    val showXiaomiPopupHint: Boolean = oemPopupItem != null && oemBrand == OemBrand.XIAOMI
 
     /** The group holds only these two rows, so it disappears when both are absent. */
     val showLockScreenGroup: Boolean = fullScreenItem != null || oemPopupItem != null

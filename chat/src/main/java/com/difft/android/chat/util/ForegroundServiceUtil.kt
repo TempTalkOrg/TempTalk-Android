@@ -12,6 +12,7 @@ import android.os.SystemClock
 import androidx.annotation.WorkerThread
 import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.utils.application
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.messages.MessageForegroundService
@@ -34,10 +35,16 @@ object ForegroundServiceUtil {
     /**
      * A simple wrapper around [ContextCompat.startForegroundService], but makes the possible failure part of the contract by forcing the caller to handle the
      * [UnableToStartException].
+     *
+     * Not started at all, and false returned, when no notification channel can carry the foreground
+     * notification ([NotificationChannelSpecs.preflightForegroundChannel], #1354): the service
+     * could only crash the app. True once the start was issued.
      */
     @JvmStatic
     @Throws(UnableToStartException::class)
-    fun start(context: Context, intent: Intent) {
+    fun start(context: Context, intent: Intent): Boolean {
+        val service = intent.component?.shortClassName?.substringAfterLast('.') ?: "unknown"
+        if (NotificationChannelSpecs.preflightForegroundChannel(context, service) == null) return false
         if (Build.VERSION.SDK_INT < 31) {
             ContextCompat.startForegroundService(context, intent)
         } else {
@@ -52,6 +59,7 @@ object ForegroundServiceUtil {
                 }
             }
         }
+        return true
     }
 
     /**
@@ -64,8 +72,8 @@ object ForegroundServiceUtil {
     @JvmStatic
     @Throws(UnableToStartException::class)
     @WorkerThread
-    fun startWhenCapable(context: Context, intent: Intent, timeout: Long = DEFAULT_TIMEOUT) {
-        try {
+    fun startWhenCapable(context: Context, intent: Intent, timeout: Long = DEFAULT_TIMEOUT): Boolean {
+        return try {
             start(context, intent)
         } catch (e: UnableToStartException) {
             L.e(e) { "[ForegroundServiceUtil] Failed to start normally. Blocking and then trying again." }

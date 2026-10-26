@@ -30,6 +30,13 @@ class ChativeHttpClient(
     useHttpClientInterceptor: Boolean = true,
     serializeNulls: Boolean = false,
     /**
+     * The chat-pool service this client talks to, or null for a client outside the pool (it then
+     * gets no host routing and no failover). Requests to this client's own origin host are routed
+     * per request and failed over across the pool (#1396); [baseUrl] stays only as the origin
+     * marker, so it must be that service's URL.
+     */
+    service: ChatService? = null,
+    /**
      * When non-null, all connections from this client are routed through the
      * self-hosted proxy (TLS-in-TLS) whenever the provider reports an active
      * config. Read at connect time, so runtime enable/disable needs no rebuild.
@@ -51,6 +58,11 @@ class ChativeHttpClient(
         fun provideAuth(): String?
     }
 
+    private companion object {
+        /** Failover bound for a client with no call timeout of its own. */
+        const val FAILOVER_TOTAL_BOUND_MS = 30_000L
+    }
+
     // Retrofit converter Gson — intentionally NOT the chat-domain singleton:
     // constructed once per @Singleton ChativeHttpClient (no GC pressure), network DTOs
     // need no For/ByteString adapters, and serializeNulls=true (signalApi protocol-defensive,
@@ -63,13 +75,15 @@ class ChativeHttpClient(
 
     private val okHttpClient = OkHttpClient.Builder()
         .apply {
-            // First in the chain: while the proxy is active, pin the request host
-            // to the embedded best host BEFORE header/failover/logging see it, so
-            // the runtime-toggled proxy host applies without rebuilding this
-            // @Singleton's fixed Retrofit baseUrl. Gated to THIS client's own
-            // baseUrl host so absolute-URL CDN requests keep their host/TLS trust.
-            // No-op when the proxy is off.
-            addInterceptor(ProxyHostInterceptor(baseUrl.toHttpUrlOrNull()?.host))
+            // First in the chain: resolve the request host (and service path) per request, BEFORE
+            // header/failover/logging see it, so a host marked unavailable, a live config change
+            // or the runtime-toggled proxy applies without rebuilding this @Singleton's fixed
+            // Retrofit baseUrl. Gated to THIS client's own baseUrl host so absolute-URL CDN
+            // requests keep their host/TLS trust.
+            val origin = baseUrl.toHttpUrlOrNull()
+            if (service != null && origin != null) {
+                addInterceptor(ChatPoolRoutingInterceptor(origin, service))
+            }
             if (removeHeader) {
                 addInterceptor(NoHeaderInterceptor())
             } else {
@@ -85,6 +99,22 @@ class ChativeHttpClient(
             }
             if (useHttpClientInterceptor) {
                 addInterceptor(HttpClientInterceptor(pinnedConnection = useCustomCa))
+            }
+            if (service != null) {
+                // Closest to the network, inside normalization, so it classifies raw responses and
+                // exceptions. Raw-status clients keep their 5xx: marked, never resent.
+                addInterceptor(
+                    HostFailoverInterceptor(
+                        resendOnServerError = useHttpClientInterceptor,
+                        pinnedConnection = useCustomCa,
+                        totalBoundMs = if (callTimeoutSeconds > 0) {
+                            TimeUnit.SECONDS.toMillis(callTimeoutSeconds)
+                        } else {
+                            FAILOVER_TOTAL_BOUND_MS
+                        },
+                    )
+                )
+                addNetworkInterceptor(ExchangeObserver())
             }
             if (BuildConfig.DEBUG) {
                 //如果想使用抓包工具获取接口数据，可以开启这个

@@ -2,29 +2,14 @@
 <!--
     Background for the draggable dual-pane divider (floating overlay).
 
-    Layer order (bottom-up):
-      1. Ripple (touch feedback; only triggered by touches in the center band per
-         DraggableDividerView.isInActiveBand)
-      2. Center drag handle pill (6dp x 56dp, fully rounded capsule) — affordance
-         mirroring Signal Android's AppPaneDragHandle (Material 3 Adaptive),
-         using @color/icon for theme-adaptive contrast (dark grey on light theme,
-         light grey on dark theme).
+    Only the center drag handle pill (6dp x 56dp, fully rounded capsule), mirroring Signal
+    Android's AppPaneDragHandle (Material 3 Adaptive). Its colour is @color/icon and turns
+    t.primary while held or dragged (@color/draggable_divider_handle); there is no ripple, which
+    would tint the whole touch band behind the pill.
 
     No full-height line: pane separation is implicit from list/detail backgrounds.
-
-    The mask on the ripple keeps feedback inside the view bounds.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <item>
-        <ripple android:color="?android:attr/colorControlHighlight">
-            <item android:id="@android:id/mask">
-                <shape android:shape="rectangle">
-                    <solid android:color="@android:color/white" />
-                </shape>
-            </item>
-        </ripple>
-    </item>
 
     <item android:gravity="center">
         <shape android:shape="rectangle">
@@ -32,7 +17,7 @@
                 android:width="6dp"
                 android:height="56dp" />
             <corners android:radius="28dp" />
-            <solid android:color="@color/icon" />
+            <solid android:color="@color/draggable_divider_handle" />
         </shape>
     </item>
 

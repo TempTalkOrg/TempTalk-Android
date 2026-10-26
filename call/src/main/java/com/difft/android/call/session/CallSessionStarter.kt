@@ -31,16 +31,20 @@ import io.livekit.android.room.Room
 import io.livekit.android.util.flow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import livekit.LivekitTemptalk
 
 /**
  * Drives the call session startup sequence after the ViewModel is constructed:
- *  1. connect the room with failover,
- *  2. await the server's `ttCallResp` and validate it,
+ *  1. connect the room with failover, and in parallel
+ *  2. await the server's `ttCallResp` from the first join and validate it,
  *  3. extract the room id and decrypt the E2EE key,
  *  4. for CALLER: start ringtone, persist local `CallData`, send start-call text,
  *  5. for CALLEE: send the join-sync control message and cancel incoming-call notification.
@@ -71,39 +75,71 @@ internal class CallSessionStarter(
     // True once the session has started ending. Its teardown clears the pre-connect cancel latch
     // before the room is released, so a late response must not be read as a live start.
     private val isSessionEnding: () -> Boolean,
+    private val startCallResponses: () -> Flow<LivekitTemptalk.TTCallResponse?> = { room::ttCallResp.flow },
 ) {
+    private val responseGate = Mutex()
+    private var connectionFlowAborted = false
 
-    /** Launch the end-to-end startup flow on an IO dispatcher. */
+    /**
+     * Launch the end-to-end startup flow on an IO dispatcher.
+     *
+     * The response is handled as soon as the first join delivers it, not after connect returns:
+     * `Room.connect` only returns once the first PeerConnection is up (up to 15s per attempt, longer
+     * across failover), and it emits `RoomEvent.Connected` just before returning — whose handler
+     * needs the room id assigned here. A later attempt's response belongs to the same call
+     * (same clientCallId), so only the first one is handled.
+     */
     fun start() {
         scope.launch(Dispatchers.IO) {
+            val response = async { startCallResponses().filterNotNull().first() }
+            val responseHandler = launch {
+                val firstResponse = response.await()
+                responseGate.lock()
+                try {
+                    if (connectionFlowAborted) {
+                        L.w { "[Call] CallSessionStarter late start call response skipped: connection flow aborted" }
+                        return@launch
+                    }
+                    handleStartCallResponse(firstResponse)
+                } finally {
+                    responseGate.unlock()
+                }
+            }
             val connected = connectionCoordinator.connectToRoomWithFailover(
                 callParams = callIntent.startCallParams,
                 useQuic = LCallEngine.isUseQuicSignal(),
             )
             if (!connected) {
+                responseGate.withLock { connectionFlowAborted = true }
+                response.cancel()
+                responseHandler.cancel()
                 L.e { "[Call] CallSessionStarter connectionFlow aborted: connectToRoom failed" }
                 return@launch
             }
-            processStartCallResponse()
+            if (withTimeoutOrNull(RESPONSE_TIMEOUT_MS) { response.await() } == null) {
+                response.cancel()
+                handleStartCallResponse(null)
+            }
         }
     }
 
-    private suspend fun processStartCallResponse() {
-        val response = withTimeoutOrNull(RESPONSE_TIMEOUT_MS) {
-            room::ttCallResp.flow.filterNotNull().first()
-        }
-        handleStartCallResponse(response)
-    }
-
-    /** The response half of [processStartCallResponse]; null = timed out. Separate so tests can drive it. */
+    /** The response half of [start]; null = timed out. Separate so tests can drive it. */
     internal suspend fun handleStartCallResponse(response: LivekitTemptalk.TTCallResponse?) {
         L.i { "[Call] CallSessionStarter start call response callback." }
         if (response == null) {
+            if (isSessionEnding()) {
+                L.w { "[Call] CallSessionStarter null start call response skipped: session ending" }
+                return
+            }
             L.e { "[Call] CallSessionStarter start call response is null." }
             roomCtl.collectError(StartCallException(getString(R.string.call_server_connect_exception_error)))
             return
         }
         if (response.body == null || response.base.status != 0) {
+            if (isSessionEnding()) {
+                L.w { "[Call] CallSessionStarter invalid start call response skipped: session ending" }
+                return
+            }
             L.e { "[Call] CallSessionStarter start call response error, status:${response.base.status} reason:${response.base.reason}." }
             when (response.base.status) {
                 22001 -> roomCtl.collectError(StartCallException(getString(R.string.call_connect_error_ended)))
@@ -113,13 +149,29 @@ internal class CallSessionStarter(
         }
 
         val roomId = response.body.roomId
+        val callerId = callIntent.callerId
+        val callType = CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
+
+        // A user can exit before the server creates the room. If that response wins the race with
+        // teardown, use its authoritative room id only to re-issue the termination; do not restore
+        // local call state or run any start-call side effects.
+        if (
+            callIntent.action == CallIntent.Action.START_CALL &&
+            onGoingCallStateManager.isInitiatorPreConnectCancelled()
+        ) {
+            reCancelAfterInitiatorExit(callType, roomId.orEmpty(), callerId)
+            return
+        }
+        if (isSessionEnding()) {
+            L.w { "[Call] CallSessionStarter start call response skipped: session ending roomId:$roomId" }
+            return
+        }
+
         if (roomId != null) {
             onRoomIdAssigned(roomId)
         }
         publisher.publish { setCurrentRoomId(roomId) }
 
-        val callerId = callIntent.callerId
-        val callType = CallType.fromString(callIntent.callType) ?: CallType.ONE_ON_ONE
         val forWhat = when (callType) {
             CallType.GROUP -> For.Group(callIntent.conversationId!!)
             CallType.ONE_ON_ONE -> For.Account(callIntent.conversationId!!)

@@ -8,6 +8,8 @@ import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.view.View
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.difft.android.chat.R
 import com.difft.android.chat.util.ViewUtil
 
@@ -32,8 +34,11 @@ class ChatBackgroundDrawable(
         val drawableHeight = backgroundDrawable.intrinsicHeight
 
         // 只有当需要绘制系统栏背景且view不为空时才获取高度
-        val statusBarHeight = if (drawSystemBars && view != null) ViewUtil.getStatusBarHeight(view) else 0
-        val navigationBarHeight = if (drawSystemBars && view != null) ViewUtil.getNavigationBarHeight(view) else 0
+        // The strips the root pads for (BaseActivity: system bars + cutout). In a freeform window
+        // the top one is the caption bar, not a status bar, so status-bar insets alone read 0.
+        val barInsets = if (drawSystemBars && view != null) systemBarInsets(view) else null
+        val statusBarHeight = barInsets?.top ?: 0
+        val navigationBarHeight = barInsets?.bottom ?: 0
 
         // 根据参数决定是否绘制系统栏背景
         if (drawSystemBars && view != null) {
@@ -90,6 +95,12 @@ class ChatBackgroundDrawable(
 
         // 恢复画布状态
         canvas.restore()
+    }
+
+    private fun systemBarInsets(view: View): androidx.core.graphics.Insets {
+        val insets = ViewCompat.getRootWindowInsets(view)
+            ?: return androidx.core.graphics.Insets.of(0, ViewUtil.getStatusBarHeight(view), 0, ViewUtil.getNavigationBarHeight(view))
+        return insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
     }
 
     override fun setAlpha(alpha: Int) {

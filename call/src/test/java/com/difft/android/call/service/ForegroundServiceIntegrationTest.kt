@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.test.core.app.ApplicationProvider
+import com.difft.android.base.notification.NotificationChannelIds
 import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.state.OgsmTestState
@@ -406,7 +407,7 @@ class ForegroundServiceIntegrationTest {
         val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(
             ForegroundService.DEFAULT_NOTIFICATION_ID,
-            NotificationCompat.Builder(app, ForegroundService.CHANNEL_CONFIG_NAME_ONGOING_CALL)
+            NotificationCompat.Builder(app, NotificationChannelIds.RUNNING_IN_BACKGROUND)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .build(),
         )

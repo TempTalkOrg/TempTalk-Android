@@ -109,10 +109,14 @@
         tools:replace="android:label,android:allowBackup"
         tools:targetApi="33">
 
-        <!-- debug模式下关闭firebase自动上报功能 -->
+        <!-- Firebase Analytics is removed; this keeps it off if a dependency ever brings it back (#1407). -->
         <meta-data
-            android:name="firebase_analytics_collection_enabled"
-            android:value="${FIREBASE_ANALYTICS_ENABLED}" />
+            android:name="firebase_analytics_collection_deactivated"
+            android:value="true" />
+        <!-- Default for fresh installs; Application also resets the persisted value on every start. -->
+        <meta-data
+            android:name="delivery_metrics_exported_to_big_query_enabled"
+            android:value="false" />
         <meta-data
             android:name="firebase_crashlytics_collection_enabled"
             android:value="${FIREBASE_CRASHLYTICS_ENABLED}" />
@@ -191,6 +195,22 @@
             android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
+        <activity
+            android:name=".setting.notificationtest.NotificationTestActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+        <!-- #1350: full-screen target of the call pop-up test; never part of a real call. -->
+        <activity
+            android:name=".setting.notificationtest.NotificationTestCallActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity="com.difft.android.notificationtest.task"
+            tools:targetApi="27" />
         <activity
             android:name=".setting.ChatSettingsActivity"
             android:screenOrientation="locked"

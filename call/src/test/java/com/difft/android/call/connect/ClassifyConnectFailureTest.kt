@@ -31,6 +31,21 @@ class ClassifyConnectFailureTest {
     }
 
     @Test
+    fun `media unreachable on the first connect tries the next candidate`() {
+        assertEquals(
+            ConnectFailureCategory.TRANSIENT,
+            classifyConnectFailure(
+                RoomException.MediaUnreachableException(
+                    message = "could not establish subscriber connection",
+                    transport = "subscriber",
+                    failed = false,
+                    elapsedMs = 15_000,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `unsatisfiable local precondition is terminal`() {
         assertEquals(
             ConnectFailureCategory.PRECONDITION,

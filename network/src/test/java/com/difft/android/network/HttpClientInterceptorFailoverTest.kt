@@ -8,7 +8,6 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -19,15 +18,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 /**
- * [HttpClientInterceptor] after auth moved out of it (issue #1231): a 401 passes through untouched,
- * and the failover path's last error is per-call state rather than a shared field.
+ * [HttpClientInterceptor] after auth (issue #1231) and host failover (#1396) moved out of it: a 401
+ * passes through untouched, a failure is per-call state rather than a shared field, and the final
+ * answer failover hands it is normalized. Failover itself is covered by [HostFailoverInterceptorTest].
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = TestScopeApplication::class)
 class HttpClientInterceptorFailoverTest {
-
-    @get:Rule
-    val hiltEntryPoints = HiltEntryPointRule()
 
     private val interceptor = HttpClientInterceptor(pinnedConnection = false)
 
@@ -73,30 +70,78 @@ class HttpClientInterceptorFailoverTest {
         assertEquals(419, results[1])
     }
 
-    // T38 — when every host is exhausted the terminal exception stays meaningful.
+    // A 5xx that failover could not resolve on any host is the final failure, never a response.
     @Test
-    fun `an exhausted failover propagates the last hosts exception`() {
-        stubUrlManager(hosts = listOf(ORIGIN_HOST, BACKUP_HOST))
+    fun `a 5xx that reaches normalization becomes the generic network exception`() {
         val request = Request.Builder().url(URL).build()
         val chain = mockk<Interceptor.Chain>()
         every { chain.request() } returns request
         every { chain.proceed(any()) } answers {
-            val proceeded = firstArg<Request>()
-            if (proceeded.url.host == ORIGIN_HOST) {
-                Response.Builder()
-                    .request(proceeded)
-                    .protocol(Protocol.HTTP_1_1)
-                    .code(500)
-                    .message("Server Error")
-                    .build()
-            } else {
-                throw NetworkException(503, "backup down")
-            }
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(503)
+                .message("Unavailable")
+                .body("""{"reason":"ignored"}""".toResponseBody("application/json".toMediaType()))
+                .build()
         }
 
         val error = assertFailsWith<NetworkException> { interceptor.intercept(chain) }
 
-        assertEquals(503, error.errorCode)
+        assertEquals(0, error.errorCode)
+    }
+
+    // The terminal verdict of a 4xx without a reason keeps its code.
+    @Test
+    fun `a 404 without a reason becomes a network exception carrying its code`() {
+        val request = Request.Builder().url(URL).build()
+        val chain = mockk<Interceptor.Chain>()
+        every { chain.request() } returns request
+        every { chain.proceed(any()) } answers {
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(404)
+                .message("Not Found")
+                .body("".toResponseBody("application/json".toMediaType()))
+                .build()
+        }
+
+        val error = assertFailsWith<NetworkException> { interceptor.intercept(chain) }
+
+        assertEquals(404, error.errorCode)
+    }
+
+    @Test
+    fun `a 4xx carrying a reason is normalized to a 200`() {
+        val request = Request.Builder().url(URL).build()
+        val chain = mockk<Interceptor.Chain>()
+        every { chain.request() } returns request
+        every { chain.proceed(any()) } answers {
+            Response.Builder()
+                .request(request)
+                .protocol(Protocol.HTTP_1_1)
+                .code(409)
+                .message("Conflict")
+                .body("""{"status":1,"reason":"busy"}""".toResponseBody("application/json".toMediaType()))
+                .build()
+        }
+
+        val response = interceptor.intercept(chain)
+
+        assertEquals(200, response.code)
+        assertEquals("""{"status":1,"reason":"busy"}""", response.body.string())
+    }
+
+    // A transport failure that failover rethrows is mapped to the localized generic error.
+    @Test
+    fun `an io failure is mapped to the generic network error`() {
+        val request = Request.Builder().url(URL).build()
+        val chain = mockk<Interceptor.Chain>()
+        every { chain.request() } returns request
+        every { chain.proceed(any()) } answers { throw java.net.UnknownHostException("origin.test.invalid") }
+
+        assertFailsWith<java.io.IOException> { interceptor.intercept(chain) }
     }
 
     private fun throwingChain(code: Int): Interceptor.Chain {
@@ -107,17 +152,7 @@ class HttpClientInterceptorFailoverTest {
         return chain
     }
 
-    private fun stubUrlManager(hosts: List<String>) {
-        val urlManager = mockk<UrlManager>(relaxed = true)
-        every { urlManager.getAllHostsRanked() } returns hosts
-        val entryPoint = mockk<HttpClientInterceptor.EntryPoint>()
-        every { entryPoint.urlManager } returns urlManager
-        hiltEntryPoints.put(HttpClientInterceptor.EntryPoint::class.java, entryPoint)
-    }
-
     private companion object {
-        const val ORIGIN_HOST = "origin.test.invalid"
-        const val BACKUP_HOST = "backup.test.invalid"
         const val URL = "https://origin.test.invalid/v1/thing"
     }
 }

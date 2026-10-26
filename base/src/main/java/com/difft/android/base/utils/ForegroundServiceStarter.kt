@@ -60,7 +60,7 @@ import java.util.concurrent.ConcurrentHashMap
  *    ~5 minutes via AlarmManager.
  *
  * The catch is narrow on purpose: any [IllegalStateException] that is *not*
- * FGSNAE is re-thrown so it surfaces as FATAL (NotificationChannel "BACKGROUND"
+ * FGSNAE is re-thrown so it surfaces as FATAL (NotificationChannel "RUNNING_IN_BACKGROUND"
  * missing, ServiceCompat mis-config, etc. — these are real bugs and must
  * fail fast).
  *

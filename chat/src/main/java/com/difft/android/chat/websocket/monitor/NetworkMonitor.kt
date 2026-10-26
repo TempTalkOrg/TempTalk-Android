@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import com.difft.android.base.log.lumberjack.L
 
 class NetworkMonitor(private val context: Context, private val onNetworkAvailable: () -> Unit) {
 
@@ -19,6 +20,13 @@ class NetworkMonitor(private val context: Context, private val onNetworkAvailabl
 
         override fun onLost(network: Network) {
             super.onLost(network)
+        }
+
+        // Tells a per-app block (Doze, background data restriction, OEM policy) apart from a
+        // real outage during long network-unavailable windows.
+        override fun onBlockedStatusChanged(network: Network, blocked: Boolean) {
+            super.onBlockedStatusChanged(network, blocked)
+            L.i { "[ws]monitor: network blocked=$blocked" }
         }
     }
 
