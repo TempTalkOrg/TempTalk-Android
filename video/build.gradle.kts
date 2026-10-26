@@ -38,6 +38,8 @@ dependencies {
     implementation(libs.isoparser)
     implementation(libs.mp4parser.streaming)
     implementation(libs.mp4parser.muxer)
+    // StreamingTranscoder uses Guava CountingOutputStream; it is no longer reachable transitively (#1407).
+    implementation(libs.guava)
 
     // Test dependencies
     testImplementation(libs.junit)

@@ -152,8 +152,8 @@ fun LabeledActionSlot(
 }
 
 /**
- * Participant count on the People control: 16dp tall pill, error red, white 12sp, hugging the
- * circle's bottom-end corner.
+ * Participant count on the People control: 16dp tall pill on the tooltip grey (matches iOS), white 12sp,
+ * hugging the circle's bottom-end corner.
  */
 @Composable
 fun BoxScope.ActionCountBadge(count: Int) {
@@ -163,7 +163,7 @@ fun BoxScope.ActionCountBadge(count: Int) {
             .offset(x = 4.dp, y = 2.dp)
             .defaultMinSize(minWidth = 20.dp)
             .height(16.dp)
-            .background(color = DifftTheme.colors.textError, shape = DifftTheme.radius.largeShape)
+            .background(color = DifftTheme.colors.backgroundTooltip, shape = DifftTheme.radius.largeShape)
             .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {

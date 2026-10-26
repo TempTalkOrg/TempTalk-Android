@@ -8,8 +8,10 @@ import android.os.Build
 import android.os.IBinder
 import android.text.TextUtils
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.appScope
@@ -74,15 +76,20 @@ class AppUpgradeService : Service() {
         isDownloading = true
 
         // Promote to a foreground service so the download survives OEM background kill (retry is
-        // typically triggered from background). The retry PendingIntent uses getForegroundService,
-        // which grants the background-start exemption. startForegroundSafely absorbs FGSNAE.
+        // typically triggered from background, via AppUpgradeRetryReceiver). Only on a channel
+        // verified here (#1354); startForegroundSafely absorbs FGSNAE.
+        val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
+        if (channelId == null) {
+            sendDownloadCompletedBroadcast(STATUS_DOWNLOAD_FAILED, filepath, isForce)
+            return START_NOT_STICKY
+        }
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         } else {
             0
         }
         val started = ForegroundServiceStarter.startForegroundSafely(
-            this, AppUpgradeNotifier.NOTIFICATION_ID, notifier.buildProgress(null), type
+            this, AppUpgradeNotifier.NOTIFICATION_ID, notifier.buildProgress(null, channelId), type
         )
         if (!started) {
             // Signal failure like every other path: the broadcast reaches the in-app UI and also
@@ -243,6 +250,33 @@ class AppUpgradeService : Service() {
         const val STATUS_VERIFY_FAILED = -1
 
         val ACTION_DOWNLOAD_COMPLETED: String by lazy { "${application.packageName}.APK_DOWNLOAD_COMPLETED" }
+
+        private const val SERVICE_TAG = "AppUpgradeService"
+
+        /**
+         * The only way to start the download: runs the foreground-channel preflight first and does
+         * not start the service when no channel can carry its notification (#1354).
+         * [asForeground] starts it as a foreground service, for a start from the background.
+         * Returns whether the start was issued.
+         */
+        fun start(
+            context: Context,
+            url: String,
+            apkHash: String,
+            filePath: String,
+            isForce: Boolean,
+            asForeground: Boolean = false,
+        ): Boolean {
+            if (NotificationChannelSpecs.preflightForegroundChannel(context, SERVICE_TAG) == null) return false
+            val intent = startIntent(context, url, apkHash, filePath, isForce)
+            return try {
+                if (asForeground) ContextCompat.startForegroundService(context, intent) else context.startService(intent)
+                true
+            } catch (e: Exception) {
+                L.e { "[AppUpgradeService] start failed foreground=$asForeground error=${e.stackTraceToString()}" }
+                false
+            }
+        }
 
         fun startIntent(context: Context, url: String, apkHash: String, filePath: String, isForce: Boolean): Intent =
             Intent(context, AppUpgradeService::class.java)

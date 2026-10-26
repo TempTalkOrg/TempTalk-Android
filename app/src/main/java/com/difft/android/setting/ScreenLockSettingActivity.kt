@@ -137,6 +137,7 @@ class ScreenLockSettingActivity : BaseActivity() {
             // Show/hide pattern show path option based on pattern lock status
             val patternEnabled = !userData.pattern.isNullOrEmpty()
             mBinding.clPatternShowPath.visibility = if (patternEnabled) View.VISIBLE else View.GONE
+            mBinding.tvPatternShowPathDesc.visibility = mBinding.clPatternShowPath.visibility
 
             // Show/hide timeout setting based on any lock being enabled
             val anyLockEnabled = !userData.passcode.isNullOrEmpty() || !userData.pattern.isNullOrEmpty()

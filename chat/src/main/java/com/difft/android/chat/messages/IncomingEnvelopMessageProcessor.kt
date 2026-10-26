@@ -1,7 +1,10 @@
 package com.difft.android.chat.messages
 
 import android.content.Context
+import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.monitor.BackgroundPowerModel
+import com.difft.android.base.monitor.BackgroundPowerSampler
 import com.difft.android.base.utils.ChunkingMethod
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.chunked
@@ -32,10 +35,15 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
     private val pendingMessageProcessor: PendingMessageProcessor,
     private val failedMessageProcessor: FailedMessageProcessor,
     private val messageNotificationUtil: MessageNotificationUtil,
+    private val wakeLock: IncomingMessageWakeLock,
+    private val powerSampler: BackgroundPowerSampler,
 ) {
+    /** [queuedAt] is `elapsedRealtime`, so the wait includes time the CPU spent suspended. */
+    private data class QueuedEnvelope(val envelope: Envelope, val requestId: Long, val queuedAt: Long, val seq: Long)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val _incomingMessagesFlow =
-        MutableSharedFlow<Pair<Envelope, Long>>(extraBufferCapacity = 30).apply {
+        MutableSharedFlow<QueuedEnvelope>(extraBufferCapacity = 30).apply {
             this
                 .chunked(ChunkingMethod.ByTime(500, 30))
                 .onEach { batch -> processBatch(batch) }
@@ -54,7 +62,7 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
      * `CancellationException` is rethrown — coroutine cancellation (logout
      * / scope shutdown) must propagate so the scope actually shuts down.
      */
-    private suspend fun processBatch(batch: List<Pair<Envelope, Long>>) {
+    private suspend fun processBatch(batch: List<QueuedEnvelope>) {
         try {
             doProcessBatch(batch)
         } catch (e: CancellationException) {
@@ -65,25 +73,32 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
             // the next allocation will OOM again and Android's LMK will
             // recover; we just don't compound that with a dead pipeline.
             L.e { "[Message] batch processing crashed (collector preserved): ${e.stackTraceToString()}" }
+        } finally {
+            wakeLock.onProcessed(batch.maxOf { it.seq })
         }
     }
 
-    private suspend fun doProcessBatch(batch: List<Pair<Envelope, Long>>) {
+    private suspend fun doProcessBatch(batch: List<QueuedEnvelope>) {
+        wakeLock.onBatchStart()
         if (batch.size > 1) L.i { "[Message] processing batch size=${batch.size}" }
         // Eager ACK — see issue #754 design §1.5. ACK first so a late
         // processing failure can't block the server's push pipeline;
         // recovery for transient failures is owned by FailedMessageProcessor.
-        batch.forEach { (envelop, requestId) ->
+        val now = SystemClock.elapsedRealtime()
+        batch.forEach { (envelop, requestId, queuedAt, _) ->
             val acked = sendAck(requestId, envelop.timestamp)
-            L.i { "[Message] recv type=${envelop.type} ts=${envelop.timestamp} requestId=$requestId acked=$acked" }
+            val queuedMs = now - queuedAt
+            L.i { "[Message] recv type=${envelop.type} ts=${envelop.timestamp} requestId=$requestId acked=$acked queuedMs=$queuedMs" }
+            // Telemetry must never interrupt the ACK loop.
+            runCatching { powerSampler.onEvent(BackgroundPowerModel.queueWaitEvent(queuedMs)) }
         }
 
         val failedEnvelopes = mutableListOf<Envelope>()
 
         // Sort batch by systemShowTimestamp to ensure chronological order.
-        val sortedBatch = batch.sortedBy { it.first.systemShowTimestamp }
+        val sortedBatch = batch.sortedBy { it.envelope.systemShowTimestamp }
 
-        sortedBatch.forEach { (envelope, _) ->
+        sortedBatch.forEach { (envelope) ->
             when (val processRes = envelopToMessageProcessor.process(envelope, "message")) {
                 is EnvelopeProcessResult.Success -> {
                     val result = processRes.result
@@ -134,7 +149,8 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
 
     suspend fun inComeMessage(envelope: Envelope, requestId: Long) {
         L.d { "[Message] envelope into flow type=${envelope.type} ts=${envelope.timestamp} requestId=$requestId" }
-        _incomingMessagesFlow.emit(Pair(envelope, requestId))
+        val seq = wakeLock.onQueued()
+        _incomingMessagesFlow.emit(QueuedEnvelope(envelope, requestId, SystemClock.elapsedRealtime(), seq))
     }
 
     /** @return whether the ack was written to the socket; the failure is logged here. */

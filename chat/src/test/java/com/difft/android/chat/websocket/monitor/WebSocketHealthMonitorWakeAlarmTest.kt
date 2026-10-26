@@ -2,10 +2,13 @@ package com.difft.android.chat.websocket.monitor
 
 import android.app.AlarmManager
 import android.content.Context
+import android.os.SystemClock
+import com.difft.android.base.monitor.BackgroundPowerSampler
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.network.UrlManager
 import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
+import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import com.difft.android.websocket.internal.websocket.WebSocketConnection
 import io.mockk.every
@@ -26,13 +29,16 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 
 /**
  * Drives the production [WebSocketHealthMonitor] health-check loop (on the real `appScope`)
  * with a real [KeepAliveWakeAlarm] and asserts the wake-alarm contract from issue #1325:
  * a connected socket in keep-alive mode keeps an elapsed-realtime wake armed, firing it sends
  * a keep-alive and re-arms, a socket that connects later is covered once it connects,
- * FCM mode arms nothing and stopping the monitor disarms.
+ * FCM mode arms nothing and stopping the monitor disarms. Each keep-alive sent in keep-alive
+ * mode also arms a response deadline: a response cancels it, a miss force-disconnects.
  *
  * Timing is real (the monitor is bound to the process scope), so assertions poll with a
  * generous deadline instead of a virtual clock.
@@ -68,6 +74,7 @@ class WebSocketHealthMonitorWakeAlarmTest {
             urlManager = mockk<UrlManager>(relaxed = true),
             coordinator = mockk<DomainSpeedTestCoordinator>(relaxed = true),
             keepAliveWakeAlarm = KeepAliveWakeAlarm(context, userManager),
+            powerSampler = mockk<BackgroundPowerSampler>(relaxed = true),
         )
     }
 
@@ -99,8 +106,69 @@ class WebSocketHealthMonitorWakeAlarmTest {
         first.onAlarmListener!!.onAlarm()
 
         verify(timeout = DEADLINE_MS) { connection.sendKeepAlive() }
-        awaitAlarms { alarms -> alarms.size == 1 && alarms.single().onAlarmListener !== first.onAlarmListener }
+        awaitAlarms { alarms ->
+            alarms.count { !it.isResponseDeadline() } == 1 &&
+                alarms.none { it.onAlarmListener === first.onAlarmListener }
+        }
     }
+
+    @Test
+    fun `keep-alive response cancels its deadline`() {
+        every { userData.keepAliveEnabled } returns true
+        stateFlow.tryEmit(WebSocketConnectionState.CONNECTED)
+        monitor.monitor(connection)
+        val wake = awaitAlarms { it.size == 1 }.single()
+        // The alarm is armed just before the loop subscribes to wake events; let it subscribe.
+        Thread.sleep(SETTLE_MS)
+        wake.onAlarmListener!!.onAlarm()
+        awaitAlarms { alarms -> alarms.any { it.isResponseDeadline() } }
+
+        monitor.onKeepAliveResponse()
+
+        awaitAlarms { alarms -> alarms.none { it.isResponseDeadline() } }
+        verify(exactly = 0) { connection.disconnectWhenConnected(any()) }
+    }
+
+    @Test
+    fun `missed response deadline force-disconnects the socket`() {
+        every { userData.keepAliveEnabled } returns true
+        stateFlow.tryEmit(WebSocketConnectionState.CONNECTED)
+        monitor.monitor(connection)
+        // Paused Robolectric clock: move past the monitor's initial response timestamp.
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        val wake = awaitAlarms { it.size == 1 }.single()
+        // The alarm is armed just before the loop subscribes to wake events; let it subscribe.
+        Thread.sleep(SETTLE_MS)
+        wake.onAlarmListener!!.onAlarm()
+        val deadline = awaitAlarms { alarms -> alarms.any { it.isResponseDeadline() } }.single { it.isResponseDeadline() }
+
+        deadline.onAlarmListener!!.onAlarm()
+
+        verify(timeout = DEADLINE_MS) { connection.disconnectWhenConnected(LocalDisconnectReason.HEARTBEAT_LOST) }
+    }
+
+    @Test
+    fun `deadline of a replaced socket leaves the new socket alone`() {
+        every { userData.keepAliveEnabled } returns true
+        stateFlow.tryEmit(WebSocketConnectionState.CONNECTED)
+        monitor.monitor(connection)
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        val wake = awaitAlarms { it.size == 1 }.single()
+        Thread.sleep(SETTLE_MS)
+        wake.onAlarmListener!!.onAlarm()
+        val deadline = awaitAlarms { alarms -> alarms.any { it.isResponseDeadline() } }.single { it.isResponseDeadline() }
+
+        stateFlow.tryEmit(WebSocketConnectionState.DISCONNECTED)
+        stateFlow.tryEmit(WebSocketConnectionState.CONNECTED)
+        Thread.sleep(SETTLE_MS)
+        deadline.onAlarmListener!!.onAlarm()
+        Thread.sleep(SETTLE_MS)
+
+        verify(exactly = 0) { connection.disconnectWhenConnected(any()) }
+    }
+
+    private fun ShadowAlarmManager.ScheduledAlarm.isResponseDeadline(): Boolean =
+        triggerAtTime - SystemClock.elapsedRealtime() <= KeepAliveWakeAlarm.RESPONSE_DEADLINE_MS
 
     @Test
     fun `socket that connects after monitoring started is covered once connected`() {

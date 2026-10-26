@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -156,7 +157,7 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
         // throws IllegalStateException if the fragment detaches while the IO work is in flight.
         val ctx = requireContext()
         val pendingRepo = ctx.getEntryPoint().getPendingRemovalContactRepository()
-        val contacts = withContext(Dispatchers.IO) {
+        val (contacts, letters) = withContext(Dispatchers.IO) {
             val friends = wcdb.contactor.allObjects
             val weakExpire = pendingRepo.getAllExpireAt()       // uid -> expireAt (countdown subtitle)
             val weakUids = weakExpire.keys.toList()
@@ -192,11 +193,27 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
             // Weak-pending contacts form a single group pinned at the top (each item carries its
             // expireAt so a weak-state change is part of DiffUtil contents and rebinds the row);
             // normal contacts follow as the A-Z list.
-            buildContactListItems(friends + weakContacts, weakExpire)
+            val items = buildContactListItems(friends + weakContacts, weakExpire)
+            items to items.indexLetters()
         }
-        mAdapter.submitList(contacts)
+        // The rail updates only once the adapter commits this list, so a letter shown on it is
+        // always resolvable by getLetterPosition. The diff callback outlives the view scope, so it
+        // must not touch binding after the view is destroyed.
+        val rail = binding.sideBar
+        val owner = viewLifecycleOwner
+        mAdapter.submitList(contacts) {
+            if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) return@submitList
+            rail.reset(letters)
+            rail.isVisible = letters.isNotEmpty()
+        }
         addLettersDecoration(contacts)
     }
+
+    /** Index letters in list order, excluding the pinned pending-removal group (iOS parity). */
+    private fun List<ContactListItem>.indexLetters(): List<String> =
+        filter { it.expireAt == null }
+            .map { it.contactor.getDisplayNameForUI().getSortLetter() }
+            .distinct()
 
     private var decoration: SectionDecoration? = null
     private var pendingDivider: PendingDividerDecoration? = null

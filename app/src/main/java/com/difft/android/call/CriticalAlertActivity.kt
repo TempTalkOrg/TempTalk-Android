@@ -31,6 +31,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.repo.LCallHttpService
+import com.difft.android.call.state.CriticalAlertCallGate
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.alert.CriticalAlertFullScreen
@@ -61,6 +62,9 @@ class CriticalAlertActivity: ComponentActivity() {
     lateinit var criticalAlertStateManager: CriticalAlertStateManager
 
     @Inject
+    lateinit var criticalAlertCallGate: CriticalAlertCallGate
+
+    @Inject
     lateinit var criticalAlertManager: CriticalAlertManager
 
     @Inject
@@ -84,6 +88,18 @@ class CriticalAlertActivity: ComponentActivity() {
     }
     
     private var autoFinishJob: Job? = null
+
+    // #1381: set when onCreate handled an alert of the current call without showing this page.
+    private var handledForCurrentCall = false
+
+    // #1387: set when this page finishes because the call of its alert ended; onDestroy then releases only
+    // what this page owns instead of resetting every alert's state.
+    private var finishedForEndedRoom = false
+
+    // #1387: the alert this page owns, published (as CriticalAlertStateManager.pageNotificationId) before its silence check.
+    private var ownNotificationId: Int? = null
+    private var ownConversationId: String? = null
+    private var receiverRegistered = false
     
     private lateinit var backPressedCallback: OnBackPressedCallback
 
@@ -138,6 +154,27 @@ class CriticalAlertActivity: ComponentActivity() {
 
         val roomId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_ROOM_ID)
 
+        // #1387 ordering: the dismissal receiver is registered before the page id is published, and the id
+        // before the silence check. A call end either shows up in the check or finds the id (and the
+        // receiver) in CriticalAlertManager.dismissForRoom.
+        registerCriticalAlertReceiver()
+        ownNotificationId = notificationId
+        ownConversationId = conversationId
+        if (criticalAlertManager.publishPageAndCheckSilence(notificationId, conversationId, roomId) &&
+            intent.action != LCallConstants.CRITICAL_ALERT_ACTION_CLICKED
+        ) {
+            undoSilencedAlert(notificationId, roomId)
+            // This page never showed: onDestroy must not reset or stop state another alert owns.
+            if (criticalAlertCallGate.isForCurrentCall(conversationId, roomId)) {
+                handledForCurrentCall = true
+            } else {
+                finishedForEndedRoom = true
+            }
+            criticalAlertStateManager.setPageClosingSilently(notificationId)
+            finish()
+            return
+        }
+
         // 所有验证通过后，设置状态
         criticalAlertStateManager.setConversationId(conversationId)
         criticalAlertStateManager.setIsShowing(true)
@@ -152,9 +189,6 @@ class CriticalAlertActivity: ComponentActivity() {
             }
         }
 
-        // 注册广播接收器，用于处理用户主动关闭或超时自动关闭的事件
-        registerCriticalAlertReceiver()
-
         // 注册返回按键和边缘手势拦截，防止用户意外退出
         registerOnBackPressedHandler()
 
@@ -162,7 +196,7 @@ class CriticalAlertActivity: ComponentActivity() {
         scheduleAutoFinish()
 
         // app前台启动activity 播放声音和闪光灯
-        if (!isNotification) criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
+        if (!isNotification) criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId, roomId)
     }
 
     private fun showBlankTransparentUI() {
@@ -196,7 +230,6 @@ class CriticalAlertActivity: ComponentActivity() {
         super.onNewIntent(intent)
         // 需要重新处理新的Intent
         L.i { "[CriticalAlert] onNewIntent: Handling new intent" }
-        setIntent(intent)
         val conversationId = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_CONVERSATION)
         val title = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_TITLE)
         val message = intent.getStringExtra(LCallConstants.BUNDLE_KEY_CRITICAL_MESSAGE)
@@ -209,7 +242,31 @@ class CriticalAlertActivity: ComponentActivity() {
             finish()
             return
         }
-        
+
+        // The page stays as it is, intent included: it is showing another alert or finishing a join.
+        if (isSilenced(intent.action, conversationId, roomId)) {
+            undoSilencedAlert(notificationId, roomId)
+            return
+        }
+        setIntent(intent)
+
+        // #1387: the new alert is accepted, so the page now owns its id; checked again after the id is
+        // published, in case its call ended since the check above. Closing the page then also stops the
+        // previous alert's sound, which this page was presenting.
+        val previousNotificationId = ownNotificationId
+        ownNotificationId = notificationId
+        ownConversationId = conversationId
+        if (criticalAlertManager.publishPageAndCheckSilence(notificationId, conversationId, roomId) &&
+            intent.action != LCallConstants.CRITICAL_ALERT_ACTION_CLICKED
+        ) {
+            undoSilencedAlert(notificationId, roomId)
+            previousNotificationId?.let { criticalAlertManager.stopIfOwner(it) }
+            finishedForEndedRoom = true
+            criticalAlertStateManager.setPageClosingSilently(notificationId)
+            finishAndRemoveTask()
+            return
+        }
+
         // 更新共享的状态，确保广播接收器能正确匹配
         criticalAlertStateManager.setConversationId(conversationId)
         criticalAlertStateManager.setIsShowing(true)
@@ -233,20 +290,37 @@ class CriticalAlertActivity: ComponentActivity() {
 
         // Same rule as onCreate: a notification tap must not restart the alert sound.
         val isNotification = intent.getBooleanExtra(LCallConstants.BUNDLE_KEY_CRITICAL_IS_NOTIFICATION, false)
-        if (!isNotification) criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
+        if (!isNotification) criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId, roomId)
     }
 
+
+    /**
+     * #1381: an alert started just before a join of its call began is handled instead of ringing over
+     * that call; #1387: so is an alert whose call has ended. A tapped notification
+     * ([LCallConstants.CRITICAL_ALERT_ACTION_CLICKED]) keeps its own in-call handling.
+     */
+    private fun isSilenced(action: String?, conversationId: String, roomId: String?): Boolean =
+        action != LCallConstants.CRITICAL_ALERT_ACTION_CLICKED && criticalAlertCallGate.shouldSilence(conversationId, roomId)
+
+    /** Owned undo of a silenced alert: only its notification and its sound; its flashlight ends itself. */
+    private fun undoSilencedAlert(notificationId: Int, roomId: String?) {
+        L.i { "[CriticalAlert] skip page reason=silenced notificationId=$notificationId roomId=$roomId" }
+        messageNotificationUtil.cancelNotificationsById(notificationId)
+        criticalAlertManager.stopIfOwner(notificationId)
+    }
 
     private fun registerCriticalAlertReceiver() {
         val filter = IntentFilter()
         filter.addAction(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS)
         filter.addAction(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_CONID)
+        filter.addAction(LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_NOTIFICATION_ID)
         ContextCompat.registerReceiver(
             this,
             criticalAlertReceiver,
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        receiverRegistered = true
     }
     
     /**
@@ -282,10 +356,33 @@ class CriticalAlertActivity: ComponentActivity() {
                                 finishAndRemoveTask()
                             }
                         }
+                        LCallConstants.CRITICAL_ALERT_ACTION_DISMISS_BY_NOTIFICATION_ID -> {
+                            // #1387: the call of an alert ended. Only the alert this page shows now closes it;
+                            // a newer alert that replaced the page via onNewIntent is left alone.
+                            val id = it.getIntExtra(LCallConstants.CRITICAL_ALERT_PARAM_NOTIFICATION_ID, -1)
+                            if (id != -1 && id == ownNotificationId) {
+                                L.i { "[CriticalAlert] dismiss action notificationId=$id" }
+                                finishedForEndedRoom = true
+                                criticalAlertStateManager.setPageClosingSilently(id)
+                                finishAndRemoveTask()
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // #1387: IndexActivity starting beneath this translucent, still resumed page is not the user leaving
+        // it. Navigating elsewhere pauses this page before the next activity starts.
+        criticalAlertStateManager.setPageVisible(true)
+    }
+
+    override fun onPause() {
+        criticalAlertStateManager.setPageVisible(false)
+        super.onPause()
     }
 
 
@@ -299,17 +396,25 @@ class CriticalAlertActivity: ComponentActivity() {
         if (::backPressedCallback.isInitialized) {
             backPressedCallback.remove()
         }
+        if (receiverRegistered) {
+            try {
+                unregisterReceiver(criticalAlertReceiver)
+            } catch (e: Exception) {
+                // May already be unregistered.
+                L.w { "[CriticalAlert] Failed to unregister receiver: ${e.message}" }
+            }
+        }
+        val ownId = ownNotificationId
+        if (ownId != null && (handledForCurrentCall || finishedForEndedRoom)) {
+            // #1381/#1387: this page never showed, or its alert's call ended. It owns only its id and state
+            // fields, and its sound when it holds the play token; another alert keeps ringing.
+            criticalAlertManager.releasePage(ownId, ownConversationId, stopOwnedAlert = finishedForEndedRoom)
+            return
+        }
         // 重置状态
         criticalAlertStateManager.reset()
         // 停止声音和闪光灯
         criticalAlertManager.stopSoundAndFlashLight()
-
-        try {
-            unregisterReceiver(criticalAlertReceiver)
-        } catch (e: Exception) {
-            // 可能已经注销，忽略异常
-            L.w { "[CriticalAlert] Failed to unregister receiver: ${e.message}" }
-        }
     }
 
     @Composable
@@ -332,7 +437,10 @@ class CriticalAlertActivity: ComponentActivity() {
         autoFinishJob?.cancel()
 
         criticalAlertStateManager.setIsJoining(true)
-        
+
+        // #1381: from the tap on, before the calling-list lookup, an alert for this call is handled.
+        // Published on the tapping thread; released on completion, even if the job never starts.
+        val joinToken = criticalAlertCallGate.beginJoin(roomId, conversationId)
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 // 1. 检查是否正在通话
@@ -432,7 +540,7 @@ class CriticalAlertActivity: ComponentActivity() {
                     }
                 }
             }
-        }
+        }.invokeOnCompletion { criticalAlertCallGate.endJoin(joinToken) }
     }
 
     private fun handleCancelAction(conversationId: String) {

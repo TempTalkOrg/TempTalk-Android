@@ -70,10 +70,11 @@ class UrlManagerProxyEmbeddedTest {
     }
 
     @Test
-    fun `getAllHostsRanked returns embedded hosts when proxy enabled`() {
+    fun `getAllHostsRanked returns the eligible embedded hosts when proxy enabled`() {
         every { proxyProvider.isEnabled } returns true
+        every { coordinator.eligibleHosts(embeddedHosts) } returns listOf("chat.failover.example")
 
-        assertEquals(embeddedHosts, urlManager.getAllHostsRanked())
+        assertEquals(listOf("chat.failover.example"), urlManager.getAllHostsRanked())
     }
 
     @Test
@@ -93,17 +94,28 @@ class UrlManagerProxyEmbeddedTest {
     }
 
     @Test
-    fun `proxyForcedHostOrNull returns embedded host when proxy enabled`() {
+    fun `currentHostFor returns the embedded host for every service when proxy enabled`() {
         every { proxyProvider.isEnabled } returns true
         every { coordinator.firstAvailableHost(embeddedHosts) } returns "chat.chative.im"
 
-        assertEquals("chat.chative.im", urlManager.proxyForcedHostOrNull())
+        ChatService.entries.forEach { service ->
+            assertEquals("chat.chative.im", urlManager.currentHostFor(service))
+        }
     }
 
     @Test
-    fun `proxyForcedHostOrNull returns null when proxy disabled`() {
-        every { proxyProvider.isEnabled } returns false
+    fun `currentHostFor rotates to the next embedded host when the first is marked`() {
+        every { proxyProvider.isEnabled } returns true
+        every { coordinator.firstAvailableHost(embeddedHosts) } returns "chat.failover.example"
 
-        assertEquals(null, urlManager.proxyForcedHostOrNull())
+        assertEquals("chat.failover.example", urlManager.currentHostFor(ChatService.CHAT))
+    }
+
+    @Test
+    fun `currentHostFor returns the live best host when proxy disabled`() {
+        every { proxyProvider.isEnabled } returns false
+        every { coordinator.getBestHostSync() } returns "live.host"
+
+        assertEquals("live.host", urlManager.currentHostFor(ChatService.CALL))
     }
 }

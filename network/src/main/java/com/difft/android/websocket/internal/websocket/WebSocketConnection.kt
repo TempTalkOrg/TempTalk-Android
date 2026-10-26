@@ -33,6 +33,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import okio.ByteString
 import com.difft.android.websocket.api.websocket.HealthMonitor
 import com.difft.android.websocket.api.websocket.KeepAliveSender
+import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketMessage
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
@@ -122,6 +123,24 @@ class WebSocketConnection @AssistedInject constructor(
     @Volatile
     private var startConnectTime = 0L
 
+    /**
+     * True when the last socket ended with a close frame from the server (idle timeout, server
+     * shutdown) rather than a transport failure or a local cancel: the host answered, so the
+     * reconnect can stay on it. Reset on every [connect].
+     */
+    @Volatile
+    var closedByServer: Boolean = false
+        private set
+
+    /**
+     * Why this app itself dropped the last socket via [cancelConnection] or [disconnectWhenConnected];
+     * null when it ended any other way. Lets the reconnect policy tell a host timeout from a
+     * proxy-change cancel or a stop. Reset on every [connect].
+     */
+    @Volatile
+    var localDisconnectReason: LocalDisconnectReason? = null
+        private set
+
     init {
         _webSocketConnectionState.tryEmit(WebSocketConnectionState.DISCONNECTED)
     }
@@ -146,6 +165,8 @@ class WebSocketConnection @AssistedInject constructor(
     @Synchronized
     internal fun connect() {
         startConnectTime = System.currentTimeMillis()
+        closedByServer = false
+        localDisconnectReason = null
 
         if (currentWebsocket == null) {
             val filledUri = webSocketUrlGetter()
@@ -166,13 +187,14 @@ class WebSocketConnection @AssistedInject constructor(
             val websocketListener = ControllableWebSocketListener(this).also {
                 currentWebsocketListener = it
             }
-            currentWebsocket = okHttpClient.newWebSocket(requestBuilder.build(), websocketListener)
+            val webSocket = okHttpClient.newWebSocket(requestBuilder.build(), websocketListener)
+            currentWebsocket = webSocket
         }
     }
 
     @Synchronized
-    fun disconnectWhenConnected() {
-        L.i { "$name disconnect(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
+    fun disconnectWhenConnected(reason: LocalDisconnectReason) {
+        L.i { "$name disconnect(), reason=$reason current webSocketConnectionState: ${webSocketConnectionState.value}" }
         if (webSocketConnectionState.value == WebSocketConnectionState.CONNECTED) {
             currentWebsocket?.let {
                 L.i { "$name Client not null when disconnect" }
@@ -180,20 +202,22 @@ class WebSocketConnection @AssistedInject constructor(
                 currentWebsocket = null
                 currentWebsocketListener?.invalidate()
                 currentWebsocketListener = null
+                localDisconnectReason = reason
                 _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
             }
         }
     }
 
     @Synchronized
-    fun cancelConnection() {
-        L.i { "$name cancelConnection(), current webSocketConnectionState: ${webSocketConnectionState.value}" }
+    fun cancelConnection(reason: LocalDisconnectReason) {
+        L.i { "$name cancelConnection(), reason=$reason current webSocketConnectionState: ${webSocketConnectionState.value}" }
         currentWebsocket?.let {
             L.i { "$name Client not null when cancelConnection" }
             it.cancel()
             currentWebsocket = null
             currentWebsocketListener?.invalidate()
             currentWebsocketListener = null
+            localDisconnectReason = reason
             _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
         }
     }
@@ -350,6 +374,7 @@ class WebSocketConnection @AssistedInject constructor(
             return
         }
         cleanupAfterShutdown()
+        closedByServer = true
         _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
     }
 
@@ -439,6 +464,7 @@ class WebSocketConnection @AssistedInject constructor(
             return
         }
         cleanupAfterShutdown()
+        closedByServer = true
         _webSocketConnectionState.value = WebSocketConnectionState.DISCONNECTED
     }
 

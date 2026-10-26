@@ -71,7 +71,7 @@ class MigrationTransferServiceTest {
         MigrationTransferStateHolder.reset()
 
         notificationHelper = mockk(relaxed = true)
-        every { notificationHelper.buildRunning(any()) } returns mockk(relaxed = true)
+        every { notificationHelper.buildRunning(any(), any()) } returns mockk(relaxed = true)
 
         service = MigrationTransferService::class.java
             .getDeclaredConstructor()

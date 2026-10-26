@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.PowerManager
 import android.telephony.TelephonyManager
 
 object NetworkUtils {
@@ -17,6 +18,28 @@ object NetworkUtils {
         val network = cm.activeNetwork ?: return false
         val capabilities = cm.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /**
+     * One-line `key=value` reasons for [isNetworkAvailable] being false, for field diagnosis of long
+     * network-unavailable windows: which check failed, how many networks exist, and the system
+     * states that can withhold one from the app (Doze, battery saver, data saver).
+     */
+    fun unavailabilityDiagnostics(context: Context): String {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return "check=no_service"
+        val network = cm.activeNetwork
+        val capabilities = network?.let { cm.getNetworkCapabilities(it) }
+        val check = when {
+            network == null -> "no_active_network"
+            capabilities == null -> "no_capabilities"
+            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> "no_internet"
+            else -> "ok"
+        }
+        val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val networks = runCatching { cm.allNetworks.size }.getOrNull()
+        return "check=$check networks=$networks doze=${power?.isDeviceIdleMode} " +
+            "power_save=${power?.isPowerSaveMode} data_saver=${runCatching { cm.restrictBackgroundStatus }.getOrNull()}"
     }
 
     fun getNetworkSummary(context: Context = appContext): String {

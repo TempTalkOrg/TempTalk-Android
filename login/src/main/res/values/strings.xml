@@ -26,6 +26,7 @@
     <string name="settings_forget_passcode_dialog_logout">Logout</string>
     <string name="settings_passcode_error_tips">Passcode does not match</string>
     <string name="settings_pattern_error_tips">Pattern does not match</string>
+    <string name="settings_pattern_min_dots_hint">Connect at least 4 dots</string>
     <string name="settings_passcode_attempts_delay">Next attempt will be delayed by %ds.</string>
     <string name="settings_too_many_attempts_warning">Too many failed attempts. The next incorrect attempt will force a logout.</string>
     <string name="settings_service_unavailable_countdown">Quicall Unavailable. Try again in %ds</string>

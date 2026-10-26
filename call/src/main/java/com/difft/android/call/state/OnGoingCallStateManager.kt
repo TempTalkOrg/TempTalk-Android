@@ -176,6 +176,9 @@ class OnGoingCallStateManager @Inject constructor() {
     @Volatile private var ownerSessionId: Long = NO_SESSION
     private val writer = MirrorWriter()
 
+    /** The session owning the projection, or null when none does. */
+    internal fun ownerSession(): Long? = ownerSessionId.takeIf { it != NO_SESSION }
+
     /**
      * [sessionId] owns the projection from now on; the newest session to bind wins. Taking over from
      * a different live owner first resets the session fields (keeping `controlMessage` and the

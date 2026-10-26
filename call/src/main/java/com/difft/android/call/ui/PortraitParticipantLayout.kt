@@ -343,7 +343,8 @@ fun PortraitParticipantLayout(
                     muteOtherEnabled = muteOtherEnabled,
                     onClickMute = { name -> viewModel.toggleMute(participant, name) },
                     coroutineScope = coroutineScope,
-                    cornerRadius = 0.dp
+                    cornerRadius = 0.dp,
+                    soloStyle = true,
                 )
             }
         }

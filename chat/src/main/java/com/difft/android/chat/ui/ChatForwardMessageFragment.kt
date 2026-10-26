@@ -62,6 +62,7 @@ import difft.android.messageserialization.model.Quote
 import difft.android.messageserialization.model.isAudioMessage
 import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
+import com.difft.android.chat.media.applyExportPolicy
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
 import org.difft.app.database.models.ContactorModel
@@ -628,7 +629,7 @@ class ChatForwardMessageFragment : Fragment() {
         }
         PictureSelector.create(requireActivity())
             .openPreview()
-            .isHidePreviewDownload(false)
+            .applyExportPolicy((activity as? ChatForwardMessageActivity)?.isConfidentialMessage() == true)
             .isAutoVideoPlay(true)
             .isVideoPauseResumePlay(true)
             .setVideoPlayerEngine(ExoVideoPlayerEngine())

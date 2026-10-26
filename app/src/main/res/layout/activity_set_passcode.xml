@@ -27,150 +27,168 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/tv_screen_lock"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="32dp"
-        android:text="@string/settings_passcode_lock"
-        android:textColor="@color/t.primary"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/cl_title" />
-
-    <LinearLayout
-        android:id="@+id/ll_step1"
+    <!-- Scrolls when the window is too short for the whole form (split screen); fillViewport keeps
+         the tips at the bottom otherwise -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/sv_content"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="32dp"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
+        android:fillViewport="true"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/tv_screen_lock">
+        app:layout_constraintTop_toBottomOf="@id/cl_title">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_passcode_tips1"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginHorizontal="48dp"
-            android:gravity="center"
-            android:textColor="@color/t.secondary"
-            android:textSize="14sp"
-            tools:text="@string/settings_passcode_tips" />
-
-        <androidx.appcompat.widget.AppCompatEditText
-            android:id="@+id/et_passcode1"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="48dp"
-            android:layout_marginTop="32dp"
-            android:backgroundTint="@color/line"
-            android:gravity="center"
-            android:inputType="numberPassword"
-            android:letterSpacing="0.2"
-            android:maxLength="10"
-            android:textColor="@color/t.primary"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            tools:text="123">
-
-            <requestFocus />
-        </androidx.appcompat.widget.AppCompatEditText>
-
-        <com.difft.android.base.widget.DifftButtonView
-            android:id="@+id/btn_next"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="48dp"
-            android:enabled="false"
-            android:text="@string/login_next" />
-
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="24dp"
-            android:orientation="horizontal"
-            android:paddingBottom="20dp">
-
-            <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/iv_tips"
-                android:layout_width="14dp"
-                android:layout_height="14dp"
-                android:layout_marginTop="5dp"
-                android:src="@drawable/ic_forget_passcode_warning"
-                app:layout_constraintHorizontal_chainStyle="packed"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/tv_tips"
-                app:layout_constraintTop_toTopOf="@+id/tv_tips"
-                app:tint="@color/icon" />
+            android:orientation="vertical">
 
             <androidx.appcompat.widget.AppCompatTextView
-                android:id="@+id/tv_tips"
+                android:id="@+id/tv_screen_lock"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="@string/settings_passcode_forget_tips"
-                android:textColor="@color/t.secondary"
-                android:textSize="14sp"
-                app:layout_constrainedWidth="true"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toEndOf="@+id/iv_tips" />
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="32dp"
+                android:text="@string/settings_passcode_lock"
+                android:textColor="@color/t.primary"
+                android:textSize="24sp"
+                android:textStyle="bold" />
 
-        </androidx.constraintlayout.widget.ConstraintLayout>
+            <LinearLayout
+                android:id="@+id/ll_step1"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="32dp"
+                android:layout_weight="1"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-    </LinearLayout>
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:id="@+id/tv_passcode_tips1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="48dp"
+                    android:gravity="center"
+                    android:textColor="@color/t.secondary"
+                    android:textSize="14sp"
+                    tools:text="@string/settings_passcode_tips" />
 
-    <LinearLayout
-        android:id="@+id/ll_step2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@+id/tv_screen_lock">
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/et_passcode1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="48dp"
+                    android:layout_marginTop="32dp"
+                    android:backgroundTint="@color/line"
+                    android:gravity="center"
+                    android:inputType="numberPassword"
+                    android:letterSpacing="0.2"
+                    android:maxLength="10"
+                    android:textColor="@color/t.primary"
+                    android:textSize="32sp"
+                    android:textStyle="bold"
+                    tools:text="123">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="48dp"
-            android:gravity="center"
-            android:text="@string/settings_passcode_confirm_again"
-            android:textColor="@color/t.secondary"
-            android:textSize="14sp" />
+                    <requestFocus />
+                </androidx.appcompat.widget.AppCompatEditText>
 
-        <androidx.appcompat.widget.AppCompatEditText
-            android:id="@+id/et_passcode2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="48dp"
-            android:layout_marginTop="32dp"
-            android:backgroundTint="@color/line"
-            android:gravity="center"
-            android:inputType="numberPassword"
-            android:letterSpacing="0.2"
-            android:maxLength="10"
-            android:textColor="@color/t.primary"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            tools:text="123" />
+                <com.difft.android.base.widget.DifftButtonView
+                    android:id="@+id/btn_next"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="48dp"
+                    android:enabled="false"
+                    android:text="@string/login_next" />
 
-        <com.difft.android.base.widget.DifftButtonView
-            android:id="@+id/btn_confirm"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="48dp"
-            android:enabled="false"
-            android:text="@string/settings_passcode_confirm" />
+                <Space
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
 
-    </LinearLayout>
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal"
+                    android:paddingBottom="20dp">
+
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/iv_tips"
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:layout_marginTop="5dp"
+                        android:src="@drawable/ic_forget_passcode_warning"
+                        app:layout_constraintHorizontal_chainStyle="packed"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/tv_tips"
+                        app:layout_constraintTop_toTopOf="@+id/tv_tips"
+                        app:tint="@color/icon" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/tv_tips"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="@string/settings_passcode_forget_tips"
+                        android:textColor="@color/t.secondary"
+                        android:textSize="14sp"
+                        app:layout_constrainedWidth="true"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@+id/iv_tips" />
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/ll_step2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="32dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <androidx.appcompat.widget.AppCompatTextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="48dp"
+                    android:gravity="center"
+                    android:text="@string/settings_passcode_confirm_again"
+                    android:textColor="@color/t.secondary"
+                    android:textSize="14sp" />
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/et_passcode2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="48dp"
+                    android:layout_marginTop="32dp"
+                    android:backgroundTint="@color/line"
+                    android:gravity="center"
+                    android:inputType="numberPassword"
+                    android:letterSpacing="0.2"
+                    android:maxLength="10"
+                    android:textColor="@color/t.primary"
+                    android:textSize="32sp"
+                    android:textStyle="bold"
+                    tools:text="123" />
+
+                <com.difft.android.base.widget.DifftButtonView
+                    android:id="@+id/btn_confirm"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="48dp"
+                    android:enabled="false"
+                    android:text="@string/settings_passcode_confirm" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

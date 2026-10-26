@@ -24,10 +24,11 @@ enum class OemBrand(val isChinaOem: Boolean) {
     OTHER(false);
 
     /**
-     * True only for brands whose banner and lock-screen switches are verified to map to standard
-     * channel fields; elsewhere a standard "on" reading cannot prove the vendor switches are on.
+     * True only for brands whose banner, lock-screen and sound switches are verified to map to
+     * standard channel fields; elsewhere a standard "on" reading cannot prove the vendor switches are
+     * on. Samsung's app-level lock screen, pop-up and sound switches live outside the channels (#1350).
      */
-    val vendorAlertSwitchesReadable: Boolean get() = !isChinaOem
+    val vendorAlertSwitchesReadable: Boolean get() = !isChinaOem && this != SAMSUNG
 
     companion object {
         private val KEYWORDS: List<Pair<OemBrand, List<String>>> = listOf(

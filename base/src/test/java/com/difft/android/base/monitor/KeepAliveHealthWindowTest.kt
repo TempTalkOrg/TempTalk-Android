@@ -109,8 +109,28 @@ class KeepAliveHealthWindowTest {
     }
 
     @Test
-    fun `daily keys cover the 18 latency buckets plus six counters`() {
-        assertEquals(24, KeepAliveHealthWindow.DAILY_KEYS.size)
+    fun `fcm transit and stall aggregates are report-only and leave the latency rule alone`() {
+        val v = verdict(mapOf("fcmt_10s" to 30, "fcmt_2h" to 5, "fcmt_more" to 45, "stall_more" to 3, "stall_2h" to 2, "stall_min" to 900))
+        assertEquals("0", v.value)
+        assertEquals(0, v.samples)
+        assertEquals(80, v.fcmTransitSamples)
+        assertEquals(62, v.fcmTransitSlowPercent)
+        assertEquals(3, v.stallsOver2h)
+        assertEquals(null, verdict(mapOf("lat_ws_10s" to 3)).fcmTransitSlowPercent)
+
+        // A slow transit backlog cannot push a fast latency window over the L rule.
+        assertEquals("0", verdict(mapOf("lat_ws_10s" to 50, "fcmt_more" to 50)).value)
+        val young = verdict(mapOf("fcmt_more" to 2, "stall_more" to 1), ageMs = day)
+        assertEquals("na", young.value)
+        assertEquals(2, young.fcmTransitSamples) // diagnostics stay populated before the window matures
+        assertEquals(1, young.stallsOver2h)
+    }
+
+    @Test
+    fun `daily keys cover latency, transit and stall buckets plus six counters`() {
+        assertEquals(34, KeepAliveHealthWindow.DAILY_KEYS.size)
+        assertTrue("fcmt_more" in KeepAliveHealthWindow.DAILY_KEYS)
+        assertTrue("stall_min" in KeepAliveHealthWindow.DAILY_KEYS)
         assertTrue("fgs_fail" in KeepAliveHealthWindow.DAILY_KEYS)
         assertTrue("fgs_alive_s" !in KeepAliveHealthWindow.DAILY_KEYS)
     }

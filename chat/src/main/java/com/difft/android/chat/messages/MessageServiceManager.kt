@@ -87,6 +87,10 @@ class MessageServiceManager @Inject constructor(
     @Volatile
     private var lastAlarmChainActivityElapsed: Long = SystemClock.elapsedRealtime()
 
+    // Activity mark whose stall was already counted: a failing re-arm leaves the mark unchanged,
+    // and every later tick of that window must not count the same stall again.
+    private var stallCountedForActivity: Long? = null
+
     init {
         // Self-healing anchors: vendor ROMs (observed on Huawei) can swallow one alarm
         // broadcast, which kills the self-re-arming chain until the app is reopened.
@@ -123,6 +127,11 @@ class MessageServiceManager @Inject constructor(
         if (sinceLast <= EXACT_ALARM_CHAIN_STALE_MS) return
         if (!hasExactAlarmPermission() && sinceLast <= NON_EXACT_ALARM_CHAIN_STALE_MS) return
         L.w { "[MessageService] Alarm chain stale (${sinceLast / 1000}s since last activity), re-arming from source=$source" }
+        // #1328: a stale chain is the observable trace of a frozen process; telemetry must not block the re-arm.
+        if (stallCountedForActivity != lastAlarmChainActivityElapsed) {
+            stallCountedForActivity = lastAlarmChainActivityElapsed
+            runCatching { healthCounters.onAppStall(sinceLast) }
+        }
         scheduleAlarmCheck()
     }
 
@@ -255,7 +264,11 @@ class MessageServiceManager @Inject constructor(
 
         try {
             // Step 1: Try direct start
-            ForegroundServiceUtil.start(context, intent)
+            if (!ForegroundServiceUtil.start(context, intent)) {
+                L.w { "[MessageService] start skipped reason=no_channel" }
+                fgsFailureRecorder.record(FgsStartFailure.NO_CHANNEL)
+                return
+            }
             L.d { "[MessageService] Service started successfully" }
         } catch (e: Exception) {
             // Start failed, handle all exceptions uniformly
@@ -266,8 +279,12 @@ class MessageServiceManager @Inject constructor(
             // Retry in background coroutine (avoid blocking main thread)
             appScope.launch {
                 try {
-                    ForegroundServiceUtil.startWhenCapable(context, intent)
-                    L.i { "[MessageService] Service started after background retry" }
+                    if (ForegroundServiceUtil.startWhenCapable(context, intent)) {
+                        L.i { "[MessageService] Service started after background retry" }
+                    } else {
+                        L.w { "[MessageService] background retry skipped reason=no_channel" }
+                        fgsFailureRecorder.record(FgsStartFailure.NO_CHANNEL)
+                    }
                 } catch (e: Exception) {
                     // Background retry also failed, log it (keep-alive will continue trying)
                     L.e { "[MessageService] Unable to start service even after background retry: ${e.stackTraceToString()}" }

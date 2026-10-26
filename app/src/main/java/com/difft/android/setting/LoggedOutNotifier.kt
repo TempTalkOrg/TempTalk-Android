@@ -1,8 +1,6 @@
 package com.difft.android.setting
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -12,6 +10,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.utils.PackageUtil
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -33,26 +33,16 @@ class LoggedOutNotifier @Inject constructor(
         NotificationManagerCompat.from(context)
     }
 
-    /** Called at startup alongside the other notification channels. Idempotent. */
-    fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        runCatching {
-            if (notificationManager.getNotificationChannel(CHANNEL_ID) != null) return
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                context.getString(com.difft.android.base.R.string.notification_channel_account),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { setShowBadge(false) }
-            notificationManager.createNotificationChannel(channel)
-        }.onFailure { L.w { "[Logout] ensureChannel failed: ${it.message}" } }
-    }
-
     /**
-     * Posts the notice. Re-creates the channel first: the logout can fire on a sticky-service
-     * revival path where the startup channel step is not guaranteed to have run.
+     * Posts the notice. Ensures the channel first: the logout can fire on a sticky-service revival
+     * path where the startup channel step is not guaranteed to have run. Dropped when the channel
+     * cannot be verified (#1354).
      */
     fun post() {
-        ensureChannel()
+        if (!NotificationChannelSpecs.ensure(context, CHANNEL_ID)) {
+            L.w { "[Logout] logged-out notice skipped: channel missing id=$CHANNEL_ID" }
+            return
+        }
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?.apply { addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK) }
         val contentIntent = launchIntent?.let {
@@ -99,8 +89,7 @@ class LoggedOutNotifier @Inject constructor(
     }
 
     private companion object {
-        // Id doubles as the display name, matching the existing channel convention in this app.
-        const val CHANNEL_ID = "ACCOUNT"
+        const val CHANNEL_ID = NotificationChannelIds.OTHER_ALERTS
 
         // Distinct from every other notification id in the repo (10000 message summary,
         // 0x5057 upgrade, 313399 message FGS, 3456 call FGS).

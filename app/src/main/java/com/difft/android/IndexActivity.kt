@@ -1,6 +1,5 @@
 package com.difft.android
 
-import android.Manifest
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -8,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Process
 import android.text.TextUtils
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -27,11 +25,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
 import com.difft.android.base.BaseActivity
-import com.difft.android.base.android.permission.PermissionUtil.launchSinglePermission
-import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.notification.NotificationFixJump
-import com.difft.android.base.notification.NotificationReadinessProvider
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.DualPaneCollapseUtil
@@ -41,14 +35,11 @@ import com.difft.android.base.utils.EdgeToEdgeUtils
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
-import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.security.SafeLinkOpener
-import com.difft.android.base.widget.ComposeDialog
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.base.utils.NetworkUtils
@@ -68,8 +59,10 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.recent.DualPaneSelectionListener
+import androidx.core.content.ContextCompat
 import com.difft.android.dualpane.DualPaneRailController
 import com.difft.android.dualpane.DualPaneReconciler
+import com.difft.android.dualpane.RailSplitBackgroundDrawable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.difft.android.chat.recent.RecentChatFragment
@@ -96,14 +89,15 @@ import com.difft.android.push.FcmInitResult
 import com.difft.android.push.PushUtil
 import com.difft.android.security.SecurityLib
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
-import com.difft.android.setting.NotificationReadinessText
 import com.difft.android.setting.UpdateManager
+import com.difft.android.startup.prompt.FcmFallbackStarter
+import com.difft.android.startup.prompt.IndexStartupPromptHost
+import com.difft.android.app.TempTalkApplication
 import com.google.gson.Gson
 import dagger.hilt.android.AndroidEntryPoint
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -112,17 +106,13 @@ import kotlinx.coroutines.withContext
 import org.difft.app.database.WCDBUpdateService
 import org.difft.app.database.wcdb
 import com.difft.android.chat.messages.FailedMessageProcessor
-import com.difft.android.chat.messages.MessageForegroundService
-import com.difft.android.chat.messages.MessageServiceManager
 import com.difft.android.chat.messages.PendingMessageProcessor
 import com.difft.android.chat.util.AppIconBadgeManager
-import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.util.NotificationChannelManager
 import com.difft.android.chat.websocket.WebSocketManager
 import com.difft.android.views.DraggableDividerView
 import java.io.File
 import javax.inject.Inject
-import kotlin.system.exitProcess
 
 
 @AndroidEntryPoint
@@ -136,6 +126,10 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     override val currentSelectedConversationId: String?
         get() = currentConversationId
     private var currentConversationId: String? = null
+        set(value) {
+            field = value
+            if (::startupPromptHost.isInitialized) startupPromptHost.onDetailPaneChanged()
+        }
 
     // Store detail fragment for each tab (tab index -> Fragment)
     // This allows preserving fragment state when switching tabs
@@ -225,7 +219,10 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     lateinit var globalConfigsManager: GlobalConfigsManager
 
     @Inject
-    lateinit var messageServiceManager: MessageServiceManager
+    lateinit var startupPromptHost: IndexStartupPromptHost
+
+    @Inject
+    lateinit var fcmFallbackStarter: FcmFallbackStarter
 
     @Inject
     lateinit var pushUtil: PushUtil
@@ -259,8 +256,14 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             EdgeToEdgeUtils.applyBottomInsetAsPadding(binding.clTab)
         }
 
+        // Measured here on the main thread: L lambdas run on the logger thread, and first-touching
+        // androidx.window there races BaseActivity's FoldPostureWatcher into a class-init deadlock.
         val density = resources.displayMetrics.density
-        L.i { "[IndexActivity] screen swDp=${resources.configuration.smallestScreenWidthDp} widthDp=${(WindowSizeClassUtil.getWindowWidthPx(this) / density).toInt()} heightDp=${(WindowSizeClassUtil.getWindowHeightPx(this) / density).toInt()} dualPane=$isDualPaneMode" }
+        val swDp = resources.configuration.smallestScreenWidthDp
+        val widthDp = (WindowSizeClassUtil.getWindowWidthPx(this) / density).toInt()
+        val heightDp = (WindowSizeClassUtil.getWindowHeightPx(this) / density).toInt()
+        val dualPane = isDualPaneMode
+        L.i { "[IndexActivity] screen swDp=$swDp widthDp=$widthDp heightDp=$heightDp dualPane=$dualPane" }
 
         // Load and emit text size early to avoid ANR in UI components
         TextSizeUtil.loadAndEmitTextSize()
@@ -380,13 +383,16 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         observeFcmInitResult()
 
-        checkEmulator()
-
-        checkRoot()
-
         updateManager.attach(this)
 
-        checkUpdate()
+        // Gates and the one startup prompt per session (#1355): security warnings, forced/optional
+        // update, notifications, background connection, full-screen intent.
+        startupPromptHost.attach(
+            activity = this,
+            updateManager = updateManager,
+            lockPending = (application as TempTalkApplication).screenLockPendingState,
+            dualPaneConversationOpen = { isDualPaneMode && currentConversationId != null },
+        )
 
         syncContactAndGroupInfo()
 
@@ -397,8 +403,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         startFileCleanupTask()
 
         observeAndUpdateUnreadMessageCountBadge()
-
-        requestNotificationPermission()
 
         globalConfigsManager.syncMineConfigs()
 
@@ -418,14 +422,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         fetchCallServiceUrlAndCache()
 
         fetchFeatureGrayConfigs()
-    }
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerPermission { permissionState ->
-                L.i { "[Notification] requestNotificationPermission permissionState:$permissionState" }
-            }.launchSinglePermission(Manifest.permission.POST_NOTIFICATIONS)
-        }
     }
 
     /** Last logged (notMuted, muted, dotNotMuted, dotMuted) so the badge log only fires on change. */
@@ -545,7 +541,49 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         } else {
             com.difft.android.base.R.color.bg1
         }
-        binding.root.setBackgroundResource(bgRes)
+        // Dual-pane: the status/navigation bar strips keep the colour of the column below them
+        // (rail, list pane, detail pane), so no column is cut by a strip of another colour.
+        val rail = binding.root.findViewById<View>(com.difft.android.R.id.navigation_rail_container)
+        val detailPane = binding.root.findViewById<View>(com.difft.android.R.id.detail_pane)
+        if (rail == null || detailPane == null) {
+            binding.root.setBackgroundResource(bgRes)
+            return
+        }
+        binding.root.background = RailSplitBackgroundDrawable(
+            rail = rail,
+            detailPane = detailPane,
+            railColor = ContextCompat.getColor(this, com.difft.android.base.R.color.bg1),
+            listColor = ContextCompat.getColor(this, bgRes),
+            detailColor = ContextCompat.getColor(this, detailPaneBackgroundRes(position)),
+        )
+        if (!railLayoutListenerAdded) {
+            railLayoutListenerAdded = true
+            binding.root.viewTreeObserver.addOnGlobalLayoutListener {
+                (binding.root.background as? RailSplitBackgroundDrawable)?.onPanesLaidOut()
+                syncListDetailDivider()
+            }
+        }
+    }
+
+    // Background of what the detail pane shows: settings pages (Me tab) and the contact card use
+    // the settings background; chats and the empty state sit on bg1.
+    private fun detailPaneBackgroundRes(position: Int): Int {
+        val detail = tabDetailFragments[position]
+        return if (position == 2 || detail is ContactDetailFragment) {
+            com.difft.android.base.R.color.bg
+        } else {
+            com.difft.android.base.R.color.bg1
+        }
+    }
+
+    private var railLayoutListenerAdded = false
+
+    // A collapsed list pane would leave the list/detail line beside the rail's own divider.
+    private fun syncListDetailDivider() {
+        val listPane = binding.root.findViewById<View>(com.difft.android.R.id.list_pane) ?: return
+        val line = binding.root.findViewById<View>(com.difft.android.R.id.divider_list_detail) ?: return
+        val visibility = if (listPane.width > COLLAPSED_LIST_WIDTH_PX) View.VISIBLE else View.INVISIBLE
+        if (line.visibility != visibility) line.visibility = visibility
     }
 
     /**
@@ -558,14 +596,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      */
     override fun shouldApplyNavigationBarPadding(): Boolean =
         resources.getBoolean(com.difft.android.R.bool.dual_pane_layout_active)
-
-    private fun checkUpdate() {
-        if (environmentHelper.isInsiderChannel()) return
-        lifecycleScope.launch {
-            delay(2000)
-            updateManager.checkUpdate(this@IndexActivity, false)
-        }
-    }
 
     private var insiderUpdateChecked = false
 
@@ -593,19 +623,19 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         pushUtil.fcmInitResult
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .onEach { result ->
-                // The recovery in handleFcmUnavailable() is idempotent and still runs on each
-                // replay; only the warning is written once per result instance.
+                // The silent fallback start is idempotent and still runs on each replay; only the
+                // warning is written once per result instance.
                 val replay = result === loggedFcmResult
                 loggedFcmResult = result
                 when (result) {
                     is FcmInitResult.PlayServicesUnavailable -> {
                         if (!replay) L.w { "[Push][fcm] Google Play Services not available, status:${result.statusCode}" }
-                        handleFcmUnavailable()
+                        fcmFallbackStarter.onFcmUnavailable()
                     }
 
                     is FcmInitResult.Failure -> {
                         if (!replay) L.w { "[Push][fcm] FCM initialization failed: ${result.reason}" }
-                        handleFcmUnavailable()
+                        fcmFallbackStarter.onFcmUnavailable()
                     }
 
                     else -> {
@@ -621,8 +651,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         // 刷新截屏状态（从后台恢复时需要重新检查屏幕锁）
 //        ScreenShotUtil.refreshWithPagePolicy(this, binding.indexViewpager.currentItem != 0)
         checkInsiderUpdate()
-        checkNotificationFullScreenPermission()
-        checkNotificationPermission()
         reconcileCriticalAlertBypass()
     }
 
@@ -661,142 +689,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             val activeConversationConfig = globalConfigsManager.getActiveConversationConfig()
             WCDBUpdateService.cleanEmptyRooms(activeConversationConfig)
         }
-    }
-
-    /**
-     * 检测模拟器
-     */
-    private fun checkEmulator() {
-        if (!BuildConfig.DEBUG) {
-            lifecycleScope.launch {
-                val emulatorSafe = withContext(Dispatchers.IO) {
-                    SecurityLib.checkEmulator()
-                }
-                if (!emulatorSafe) {
-                    ComposeDialogManager.showMessageDialog(
-                        context = this@IndexActivity,
-                        title = getString(R.string.app_sign_error_title),
-                        message = getString(R.string.emulator_risk_tips),
-                        confirmText = getString(R.string.app_close_application),
-                        cancelText = getString(R.string.app_ignore),
-                        cancelable = false,
-                        onConfirm = {
-                            Process.killProcess(Process.myPid())
-                            exitProcess(0)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    /**
-     * 检测系统root
-     */
-    private fun checkRoot() {
-        if (!BuildConfig.DEBUG) {
-            lifecycleScope.launch {
-                val rootSafe = withContext(Dispatchers.IO) {
-                    SecurityLib.checkRoot()
-                }
-                if (!rootSafe) {
-                    ComposeDialogManager.showMessageDialog(
-                        context = this@IndexActivity,
-                        title = getString(R.string.app_sign_error_title),
-                        message = getString(R.string.root_risk_tips),
-                        confirmText = getString(R.string.app_close_application),
-                        cancelText = getString(R.string.app_ignore),
-                        cancelable = false,
-                        onConfirm = {
-                            Process.killProcess(Process.myPid())
-                            exitProcess(0)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-
-    /**
-     * 处理 FCM 不可用的情况
-     *
-     * 逻辑：
-     * 1. 如果服务已运行 → 不处理
-     * 2. 如果服务未运行：
-     *    - 如果用户允许自动启动（autoStartMessageService = true）：
-     *      - 检查启动条件
-     *      - 条件满足 → 自动启动（不弹窗）
-     *      - 条件不满足 → 弹窗引导用户开启权限
-     *    - 如果用户主动关闭过服务（autoStartMessageService = false）：
-     *      - 弹窗提示用户开启服务
-     */
-    private fun handleFcmUnavailable() {
-        // 1. 服务已运行，不处理
-        if (MessageForegroundService.isRunning) {
-            L.d { "[MessageService] Service already running, no action needed" }
-            return
-        }
-
-        // 2. 检查用户意图
-        val autoStartMessageService = userManager.getUserData()?.autoStartMessageService ?: true
-
-        if (autoStartMessageService) {
-            // 用户允许自动启动，检查条件
-            if (messageServiceManager.checkBackgroundConnectionRequirements()) {
-                // 条件满足，自动启动服务
-                L.i { "[MessageService] Auto-starting service (conditions met)" }
-                messageServiceManager.startService()
-            } else {
-                // 条件不满足，弹窗引导用户开启权限
-                L.w { "[MessageService] Cannot auto-start, showing settings dialog" }
-                showStartMessageServiceTipsDialog()
-            }
-        } else {
-            // 用户主动关闭过，弹窗提示
-            L.i { "[MessageService] User disabled service, showing enable dialog" }
-            showStartMessageServiceTipsDialog()
-        }
-    }
-
-    /**
-     * 显示后台连接提示弹窗
-     * - 如果当前版本已经显示过（用户点击了"暂不开启"），则不再显示
-     * - 只有用户点击"暂不开启"时，才记录当前版本号，此版本不再弹窗
-     * - 如果用户点击"前往设置"，不记录版本号，下次还会弹窗
-     */
-    private fun showStartMessageServiceTipsDialog() {
-        if (!pushUtil.canShowFcmUnavailableDialog()) {
-            L.d { "[MessageService] Dialog already shown in this application session" }
-            return
-        }
-
-        val messageServiceTipsShowedVersion = userManager.getUserData()?.messageServiceTipsShowedVersion
-        if (messageServiceTipsShowedVersion == PackageUtil.getAppVersionName()) {
-            L.i { "[MessageService] Tips dialog already shown in this version" }
-            return
-        }
-
-        // 设置标记，防止重复弹窗
-        pushUtil.markFcmUnavailableDialogShown()
-
-        ComposeDialogManager.showMessageDialog(
-            context = this@IndexActivity,
-            title = getString(R.string.tip),
-            message = getString(R.string.notification_no_google_tip),
-            confirmText = getString(R.string.notification_go_to_settings),
-            cancelText = getString(R.string.notification_ignore),
-            cancelable = false,
-            onConfirm = {
-                BackgroundConnectionSettingsActivity.startActivity(this@IndexActivity)
-            },
-            onCancel = {
-                // 用户点击"暂不开启"，记录版本号，此版本不再弹窗
-                userManager.update {
-                    this.messageServiceTipsShowedVersion = PackageUtil.getAppVersionName()
-                }
-            }
-        )
     }
 
     /**
@@ -954,104 +846,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     @Inject
-    lateinit var messageNotificationUtil: MessageNotificationUtil
-
-    @Inject
-    lateinit var notificationReadinessProvider: NotificationReadinessProvider
-
-    @Inject
     lateinit var notificationChannelManager: NotificationChannelManager
-
-    private var checkNotificationPermissionIgnore = false
-    private var checkNotificationFullScreenPermissionIgnore = false
-    private var checkNotificationPermissionDialog: ComposeDialog? = null
-    private var checkNotificationFullScreenPermissionDialog: ComposeDialog? = null
-    private var checkNotificationFullScreenPermissionJob: Job? = null
-
-    /**
-     * 检查通知权限并显示引导对话框
-     */
-    private fun checkNotificationPermission() {
-        if (checkNotificationPermissionIgnore) return
-
-        val notificationPermissionCheckedVersion = userManager.getUserData()?.checkNotificationPermission
-        if (notificationPermissionCheckedVersion == PackageUtil.getAppVersionName()) return
-
-        lifecycleScope.launch {
-            val canShow = withContext(Dispatchers.IO) {
-                messageNotificationUtil.canShowNotifications()
-            }
-            if (!canShow) {
-                if (checkNotificationPermissionDialog == null) {
-                    checkNotificationPermissionDialog = ComposeDialogManager.showMessageDialog(
-                        context = this@IndexActivity,
-                        title = getString(R.string.tip),
-                        message = getString(R.string.notification_no_permission_tip1, PackageUtil.getAppName()),
-                        confirmText = getString(R.string.notification_go_to_settings),
-                        cancelText = getString(R.string.notification_ignore),
-                        onConfirm = {
-                            messageNotificationUtil.openNotificationSettings(this@IndexActivity)
-                            checkNotificationPermissionIgnore = true
-                        },
-                        onCancel = {
-                            userManager.update {
-                                this.checkNotificationPermission = PackageUtil.getAppVersionName()
-                            }
-                            checkNotificationPermissionIgnore = true
-                        },
-                        onDismiss = {
-                            checkNotificationPermissionDialog = null
-                        }
-                    )
-                }
-            } else {
-                checkNotificationPermissionDialog?.dismiss()
-                checkNotificationPermissionDialog = null
-            }
-        }
-    }
-
-    /**
-     * Incoming-call prompt: raised only for a denied full-screen-intent permission (API 34+), as
-     * before the readiness model. Unknown or vendor-only signals never prompt.
-     */
-    private fun checkNotificationFullScreenPermission() {
-        if (checkNotificationFullScreenPermissionIgnore) return
-
-        checkNotificationFullScreenPermissionJob?.cancel()
-        checkNotificationFullScreenPermissionJob = lifecycleScope.launch {
-            val issue = withContext(Dispatchers.IO) {
-                notificationReadinessProvider.readBlocking().callPromptIssue()
-            }
-            if (checkNotificationFullScreenPermissionIgnore) return@launch
-            val message = issue?.let { NotificationReadinessText.promptMessage(this@IndexActivity, it, PackageUtil.getAppName().orEmpty()) }
-            if (issue != null && message != null) {
-                if (checkNotificationFullScreenPermissionDialog == null) {
-                    checkNotificationFullScreenPermissionDialog = ComposeDialogManager.showMessageDialog(
-                        context = this@IndexActivity,
-                        title = getString(R.string.tip),
-                        message = message,
-                        confirmText = getString(R.string.notification_go_to_settings),
-                        cancelText = getString(R.string.notification_ignore),
-                        onConfirm = {
-                            if (!NotificationFixJump.open(this@IndexActivity, NotificationFixJump.fixFor(issue))) {
-                                ToastUtil.show(R.string.notification_settings_open_fail)
-                            }
-                        },
-                        onCancel = {
-                            checkNotificationFullScreenPermissionIgnore = true
-                        },
-                        onDismiss = {
-                            checkNotificationFullScreenPermissionDialog = null
-                        }
-                    )
-                }
-            } else {
-                checkNotificationFullScreenPermissionDialog?.dismiss()
-                checkNotificationFullScreenPermissionDialog = null
-            }
-        }
-    }
 
     /** Re-applies bypass-Do-Not-Disturb on the critical-alert category on each return to foreground. */
     private fun reconcileCriticalAlertBypass() {
@@ -1761,6 +1556,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         }
 
         L.i { "[IndexActivity] restoreDetailFragmentsState reclaimed=${tabDetailFragments.size} currentTab=$currentTabIndex hasDetail=${current != null}" }
+        applyRootBackgroundForTab(currentTabIndex)
         notifyListFragmentSelectionChanged()
     }
 
@@ -1915,6 +1711,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         // Update the map
         tabDetailFragments[currentTabIndex] = newFragment
+        applyRootBackgroundForTab(currentTabIndex)
     }
 
     /**
@@ -1933,6 +1730,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             supportFragmentManager.beginTransaction().remove(it).commit()
         }
         tabDetailFragments[currentTabIndex] = null
+        applyRootBackgroundForTab(currentTabIndex)
 
         // Clear chat background
         clearDetailPaneChatBackground()

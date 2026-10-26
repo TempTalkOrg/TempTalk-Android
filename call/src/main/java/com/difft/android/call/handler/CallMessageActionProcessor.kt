@@ -42,6 +42,9 @@ internal fun CallMessageHandler.handleCancelMessage(
 ) {
     L.i { "[Call] handleCallMessage, hasCancel Message:${content.cancel.roomId}" }
 
+    // #1387: the caller gave up, so the critical alerts of this call stop presenting.
+    criticalAlertManager.dismissForRoom(roomId)
+
     cancelNotificationAndHandleService(roomId, CallActionType.CANCEL, "cancel: caller cancel the call")
 }
 

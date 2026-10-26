@@ -119,6 +119,7 @@ import difft.android.messageserialization.model.isAudioFile
 import difft.android.messageserialization.model.isAudioMessage
 import com.difft.android.chat.media.AttachmentPreview
 import com.difft.android.chat.media.EncryptedAttachmentAccess
+import com.difft.android.chat.media.applyExportPolicy
 import com.difft.android.chat.gif.favorite.MAX_FAVORITE_ASSET_BYTES
 import difft.android.messageserialization.model.isImage
 import difft.android.messageserialization.model.isVideo
@@ -1928,7 +1929,7 @@ class ChatMessageListFragment : Fragment() {
 
             PictureSelector.create(requireActivity())
                 .openPreview()
-                .isHidePreviewDownload(false)
+                .applyExportPolicy(isConfidential)
                 .isAutoVideoPlay(true)
                 .isVideoPauseResumePlay(true)
                 .isShowConfidentialTip(isConfidential)

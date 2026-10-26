@@ -7,6 +7,7 @@
     <string name="settings_pattern_lock">手势密码</string>
     <string name="settings_passcode_lock">数字密码</string>
     <string name="settings_pattern_show_path">手势轨迹</string>
+    <string name="settings_pattern_show_path_desc">关闭后，绘制时不显示轨迹，经过圆点时圆点会短暂闪烁。</string>
     <string name="settings_pattern_draw_title">创建手势密码</string>
     <string name="settings_pattern_draw_subtitle">绘制解锁图案</string>
     <string name="settings_pattern_confirm_title">确认手势密码</string>
@@ -84,7 +85,6 @@
     <string name="status_upgrade_button_cancle">取消</string>
     <string name="status_upgrade_verify_failed">更新包校验失败</string>
     <string name="status_upgrade_param_exception">更新包参数异常</string>
-    <string name="upgrade_notification_channel_name">应用更新</string>
     <string name="upgrade_notification_downloading">正在下载新版本…</string>
     <string name="upgrade_notification_verifying">正在校验…</string>
     <string name="upgrade_notification_complete">下载完成，点击安装</string>
@@ -139,8 +139,6 @@
     <!-- Data-migration backup (A3) — notification surface -->
 
     <!-- Data-migration P2P transfer (I5) — 前台服务通知文案 -->
-    <string name="migration_p2p_notification_channel_progress">设备迁移(进行中)</string>
-    <string name="migration_p2p_notification_channel_result">设备迁移(结果)</string>
     <string name="migration_p2p_notification_title_running">正在迁移你的数据…</string>
     <string name="migration_p2p_notification_text_running">请保持 App 打开，直到迁移完成。</string>
     <string name="migration_p2p_notification_action_cancel">取消</string>

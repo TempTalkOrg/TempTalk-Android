@@ -274,7 +274,7 @@ class EncryptedAttachmentProvider : ContentProvider() {
     }
 
     private fun resolveKey(messageId: String, fileName: String): ByteArray? =
-        findAttachment(messageId, fileName)?.key?.takeIf { it.size >= 64 }
+        findAttachment(messageId, fileName)?.key?.takeIf(EncryptedAttachmentAccess::isUsableKey)
 
     private fun resolveContentType(messageId: String, fileName: String): String? =
         findAttachment(messageId, fileName)?.contentType?.takeIf { it.isNotBlank() }

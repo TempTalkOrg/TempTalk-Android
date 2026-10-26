@@ -11,6 +11,7 @@ import com.difft.android.BuildConfig
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.MigrationImportLauncher
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.storage.user.StorageBoundUserManager
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.ForegroundServiceStarter
@@ -670,8 +671,17 @@ class MigrationTransferService : LifecycleService() {
         )
     }
 
+    /**
+     * Promotes on a channel verified at this call (#1354). With none, stops without
+     * `startForeground` — which on a missing channel would get the app killed — and returns false.
+     */
     private fun startForegroundCompat(): Boolean {
-        val n = notificationHelper.buildRunning(INDETERMINATE_PERCENT)
+        val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
+        if (channelId == null) {
+            stopSelf()
+            return false
+        }
+        val n = notificationHelper.buildRunning(INDETERMINATE_PERCENT, channelId)
         return ForegroundServiceStarter.startForegroundSafely(
             this,
             MigrationTransferNotificationHelper.NOTIFICATION_ID_RUNNING,
@@ -740,6 +750,19 @@ class MigrationTransferService : LifecycleService() {
         /** Indeterminate percent passed to the notification (negative → indeterminate bar). */
         private const val INDETERMINATE_PERCENT = -1
 
+        private const val SERVICE_TAG = "MigrationTransferService"
+
+        /** No notification channel could carry the foreground notification; the service was not started. */
+        @VisibleForTesting
+        internal const val REASON_NO_NOTIFICATION_CHANNEL = "no notification channel"
+
+        /** Starter-side channel preflight (#1354); on failure the transfer fails instead of starting. */
+        private fun preflight(context: Context): Boolean {
+            if (NotificationChannelSpecs.preflightForegroundChannel(context, SERVICE_TAG) != null) return true
+            MigrationTransferStateHolder.update(TransferState.Failed(REASON_NO_NOTIFICATION_CHANNEL))
+            return false
+        }
+
         /** Starts the receiver role (the new device) from any context. */
         fun startReceiver(
             context: Context,
@@ -747,6 +770,7 @@ class MigrationTransferService : LifecycleService() {
             sameDevice: Boolean = false,
             credentialHandoff: Boolean = false,
         ) {
+            if (!preflight(context)) return
             val intent = Intent(context, MigrationTransferService::class.java).apply {
                 action = ACTION_START_RECEIVER
                 putExtra(EXTRA_ACCOUNT, account)
@@ -780,6 +804,7 @@ class MigrationTransferService : LifecycleService() {
             credentialHandoff: Boolean = false,
             awaitPeerConfirm: Boolean = false,
         ) {
+            if (!preflight(context)) return
             val intent = Intent(context, MigrationTransferService::class.java).apply {
                 action = ACTION_START_SENDER
                 putExtra(EXTRA_QR_PAYLOAD, rawQrPayload)

@@ -137,9 +137,9 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(ReadinessStatus.OK, evaluate(input(sdk = 34, fullScreen = true)).status(ReadinessItemId.C2))
     }
 
-    // T4: the vendor row carries no signal, so it is always "check" on China skins
+    // T4: the vendor row carries no readable signal, so it is "check" on China skins until a call test (#1350)
     @Test
-    fun `C3 is always need-to-check on a China skin`() {
+    fun `C3 is need-to-check on a China skin without a call test`() {
         OemBrand.entries.filter { it.isChinaOem }.forEach { brand ->
             val item = evaluate(input(brand = brand)).item(ReadinessItemId.C3)
             assertEquals(ReadinessStatus.UNKNOWN, item?.status, "brand=$brand")
@@ -199,12 +199,17 @@ class NotificationReadinessEvaluatorTest {
     }
 
     @Test
-    fun `non-China brands show a standard on reading as on`() {
-        listOf(OemBrand.OTHER, OemBrand.SAMSUNG).forEach { brand ->
-            val readiness = evaluate(input(brand = brand))
-            assertEquals(CategoryLevel.ON, readiness.messageLevel, "brand=$brand")
-            assertEquals(CategoryLevel.ON, readiness.callLevel, "brand=$brand")
-        }
+    fun `stock Android shows a standard on reading as on`() {
+        val readiness = evaluate(input(brand = OemBrand.OTHER))
+        assertEquals(CategoryLevel.ON, readiness.messageLevel)
+        assertEquals(CategoryLevel.ON, readiness.callLevel)
+    }
+
+    @Test
+    fun `Samsung keeps a standard on reading at need-to-check`() {
+        val readiness = evaluate(input(brand = OemBrand.SAMSUNG))
+        assertEquals(CategoryLevel.UNKNOWN, readiness.messageLevel)
+        assertEquals(CategoryLevel.UNKNOWN, readiness.callLevel)
     }
 
     @Test

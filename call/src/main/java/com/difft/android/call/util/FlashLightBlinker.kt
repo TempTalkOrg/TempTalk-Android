@@ -45,25 +45,52 @@ object FlashLightBlinker {
      * @param context 上下文
      * @param intervalMs 闪烁间隔时间（每次亮灭的间隔）
      * @param durationMs 持续时长（到期自动停止），null 表示无限时长
+     * @param admitted checked before this start touches any state, again once it is marked blinking, and
+     *   on every blink; false skips the start or ends the blinking (#1381: a critical alert for the
+     *   current call; #1387: for an ended call)
      */
     fun startBlinking(
         context: Context,
         intervalMs: Long = 400,
-        durationMs: Long? = null
+        durationMs: Long? = null,
+        admitted: () -> Boolean = { true },
     ) {
         val token = System.currentTimeMillis()
 
         blinkerScope.launch {
+            // #1381: admission is decided under the mutex before this start takes another start's job.
+            var admittedFirst = false
             val oldJob: Job? = mutex.withLock {
-                blinkJobRef.getAndSet(null)
+                admittedFirst = admitted()
+                if (admittedFirst) blinkJobRef.getAndSet(null) else null
+            }
+            if (!admittedFirst) {
+                L.i { "[FlashLightBlinker] start skipped reason=not_admitted" }
+                return@launch
             }
 
             oldJob?.cancelAndJoin()
 
-            mutex.withLock {
+            val started = mutex.withLock {
+                if (!admitted()) return@withLock false
+                val previousToken = currentToken
+                val wasBlinking = isBlinking
                 currentToken = token
-                turnOffTorch(context)
                 isBlinking = true
+                // A stop that ran just before isBlinking was set is caught here; restoring the previous
+                // values leaves a start admitted meanwhile untouched.
+                admitted().also {
+                    if (it) {
+                        turnOffTorch(context)
+                    } else {
+                        currentToken = previousToken
+                        isBlinking = wasBlinking
+                    }
+                }
+            }
+            if (!started) {
+                L.i { "[FlashLightBlinker] start skipped reason=not_admitted" }
+                return@launch
             }
 
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -84,7 +111,7 @@ object FlashLightBlinker {
                     while (isActive) {
                         val now = System.currentTimeMillis()
                         if (endTime != null && now >= endTime) break
-                        if (!isBlinking || token != currentToken) break
+                        if (!isBlinking || token != currentToken || !admitted()) break
 
                         cameraManager.setTorchMode(id, true)
                         delay(intervalMs.coerceAtLeast(50))

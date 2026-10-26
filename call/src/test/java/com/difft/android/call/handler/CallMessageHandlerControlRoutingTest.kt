@@ -6,6 +6,7 @@ import com.difft.android.base.call.CallDataCaller
 import com.difft.android.base.call.CallType
 import com.difft.android.call.LCallManager
 import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.service.TestScopeApplication
 import com.difft.android.call.session.command.CallSessionCommands
 import com.difft.android.call.state.InComingCallStateManager
@@ -51,6 +52,7 @@ class CallMessageHandlerControlRoutingTest {
     private val incoming = InComingCallStateManager()
     private val callDataManager = CallDataManager()
     private val commands = mockk<CallSessionCommands>(relaxed = true)
+    private val criticalAlertManager = mockk<CriticalAlertManager>(relaxed = true)
     private lateinit var handler: CallMessageHandler
 
     @Before
@@ -66,6 +68,7 @@ class CallMessageHandlerControlRoutingTest {
             callToChatController = mockk(relaxed = true),
             groupRepo = mockk(relaxed = true),
             dbRoomStore = mockk(relaxed = true),
+            criticalAlertManager = criticalAlertManager,
             callSessionCommands = Lazy { commands },
         )
     }
@@ -128,7 +131,37 @@ class CallMessageHandlerControlRoutingTest {
         verify(exactly = 1) { commands.onRemoteControl(any(), any()) }
     }
 
-    private fun message(senderId: String) = mockk<SignalServiceDataClass>(relaxed = true) {
+    @Test
+    fun `1387 a caller cancel dismisses the critical alerts of that room only`() {
+        handler.handleCancelMessage(callMessage(), ROOM_ID)
+
+        verify(exactly = 1) { criticalAlertManager.dismissForRoom(ROOM_ID) }
+        verify(exactly = 1) { criticalAlertManager.dismissForRoom(any()) }
+    }
+
+    @Test
+    fun `1387 a server call end dismisses the critical alerts of that room, also when it is not the ongoing call`() {
+        handler.handleCallEndNotification(ROOM_ID)
+
+        verify(exactly = 1) { criticalAlertManager.dismissForRoom(ROOM_ID) }
+        verify(exactly = 1) { criticalAlertManager.dismissForRoom(any()) }
+    }
+
+    @Test
+    fun `1387 a call end without a room id dismisses nothing`() {
+        handler.handleCallEndNotification("")
+
+        verify(exactly = 0) { criticalAlertManager.dismissForRoom(any()) }
+    }
+
+    @Test
+    fun `1387 a hangup keeps its current behaviour and does not touch critical alerts`() {
+        handler.handleHangupMessage(callMessage(), ROOM_ID)
+
+        verify(exactly = 0) { criticalAlertManager.dismissForRoom(any()) }
+    }
+
+    private fun message(senderId: String) =mockk<SignalServiceDataClass>(relaxed = true) {
         every { this@mockk.senderId } returns senderId
     }
 

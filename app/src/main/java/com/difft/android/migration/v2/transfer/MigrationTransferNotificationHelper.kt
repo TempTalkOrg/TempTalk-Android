@@ -1,24 +1,25 @@
 package com.difft.android.migration.v2.transfer
 
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationChannelSpecs
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Notification surface for the transfer foreground service: progress, terminal result and a Cancel
- * action. It owns its own channel and notification ids so it never collides with the backup service
- * in the tray. All user-visible copy comes from `migration_p2p_notification_*` string resources.
+ * action. Progress sits on the channel the service verified for its foreground notification, the
+ * result on [NotificationChannelIds.OTHER_ALERTS] (#1354). All user-visible copy comes from
+ * `migration_p2p_notification_*` string resources.
  */
 @Singleton
 class MigrationTransferNotificationHelper @Inject constructor(
@@ -36,25 +37,35 @@ class MigrationTransferNotificationHelper @Inject constructor(
     @Volatile
     var returnToTransferIntent: PendingIntent? = null
 
-    /** `startForeground(...)` notification — ongoing, with progress bar + Cancel action. */
-    fun buildRunning(percent: Int): Notification {
-        ensureChannels()
-        return buildRunningNotification(percent)
+    /** The channel the foreground notification was last built on; progress updates stay on it. */
+    @Volatile
+    private var runningChannelId: String? = null
+
+    /**
+     * `startForeground(...)` notification — ongoing, with progress bar + Cancel action — on
+     * [channelId], which the service verified to exist.
+     */
+    fun buildRunning(percent: Int, channelId: String): Notification {
+        runningChannelId = channelId
+        return buildRunningNotification(percent, channelId)
     }
 
     /** Re-posts the ongoing notification at a refreshed [percent]; indeterminate when negative. */
     fun updateProgress(percent: Int) {
-        ensureChannels()
         val manager = notificationManager ?: return
-        runCatching { manager.notify(NOTIFICATION_ID_RUNNING, buildRunningNotification(percent)) }
+        val channelId = runningChannelId ?: return
+        runCatching { manager.notify(NOTIFICATION_ID_RUNNING, buildRunningNotification(percent, channelId)) }
             .onFailure { L.w { "[MigrationV2][P2P][FGS] notification update failed: ${it.message}" } }
     }
 
-    /** Terminal (success / failure) — dismissible, on the result channel. */
+    /** Terminal (success / failure) — dismissible; dropped when its channel cannot be verified. */
     fun showTerminal(title: String, body: String) {
-        ensureChannels()
         val manager = notificationManager ?: return
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID_RESULT)
+        if (!NotificationChannelSpecs.ensure(context, NotificationChannelIds.OTHER_ALERTS)) {
+            L.w { "[MigrationV2][P2P][FGS] terminal notification skipped: channel missing" }
+            return
+        }
+        val notification = NotificationCompat.Builder(context, NotificationChannelIds.OTHER_ALERTS)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -69,10 +80,10 @@ class MigrationTransferNotificationHelper @Inject constructor(
 
     // ── Internals ───────────────────────────────────────────────────────────
 
-    private fun buildRunningNotification(percent: Int): Notification {
+    private fun buildRunningNotification(percent: Int, channelId: String): Notification {
         val indeterminate = percent < 0
         val clamped = percent.coerceIn(0, 100)
-        return NotificationCompat.Builder(context, CHANNEL_ID_PROGRESS)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setContentTitle(context.getString(R.string.migration_p2p_notification_title_running))
             .setContentText(
                 if (indeterminate) context.getString(R.string.migration_p2p_notification_text_running) else "$clamped%",
@@ -85,7 +96,7 @@ class MigrationTransferNotificationHelper @Inject constructor(
             .setProgress(100, clamped, indeterminate)
             .apply { returnToTransferIntent?.let { setContentIntent(it) } }
             .addAction(buildCancelAction())
-            .build()
+        return NotificationChannelSpecs.applyForegroundFallback(builder, channelId).build()
     }
 
     private fun buildCancelAction(): NotificationCompat.Action {
@@ -100,35 +111,7 @@ class MigrationTransferNotificationHelper @Inject constructor(
         return NotificationCompat.Action.Builder(0, label, pendingIntent).build()
     }
 
-    private fun ensureChannels() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = notificationManager ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID_PROGRESS) == null) {
-            val progressName = context.getString(R.string.migration_p2p_notification_channel_progress)
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID_PROGRESS, progressName, NotificationManager.IMPORTANCE_LOW)
-                    .apply {
-                        setShowBadge(false)
-                        enableVibration(false)
-                        enableLights(false)
-                    },
-            )
-        }
-        if (manager.getNotificationChannel(CHANNEL_ID_RESULT) == null) {
-            val resultName = context.getString(R.string.migration_p2p_notification_channel_result)
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID_RESULT, resultName, NotificationManager.IMPORTANCE_DEFAULT),
-            )
-        }
-    }
-
     companion object {
-        /** Progress channel, silent ongoing updates. Distinct from the backup channel id. */
-        const val CHANNEL_ID_PROGRESS = "migration_p2p_transfer_progress"
-
-        /** Result channel, dismissible terminal notifications. Distinct from the backup channel id. */
-        const val CHANNEL_ID_RESULT = "migration_p2p_transfer_result"
-
         /** Ongoing-notification id for `startForeground(...)`. Distinct from the backup ids. */
         const val NOTIFICATION_ID_RUNNING = 0xCAFE0101.toInt()
 

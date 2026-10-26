@@ -1,8 +1,14 @@
 package com.difft.android.call.service
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.os.Looper
+import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.call.LCallToChatController
 import io.mockk.every
 import io.mockk.just
@@ -19,6 +25,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import util.AppForegroundObserver
 
@@ -37,11 +44,16 @@ class OngoingCallServiceControllerTest {
     private val controller = OngoingCallServiceController(app, callToChat)
     private val starts = mutableListOf<Intent>()
     private val listeners = mutableListOf<AppForegroundObserver.Listener>()
+    private val nm = mockk<NotificationManager>(relaxed = true)
 
     @Before
     fun setUp() {
+        NotificationChannelSpecs.resetVerifiedForegroundChannel()
+        every { app.getSystemService(Context.NOTIFICATION_SERVICE) } returns nm
+        every { nm.getNotificationChannel(NotificationChannelIds.RUNNING_IN_BACKGROUND) } returns
+            NotificationChannel(NotificationChannelIds.RUNNING_IN_BACKGROUND, "Running in background", NotificationManager.IMPORTANCE_LOW)
         every { callToChat.isAppForegrounded() } returns true
-        every { callToChat.startForegroundService(any(), capture(starts)) } just runs
+        every { callToChat.startForegroundService(any(), capture(starts), any()) } returns true
         every { app.startForegroundService(any()) } returns ComponentName("pkg", ForegroundService::class.java.name)
         mockkStatic(AppForegroundObserver::class)
         every { AppForegroundObserver.addListener(any()) } answers { listeners += firstArg<AppForegroundObserver.Listener>() }
@@ -53,7 +65,95 @@ class OngoingCallServiceControllerTest {
         ForegroundService.ownerSessionId = ForegroundService.NO_OWNER
         ForegroundService.isServiceRunning = false
         ForegroundService.pendingTypeUpdates = 0
+        NotificationChannelSpecs.resetVerifiedForegroundChannel()
         unmockkAll()
+    }
+
+    // #1354: with no channel for the notification, no start is ever issued.
+    @Test
+    fun `no start is issued while no foreground channel exists`() {
+        every { nm.getNotificationChannel(any()) } returns null
+        every { nm.createNotificationChannel(any<NotificationChannel>()) } throws IllegalStateException("Limit exceed")
+
+        controller.start(SESSION)
+        controller.ensureStarted(SESSION)
+        ForegroundService.isServiceRunning = true
+        controller.updateServiceType(SESSION)
+
+        verify(exactly = 0) { callToChat.startForegroundService(any(), any(), any()) }
+        verify(exactly = 0) { app.startForegroundService(any()) }
+        assertEquals(0, ForegroundService.pendingTypeUpdates)
+        assertNull(NotificationChannelSpecs.verifiedForegroundChannel)
+    }
+
+    // A failed preflight keeps the start unissued with the retry armed.
+    @Test
+    fun `a foreground start without a channel is retried on the next foreground`() {
+        every { nm.getNotificationChannel(any()) } returns null
+        every { nm.createNotificationChannel(any<NotificationChannel>()) } throws IllegalStateException("Limit exceed")
+
+        controller.start(SESSION)
+        assertEquals(0, starts.size)
+        assertEquals(1, listeners.size)
+
+        every { nm.getNotificationChannel(NotificationChannelIds.RUNNING_IN_BACKGROUND) } returns
+            NotificationChannel(NotificationChannelIds.RUNNING_IN_BACKGROUND, "Running in background", NotificationManager.IMPORTANCE_LOW)
+        listeners.single().onForeground()
+
+        assertEquals(1, starts.size)
+    }
+
+    // The starter's own preflight failing is not a silent "issued".
+    @Test
+    fun `a start the starter declines stays unissued and is retried`() {
+        every { callToChat.startForegroundService(any(), any(), any()) } returns false
+
+        controller.start(SESSION)
+        assertEquals(1, listeners.size)
+        verify(exactly = 1) { callToChat.startForegroundService(any(), any(), any()) }
+
+        every { callToChat.startForegroundService(any(), capture(starts), any()) } returns true
+        controller.ensureStarted(SESSION)
+        assertEquals(1, starts.size)
+        assertEquals(0, listeners.size)
+    }
+
+    // A start the starter deferred and then could not issue re-arms the retry.
+    @Test
+    fun `a deferred start that fails later re-arms the retry for the current session only`() {
+        val onDeferredFailure = slot<() -> Unit>()
+        every { callToChat.startForegroundService(any(), any(), capture(onDeferredFailure)) } returns true
+
+        controller.start(SESSION)
+        assertEquals(0, listeners.size)
+        onDeferredFailure.captured()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, listeners.size)
+
+        controller.ensureStarted(SESSION)
+        verify(exactly = 2) { callToChat.startForegroundService(any(), any(), any()) }
+        assertEquals(0, listeners.size)
+
+        // Stale: another session owns the service by the time the deferred failure lands.
+        ForegroundService.ownerSessionId = OTHER
+        onDeferredFailure.captured()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, listeners.size)
+
+        // Or the service is already running for this session.
+        ForegroundService.ownerSessionId = SESSION
+        ForegroundService.isServiceRunning = true
+        onDeferredFailure.captured()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, listeners.size)
+    }
+
+    @Test
+    fun `a start records the verified channel for the service`() {
+        controller.start(SESSION)
+
+        assertEquals(1, starts.size)
+        assertEquals(NotificationChannelIds.RUNNING_IN_BACKGROUND, NotificationChannelSpecs.verifiedForegroundChannel)
     }
 
     @Test
@@ -234,13 +334,13 @@ class OngoingCallServiceControllerTest {
 
     @Test
     fun `start and stop failures are logged, not thrown`() {
-        every { callToChat.startForegroundService(any(), any()) } throws IllegalStateException("start")
+        every { callToChat.startForegroundService(any(), any(), any()) } throws IllegalStateException("start")
         every { app.stopService(any()) } throws SecurityException("stop")
 
         controller.start(SESSION)
         assertEquals(SESSION, ForegroundService.ownerSessionId)
 
-        every { callToChat.startForegroundService(any(), capture(starts)) } just runs
+        every { callToChat.startForegroundService(any(), capture(starts), any()) } returns true
         controller.ensureStarted(SESSION)
         assertEquals("a failed start can be issued again", 1, starts.size)
 

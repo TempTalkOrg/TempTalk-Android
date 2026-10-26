@@ -18,7 +18,6 @@ package com.difft.android.call.service
 
 import android.Manifest
 import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -39,7 +38,7 @@ import com.difft.android.call.LCallActivity
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.receiver.CallNotificationActionReceiver
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.notification.SystemProps
 import com.difft.android.call.util.PermissionUtil
 import dagger.hilt.EntryPoint
@@ -167,7 +166,6 @@ open class ForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         L.i { "[Call] +++ ForegroundService onCreate +++" }
-        createNotificationChannel()
         observeCallState()
     }
 
@@ -195,10 +193,10 @@ open class ForegroundService : Service() {
                 isCallEnding = { onGoingCallStateManager.isInCallEnding() },
             ).collect { state ->
                 if (state == null) return@collect
-                val notification = buildOngoingCallNotification(state.status, state.connectedAt)
                 val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getServiceType() else 0
-                if (promote(notification, type)) {
-                    currentNotification = notification
+                val posted = promote(type) { channelId -> buildOngoingCallNotification(state.status, state.connectedAt, channelId) }
+                if (posted != null) {
+                    currentNotification = posted
                     L.i {
                         "[Call] ForegroundService notification updated status=${state.status}" +
                             " connectedAt=${state.connectedAt}" +
@@ -214,27 +212,44 @@ open class ForegroundService : Service() {
     }
 
     /**
-     * Every promotion goes through here. A type the platform denies (a microphone or camera start
-     * without while-in-use eligibility throws [SecurityException], which the shared helper does not
-     * catch) is retried as DATA_SYNC alone. A start the platform refuses outright makes the helper
-     * return false, having stopped the service itself. On either failure the owning session is told so
-     * it can retry from the foreground; a denial stops the service up to [lastStartId], so a start
-     * already queued behind it survives. Returns whether the service is in the foreground.
+     * Every promotion goes through here. The notification is built by [build] on a channel verified
+     * to exist at this very promotion (#1354); with none, the service stops without
+     * `startForeground`, which on a missing channel would get the app killed. A type the platform
+     * denies (a microphone or camera start without while-in-use eligibility throws
+     * [SecurityException], which the shared helper does not catch) is retried as DATA_SYNC alone. A
+     * start the platform refuses outright makes the helper return false, having stopped the service
+     * itself. On any failure the owning session is told so it can retry from the foreground; a
+     * denial or a missing channel stops the service up to [lastStartId], so a start already queued
+     * behind it survives. Returns the notification now in the foreground, or null.
      */
-    private fun promote(notification: Notification, type: Int): Boolean {
+    private fun promote(type: Int, build: (channelId: String) -> Notification): Notification? {
+        val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
+        if (channelId == null) {
+            onPromotionFailed(stop = true)
+            return null
+        }
+        val notification = build(channelId)
         val dataSync = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         val retryAsDataSync = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && type != dataSync
         val promoted = promoteOrNull(notification, type)
             ?: if (retryAsDataSync) promoteOrNull(notification, dataSync) else null
-        if (promoted == true) return true
+        if (promoted == true) return notification
+        onPromotionFailed(stop = promoted == null)
+        return null
+    }
+
+    private fun onPromotionFailed(stop: Boolean) {
         val owner = ownerSessionId
         isServiceRunning = false
         if (owner != NO_OWNER) {
             Handler(Looper.getMainLooper()).post { entryPoint.ongoingCallServiceController().onPromoteFailed(owner) }
         }
-        if (promoted == null) stopSelfResult(lastStartId)
-        return false
+        if (stop) stopSelfResult(lastStartId)
     }
+
+    /** What is on screen when it already sits on [channelId], else the starting notification there. */
+    private fun currentOrStarting(channelId: String): Notification =
+        currentNotification?.takeIf { it.channelId == channelId } ?: buildStartingNotification(channelId)
 
     /** One promotion as [type]: the helper's result, or null when the platform denies the type. */
     private fun promoteOrNull(notification: Notification, type: Int): Boolean? = try {
@@ -271,12 +286,12 @@ open class ForegroundService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    private fun buildOngoingCallNotification(status: CallStatus, connectedAt: Long): Notification {
+    private fun buildOngoingCallNotification(status: CallStatus, connectedAt: Long, channelId: String): Notification {
 
         val pendingIntent = callActivityPendingIntent()
         val hangUpPendingIntent = hangUpPendingIntent()
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_CONFIG_NAME_ONGOING_CALL)
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
             .setContentTitle(PackageUtil.getAppName())
             .setContentText(getString(contentTextRes(status)))
@@ -312,12 +327,14 @@ open class ForegroundService : Service() {
             builder.setStyle(NotificationCompat.CallStyle.forOngoingCall(person, hangUpPendingIntent))
         }
 
-        return builder.build()
+        return NotificationChannelSpecs.applyForegroundFallback(builder, channelId).build()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
 
-        // Every startForegroundService() must be matched by startForeground() within ~5s, even on
+        // Every startForegroundService() must be matched by startForeground() within ~5s (the one
+        // exception: with no usable notification channel the service stops without promoting; starters
+        // preflight, so that only happens on system restarts), even on
         // follow-up onStartCommand when already foreground. A follow-up re-posts what is already on
         // screen: rebuilding the starting notification there would drop a connected call back to
         // "Connecting…" without CallStyle. The first start has nothing posted yet, which is also
@@ -326,10 +343,10 @@ open class ForegroundService : Service() {
         val isTypeUpdate = intent?.action == ACTION_UPDATE_SERVICE_TYPE
         // The update start has arrived, promoted or not: from here on a stop may bring the service down.
         if (isTypeUpdate) pendingTypeUpdates = (pendingTypeUpdates - 1).coerceAtLeast(0)
-        val notification = currentNotification ?: buildStartingNotification()
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) getServiceType() else 0
-        if (promote(notification, type)) {
-            currentNotification = notification
+        val posted = promote(type, ::currentOrStarting)
+        if (posted != null) {
+            currentNotification = posted
             isServiceRunning = true
             if (!isForegroundStarted) {
                 L.i { "[Call] ForegroundService +++ start Foreground Service +++" }
@@ -408,33 +425,13 @@ open class ForegroundService : Service() {
         L.i { "[Call] ForegroundService onTaskRemoved rootAction=${rootIntent?.action}" }
     }
 
-    private fun serviceChannelName(): String =
-        NotificationChannelIds.nameRes(CHANNEL_CONFIG_NAME_ONGOING_CALL)?.let { getString(it) } ?: DEFAULT_CHANNEL_ID
-
-    private fun createNotificationChannel() {
-        val serviceChannel = NotificationChannel(
-            CHANNEL_CONFIG_NAME_ONGOING_CALL,
-            serviceChannelName(),
-            // Same spec as NotificationChannelManager (the chat module owns it and cannot be reached from here).
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            setShowBadge(false)
-            setSound(null, null)
-            enableVibration(false)
-        }
-        val manager = getSystemService<NotificationManager?>(NotificationManager::class.java)
-        if (manager != null) {
-            manager.createNotificationChannel(serviceChannel)
-        }
-    }
-
     /**
      * The notification published for the initial foreground promotion. The service is started
      * before the call is up, so "Connecting…" is what is true at that point; the state collector
      * replaces it as soon as a call status arrives.
      */
-    private fun buildStartingNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_CONFIG_NAME_ONGOING_CALL)
+    private fun buildStartingNotification(channelId: String): Notification {
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
             .setContentTitle(PackageUtil.getAppName())
             .setContentText(getString(com.difft.android.call.R.string.call_connecting_title))
@@ -449,10 +446,9 @@ open class ForegroundService : Service() {
             // a stamp could feed. Keeping it out also leaves this builder free of injected state,
             // which is what lets the foreground-start path be exercised without standing up Hilt.
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            // The channel is IMPORTANCE_DEFAULT, which makes every re-post alert unless suppressed
-            // here.
+            // Re-posted on every start; a re-post must never alert, whichever channel carries it.
             .setOnlyAlertOnce(true)
-            .build()
+        return NotificationChannelSpecs.applyForegroundFallback(builder, channelId).build()
     }
 
     /**
@@ -465,8 +461,7 @@ open class ForegroundService : Service() {
             val newServiceType = getServiceType()
             // Re-post what is already on screen rather than rebuilding: a connected call keeps its
             // CallStyle notification and hang-up action across the permission-grant update.
-            val notification = currentNotification ?: buildStartingNotification()
-            if (promote(notification, newServiceType)) {
+            if (promote(newServiceType, ::currentOrStarting) != null) {
                 L.i { "[Call] ForegroundService service type updated successfully" }
             } else {
                 // The service has already been told to stop; collapse our local state to match.
@@ -490,8 +485,7 @@ open class ForegroundService : Service() {
         internal const val NO_OWNER = -1L
         internal const val EXTRA_SESSION_ID = "call_session_id"
         const val DEFAULT_NOTIFICATION_ID = 3456
-        const val DEFAULT_CHANNEL_ID = "tt_livekit_foreground"
-        const val CHANNEL_CONFIG_NAME_ONGOING_CALL = "ONGOING_CALL"
+        private const val SERVICE_TAG = "ForegroundService"
         const val ACTION_UPDATE_SERVICE_TYPE = "ACTION_UPDATE_SERVICE_TYPE"
         private const val REQUEST_CODE_HANG_UP = 1
     }

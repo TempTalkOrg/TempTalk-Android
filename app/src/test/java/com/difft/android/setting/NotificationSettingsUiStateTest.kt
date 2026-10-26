@@ -1,8 +1,12 @@
 package com.difft.android.setting
 
+import com.difft.android.base.notification.CallPopupLevel
 import com.difft.android.base.notification.CategoryLevel
 import com.difft.android.base.notification.NotificationFix
 import com.difft.android.base.notification.NotificationReadiness
+import com.difft.android.base.notification.NotificationTestOutcome
+import com.difft.android.base.notification.NotificationTestResult
+import com.difft.android.base.notification.NotificationTestResults
 import com.difft.android.base.notification.OemBrand
 import com.difft.android.base.notification.ReadinessIssue
 import com.difft.android.base.notification.ReadinessItem
@@ -60,11 +64,32 @@ class NotificationSettingsUiStateTest {
         assertNull(state(brand = OemBrand.OTHER).oemPopupItem)
         assertNull(state(brand = OemBrand.SAMSUNG).oemPopupItem)
         assertNotNull(state(c3Check, brand = OemBrand.XIAOMI).oemPopupItem)
-        assertFalse(state(c3Check, brand = OemBrand.XIAOMI).oemPopupOpensGuide)
+        assertTrue(state(c3Check, brand = OemBrand.XIAOMI).showXiaomiPopupHint)
         OemBrand.entries.filter { it.isChinaOem && it != OemBrand.XIAOMI }.forEach {
-            assertTrue(state(c3Check, brand = it).oemPopupOpensGuide, "brand=$it")
+            assertFalse(state(c3Check, brand = it).showXiaomiPopupHint, "brand=$it")
         }
-        assertFalse(state(brand = OemBrand.OTHER).oemPopupOpensGuide)
+        assertFalse(state(brand = OemBrand.OTHER).showXiaomiPopupHint)
+        assertFalse(state(brand = OemBrand.XIAOMI).showXiaomiPopupHint)
+    }
+
+    // #1350 T1, T2, T9, T10: the rows show the still-valid notification test results on China skins.
+    @Test
+    fun `the call pop-up and category rows follow the notification test results`() {
+        val ok = NotificationTestResult(NotificationTestOutcome.OK, 1L, "fp")
+        val fail = NotificationTestResult(NotificationTestOutcome.FAIL, 1L, "fp")
+        fun tested(tests: NotificationTestResults) =
+            NotificationSettingsUiState(NotificationReadiness(items(c3Check), OemBrand.HONOR, tests), 34, true, CriticalAlertBypass.ENABLED)
+        val none = tested(NotificationTestResults.NONE)
+        assertEquals(CallPopupLevel.UNTESTED, none.callPopupLevel)
+        assertEquals(CategoryLevel.UNKNOWN, none.messageLevel)
+        assertEquals(CategoryLevel.UNKNOWN, none.callLevel)
+        val all = tested(NotificationTestResults(banner = ok, lockscreen = ok, call = ok))
+        assertEquals(CategoryLevel.CONFIRMED, all.messageLevel)
+        assertEquals(CategoryLevel.TESTED_OK, all.callLevel)
+        assertEquals(CallPopupLevel.TESTED_OK, all.callPopupLevel)
+        val failed = tested(NotificationTestResults(call = fail))
+        assertEquals(CallPopupLevel.NOT_SHOWN, failed.callPopupLevel)
+        assertEquals(CategoryLevel.UNKNOWN, failed.callLevel)
     }
 
     @Test

@@ -61,6 +61,8 @@ internal class NotificationSettingsActions(
     val onDisplayContent: () -> Unit,
     val onBackgroundConnection: () -> Unit,
     val onGuide: () -> Unit,
+    /** Opens the notification test page (#1350). */
+    val onNotificationTest: () -> Unit,
 )
 
 /**
@@ -124,27 +126,7 @@ internal fun NotificationSettingsContent(
 
         if (state?.showLockScreenGroup == true) {
             Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
-            DifftSettingsGroup(
-                modifier = Modifier.testTag(TAG_GROUP_LOCK_SCREEN),
-                footer = {
-                    DifftSettingsCaption(stringResource(ChatR.string.notification_group_lock_screen_caption))
-                    if (state.oemPopupItem != null && !state.oemPopupOpensGuide) {
-                        DifftSettingsCaption(stringResource(CallR.string.notification_hint_oem_xiaomi))
-                    }
-                },
-            ) {
-                state.fullScreenItem?.let {
-                    StatusRow(ChatR.string.notification_full_screen_display, it, TAG_ROW_FULL_SCREEN) {
-                        actions.onFix(NotificationFix.FULL_SCREEN_INTENT)
-                    }
-                }
-                state.oemPopupItem?.let {
-                    val label = if (state.oemPopupOpensGuide) ChatR.string.notification_vendor_settings else ChatR.string.notification_oem_popup
-                    StatusRow(label, it, TAG_ROW_OEM_POPUP) {
-                        if (state.oemPopupOpensGuide) actions.onGuide() else actions.onFix(NotificationFix.OEM_POPUP)
-                    }
-                }
-            }
+            LockScreenGroup(state, actions)
         }
 
         Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
@@ -178,7 +160,37 @@ internal fun NotificationSettingsContent(
             )
         }
 
-        SetupGuideFooter(onClick = actions.onGuide)
+        SetupGuideFooter(onClick = actions.onGuide, onTest = actions.onNotificationTest)
+    }
+}
+
+/** Full-screen display (API 34+) and, on China OEM skins, the vendor pop-up row whose value comes from the call test (#1350). */
+@Composable
+private fun LockScreenGroup(state: NotificationSettingsUiState, actions: NotificationSettingsActions) {
+    val context = LocalContext.current
+    DifftSettingsGroup(
+        modifier = Modifier.testTag(TAG_GROUP_LOCK_SCREEN),
+        footer = {
+            DifftSettingsCaption(stringResource(ChatR.string.notification_group_lock_screen_caption))
+            if (state.showXiaomiPopupHint) {
+                DifftSettingsCaption(stringResource(CallR.string.notification_hint_oem_xiaomi))
+            }
+        },
+    ) {
+        state.fullScreenItem?.let {
+            StatusRow(ChatR.string.notification_full_screen_display, it, TAG_ROW_FULL_SCREEN) {
+                actions.onFix(NotificationFix.FULL_SCREEN_INTENT)
+            }
+        }
+        if (state.oemPopupItem != null) {
+            val label = if (state.oemPopupOpensGuide) ChatR.string.notification_vendor_settings else ChatR.string.notification_oem_popup
+            ValueRow(
+                label = stringResource(label),
+                value = NotificationReadinessText.callPopupLabel(context, state.callPopupLevel),
+                onClick = { if (state.oemPopupOpensGuide) actions.onGuide() else actions.onFix(NotificationFix.OEM_POPUP) },
+                modifier = Modifier.testTag(TAG_ROW_OEM_POPUP),
+            )
+        }
     }
 }
 

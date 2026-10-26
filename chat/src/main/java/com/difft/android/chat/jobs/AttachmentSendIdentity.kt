@@ -133,8 +133,35 @@ internal class AttachmentSendIdentity(private val messageId: String) {
             val staged = File(AttachmentPathResolver.materializedFileFor(attachment, messageId))
             if (staged.isFile && staged.length() > 0) return staged.path
         }
-        throw IllegalStateException(
-            "attachment never uploaded and staged source missing messageId=$messageId"
-        )
+        throw MissingUploadSourceException(messageId)
+    }
+
+    /**
+     * The file the send job uploads: the transient path a fresh send carries when it still holds
+     * bytes, else [resendSourcePath]. Null when the attachment is already uploaded and needs none;
+     * throws when it never uploaded and its source is gone.
+     */
+    fun uploadSourcePath(attachment: Attachment): String? =
+        attachment.path?.takeIf { File(it).let { file -> file.isFile && file.length() > 0 } }
+            ?: resendSourcePath(attachment)
+
+    /**
+     * Whether a send of [attachment] can find something to send, by the same rule the send job
+     * applies: false only for one that never uploaded and whose source is gone, which no retry can
+     * fix. Lets the resend action say so instead of queueing a job that fails on arrival. Any other
+     * failure of the probe answers true, so the job runs and reports it as it always did.
+     */
+    fun hasUploadSource(attachment: Attachment): Boolean = try {
+        uploadSourcePath(attachment)
+        true
+    } catch (_: MissingUploadSourceException) {
+        false
+    } catch (e: Exception) {
+        L.w { "[ChatResend] source probe failed messageId=$messageId: ${e.stackTraceToString()}" }
+        true
     }
 }
+
+/** A never-uploaded attachment whose staged file is gone: nothing exists that could be sent. */
+internal class MissingUploadSourceException(messageId: String) :
+    IllegalStateException("attachment never uploaded and staged source missing messageId=$messageId")

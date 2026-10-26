@@ -1,6 +1,7 @@
 package com.difft.android.setting
 
 import android.content.Context
+import com.difft.android.base.notification.CallPopupLevel
 import com.difft.android.base.notification.CategoryLevel
 import com.difft.android.base.notification.ReadinessIssue
 import com.difft.android.base.notification.ReadinessStatus
@@ -26,6 +27,17 @@ internal object NotificationReadinessText {
             CategoryLevel.SILENT -> ChatR.string.notification_level_silent
             CategoryLevel.OFF -> ChatR.string.notification_disable
             CategoryLevel.UNKNOWN -> ChatR.string.notification_level_check
+            CategoryLevel.CONFIRMED -> ChatR.string.notification_level_confirmed
+            CategoryLevel.TESTED_OK -> ChatR.string.notification_test_passed
+        }
+    )
+
+    /** The call pop-up row (C3): the last still-valid call test (#1350). */
+    fun callPopupLabel(context: Context, level: CallPopupLevel): String = context.getString(
+        when (level) {
+            CallPopupLevel.TESTED_OK -> ChatR.string.notification_test_passed
+            CallPopupLevel.NOT_SHOWN -> ChatR.string.notification_test_not_shown
+            CallPopupLevel.UNTESTED -> ChatR.string.notification_status_check
         }
     )
 

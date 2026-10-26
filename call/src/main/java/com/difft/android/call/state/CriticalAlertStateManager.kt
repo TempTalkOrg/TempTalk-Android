@@ -56,7 +56,16 @@ class CriticalAlertStateManager @Inject constructor() {
         val isJoining: Boolean,
         val conversationId: String?,
         val currentNotificationId: Int?,
-        val currentPlayToken: Long
+        val currentPlayToken: Long,
+        /** Id of the alert the page owns, published before its silence check; owned by the page, not by the sound (#1387). */
+        val pageNotificationId: Int?,
+        /** The page is resumed, i.e. in front and not left for another activity (#1387). */
+        val isPageVisible: Boolean,
+        /**
+         * Id of the page finishing on its own because its alert's call is current or ended (#1387).
+         * Cleared only by that page's release, so a newer page cannot leave it stuck.
+         */
+        val pageClosingSilentlyId: Int?,
     ) {
         companion object {
             fun initial() = StateSnapshot(
@@ -65,7 +74,10 @@ class CriticalAlertStateManager @Inject constructor() {
                 isJoining = false,
                 conversationId = null,
                 currentNotificationId = null,
-                currentPlayToken = 0L
+                currentPlayToken = 0L,
+                pageNotificationId = null,
+                isPageVisible = false,
+                pageClosingSilentlyId = null,
             )
         }
     }
@@ -79,6 +91,48 @@ class CriticalAlertStateManager @Inject constructor() {
 
     fun setIsShowing(value: Boolean) {
         updateState { it.copy(isShowing = value) }
+    }
+
+    fun isPageVisible(): Boolean = _state.value.isPageVisible
+
+    fun setPageClosingSilently(notificationId: Int) {
+        updateState { it.copy(pageClosingSilentlyId = notificationId) }
+    }
+
+    fun setPageVisible(value: Boolean) {
+        updateState { it.copy(isPageVisible = value) }
+    }
+
+    fun getPageNotificationId(): Int? = _state.value.pageNotificationId
+
+    fun setPageNotificationId(notificationId: Int?) {
+        updateState { it.copy(pageNotificationId = notificationId) }
+    }
+
+    /**
+     * Clears what the page showing alert [notificationId] owns and leaves what another alert set
+     * (#1387): its id, its showing, joining and visible flags, and its conversation while that is still
+     * [conversationId]. A page already replaced by a newer alert changes nothing.
+     */
+    fun clearPage(notificationId: Int, conversationId: String?) {
+        updateState {
+            val closingId = if (it.pageClosingSilentlyId == notificationId) null else it.pageClosingSilentlyId
+            if (it.pageNotificationId != notificationId) {
+                it.copy(pageClosingSilentlyId = closingId)
+            } else {
+                it.copy(
+                    pageNotificationId = null,
+                    isShowing = false,
+                    isJoining = false,
+                    isPageVisible = false,
+                    pageClosingSilentlyId = closingId,
+                    // Kept while another alert's sound is current: it may share this conversation.
+                    conversationId = if (it.conversationId == conversationId &&
+                        (it.currentNotificationId == null || it.currentNotificationId == notificationId)
+                    ) null else it.conversationId,
+                )
+            }
+        }
     }
 
     fun setIsJoining(value: Boolean) {

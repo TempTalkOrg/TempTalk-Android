@@ -84,7 +84,9 @@ class NeutralExporterForwardAttachmentTest {
         localId: String? = null,
         contentType: String = "image/jpeg",
         size: Int = 0,
+        key: ByteArray = ByteArray(64) { 1 },
     ) = AttachmentModel().apply {
+        this.key = key
         this.id = id
         this.authorityId = authorityId
         this.fileName = fileName
@@ -135,6 +137,47 @@ class NeutralExporterForwardAttachmentTest {
         val am = attModel(id = "att-audio", authorityId = 3L, fileName = "song.mp3", localId = "loc-audio", contentType = "audio/mpeg")
 
         assertTrue(exporter.projectNormalAttachment(am, messageId = "m-3").pointerOnly)
+    }
+
+    // ── a ciphertext with no recorded key (a send whose upload failed) ──────────────────────
+
+    @Test
+    fun `an at-rest file without a recorded key travels pointer-only`() {
+        val exporter = newExporter()
+        seedFile("loc-failed", "voice.aac", atRestBytes(300) { it.toByte() })
+        val am = attModel(
+            id = "att-failed", authorityId = 0L, fileName = "voice.aac", localId = "loc-failed",
+            contentType = "audio/aac", key = ByteArray(0),
+        ).apply { flags = 1 }
+
+        val neutral = exporter.projectNormalAttachment(am, messageId = "m-failed")
+
+        assertTrue(neutral.pointerOnly, "a file the destination could never decrypt must not travel")
+        assertNull(bytesFor(exporter, "att-failed"))
+    }
+
+    @Test
+    fun `an at-rest file whose recorded key is too short to read travels pointer-only`() {
+        val exporter = newExporter()
+        seedFile("loc-short", "voice.aac", atRestBytes(300) { it.toByte() })
+        val am = attModel(
+            id = "att-short", authorityId = 7L, fileName = "voice.aac", localId = "loc-short",
+            contentType = "audio/aac", key = ByteArray(32) { 1 },
+        ).apply { flags = 1 }
+
+        assertTrue(exporter.projectNormalAttachment(am, messageId = "m-short").pointerOnly)
+    }
+
+    @Test
+    fun `the same file with its key recorded carries its bytes`() {
+        val exporter = newExporter()
+        val bytes = atRestBytes(300) { (it * 5).toByte() }
+        seedFile("loc-sent", "voice.aac", bytes)
+        val am = attModel(id = "att-sent", authorityId = 9L, fileName = "voice.aac", localId = "loc-sent", contentType = "audio/aac")
+            .apply { flags = 1 }
+
+        assertFalse(exporter.projectNormalAttachment(am, messageId = "m-sent").pointerOnly)
+        assertBytesEqual(bytes, bytesFor(exporter, "att-sent"))
     }
 
     // ── (1) single-forward: bytes carried + resolvable + placed at authorityId dir ────────────

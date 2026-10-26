@@ -57,12 +57,10 @@ object AppStateKeys {
     val CALL_CAMERA_PERMISSION_REQUESTED = booleanPreferencesKey("call_camera_permission_requested")
     val KEEP_ALIVE_ENABLED = booleanPreferencesKey("keep_alive_enabled")
     val AUTO_START_MESSAGE_SERVICE = booleanPreferencesKey("auto_start_message_service")
-    val MESSAGE_SERVICE_TIPS_SHOWED_VERSION = stringPreferencesKey("message_service_tips_showed_version")
     val FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION =
         stringPreferencesKey("floating_window_permission_tips_showed_version")
     val NOTIFICATION_CONTENT_DISPLAY_TYPE = intPreferencesKey("notification_content_display_type")
     val GLOBAL_NOTIFICATION = intPreferencesKey("global_notification")
-    val CHECK_NOTIFICATION_PERMISSION = stringPreferencesKey("check_notification_permission")
     val HAS_SHOWN_CONFIDENTIAL_TIP = booleanPreferencesKey("has_shown_confidential_tip")
     val IMAGE_EDITOR_MARKER_PERCENTAGE = intPreferencesKey("image_editor_marker_percentage")    // HOT WRITE — onStopTrackingTouch
     val IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE = intPreferencesKey("image_editor_highlighter_percentage")
@@ -214,6 +212,22 @@ object AppStateKeys {
     /** App version name for which the critical-alert bypass-DND reconcile was last attempted. */
     val CRITICAL_ALERT_BYPASS_ATTEMPT_VERSION = stringPreferencesKey("critical_alert_bypass_attempt_version")
 
+    /** Whether channels outside the app's keep and obsolete sets were already logged once (#1354). */
+    val NOTIFICATION_CHANNEL_UNKNOWN_LOGGED = booleanPreferencesKey("notification_channel_unknown_logged")
+
+    // ---------- Section L: Startup prompts (#1355) ----------
+
+    /** JSON map of per-prompt back-off records keyed by prompt id; see StartupPromptStore. */
+    val STARTUP_PROMPT_STATE = stringPreferencesKey("startup_prompt_state")
+
+    // ---------- Section M: Notification test results (#1350) ----------
+    //
+    // One user-run test outcome per key, encoded `<ok|fail>|<epochMs>|<fingerprint>`; see
+    // NotificationTestResult. Absent = never tested.
+    val NOTIF_TEST_BANNER = stringPreferencesKey("notif_test_banner")
+    val NOTIF_TEST_LOCKSCREEN = stringPreferencesKey("notif_test_lockscreen")
+    val NOTIF_TEST_CALL = stringPreferencesKey("notif_test_call")
+
 }
 
 /**
@@ -252,11 +266,9 @@ object AppStateDefaults {
     const val KEEP_ALIVE_ENABLED = false
     const val AUTO_START_MESSAGE_SERVICE = true
     /** Nullable-string sentinel — see [MOST_USE_EMOJIS]. */
-    const val MESSAGE_SERVICE_TIPS_SHOWED_VERSION = ""
     const val FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION = ""
     const val NOTIFICATION_CONTENT_DISPLAY_TYPE = 0
     const val GLOBAL_NOTIFICATION = 0
-    const val CHECK_NOTIFICATION_PERMISSION = ""
     const val HAS_SHOWN_CONFIDENTIAL_TIP = false
     const val IMAGE_EDITOR_MARKER_PERCENTAGE = 0
     const val IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE = 0
@@ -303,4 +315,8 @@ object AppStateDefaults {
     // Section K defaults — 0 = no channel maintenance applied yet; "" = no bypass reconcile attempted.
     const val NOTIFICATION_CHANNEL_VERSION = 0
     const val CRITICAL_ALERT_BYPASS_ATTEMPT_VERSION = ""
+    const val NOTIFICATION_CHANNEL_UNKNOWN_LOGGED = false
+
+    // Section L defaults — "" = no prompt state written yet.
+    const val STARTUP_PROMPT_STATE = ""
 }

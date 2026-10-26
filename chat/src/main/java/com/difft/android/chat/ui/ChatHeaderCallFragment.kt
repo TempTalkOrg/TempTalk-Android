@@ -35,6 +35,7 @@ import com.difft.android.network.BaseResponse
 import com.difft.android.network.ChativeHttpClient
 import com.difft.android.network.di.ChativeHttpClientModule
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.catch
@@ -77,13 +78,37 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
     private lateinit var stubBinding: ChatFragmentHeaderCallStubBinding
     private var callBinding: ChatFragmentHeaderCallBinding? = null
 
+    /** Room the bar on screen currently shows, null while hidden. */
+    private var displayedRoomId: String? = null
+
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         callBinding?.callBarView?.visibility = View.GONE
 
+        renderLastSnapshotIfCurrent()
         registerCallingListener()
     }
+
+    /**
+     * Every chat page creates this fragment anew, and the checked path below needs a `checkCall`
+     * round trip plus a DB read before it renders. When the meeting is the one rendered last, draw
+     * it synchronously from [lastRendered] so a conversation switch shows the bar at once (as iOS
+     * does from its in-memory meeting list); the checked path still runs and reconciles.
+     */
+    private fun renderLastSnapshotIfCurrent() {
+        val callData = selectCallData(callDataManager.callingList.value, onGoingCallStateManager.isInCalling())
+            ?: return
+        val snapshot = lastRendered?.takeIf { it.roomId == callData.roomId } ?: return
+        updateCallBarView(snapshot.callType, callData, snapshot.displayInfo, snapshot.anotherDeviceJoined)
+    }
+
+    private fun selectCallData(callingList: Map<String, CallData>, isInCalling: Boolean): CallData? =
+        if (!isInCalling) {
+            callingList.values.firstOrNull()
+        } else {
+            callingList.values.firstOrNull { onGoingCallStateManager.getCurrentRoomId() != it.roomId }
+        }
 
 
     override fun onCreateView(
@@ -98,6 +123,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
 
     override fun onDestroyView() {
         callBinding = null
+        displayedRoomId = null
         super.onDestroyView()
     }
 
@@ -110,15 +136,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             callingList to isInCalling
         }
             // 计算当前需要处理的 callData
-            .map { (callingList, isInCalling) ->
-                if (!isInCalling) {
-                    callingList.values.firstOrNull()
-                } else {
-                    callingList.values.firstOrNull {
-                        onGoingCallStateManager.getCurrentRoomId() != it.roomId
-                    }
-                }
-            }
+            .map { (callingList, isInCalling) -> selectCallData(callingList, isInCalling) }
             // 去重，避免重复请求
             .distinctUntilChanged { old, new ->
                 old?.roomId == new?.roomId
@@ -126,10 +144,17 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
             // 根据 callData 发起异步请求（自动取消旧请求）
             .flatMapLatest { callData ->
                 if (callData == null || callData.roomId.isEmpty()) {
-                    flowOf<Pair<CallData, BaseResponse<RoomState>>?>(null)
+                    flowOf<Pair<CallData, BaseResponse<RoomState>?>?>(null)
                 } else {
                     flow {
-                        val result = callService.checkCall(callData.roomId)
+                        val result = try {
+                            callService.checkCall(callData.roomId)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            L.w { "[Call] ChatHeaderCallFragment checkCall failed roomId:${callData.roomId} error:${e.message}" }
+                            null
+                        }
                         emit(callData to result)
                     }
                 }
@@ -144,6 +169,13 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
                 }
 
                 val (callData, checkCallResult) = result
+
+                // Server unreachable: that does not mean the call ended, so keep a bar (and the
+                // snapshot) that already shows this room; anything else on screen is stale.
+                if (checkCallResult == null) {
+                    if (displayedRoomId != callData.roomId) hideCallBarViews()
+                    return@onEach
+                }
 
                 if (checkCallResult.status != 0) {
                     hideCallBarViews()
@@ -165,6 +197,7 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
                     displayInfo,
                     anotherDeviceJoined
                 )
+                lastRendered = CallBarSnapshot(callData.roomId, callType, anotherDeviceJoined, displayInfo)
             }
             .catch { e ->
                 L.e { "[Call] ChatHeaderCallFragment error = ${e.message}" }
@@ -290,12 +323,15 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         }
         binding.buttonJoinCall.visibility = View.VISIBLE
         binding.callBarView.visibility = View.VISIBLE
+        displayedRoomId = callData.roomId
 
         // set call header visible to true
         onGoingCallStateManager.setChatHeaderCallVisibility(true)
     }
 
     private fun hideCallBarViews() {
+        lastRendered = null
+        displayedRoomId = null
         callBinding?.callBarView?.visibility = View.GONE
         onGoingCallStateManager.setChatHeaderCallVisibility(false)
     }
@@ -306,6 +342,19 @@ class ChatHeaderCallFragment : CommonHeaderFragment() {
         val binding = ChatFragmentHeaderCallBinding.bind(inflated)
         callBinding = binding
         return binding
+    }
+
+    /** What the bar last rendered after a successful check; see [renderLastSnapshotIfCurrent]. */
+    private data class CallBarSnapshot(
+        val roomId: String,
+        val callType: String?,
+        val anotherDeviceJoined: Boolean,
+        val displayInfo: CallDisplayInfo,
+    )
+
+    private companion object {
+        // Process-wide and touched on main only; cleared whenever the bar is hidden.
+        var lastRendered: CallBarSnapshot? = null
     }
 
 

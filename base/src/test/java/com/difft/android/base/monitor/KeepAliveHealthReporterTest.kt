@@ -36,12 +36,15 @@ class KeepAliveHealthReporterTest {
     private val zeroTail = "lat_ws_10s=0 lat_ws_1m=0 lat_ws_5m=0 lat_ws_30m=0 lat_ws_2h=0 lat_ws_more=0 " +
         "lat_fcm_10s=0 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
         "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
-        "pv=na pv_why=none pv_days=0 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na fcm_state=unknown fcm_fail_h=0"
+        "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
+        "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+        "pv=na pv_why=none pv_days=0 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na " +
+        "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=unknown fcm_fail_h=0" + POWER_TAIL
 
     private val snapshot = HealthSnapshot(
         sdkInt = 34, keepAliveEnabled = true, ignoringBatteryOptimizations = true,
         backgroundRestricted = false, restrictBackgroundStatus = 1, notificationsEnabled = true,
-        canUseFullScreenIntent = true, standbyBucket = 10
+        canUseFullScreenIntent = true, standbyBucket = 10, canScheduleExactAlarms = false
     )
 
     @Before
@@ -92,7 +95,7 @@ class KeepAliveHealthReporterTest {
         assertEquals(1, sent.size)
         assertEquals(
             "window_min=1440 sdk=34 keep_alive=1 ignore_batt=1 bg_restricted=0 data_saver=off notif=1 fsi=1 " +
-                "bucket=ACTIVE exits_total=4 exit_ANR_fg=1 exit_EXIT_SELF_bg=2 exit_OTHER_bg=1 " +
+                "bucket=ACTIVE exact_alarm=0 exits_total=4 exit_ANR_fg=1 exit_EXIT_SELF_bg=2 exit_OTHER_bg=1 " +
                 "fgs_fail_total=1 fgs_fail_DIRECT_NOT_ALLOWED=1 fgs_alive_min=0 fgs_starts=0 fcm_recv=0 fcm_deprio=0 pull_ok=0 pull_fail=0 " +
                 zeroTail,
             sent[0]
@@ -154,10 +157,27 @@ class KeepAliveHealthReporterTest {
                     "lat_ws_10s=1 lat_ws_1m=0 lat_ws_5m=1 lat_ws_30m=0 lat_ws_2h=0 lat_ws_more=0 " +
                     "lat_fcm_10s=0 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
                     "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
-                    "pv=na pv_why=none pv_days=2 pv_n=2 pv_fcm_n=0 pv_fcm_slow=na fcm_state=unknown fcm_fail_h=0"
+                    "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
+                    "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+                    "pv=na pv_why=none pv_days=2 pv_n=2 pv_fcm_n=0 pv_fcm_slow=na " +
+                    "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=unknown fcm_fail_h=0" + POWER_TAIL
             )
         )
         assertNull(prefs()[AppStateKeys.BG_HEALTH_EVENT_COUNTS])
+    }
+
+    @Test
+    fun `fcm transit and app stalls reach the 24h fields and the window aggregates`() = runTest {
+        run(true, emptyList(), now = 0L)
+        val serverNow = 4 * 60 * 60_000L
+        counters.serverNow = { serverNow }
+        counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = serverNow - 5_000L)
+        counters.onFcmReceived(deprioritized = false, highPrioritySentTimeMs = serverNow - 3 * 60 * 60_000L)
+        counters.onAppStall(durationMs = 3 * 60 * 60_000L)
+        run(true, emptyList(), now = day)
+        assertEquals(true, sent[0].contains(" fcmt_10s=1 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=1 "), sent[0])
+        assertEquals(true, sent[0].contains(" stall_30m=0 stall_2h=0 stall_more=1 stall_min=180 "), sent[0])
+        assertEquals(true, sent[0].contains(" pv_n=0 pv_fcm_n=0 pv_fcm_slow=na pv_fcmt_n=2 pv_fcmt_slow=50 pv_stall_2h=1 "), sent[0])
     }
 
     @Test
@@ -202,7 +222,7 @@ class KeepAliveHealthReporterTest {
         )
         assertNull(prefs()[AppStateKeys.BG_HEALTH_EVENT_COUNTS])
         assertEquals(
-            setOf(FgsStartFailure.RETRY_FAILED, FgsStartFailure.STARTFG_REFUSED),
+            setOf(FgsStartFailure.RETRY_FAILED, FgsStartFailure.STARTFG_REFUSED, FgsStartFailure.NO_CHANNEL),
             FgsStartFailure.entries.filter { it.terminal }.toSet()
         )
     }
@@ -281,11 +301,11 @@ class KeepAliveHealthReporterTest {
             it[AppStateKeys.BG_FCM_FAIL_SINCE] = 8 * day - 31 * 3_600_000L
         }
         run(true, emptyList(), now = 8 * day)
-        assertEquals(true, sent[0].endsWith(" fcm_state=fail fcm_fail_h=31"), sent[0])
+        assertEquals(true, sent[0].endsWith(" fcm_state=fail fcm_fail_h=31$POWER_TAIL"), sent[0])
 
         store.edit { it[AppStateKeys.BG_FCM_STATE] = "nogms" } // failure hours only apply to a failing state
         run(true, emptyList(), now = 9 * day)
-        assertEquals(true, sent[1].endsWith(" fcm_state=nogms fcm_fail_h=0"), sent[1])
+        assertEquals(true, sent[1].endsWith(" fcm_state=nogms fcm_fail_h=0$POWER_TAIL"), sent[1])
     }
 
     @Test
@@ -317,5 +337,10 @@ class KeepAliveHealthReporterTest {
         reporter.onProbe(null, listOf(ExitSample("ANR", true)))
         run(true, emptyList(), now = day)
         assertEquals(true, sent.single().contains(" exits_total=1 exit_ANR_fg=1 "), sent.single())
+    }
+
+    private companion object {
+        // adb is unknown in the test snapshot; no power counters were recorded.
+        val POWER_TAIL = " adb=na" + BackgroundPowerModel.formatSection(emptyMap())
     }
 }

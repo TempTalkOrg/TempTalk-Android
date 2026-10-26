@@ -12,6 +12,7 @@
     <string name="settings_pattern_lock">Pattern</string>
     <string name="settings_passcode_lock">Passcode</string>
     <string name="settings_pattern_show_path">Pattern Path</string>
+    <string name="settings_pattern_show_path_desc">When off, the path is hidden while drawing; dots flash briefly as you reach them.</string>
     <string name="settings_pattern_draw_title">Create your pattern</string>
     <string name="settings_pattern_draw_subtitle">Draw an unlock pattern</string>
     <string name="settings_pattern_confirm_title">Confirm your pattern</string>
@@ -89,7 +90,6 @@
     <string name="status_upgrade_button_cancle">Cancel</string>
     <string name="status_upgrade_verify_failed">Update package security verification failed</string>
     <string name="status_upgrade_param_exception">Update package parameter exception</string>
-    <string name="upgrade_notification_channel_name">App updates</string>
     <string name="upgrade_notification_downloading">Downloading new version…</string>
     <string name="upgrade_notification_verifying">Verifying…</string>
     <string name="upgrade_notification_complete">Download complete, tap to install</string>
@@ -144,8 +144,6 @@
     <!-- Data-migration backup (A3) — notification surface -->
 
     <!-- Data-migration P2P transfer (I5) — foreground-service notification surface -->
-    <string name="migration_p2p_notification_channel_progress">Device transfer (in progress)</string>
-    <string name="migration_p2p_notification_channel_result">Device transfer (result)</string>
     <string name="migration_p2p_notification_title_running">Transferring your data…</string>
     <string name="migration_p2p_notification_text_running">Keep the app open until the migration finishes.</string>
     <string name="migration_p2p_notification_action_cancel">Cancel</string>

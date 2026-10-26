@@ -92,6 +92,7 @@ class MessageContentProcessorBackwardCompatTest {
             weakContactReconciler = mockk(relaxed = true),
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
+            criticalAlertHighlightWriter = mockk(relaxed = true),
         )
     }
 

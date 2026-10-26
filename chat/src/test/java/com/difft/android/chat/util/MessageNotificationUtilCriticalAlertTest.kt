@@ -10,6 +10,9 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.NotificationRepostGuard
 import com.difft.android.call.LCallManager
 import com.difft.android.call.manager.CriticalAlertManager
+import com.difft.android.call.state.CriticalAlertCallGate
+import com.difft.android.call.state.CriticalAlertRoomRegistry
+import com.difft.android.call.state.OnGoingCallStateManager
 import difft.android.messageserialization.For
 import io.mockk.every
 import io.mockk.just
@@ -29,7 +32,8 @@ import util.AppForegroundObserver
  * Branch coverage for [MessageNotificationUtil.showCriticalAlert]: the foreground branch posts a
  * silent companion notification before launching CriticalAlertActivity, the background branch
  * posts the full-screen notification and plays sound only after a successful notify, and the
- * cache-hit / already-showing / concurrent-add branches stay no-ops.
+ * cache-hit / already-showing / concurrent-add branches stay no-ops, and an alert for the call
+ * being joined or already active (#1381) is only recorded as processed.
  */
 class MessageNotificationUtilCriticalAlertTest {
 
@@ -45,6 +49,8 @@ class MessageNotificationUtilCriticalAlertTest {
     private lateinit var builder: CriticalAlertNotificationBuilder
     private lateinit var notification: Notification
     private lateinit var repostGuard: NotificationRepostGuard
+    private lateinit var callGate: CriticalAlertCallGate
+    private val registry = CriticalAlertRoomRegistry()
     private lateinit var util: MessageNotificationUtil
 
     @Before
@@ -74,6 +80,7 @@ class MessageNotificationUtilCriticalAlertTest {
         every { builder.build(any(), any(), any()) } returns notification
 
         repostGuard = mockk(relaxed = true)
+        callGate = CriticalAlertCallGate(OnGoingCallStateManager(), registry)
 
         util = MessageNotificationUtil(
             context = context,
@@ -87,6 +94,7 @@ class MessageNotificationUtilCriticalAlertTest {
             criticalAlertNotificationBuilder = builder,
             channelManager = mockk(relaxed = true),
             repostGuard = repostGuard,
+            criticalAlertCallGate = callGate,
         )
     }
 
@@ -117,7 +125,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 0) { repostGuard.repostIfActive(any()) }
         verify(exactly = 1) { nm.notify(any(), any()) }
         verify(exactly = 1) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
-        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any()) }
+        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
     }
 
     // N2
@@ -130,7 +138,7 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 1) {
             criticalAlertManager.startCriticalAlertActivity(conversationId, alertTitle, alertContent, notificationId, "r1")
         }
-        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any()) }
+        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
     }
 
     // N3
@@ -161,7 +169,7 @@ class MessageNotificationUtilCriticalAlertTest {
 
         show()
 
-        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any()) }
+        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
         verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
     }
 
@@ -264,13 +272,132 @@ class MessageNotificationUtilCriticalAlertTest {
         verify(exactly = 1) { builder.build(payload(roomId = null), any(), CriticalAlertPresentation.SILENT_COMPANION) }
     }
 
+    // #1381
+    @Test
+    fun `alert for the joining call is recorded as processed and shows nothing`() {
+        callGate.beginJoin("r1", conversationId)
+        listOf(true, false).forEach { foreground ->
+            every { AppForegroundObserver.isForegrounded() } returns foreground
+
+            show()
+
+            verify { criticalAlertManager.addCriticalAlertNotificationIfNotExists(conversationId, notificationId) }
+            assertNothingPublished()
+            verify(exactly = 0) { LCallManager.dismissIncomingNotificationByRoomId(any()) }
+            verify(exactly = 0) { LCallManager.dismissIncomingNotification(any()) }
+        }
+    }
+
+    // #1381: a join that begins while the alert is being published may have cancelled alerts
+    // before the post; the publisher re-checks and undoes it.
+    @Test
+    fun `a join that begins during the post undoes it`() {
+        listOf(true, false).forEach { foreground ->
+            every { AppForegroundObserver.isForegrounded() } returns foreground
+            var token = 0L
+            every { nm.notify(notificationId, notification) } answers { token = callGate.beginJoin("r1", conversationId) }
+
+            show()
+
+            verifyOrder {
+                nm.notify(notificationId, notification)
+                repostGuard.cancel(notificationId)
+                criticalAlertManager.stopSoundIfMatch(notificationId)
+            }
+            callGate.endJoin(token)
+        }
+    }
+
+    @Test
+    fun `a published alert is not undone while no join began`() {
+        show()
+
+        verify(exactly = 0) { repostGuard.cancel(any()) }
+        verify(exactly = 0) { criticalAlertManager.stopSoundIfMatch(any()) }
+    }
+
+    @Test
+    fun `alert for another call is shown`() {
+        callGate.beginJoin("r2", conversationId)
+
+        show(roomId = "r1")
+
+        verify(exactly = 1) { criticalAlertManager.startCriticalAlertActivity(conversationId, alertTitle, alertContent, notificationId, "r1") }
+    }
+
+    // #1387
+    @Test
+    fun `alert for an ended room shows nothing and is not recorded`() {
+        registry.end("r1")
+        listOf(true, false).forEach { foreground ->
+            every { AppForegroundObserver.isForegrounded() } returns foreground
+
+            show()
+
+            verify { criticalAlertManager.addCriticalAlertNotificationIfNotExists(conversationId, notificationId) }
+            assertNothingPublished()
+            verify(exactly = 0) { criticalAlertManager.recordRoomAlert(any(), any()) }
+            verify(exactly = 0) { LCallManager.dismissIncomingNotificationByRoomId(any()) }
+        }
+    }
+
+    // #1387: a call end that lands while the alert is being published is caught by the re-check.
+    @Test
+    fun `a room that ends during the foreground post undoes it`() {
+        assertEndDuringPostUndone(foreground = true)
+    }
+
+    @Test
+    fun `a room that ends during the background post undoes it`() {
+        assertEndDuringPostUndone(foreground = false)
+    }
+
+    private fun assertEndDuringPostUndone(foreground: Boolean) {
+        every { AppForegroundObserver.isForegrounded() } returns foreground
+        every { nm.notify(notificationId, notification) } answers { registry.end("r1") }
+
+        show()
+
+        verifyOrder {
+            nm.notify(notificationId, notification)
+            repostGuard.cancel(notificationId)
+            criticalAlertManager.stopSoundIfMatch(notificationId)
+        }
+    }
+
+    @Test
+    fun `a published alert with a room is recorded before it is posted`() {
+        show(roomId = "r1")
+
+        verifyOrder {
+            criticalAlertManager.recordRoomAlert("r1", notificationId)
+            nm.notify(notificationId, notification)
+        }
+    }
+
+    @Test
+    fun `an alert without a room id is never recorded`() {
+        show(roomId = null)
+        show(roomId = "")
+
+        verify(exactly = 0) { criticalAlertManager.recordRoomAlert(any(), any()) }
+    }
+
+    private fun assertNothingPublished() {
+        verify(exactly = 0) { builder.build(any(), any(), any()) }
+        verify(exactly = 0) { nm.notify(any(), any()) }
+        verify(exactly = 0) { repostGuard.onPosted(any()) }
+        verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
+        verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
+    }
+
     private fun assertBackgroundPath() {
         verify(exactly = 1) { builder.build(payload(), "CRITICAL_ALERT_V2", CriticalAlertPresentation.FULL_SCREEN) }
         verify(exactly = 0) { builder.build(any(), any(), CriticalAlertPresentation.SILENT_COMPANION) }
         verifyOrder {
             repostGuard.onPosted(notificationId)
             nm.notify(notificationId, notification)
-            criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId)
+            criticalAlertManager.playSoundAndFlashLight(conversationId, notificationId, "r1")
         }
         verify(exactly = 1) { nm.notify(any(), any()) }
         verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }

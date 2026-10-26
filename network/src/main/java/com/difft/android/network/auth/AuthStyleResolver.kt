@@ -8,7 +8,8 @@ import retrofit2.Invocation
  *
  * Retrofit tags every request it builds with an `Invocation` naming the service interface and the
  * invoked method, and `Request.newBuilder()` copies tags, so the declaration survives the
- * host-failover rebuild in `HttpClientInterceptor`. A request built outside Retrofit carries no
+ * host rewrite in `ChatPoolRoutingInterceptor` and the per-host rebuild in
+ * `HostFailoverInterceptor`. A request built outside Retrofit carries no
  * tag and therefore no declaration (issue #1231).
  */
 object AuthStyleResolver {

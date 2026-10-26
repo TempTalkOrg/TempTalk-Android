@@ -80,7 +80,7 @@ class FavoriteEncryptedAttachmentProvider : ContentProvider() {
         wcdb.favoriteGifs.getFirstObject(DBFavoriteGifModel.attachmentId.eq(attachmentId))
             ?.encKey
             ?.let { Base64.decode(it, Base64.NO_WRAP) }
-            ?.takeIf { it.size >= 64 }
+            ?.takeIf(EncryptedAttachmentAccess::isUsableKey)
     } catch (e: Exception) {
         L.w { "[FavoriteEncryptedAttachmentProvider] resolveKey failed: ${e.message}" }
         null

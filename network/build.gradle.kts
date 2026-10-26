@@ -124,6 +124,8 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.hilt.android.testing)
+    testImplementation(libs.okhttp.tls)
+    testImplementation(libs.okhttp.mockwebserver3)
     kspTest(libs.hilt.compiler)
     testImplementation(testFixtures(project(":base")))
 }

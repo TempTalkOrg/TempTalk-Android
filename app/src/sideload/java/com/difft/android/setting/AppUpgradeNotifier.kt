@@ -1,16 +1,15 @@
 package com.difft.android.setting
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelIds
+import com.difft.android.base.notification.NotificationChannelSpecs
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -27,6 +26,10 @@ import javax.inject.Singleton
  * update with stale "verifying" content. The invariant is held by explicit cross-id cancels:
  * a terminal post cancels [NOTIFICATION_ID]; a new download cancels [NOTIFICATION_ID_TERMINAL].
  *
+ * Progress/verifying sit on the foreground channel the service verified; complete/failed on
+ * [NotificationChannelIds.OTHER_ALERTS] (#1354). A notification whose channel cannot be verified
+ * is dropped.
+ *
  * Compiled only for sideload channels (src/sideload).
  */
 @Singleton
@@ -34,7 +37,6 @@ class AppUpgradeNotifier @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
     companion object {
-        private const val CHANNEL_ID = "app_upgrade"
         const val NOTIFICATION_ID = 0x5057
 
         // Terminal (complete/failed) notification id, kept distinct from NOTIFICATION_ID and from
@@ -51,38 +53,21 @@ class AppUpgradeNotifier @Inject constructor(
         NotificationManagerCompat.from(context)
     }
 
+    /** The channel the foreground notification was last built on; progress updates stay on it. */
     @Volatile
-    private var channelReady = false
+    private var progressChannelId: String? = null
 
-    /**
-     * Lazily creates the upgrade channel. IMPORTANCE_DEFAULT + no badge; the channel default
-     * sound is intentionally kept (do NOT setSound(null)) so complete/failed alert once.
-     */
-    private fun ensureChannel() {
-        if (channelReady) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (notificationManager.getNotificationChannel(CHANNEL_ID) == null) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    context.getString(R.string.upgrade_notification_channel_name),
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    setShowBadge(false)
-                }
-                notificationManager.createNotificationChannel(channel)
-            }
-        }
-        channelReady = true
-    }
-
-    private fun baseBuilder(): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, CHANNEL_ID)
+    private fun baseBuilder(channelId: String): NotificationCompat.Builder =
+        NotificationCompat.Builder(context, channelId)
             .setSmallIcon(com.difft.android.base.R.drawable.base_ic_notification_small)
 
-    /** Ongoing, silent progress notification. Reused by startForeground; null percent → indeterminate. */
-    fun buildProgress(percent: Int?): Notification {
-        ensureChannel()
-        val builder = baseBuilder()
+    /**
+     * Ongoing, silent progress notification on [channelId], which the caller verified. Reused by
+     * startForeground; null percent → indeterminate.
+     */
+    fun buildProgress(percent: Int?, channelId: String): Notification {
+        progressChannelId = channelId
+        val builder = baseBuilder(channelId)
             .setContentTitle(context.getString(R.string.upgrade_notification_downloading))
             .setOngoing(true)
             .setSilent(true)
@@ -92,24 +77,24 @@ class AppUpgradeNotifier @Inject constructor(
         } else {
             builder.setProgress(100, percent.coerceIn(0, 100), false)
         }
-        return builder.build()
+        return NotificationChannelSpecs.applyForegroundFallback(builder, channelId).build()
     }
 
     fun showProgress(percent: Int?) {
-        notifyGuarded(NOTIFICATION_ID, buildProgress(percent))
+        val channelId = progressChannel() ?: return
+        notifyGuarded(NOTIFICATION_ID, buildProgress(percent, channelId))
     }
 
     /** Indeterminate "verifying" state shown while SHA256 + signature check runs. */
     fun showVerifying() {
-        ensureChannel()
-        val notification = baseBuilder()
+        val channelId = progressChannel() ?: return
+        val builder = baseBuilder(channelId)
             .setContentTitle(context.getString(R.string.upgrade_notification_verifying))
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
             .setProgress(0, 0, true)
-            .build()
-        notifyGuarded(NOTIFICATION_ID, notification)
+        notifyGuarded(NOTIFICATION_ID, NotificationChannelSpecs.applyForegroundFallback(builder, channelId).build())
     }
 
     /**
@@ -118,7 +103,7 @@ class AppUpgradeNotifier @Inject constructor(
      * On getUriForFile failure: log and do NOT post — the foreground dialog path still installs.
      */
     fun showComplete(apkFile: File) {
-        ensureChannel()
+        if (!ensureAlertChannel()) return
         val uri = try {
             ApkUpdateFiles.contentUri(context, apkFile)
         } catch (e: Exception) {
@@ -136,7 +121,7 @@ class AppUpgradeNotifier @Inject constructor(
             installIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = baseBuilder()
+        val notification = baseBuilder(NotificationChannelIds.OTHER_ALERTS)
             .setContentTitle(context.getString(R.string.upgrade_notification_complete))
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
@@ -147,20 +132,21 @@ class AppUpgradeNotifier @Inject constructor(
     }
 
     /**
-     * Terminal failure: tapping restarts AppUpgradeService (as a foreground service) with the same
-     * params to retry. Not auto-cancelled — the service clears it via cancelTerminal() when a new
-     * download starts.
+     * Terminal failure: tapping retries with the same params through [AppUpgradeRetryReceiver],
+     * which runs the starter's channel preflight before starting AppUpgradeService; a direct
+     * foreground-service PendingIntent would start it with no preflight. Not auto-cancelled — the
+     * service clears it via cancelTerminal() when a new download starts.
      */
     fun showFailed(url: String, apkHash: String, filePath: String, isForce: Boolean) {
-        ensureChannel()
-        val retryIntent = AppUpgradeService.startIntent(context, url, apkHash, filePath, isForce)
-        val contentIntent = PendingIntent.getForegroundService(
+        if (!ensureAlertChannel()) return
+        val retryIntent = AppUpgradeRetryReceiver.intent(context, url, apkHash, filePath, isForce)
+        val contentIntent = PendingIntent.getBroadcast(
             context,
             REQUEST_RETRY,
             retryIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = baseBuilder()
+        val notification = baseBuilder(NotificationChannelIds.OTHER_ALERTS)
             .setContentTitle(context.getString(R.string.upgrade_notification_failed))
             .setContentIntent(contentIntent)
             .setAutoCancel(false)
@@ -168,6 +154,18 @@ class AppUpgradeNotifier @Inject constructor(
             .build()
         cancel()
         notifyGuarded(NOTIFICATION_ID_TERMINAL, notification)
+    }
+
+    private fun progressChannel(): String? {
+        val channelId = progressChannelId ?: NotificationChannelSpecs.foregroundChannel(context)
+        if (channelId == null) L.w { "[AppUpgradeNotifier] progress skipped: channel missing" }
+        return channelId
+    }
+
+    private fun ensureAlertChannel(): Boolean {
+        val ready = NotificationChannelSpecs.ensure(context, NotificationChannelIds.OTHER_ALERTS)
+        if (!ready) L.w { "[AppUpgradeNotifier] terminal skipped: channel missing id=${NotificationChannelIds.OTHER_ALERTS}" }
+        return ready
     }
 
     /** Cancels the progress/verifying (FGS) notification. */

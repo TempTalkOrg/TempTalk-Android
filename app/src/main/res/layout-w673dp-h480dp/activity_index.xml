@@ -122,6 +122,19 @@
     </FrameLayout>
 
     <!--
+        1dp line between the list and detail panes, matching divider_rail. Overlays the detail
+        pane's first dp instead of taking layout space, so the pane widths are unchanged.
+    -->
+    <View
+        android:id="@+id/divider_list_detail"
+        android:layout_width="@dimen/dual_pane_divider_width"
+        android:layout_height="0dp"
+        android:background="@color/line"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toEndOf="@id/list_pane"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!--
         Draggable divider between list and detail panes — floating overlay.
         24dp wide visually centered on list_pane's right edge via marginStart="-12dp",
         so it overlaps 12dp into each pane without consuming layout space.

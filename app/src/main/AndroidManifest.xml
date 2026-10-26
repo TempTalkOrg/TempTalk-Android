@@ -178,6 +178,22 @@
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
         <activity
+            android:name=".setting.notificationtest.NotificationTestActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+        <!-- #1350: full-screen target of the call pop-up test; never part of a real call. -->
+        <activity
+            android:name=".setting.notificationtest.NotificationTestCallActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:taskAffinity="com.difft.android.notificationtest.task"
+            tools:targetApi="27" />
+        <activity
             android:name=".setting.ChatSettingsActivity"
             android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"

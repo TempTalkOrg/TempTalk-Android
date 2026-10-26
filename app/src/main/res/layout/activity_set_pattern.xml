@@ -32,6 +32,7 @@
         android:id="@+id/ll_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
         app:layout_constraintTop_toBottomOf="@+id/cl_title">
@@ -40,7 +41,6 @@
             android:id="@+id/tv_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
             android:layout_marginBottom="8dp"
             android:text="@string/settings_pattern_draw_title"
             android:textColor="@color/t.primary"
@@ -79,20 +79,21 @@
 
     </LinearLayout>
 
-    <!-- Pattern Lock View -->
+    <!-- Pattern Lock View: anchored below the title bar so a taller header (error text) never
+         moves it; SetPatternLayoutPolicy sets the top margin -->
     <com.difft.android.base.widget.PatternLockView
         android:id="@+id/pattern_lock_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="56dp"
         android:layout_marginEnd="56dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginTop="160dp"
+        android:layout_marginBottom="48dp"
         app:layout_constrainedWidth="true"
         app:layout_constrainedHeight="true"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/ll_header"
+        app:layout_constraintTop_toBottomOf="@+id/cl_title"
         app:layout_constraintBottom_toTopOf="@+id/cl_tips"
         app:layout_constraintVertical_bias="0" />
 
@@ -102,7 +103,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginHorizontal="16dp"
-        android:paddingBottom="20dp"
+        android:paddingBottom="16dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <androidx.appcompat.widget.AppCompatImageView

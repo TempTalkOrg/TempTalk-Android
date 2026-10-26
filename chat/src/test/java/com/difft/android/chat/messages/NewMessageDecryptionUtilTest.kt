@@ -54,11 +54,12 @@ class NewMessageDecryptionUtilTest {
         io.mockk.unmockkAll()
     }
 
-    private fun envelope(type: Int, content: ByteArray): Envelope =
+    private fun envelope(type: Int, content: ByteArray, source: String? = null): Envelope =
         Envelope.newBuilder()
             .setType(Envelope.Type.forNumber(type))
             .setTimestamp(1_700_000_000_000L)
             .setContent(ByteString.copyFrom(content))
+            .apply { if (source != null) setSource(source) }
             .build()
 
     @Test
@@ -107,5 +108,37 @@ class NewMessageDecryptionUtilTest {
         assertNotNull("NOTIFY must produce a notify message", result!!.signalCustomNotifyMessage)
         assertNull("NOTIFY must not be parsed as a chat Content", result.signalServiceContent)
         assertEquals(1, result.signalCustomNotifyMessage!!.notifyType)
+    }
+
+    @Test
+    fun `NOTIFY sent from a user account is dropped`() {
+        // A peer can push NOTIFY through the 1:1 send API; the server stamps the sender's account.
+        val forged = """{"notifyType":1}""".toByteArray()
+
+        listOf("+72212204429", "+10000").forEach { account ->
+            val result = util.decrypt(envelope(Envelope.Type.NOTIFY_VALUE, forged, source = account))
+            assertNull("NOTIFY from account $account must be dropped", result)
+        }
+    }
+
+    @Test
+    fun `NOTIFY from the server or an internal service is delivered`() {
+        val notifyJson = """{"notifyType":1}""".toByteArray()
+
+        listOf("server", "callService").forEach { source ->
+            val result = util.decrypt(envelope(Envelope.Type.NOTIFY_VALUE, notifyJson, source = source))
+            assertNotNull("NOTIFY from $source must be delivered", result?.signalCustomNotifyMessage)
+        }
+    }
+
+    @Test
+    fun `account source detection`() {
+        assertEquals(true, isAccountSource("+72212204429"))
+        assertEquals(true, isAccountSource("+10000"))
+        assertEquals(false, isAccountSource("server"))
+        assertEquals(false, isAccountSource(""))
+        assertEquals(false, isAccountSource(null))
+        assertEquals(false, isAccountSource("+"))
+        assertEquals(false, isAccountSource("+123abc"))
     }
 }

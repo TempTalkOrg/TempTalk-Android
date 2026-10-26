@@ -87,7 +87,7 @@ class UpdateManagerDeliveryTest {
                 context = any(), title = any(), message = any(), confirmText = any(), cancelText = any(),
                 showCancel = capture(showCancel), cancelable = capture(cancelable), autoDismiss = capture(autoDismiss),
                 confirmButtonColor = any(), cancelButtonColor = any(), onConfirm = capture(onConfirm),
-                onCancel = any(), onDismiss = any(), content = any()
+                onCancel = any(), onDismiss = any(), onClosed = any(), content = any()
             )
         } returns dialog
         every { environmentHelper.isInsiderChannel() } returns false
@@ -131,6 +131,40 @@ class UpdateManagerDeliveryTest {
         assertEquals(listOf(UpdateOffer("u", "h") to true), delivery.delivered)
 
         delivery.lastHandOff!!.invoke()
+        verify(exactly = 1) { dialog.dismiss() }
+    }
+
+    @Test
+    fun forceDialog_newOfferReplacesTheOld_andHandOffClosesTheCurrentOne() {
+        val first: ComposeDialog = mockk(relaxed = true)
+        val second: ComposeDialog = mockk(relaxed = true)
+        every {
+            ComposeDialogManager.showMessageDialog(
+                context = any(), title = any(), message = any(), confirmText = any(), cancelText = any(),
+                showCancel = any(), cancelable = any(), autoDismiss = any(), confirmButtonColor = any(),
+                cancelButtonColor = any(), onConfirm = capture(onConfirm), onCancel = any(), onDismiss = any(),
+                onClosed = any(), content = any()
+            )
+        } returnsMany listOf(first, second)
+        val h1 = CheckUpdateResponse(update = true, force = true, url = "u1", notes = "n", updateWithApk = false, apkHash = "h1")
+
+        manager.showForceUpdateDialog(activity, h1)
+        manager.showForceUpdateDialog(activity, h1.copy(url = "u2", apkHash = "h2"))
+        verify(exactly = 1) { first.dismiss() }
+        verify(exactly = 0) { second.dismiss() }
+
+        onConfirm.captured.invoke()
+        assertEquals(listOf(UpdateOffer("u2", "h2") to true), delivery.delivered)
+        delivery.lastHandOff!!.invoke()
+        verify(exactly = 1) { second.dismiss() }
+        verify(exactly = 1) { first.dismiss() }
+    }
+
+    @Test
+    fun forceDialog_withdrawnOfferIsDismissed() {
+        manager.showForceUpdateDialog(activity, CheckUpdateResponse(update = true, force = true, url = "u", notes = "n", updateWithApk = false, apkHash = "h"))
+        manager.dismissForceUpdateDialog()
+        manager.dismissForceUpdateDialog()
         verify(exactly = 1) { dialog.dismiss() }
     }
 

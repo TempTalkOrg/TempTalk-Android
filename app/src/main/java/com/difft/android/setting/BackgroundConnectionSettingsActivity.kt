@@ -275,7 +275,11 @@ class BackgroundConnectionSettingsActivity : BaseActivity() {
 
                 if (onSetupGuideClick != null) {
                     item {
-                        SetupGuideFooter(onClick = onSetupGuideClick, modifier = Modifier.padding(horizontal = 16.dp))
+                        SetupGuideFooter(
+                            onClick = onSetupGuideClick,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            prompt = com.difft.android.chat.R.string.background_connection_guide_check,
+                        )
                     }
                 }
             }

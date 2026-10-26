@@ -4,6 +4,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.chat.messages.IncomingMessageObserver
 import com.difft.android.websocket.api.AppWebSocketHelper
+import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import com.difft.android.websocket.internal.websocket.value
 import javax.inject.Inject
@@ -128,7 +129,7 @@ class WebSocketManager @Inject constructor(
             WebSocketConnectionState.CONNECTED, WebSocketConnectionState.CONNECTING -> {
                 L.i { "[ws] reconnectAfterProxyChange: state=$state, evicting pool + cancelling to force fresh connect" }
                 conn.evictConnectionPool()
-                conn.cancelConnection()
+                conn.cancelConnection(LocalDisconnectReason.PROXY_CHANGE)
                 // healthMonitor (started via startMonitoring()) re-establishes
                 // and the new attempt reads the updated ProxyConfigProvider.current.
             }

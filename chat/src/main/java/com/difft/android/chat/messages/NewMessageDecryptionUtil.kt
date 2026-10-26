@@ -28,6 +28,11 @@ import javax.inject.Singleton
 class Base64DecodeException(field: String, cause: Throwable?) :
     RuntimeException("Base64 decode failed for envelope field: $field", cause)
 
+private val ACCOUNT_SOURCE = Regex("^\\+\\d+$")
+
+/** True when [source] is a user account id (E.164 shaped), as opposed to "server" or a service name. */
+internal fun isAccountSource(source: String?): Boolean = source != null && ACCOUNT_SOURCE.matches(source)
+
 @Singleton
 class NewMessageDecryptionUtil @Inject constructor(
     private val encryptionDataManager: EncryptionDataManager,
@@ -40,6 +45,14 @@ class NewMessageDecryptionUtil @Inject constructor(
         // It is not an E2E chat message and is never rendered as one — it is parsed
         // as JSON and dispatched to the notify handlers. Kept as its own path.
         if (typeNumber == Envelope.Type.NOTIFY_VALUE) {
+            // A peer can submit a NOTIFY envelope through the 1:1 send API and the server
+            // forwards it with the sender's account as source. Server notifies carry "server"
+            // and internal-service notifies never use an account source, so an account-shaped
+            // source is a forged control signal: drop it (same rule as iOS PR #812).
+            if (isAccountSource(envelope.source)) {
+                L.w { "[Message] drop notify from account source ts=${envelope.timestamp}" }
+                return null
+            }
             val contentString = String(envelope.content.toByteArray())
             val notifyMessage = gson.fromJson(
                 contentString,

@@ -3,8 +3,11 @@ package com.difft.android.call.service
 import android.app.Application
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.MainThread
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.call.LCallToChatController
 import util.AppForegroundObserver
 import javax.inject.Inject
@@ -23,6 +26,10 @@ import javax.inject.Singleton
  * ([ForegroundService.pendingTypeUpdates]): that start requires a promotion, and a service destroyed
  * before making it crashes the app. Such a start, like any start that reaches the service after its
  * owner stopped it, promotes and then stops the service itself.
+ *
+ * No start is issued while no notification channel can carry the foreground notification
+ * ([NotificationChannelSpecs.preflightForegroundChannel], #1354): the call goes on without the
+ * service rather than crash the app.
  *
  * Every method runs on main; every platform call is caught and logged.
  */
@@ -99,6 +106,7 @@ class OngoingCallServiceController @Inject constructor(
             L.i { "[Call] FGS type update skipped id=$id owner=${ForegroundService.ownerSessionId} running=${ForegroundService.isServiceRunning}" }
             return
         }
+        if (NotificationChannelSpecs.preflightForegroundChannel(application, SERVICE_TAG) == null) return
         ForegroundService.pendingTypeUpdates++
         val reached = try {
             application.startForegroundService(serviceIntent(id).setAction(ForegroundService.ACTION_UPDATE_SERVICE_TYPE)) != null
@@ -111,16 +119,40 @@ class OngoingCallServiceController @Inject constructor(
         }
     }
 
+    /**
+     * A start that is not issued — no notification channel at either preflight, or a throw — stays
+     * unissued with the foreground retry armed, so [ensureStarted] or the next foreground retries.
+     */
     private fun issueStart(id: Long) {
+        if (NotificationChannelSpecs.preflightForegroundChannel(application, SERVICE_TAG) == null) {
+            onStartNotIssued(id)
+            return
+        }
         startIssued = true
         disarmForegroundRetry()
         L.i { "[Call] FGS start id=$id" }
-        try {
-            callToChatController.startForegroundService(application, serviceIntent(id))
+        val issued = try {
+            callToChatController.startForegroundService(application, serviceIntent(id)) {
+                Handler(Looper.getMainLooper()).post { onDeferredStartFailed(id) }
+            }
         } catch (e: Exception) {
-            startIssued = false
             L.e { "[Call] FGS start id=$id failed: ${e.stackTraceToString()}" }
+            false
         }
+        if (!issued) onStartNotIssued(id)
+    }
+
+    /** A start deferred by the starter was not issued either; re-arm unless the session or service moved on. */
+    @MainThread
+    internal fun onDeferredStartFailed(id: Long) {
+        if (ForegroundService.ownerSessionId != id || ForegroundService.isServiceRunning) return
+        onStartNotIssued(id)
+    }
+
+    private fun onStartNotIssued(id: Long) {
+        L.w { "[Call] FGS start not issued id=$id, retry armed" }
+        startIssued = false
+        armForegroundRetry(id)
     }
 
     /**
@@ -147,5 +179,9 @@ class OngoingCallServiceController @Inject constructor(
 
     private fun serviceIntent(id: Long? = null) = Intent(application, ForegroundService::class.java).apply {
         id?.let { putExtra(ForegroundService.EXTRA_SESSION_ID, it) }
+    }
+
+    private companion object {
+        const val SERVICE_TAG = "ForegroundService"
     }
 }

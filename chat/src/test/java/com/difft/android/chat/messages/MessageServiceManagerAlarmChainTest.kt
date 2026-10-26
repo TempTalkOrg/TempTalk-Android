@@ -2,12 +2,17 @@ package com.difft.android.chat.messages
 
 import android.app.AlarmManager
 import android.content.Context
+import com.difft.android.base.monitor.FgsStartFailure
+import com.difft.android.base.monitor.ForegroundServiceFailureRecorder
 import com.difft.android.base.monitor.KeepAliveHealthCounters
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.chat.websocket.monitor.WebSocketHealthMonitor
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.spyk
 import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -48,6 +53,7 @@ class MessageServiceManagerAlarmChainTest {
     private lateinit var userData: UserData
     private lateinit var manager: MessageServiceManager
     private lateinit var healthCounters: KeepAliveHealthCounters
+    private lateinit var fgsFailureRecorder: ForegroundServiceFailureRecorder
 
     @Before
     fun setUp() {
@@ -64,7 +70,8 @@ class MessageServiceManagerAlarmChainTest {
         every { monitor.monitorWakeTicks } returns MutableSharedFlow()
 
         healthCounters = mockk(relaxed = true)
-        manager = MessageServiceManager(context, userManager, monitor, mockk(relaxed = true), healthCounters)
+        fgsFailureRecorder = mockk(relaxed = true)
+        manager = MessageServiceManager(context, userManager, monitor, fgsFailureRecorder, healthCounters)
     }
 
     @After
@@ -76,6 +83,16 @@ class MessageServiceManagerAlarmChainTest {
         listenersField.isAccessible = true
         (listenersField.get(AppForegroundObserver) as MutableSet<*>).clear()
         unmockkAll()
+    }
+
+    @Test
+    fun `a start skipped for lack of a notification channel is recorded as a failure`() {
+        mockkObject(NotificationChannelSpecs)
+        every { NotificationChannelSpecs.preflightForegroundChannel(any(), any()) } returns null
+
+        manager.startService()
+
+        verify(exactly = 1) { fgsFailureRecorder.record(FgsStartFailure.NO_CHANNEL) }
     }
 
     private fun advanceMinutes(minutes: Long) {
@@ -123,6 +140,51 @@ class MessageServiceManagerAlarmChainTest {
         manager.ensureAlarmChainAlive("test")
 
         assertNotNull("must re-arm alarm when chain is stale", shadowAlarmManager.nextScheduledAlarm)
+    }
+
+    @Test
+    fun `a stale chain is recorded as an app stall, a fresh or disabled one is not`() {
+        every { userData.keepAliveEnabled } returns false
+        advanceMinutes(21)
+        manager.ensureAlarmChainAlive("disabled")
+        every { userData.keepAliveEnabled } returns true
+        manager.ensureAlarmChainAlive("stale") // the stall spans the 21 min since construction
+        advanceMinutes(16)
+        manager.ensureAlarmChainAlive("fresh")
+
+        verify(exactly = 1) { healthCounters.onAppStall(match { it in 21 * 60_000L until 22 * 60_000L }) }
+    }
+
+    @Test
+    fun `a throwing stall counter does not block the re-arm`() {
+        every { userData.keepAliveEnabled } returns true
+        every { healthCounters.onAppStall(any()) } throws IllegalStateException("boom")
+        advanceMinutes(21)
+
+        manager.ensureAlarmChainAlive("test")
+
+        assertNotNull("telemetry failure must not skip the re-arm", shadowAlarmManager.nextScheduledAlarm)
+    }
+
+    @Test
+    fun `a stall whose re-arm keeps failing is counted once`() {
+        val failingAlarms = mockk<AlarmManager>(relaxed = true)
+        every { failingAlarms.canScheduleExactAlarms() } returns true
+        every { failingAlarms.setExactAndAllowWhileIdle(any(), any(), any()) } throws IllegalStateException("arm")
+        every { failingAlarms.setAndAllowWhileIdle(any(), any(), any()) } throws IllegalStateException("arm")
+        val failingContext = spyk(context)
+        every { failingContext.getSystemService(Context.ALARM_SERVICE) } returns failingAlarms
+        val monitor = mockk<WebSocketHealthMonitor>(relaxed = true)
+        every { monitor.monitorWakeTicks } returns MutableSharedFlow()
+        val failing = MessageServiceManager(failingContext, userManager, monitor, fgsFailureRecorder, healthCounters)
+        every { userData.keepAliveEnabled } returns true
+        advanceMinutes(21)
+
+        failing.ensureAlarmChainAlive("tick-1")
+        advanceMinutes(1)
+        failing.ensureAlarmChainAlive("tick-2")
+
+        verify(exactly = 1) { healthCounters.onAppStall(any()) }
     }
 
     @Test

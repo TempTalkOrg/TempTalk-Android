@@ -18,10 +18,36 @@ import org.difft.app.database.models.DBMessageModel
 import org.difft.app.database.models.DBReadInfoModel
 import org.difft.app.database.models.ReadInfoModel
 import org.difft.app.database.getGroupMemberCount
+import org.difft.app.database.isGroupMember
+import org.difft.app.database.models.MessageModel
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val ROOM_TYPE_ONE_TO_ONE = 0
+private const val ROOM_TYPE_GROUP = 1
+
+/**
+ * The message a confidential receipt from [senderId] may burn, among the stored messages that share
+ * the receipt timestamp: one I sent, sent as confidential, in the 1:1 conversation with the sender
+ * or in a group the sender belongs to (locally known membership). Same rule as Mac
+ * `read_receipts.js` and the iOS confidential check. Null when nothing qualifies.
+ */
+internal fun pickConfidentialReceiptTarget(
+    candidates: List<MessageModel>,
+    myId: String,
+    senderId: String,
+    isSenderInGroup: (gid: String) -> Boolean,
+): MessageModel? = candidates.firstOrNull { message ->
+    message.fromWho == myId &&
+        message.mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE &&
+        when (message.roomType) {
+            ROOM_TYPE_ONE_TO_ONE -> message.roomId == senderId
+            ROOM_TYPE_GROUP -> message.roomId?.let(isSenderInGroup) == true
+            else -> false
+        }
+}
 
 // All wcdb calls in this class run on Dispatchers.IO.
 @Suppress("BlockingWcdbInSuspend")
@@ -87,44 +113,47 @@ class ReceiptMessageHelper @Inject constructor(
             }
 
             if (mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                // Group confidential: convert to placeholder only for messages I sent
-                receiptMessage.timestampList?.forEach { timestamp ->
-                    val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp)) ?: run {
-                        L.i { "[Message] can't find the original group confidential message, message timestamp:${timestamp}" }
-                        dbMessageStore.savePendingMessage(signalService.messageId, timestamp, signalService.signalServiceEnvelope.toByteArray())
-                        return@forEach
-                    }
-                    if (originalMessage.fromWho != globalServices.myId) {
-                        L.w { "[Message] skip group confidential placeholder: not my message -> timestamp:${timestamp}, from:${originalMessage.fromWho}, viewer:${signalService.senderId}" }
-                        return@forEach
-                    }
-                    L.i { "[Message] convert group confidential message to placeholder -> timestamp:${timestamp}, viewer:${signalService.senderId}" }
-                    originalMessage.convertToConfidentialPlaceholder()
-                }
+                convertConfidentialTargets(receiptMessage, signalService)
             } else {
                 if (readPosition == null) return
                 updateReadInfo(signalService.conversation.id, signalService.senderId, readPosition.maxServerTime)
             }
         } else {
             if (mode == SignalServiceProtos.Mode.CONFIDENTIAL_VALUE) {
-                // 1-on-1 confidential: convert to placeholder only for messages I sent
-                receiptMessage.timestampList?.forEach { timestamp ->
-                    val originalMessage = wcdb.message.getFirstObject(DBMessageModel.timeStamp.eq(timestamp)) ?: run {
-                        L.i { "[Message] can't find the original confidential message, message timestamp:${timestamp}" }
-                        dbMessageStore.savePendingMessage(signalService.messageId, timestamp, signalService.signalServiceEnvelope.toByteArray())
-                        return@forEach
-                    }
-                    if (originalMessage.fromWho != globalServices.myId) {
-                        L.w { "[Message] skip confidential placeholder: not my message -> timestamp:${timestamp}, from:${originalMessage.fromWho}" }
-                        return@forEach
-                    }
-                    L.i { "[Message] convert confidential message to placeholder -> timestamp:${timestamp}" }
-                    originalMessage.convertToConfidentialPlaceholder()
-                }
+                convertConfidentialTargets(receiptMessage, signalService)
             } else {
                 if (readPosition == null) return
                 updateReadInfo(signalService.conversation.id, signalService.senderId, readPosition.maxServerTime)
             }
+        }
+    }
+
+    /**
+     * A confidential receipt burns my sent copy into a placeholder. Only a message that was sent
+     * as confidential, in a conversation the receipt sender belongs to, qualifies (see
+     * [pickConfidentialReceiptTarget]); a receipt can never wipe a normal message.
+     */
+    private fun convertConfidentialTargets(
+        receiptMessage: SignalServiceProtos.ReceiptMessage,
+        signalService: SignalServiceDataClass,
+    ) {
+        val senderId = signalService.senderId
+        receiptMessage.timestampList?.forEach { timestamp ->
+            val candidates = wcdb.message.getAllObjects(DBMessageModel.timeStamp.eq(timestamp))
+            if (candidates.isEmpty()) {
+                L.i { "[Message] confidential receipt target not stored yet ts=$timestamp viewer=$senderId" }
+                dbMessageStore.savePendingMessage(signalService.messageId, timestamp, signalService.signalServiceEnvelope.toByteArray())
+                return@forEach
+            }
+            val target = pickConfidentialReceiptTarget(candidates, globalServices.myId, senderId) { gid ->
+                wcdb.isGroupMember(gid, senderId)
+            }
+            if (target == null) {
+                L.w { "[Message] skip confidential receipt: no confidential message of mine in a conversation with the viewer ts=$timestamp viewer=$senderId candidates=${candidates.size}" }
+                return@forEach
+            }
+            L.i { "[Message] convert confidential message to placeholder ts=$timestamp viewer=$senderId room=${target.roomType}" }
+            target.convertToConfidentialPlaceholder()
         }
     }
 

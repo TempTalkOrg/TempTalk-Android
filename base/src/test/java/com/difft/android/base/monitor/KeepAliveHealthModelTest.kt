@@ -7,10 +7,18 @@ import kotlin.test.assertEquals
 class KeepAliveHealthModelTest {
 
     private val day = KeepAliveHealthModel.REPORT_INTERVAL_MS
+    private val zeroPower = " pw_awake_bat=na pw_el_s_bat=0 pw_up_s_bat=0 pw_el_s_chg=0 pw_up_s_chg=0 pw_cpu_ms_bat=0 " +
+        "pw_net_kb_bat=0 pw_batt_mah=0 pw_batt_pct=0 pw_net_wifi_s=0 pw_net_cell_s=0 pw_net_other_s=0 pw_net_none_s=0 " +
+        "pw_wake_ka=0 pw_wake_svc=0 pw_ka_sent=0 pw_ka_miss=0 pw_reconnect=0 pw_qwait_2s=0 pw_qwait_10s=0 pw_qwait_more=0"
+
     private val zeroTail = "lat_ws_10s=0 lat_ws_1m=0 lat_ws_5m=0 lat_ws_30m=0 lat_ws_2h=0 lat_ws_more=0 " +
         "lat_fcm_10s=0 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
         "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
-        "pv=na pv_why=none pv_days=0 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na fcm_state=unknown fcm_fail_h=0"
+        "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
+        "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+        "pv=na pv_why=none pv_days=0 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na " +
+        "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=unknown fcm_fail_h=0" +
+        " adb=na" + zeroPower
 
     @Test
     fun `decide covers disabled seed wait report and clock rollback`() {
@@ -72,7 +80,7 @@ class KeepAliveHealthModelTest {
         val zero = KeepAliveHealthModel.formatReport(snapshot, day, emptyMap(), emptyMap())
         assertEquals(
             "window_min=1440 sdk=34 keep_alive=1 ignore_batt=0 bg_restricted=0 data_saver=off notif=1 " +
-                "fsi=na bucket=WORKING_SET exits_total=0 fgs_fail_total=0" +
+                "fsi=na bucket=WORKING_SET exact_alarm=na exits_total=0 fgs_fail_total=0" +
                 " fgs_alive_min=0 fgs_starts=0 fcm_recv=0 fcm_deprio=0 pull_ok=0 pull_fail=0 " +
                 zeroTail,
             zero
@@ -84,7 +92,7 @@ class KeepAliveHealthModelTest {
         )
         assertEquals(
             "window_min=90 sdk=34 keep_alive=1 ignore_batt=0 bg_restricted=0 data_saver=off notif=1 " +
-                "fsi=na bucket=WORKING_SET exits_total=3 exit_ANR_fg=1 exit_EXIT_SELF_bg=2 " +
+                "fsi=na bucket=WORKING_SET exact_alarm=na exits_total=3 exit_ANR_fg=1 exit_EXIT_SELF_bg=2 " +
                 "fgs_fail_total=3 fgs_fail_DIRECT_NOT_ALLOWED=3 fgs_alive_min=0 fgs_starts=0 fcm_recv=0 fcm_deprio=0 pull_ok=0 pull_fail=0 " +
                 zeroTail,
             full
@@ -111,7 +119,11 @@ class KeepAliveHealthModelTest {
                     "lat_ws_10s=0 lat_ws_1m=0 lat_ws_5m=0 lat_ws_30m=0 lat_ws_2h=0 lat_ws_more=2 " +
                     "lat_fcm_10s=5 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
                     "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
-                    "pv=1 pv_why=L,P pv_days=4 pv_n=120 pv_fcm_n=40 pv_fcm_slow=25 fcm_state=fail fcm_fail_h=30"
+                    "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
+                    "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+                    "pv=1 pv_why=L,P pv_days=4 pv_n=120 pv_fcm_n=40 pv_fcm_slow=25 " +
+                    "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=fail fcm_fail_h=30" +
+                    " adb=na" + zeroPower
             )
         )
         assertEquals(true, line.contains(" keep_alive=0 "))
@@ -138,6 +150,45 @@ class KeepAliveHealthModelTest {
         assertEquals("lat_pull_more", KeepAliveHealthModel.latencyKey(DeliveryChannel.PULL, 2 * 60 * 60_000L + 1))
         assertEquals(18, HealthEventKeys.ALL_LATENCY_KEYS.size)
         assertEquals(18, HealthEventKeys.ALL_LATENCY_KEYS.toSet().size)
+    }
+
+    @Test
+    fun `fcm transit keys share the latency bounds and stall keys bucket at 30m and 2h`() {
+        assertEquals("fcmt_10s", KeepAliveHealthModel.fcmTransitKey(-5_000L))
+        assertEquals("fcmt_1m", KeepAliveHealthModel.fcmTransitKey(10_001L))
+        assertEquals("fcmt_2h", KeepAliveHealthModel.fcmTransitKey(2 * 60 * 60_000L))
+        assertEquals("fcmt_more", KeepAliveHealthModel.fcmTransitKey(2 * 60 * 60_000L + 1))
+        assertEquals(
+            listOf("fcmt_10s", "fcmt_1m", "fcmt_5m", "fcmt_30m", "fcmt_2h", "fcmt_more"),
+            HealthEventKeys.ALL_FCM_TRANSIT_KEYS
+        )
+        assertEquals("stall_30m", KeepAliveHealthModel.stallKey(30 * 60_000L))
+        assertEquals("stall_2h", KeepAliveHealthModel.stallKey(30 * 60_000L + 1))
+        assertEquals("stall_2h", KeepAliveHealthModel.stallKey(2 * 60 * 60_000L))
+        assertEquals("stall_more", KeepAliveHealthModel.stallKey(2 * 60 * 60_000L + 1))
+    }
+
+    @Test
+    fun `formatReport renders transit and stall fields after latency and their aggregates after pv_fcm_slow`() {
+        val snapshot = HealthSnapshot(34, true, true, false, 1, true, true, 10)
+        val line = KeepAliveHealthModel.formatReport(
+            snapshot, day, emptyMap(), emptyMap(),
+            mapOf("fcmt_more" to 2, "fcmt_10s" to 6, "stall_more" to 1, "stall_30m" to 3, "stall_min" to 250),
+            verdict = HealthVerdict("0", emptyList(), 5, 0, 0, null, 8, 25, 1),
+            fcmState = "ok"
+        )
+        assertEquals(
+            true,
+            line.endsWith(
+                " lat_pull_2h=0 lat_pull_more=0 " +
+                    "fcmt_10s=6 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=2 " +
+                    "stall_30m=3 stall_2h=0 stall_more=1 stall_min=250 " +
+                    "pv=0 pv_why=none pv_days=5 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na " +
+                    "pv_fcmt_n=8 pv_fcmt_slow=25 pv_stall_2h=1 fcm_state=ok fcm_fail_h=0" +
+                    " adb=na" + zeroPower
+            ),
+            line
+        )
     }
 
     @Test

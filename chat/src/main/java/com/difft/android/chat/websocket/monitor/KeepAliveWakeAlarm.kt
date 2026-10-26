@@ -15,9 +15,9 @@ import javax.inject.Singleton
  * Elapsed-realtime wake source for the WebSocket keep-alive loop (issue #1325).
  *
  * The loop waits with `withTimeout`, which runs on the uptime clock. That clock stops while the
- * CPU is suspended (screen off, no wakelock held), so in the background the 30 s cadence never
- * elapses and the server closes the socket at its 60 s idle timeout; the close wakes the process,
- * which reconnects and goes back to sleep, once a minute all day. A one-shot
+ * CPU is suspended (screen off, no wakelock held), so in the background the uptime cadence never
+ * elapses and the server closes the idle socket; the close wakes the process, which reconnects
+ * and goes back to sleep, once per idle timeout all day. A one-shot
  * `ELAPSED_REALTIME_WAKEUP` alarm keeps counting through suspend and wakes the CPU; the send
  * follows within milliseconds on the loop's dispatcher (the same hand-off the 5-minute service
  * alarm already relies on, verified on production logs).
@@ -30,6 +30,12 @@ import javax.inject.Singleton
  *
  * Armed only while the user has enabled the background connection (`keepAliveEnabled`): in FCM
  * mode the app never opted into periodic wakes and the cached-process freezer ends the loop anyway.
+ *
+ * It also owns the keep-alive response deadline: in keep-alive mode it replaces the monitor's
+ * stale-connection probe (kept for FCM mode), whose timeout runs on the uptime clock and stalls
+ * through suspend, so a socket dropped silently by a NAT would otherwise be noticed only after
+ * several cadences. The deadline alarm is cancelled by the response, so a
+ * healthy connection never fires it and it costs no extra wake-up.
  */
 @Singleton
 class KeepAliveWakeAlarm @Inject constructor(
@@ -42,6 +48,12 @@ class KeepAliveWakeAlarm @Inject constructor(
     // Guarded by synchronized(this).
     private var armedListener: AlarmManager.OnAlarmListener? = null
 
+    // Guarded by synchronized(this).
+    private var deadlineListener: AlarmManager.OnAlarmListener? = null
+
+    // Guarded by synchronized(this). elapsedRealtime the pending deadline was armed at.
+    private var deadlineArmedAt = 0L
+
     /** True when the user-enabled background connection (keep-alive mode) is active. */
     fun isEnabled(): Boolean = userManager.getUserData()?.keepAliveEnabled == true
 
@@ -52,32 +64,75 @@ class KeepAliveWakeAlarm @Inject constructor(
      */
     @Synchronized
     fun arm(onFire: () -> Unit): Boolean {
-        if (!isEnabled()) return false
-        val manager = alarmManager ?: return false
         cancelLocked()
+        val listener = setLocked(CADENCE_MS, TAG, onFire) ?: return false
+        armedListener = listener
+        return true
+    }
+
+    /**
+     * Arms a one-shot [RESPONSE_DEADLINE_MS] wake for the keep-alive just sent; [onFire] runs on
+     * the main thread. A deadline still pending is kept rather than pushed back, so a burst of
+     * sends cannot postpone the verdict on the earliest unanswered one; a pending deadline already
+     * past due (an alarm a vendor swallowed) is replaced. Cancel it with
+     * [cancelResponseDeadline] when the response arrives. Returns false in FCM mode or when the
+     * alarm could not be set.
+     */
+    @Synchronized
+    fun armResponseDeadline(onFire: () -> Unit): Boolean {
+        if (deadlineListener != null) {
+            if (SystemClock.elapsedRealtime() - deadlineArmedAt <= RESPONSE_DEADLINE_MS * 2) return true
+            cancelDeadlineLocked()
+        }
+        var self: AlarmManager.OnAlarmListener? = null
+        val listener = setLocked(RESPONSE_DEADLINE_MS, DEADLINE_TAG) {
+            synchronized(this) { if (deadlineListener === self) deadlineListener = null }
+            onFire()
+        } ?: return false
+        self = listener
+        deadlineListener = listener
+        deadlineArmedAt = SystemClock.elapsedRealtime()
+        return true
+    }
+
+    /** Disarms the pending response deadline, if any. */
+    @Synchronized
+    fun cancelResponseDeadline() {
+        cancelDeadlineLocked()
+    }
+
+    /** Disarms the pending cadence wake, if any, leaving the response deadline armed. */
+    @Synchronized
+    fun cancelWake() {
+        cancelLocked()
+    }
+
+    /** Disarms both the pending cadence wake and the response deadline. */
+    @Synchronized
+    fun cancel() {
+        cancelLocked()
+        cancelDeadlineLocked()
+    }
+
+    private fun setLocked(delayMs: Long, tag: String, onFire: () -> Unit): AlarmManager.OnAlarmListener? {
+        if (!isEnabled()) return null
+        val manager = alarmManager ?: return null
         // Cancelling an already-fired one-shot is a no-op, so the fired listener may stay
         // referenced until the next arm or cancel.
         val listener = AlarmManager.OnAlarmListener { onFire() }
         return try {
             manager.setExact(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + CADENCE_MS,
-                TAG,
+                SystemClock.elapsedRealtime() + delayMs,
+                tag,
                 listener,
                 handler,
             )
-            armedListener = listener
-            true
+            listener
         } catch (e: Exception) {
-            L.w { "[ws]monitor: keep-alive wake alarm arm failed: ${e.message}" }
-            false
+            L.w { "[ws]monitor: keep-alive alarm arm failed tag=$tag: ${e.message}" }
+            null
         }
-    }
-
-    /** Disarms the pending wake, if any. */
-    @Synchronized
-    fun cancel() {
-        cancelLocked()
     }
 
     private fun cancelLocked() {
@@ -86,15 +141,30 @@ class KeepAliveWakeAlarm @Inject constructor(
         runCatching { alarmManager?.cancel(listener) }
     }
 
+    private fun cancelDeadlineLocked() {
+        val listener = deadlineListener ?: return
+        deadlineListener = null
+        runCatching { alarmManager?.cancel(listener) }
+    }
+
     companion object {
         /**
-         * Background send cadence. Must stay under the server's 60 s WebSocket idle timeout with
-         * margin for alarm delivery and the send itself; 45 s leaves 15 s. Should the server
-         * timeout ever exceed the 5-minute `ServiceCheckReceiver` interval, that chain alone
-         * suffices and this wake can be retired.
+         * Background send cadence. Must stay under the server's 90 s WebSocket idle timeout
+         * (Jetty; every proxy layer in front of it must allow more) with margin for alarm
+         * delivery and the send itself; 60 s leaves 30 s, the same ratio as Signal. Should the
+         * server timeout ever exceed the 5-minute `ServiceCheckReceiver` interval, that chain
+         * alone suffices and this wake can be retired.
          */
-        const val CADENCE_MS = 45_000L
+        const val CADENCE_MS = 60_000L
+
+        /**
+         * How long a background keep-alive may go unanswered before the socket is treated as
+         * dead: generous enough for a slow cellular round-trip, so worst-case detection is about
+         * one cadence plus this (90 s), still under Signal-Android's two background cadences.
+         */
+        const val RESPONSE_DEADLINE_MS = 30_000L
 
         private const val TAG = "TempTalk:ws-keep-alive"
+        private const val DEADLINE_TAG = "TempTalk:ws-keep-alive-deadline"
     }
 }

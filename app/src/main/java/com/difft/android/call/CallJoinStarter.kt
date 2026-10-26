@@ -12,11 +12,13 @@ import com.difft.android.base.utils.application
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.data.createStartCallParams
 import com.difft.android.call.manager.CallDataManager
+import com.difft.android.call.session.CallSessionHolder
 import com.difft.android.call.session.CallSessionLauncher
+import com.difft.android.call.state.CriticalAlertCallGate
 import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.chat.messages.CriticalAlertHighlightWriter
 import com.difft.android.chat.util.MessageNotificationUtil
-import com.difft.android.messageserialization.db.store.DBRoomStore
 import dagger.Lazy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -33,11 +35,13 @@ import javax.inject.Singleton
 @Singleton
 class CallJoinStarter @Inject constructor(
     private val messageNotificationUtil: MessageNotificationUtil,
-    private val dbRoomStore: DBRoomStore,
+    private val criticalAlertHighlightWriter: CriticalAlertHighlightWriter,
     private val criticalAlertStateManager: CriticalAlertStateManager,
+    private val criticalAlertCallGate: CriticalAlertCallGate,
     private val callDataManagerLazy: Lazy<CallDataManager>,
     // Lazy: the launcher's session graph depends back on the call-to-chat controller.
     private val sessionLauncher: Lazy<CallSessionLauncher>,
+    private val sessionHolder: Lazy<CallSessionHolder>,
 ) {
     private val mySelfId: String by lazy { globalServices.myId }
     private val callDataManager: CallDataManager by lazy { callDataManagerLazy.get() }
@@ -52,6 +56,23 @@ class CallJoinStarter @Inject constructor(
         conversationId: String?,
         isNeedAppLock: Boolean,
     ): Boolean {
+        // #1381: a critical alert for this call that arrives before the session's presence is up is handled.
+        val joinToken = criticalAlertCallGate.beginJoin(roomId, conversationId)
+        try {
+            return joinCallInternal(context, roomId, roomName, callType, conversationId, isNeedAppLock)
+        } finally {
+            criticalAlertCallGate.endJoin(joinToken)
+        }
+    }
+
+    private suspend fun joinCallInternal(
+        context: Context,
+        roomId: String,
+        roomName: String?,
+        callType: CallType,
+        conversationId: String?,
+        isNeedAppLock: Boolean,
+    ): Boolean {
         // This join's own share of the wait dialog: every failure path releases only it.
         val waitToken = withContext(Dispatchers.Main) { CallWaitDialogUtil.show(context) }
 
@@ -59,7 +80,7 @@ class CallJoinStarter @Inject constructor(
             withContext(Dispatchers.IO) {
                 conversationId?.let { messageNotificationUtil.cancelCriticalAlertNotification(it) }
                 dismissCriticalAlertIfActive()
-                conversationId?.let { dbRoomStore.clearCriticalAlert(it) }
+                conversationId?.let { criticalAlertHighlightWriter.clearForJoin(it) }
 
                 val body = StartCallRequestBody(
                     callType.type, LCallConstants.CALL_VERSION,
@@ -87,7 +108,7 @@ class CallJoinStarter @Inject constructor(
                     .withCallWaitDialogShown(true)
                     .build()
 
-                startCallInternal(context, intent, waitToken)
+                startCallInternal(context, intent, waitToken, roomId)
             }
         } catch (e: CancellationException) {
             throw e
@@ -113,10 +134,16 @@ class CallJoinStarter @Inject constructor(
      * set only for a launch that went through, still in that message, so it is in place before any
      * callback of the new page; a refused launch leaves it alone and releases only this join's claim.
      */
-    private suspend fun startCallInternal(context: Context, intent: Intent, waitToken: Int): Boolean =
+    private suspend fun startCallInternal(context: Context, intent: Intent, waitToken: Int, roomId: String): Boolean =
         withContext(Dispatchers.Main) {
             val launched = sessionLauncher.get().launch(context.applicationContext, intent, waitToken)
-            if (launched) ScreenLockUtil.temporarilyDisabled = true else CallWaitDialogUtil.dismiss(waitToken)
+            if (launched) {
+                // #1381: the session publishes its room only after the start-call response; this join knows it now.
+                sessionHolder.get().current.value?.let { criticalAlertCallGate.bindSessionRoom(it.id, roomId) }
+                ScreenLockUtil.temporarilyDisabled = true
+            } else {
+                CallWaitDialogUtil.dismiss(waitToken)
+            }
             launched
         }
 }

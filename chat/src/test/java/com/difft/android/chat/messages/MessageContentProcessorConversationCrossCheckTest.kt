@@ -131,6 +131,7 @@ class MessageContentProcessorConversationCrossCheckTest {
             weakContactReconciler = mockk(relaxed = true),
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
+            criticalAlertHighlightWriter = mockk(relaxed = true),
         )
 
         // Real receive-path chain around the real processor: decrypt + persist mocked only.

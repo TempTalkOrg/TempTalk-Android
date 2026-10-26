@@ -308,9 +308,7 @@ class PushTextSendJob @AssistedInject constructor(
         // A recovery that finds nothing throws: mark the row FAILED first, exactly as an upload
         // failure below does, so the bubble does not keep rendering a transfer that will never run.
         val path = try {
-            attachment.path?.takeIf { File(it).let { file -> file.isFile && file.length() > 0 } }
-                ?: attachmentIdentity.resendSourcePath(attachment)
-                ?: return
+            attachmentIdentity.uploadSourcePath(attachment) ?: return
         } catch (e: Exception) {
             L.e { "[PushTextSendJob] upload source unresolvable, messageId=${textMessage.id}: ${e.stackTraceToString()}" }
             attachment.status = AttachmentStatus.FAILED.code

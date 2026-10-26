@@ -10,6 +10,7 @@ import androidx.core.net.toUri
 import com.difft.android.base.monitor.FgsStartFailure
 import com.difft.android.base.monitor.ForegroundServiceFailureRecorder
 import com.difft.android.base.monitor.KeepAliveHealthCounters
+import com.difft.android.base.notification.NotificationChannelSpecs
 import com.difft.android.base.utils.ForegroundServiceStarter
 import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.base.log.lumberjack.L
@@ -38,7 +39,8 @@ class MessageForegroundService : Service() {
 
     companion object {
         const val FOREGROUND_ID = 313399
-        private const val CHANNEL_CONFIG_NAME_BACKGROUND = "BACKGROUND"
+
+        private const val SERVICE_TAG = "MessageForegroundService"
 
         @Volatile
         var isRunning = false
@@ -69,9 +71,11 @@ class MessageForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         L.i { "[MessageForegroundService] onCreate()" }
-        postForegroundNotification()
-        isRunning = true
-        if (!refusalRecorded) runCatching { healthCounters().onServiceStarted() }
+        // Without a channel the service has stopped itself: neither running nor counted as started.
+        if (postForegroundNotification()) {
+            isRunning = true
+            if (!refusalRecorded) runCatching { healthCounters().onServiceStarted() }
+        }
 
         // Bare call (NOT serviceScope.launch): collector anchors to WCDBUpdateService's process scope and must outlive this Service. Idempotent.
         WCDBUpdateService.updatingRooms()
@@ -82,7 +86,7 @@ class MessageForegroundService : Service() {
 
         L.d { "[MessageForegroundService] onStartCommand()" }
 
-        postForegroundNotification()
+        if (!postForegroundNotification()) return START_NOT_STICKY
 
         serviceScope.launch {
             // F-H1 safety: if startForeground above failed via FGSNAE, the helper
@@ -130,8 +134,18 @@ class MessageForegroundService : Service() {
     private fun healthCounters(): KeepAliveHealthCounters =
         EntryPointAccessors.fromApplication(applicationContext, ServiceEntryPoint::class.java).keepAliveHealthCounters()
 
-    private fun postForegroundNotification() {
-        val started = ForegroundServiceStarter.startForegroundSafely(this, FOREGROUND_ID, createNotification())
+    /**
+     * Promotes on a verified channel only (#1354). With none, stops without `startForeground` and
+     * returns false; a sticky restart reaches here with no pending foreground requirement, so the
+     * stop is safe. A refused promotion is handled by the helper and still returns true.
+     */
+    private fun postForegroundNotification(): Boolean {
+        val channelId = NotificationChannelSpecs.serviceForegroundChannel(this, SERVICE_TAG)
+        if (channelId == null) {
+            stopSelf()
+            return false
+        }
+        val started = ForegroundServiceStarter.startForegroundSafely(this, FOREGROUND_ID, createNotification(channelId))
         // onCreate and onStartCommand both land here; count a refusal once.
         if (!started && !refusalRecorded) {
             refusalRecorded = true
@@ -140,10 +154,11 @@ class MessageForegroundService : Service() {
                     .foregroundServiceFailureRecorder().record(FgsStartFailure.STARTFG_REFUSED)
             }
         }
+        return true
     }
 
-    private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_CONFIG_NAME_BACKGROUND)
+    private fun createNotification(channelId: String): Notification {
+        val builder = NotificationCompat.Builder(this, channelId)
             .setContentTitle(PackageUtil.getAppName())
             .setContentText(ResUtils.getString(R.string.background_connection_enabled))
             .setPriority(NotificationCompat.PRIORITY_MIN)
@@ -152,7 +167,7 @@ class MessageForegroundService : Service() {
             .setContentIntent(createSettingsPendingIntent())
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .build()
+        return NotificationChannelSpecs.applyForegroundFallback(builder, channelId).build()
     }
 
     private fun createSettingsPendingIntent(): PendingIntent {

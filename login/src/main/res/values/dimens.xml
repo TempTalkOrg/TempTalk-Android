@@ -2,9 +2,5 @@
     <dimen name="login_dp_0">0dp</dimen>
     <dimen name="login_title_size">20sp</dimen>
     <dimen name="login_hint_size">14sp</dimen>
-    <!-- Grid size worth sacrificing the logo for: the unlock screen hides the logo when the
-         pattern would get less height than min(this, width budget) with the logo shown.
-         Equals PatternLockView's unconstrained default size. -->
-    <dimen name="screen_lock_pattern_min_size">280dp</dimen>
-    <dimen name="screen_lock_options_bottom_margin">50dp</dimen>
+    <dimen name="screen_lock_options_bottom_margin">16dp</dimen>
 </resources>

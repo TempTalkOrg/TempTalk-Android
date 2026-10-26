@@ -97,8 +97,15 @@ class SectionDecoration(
         super.onDrawOver(c, parent, state)
         val itemCount = state.itemCount
         val childCount = parent.childCount
-        val left = parent.paddingLeft.toFloat()
-        val right = (parent.width - parent.paddingRight - 3.dp).toFloat()
+        // Keep the band clear of the scrollbar thumb, which sits on the left in RTL layouts.
+        val scrollbarOnLeft = when (parent.verticalScrollbarPosition) {
+            View.SCROLLBAR_POSITION_LEFT -> true
+            View.SCROLLBAR_POSITION_RIGHT -> false
+            else -> parent.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        }
+        val scrollbarWidth = parent.verticalScrollbarWidth
+        val left = (parent.paddingLeft + if (scrollbarOnLeft) scrollbarWidth else 0).toFloat()
+        val right = (parent.width - parent.paddingRight - if (scrollbarOnLeft) 0 else scrollbarWidth).toFloat()
         val lineHeight = textPaint.textSize + fontMetrics.descent
         var lastGroupId: Long
         var groupId: Long = -1

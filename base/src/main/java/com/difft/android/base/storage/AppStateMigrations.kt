@@ -275,17 +275,11 @@ internal object AppStateMigrations {
             mut[AppStateKeys.CALL_VOICE_CHANGER_PRESET] = legacy.callVoiceChangerPreset
             mut[AppStateKeys.KEEP_ALIVE_ENABLED] = legacy.keepAliveEnabled
             mut[AppStateKeys.AUTO_START_MESSAGE_SERVICE] = legacy.autoStartMessageService
-            legacy.messageServiceTipsShowedVersion?.let {
-                mut[AppStateKeys.MESSAGE_SERVICE_TIPS_SHOWED_VERSION] = it
-            }
             legacy.floatingWindowPermissionTipsShowedVersion?.let {
                 mut[AppStateKeys.FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION] = it
             }
             mut[AppStateKeys.NOTIFICATION_CONTENT_DISPLAY_TYPE] = legacy.notificationContentDisplayType
             mut[AppStateKeys.GLOBAL_NOTIFICATION] = legacy.globalNotification
-            legacy.checkNotificationPermission?.let {
-                mut[AppStateKeys.CHECK_NOTIFICATION_PERMISSION] = it
-            }
             mut[AppStateKeys.HAS_SHOWN_CONFIDENTIAL_TIP] = legacy.hasShownConfidentialTip
             mut[AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE] = legacy.imageEditorMarkerPercentage
             mut[AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE] = legacy.imageEditorHighlighterPercentage

@@ -124,17 +124,20 @@ object ComposeDialogManager {
         onConfirm: () -> Unit = {},
         onCancel: () -> Unit = {},
         onDismiss: () -> Unit = {},
+        onClosed: ((DialogCloseReason) -> Unit)? = null,
         content: (@Composable () -> Unit)? = null
     ): ComposeDialog? {
         val activity = context.getSafeActivity()
         return if (activity != null) {
             val composeView = ComposeView(activity)
+            val closer = MessageDialogCloser(
+                unmount = { ComposeActivityMount.unmount(activity, composeView) },
+                onDismiss = onDismiss,
+                onClosed = onClosed,
+            )
 
             val dialog = object : ComposeDialog {
-                override fun dismiss() {
-                    ComposeActivityMount.unmount(activity, composeView)
-                    onDismiss()
-                }
+                override fun dismiss() = closer.dismiss()
             }
 
             composeView.setContent {
@@ -149,24 +152,9 @@ object ComposeDialogManager {
                         cancelable = cancelable,
                         confirmButtonColor = confirmButtonColor,
                         cancelButtonColor = cancelButtonColor,
-                        onConfirm = {
-                            onConfirm()
-                            if (autoDismiss) {
-                                ComposeActivityMount.unmount(activity, composeView)
-                            }
-                        },
-                        onCancel = {
-                            onCancel()
-                            if (autoDismiss) {
-                                ComposeActivityMount.unmount(activity, composeView)
-                            }
-                        },
-                        onDismiss = {
-                            if (cancelable) {
-                                onDismiss()
-                                ComposeActivityMount.unmount(activity, composeView)
-                            }
-                        },
+                        onConfirm = { closer.confirm(autoDismiss, onConfirm) },
+                        onCancel = { closer.cancel(autoDismiss, onCancel) },
+                        onDismiss = { closer.outside(cancelable) },
                         content = content
                     )
                 }

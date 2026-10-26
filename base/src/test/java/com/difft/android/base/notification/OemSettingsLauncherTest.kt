@@ -1,11 +1,17 @@
 package com.difft.android.base.notification
 
+import android.app.NotificationChannelGroup
+import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.spyk
+import io.mockk.verify
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -89,6 +95,13 @@ class OemSettingsLauncherTest {
 
         val critical = NotificationFixJump.chain(context, NotificationFix.CRITICAL_ALERT_CATEGORY, OemBrand.OTHER)
         assertEquals(NotificationChannelIds.CRITICAL_ALERT, channelOf(critical[0]))
+    }
+
+    @Test
+    fun `a blocked message group opens the app page, where its switch is`() {
+        val chain = NotificationFixJump.chain(context, NotificationFix.MESSAGE_CATEGORY, OemBrand.OTHER, messageGroupBlocked = true)
+        assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, chain[0].action)
+        assertTrue(chain.none { it.action == Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS })
     }
 
     @Test
@@ -237,5 +250,32 @@ class OemSettingsLauncherTest {
         }
         assertTrue(opened)
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, tried.last())
+    }
+
+    @Test
+    fun `opening a fix never queries the notification manager and honours the caller's flag`() {
+        val nm: NotificationManager = mockk(relaxed = true)
+        val spied = spyk(context)
+        every { spied.getSystemService(Context.NOTIFICATION_SERVICE) } returns nm
+        every { spied.getSystemService(NotificationManager::class.java) } returns nm
+        val tried = mutableListOf<String?>()
+
+        val opened = NotificationFixJump.openForResult(spied, NotificationFix.MESSAGE_CATEGORY, messageGroupBlocked = true) {
+            tried += it.action
+        }
+
+        assertTrue(opened)
+        assertEquals(Settings.ACTION_APP_NOTIFICATION_SETTINGS, tried.first())
+        verify(exactly = 0) { nm.getNotificationChannelGroup(any()) }
+    }
+
+    @Test
+    fun `the group-blocked helper reads the message group`() {
+        val group: NotificationChannelGroup = mockk { every { isBlocked } returns true }
+        val nm: NotificationManager = mockk { every { getNotificationChannelGroup(NotificationChannelIds.MESSAGE_GROUP) } returns group }
+        val spied = spyk(context)
+        every { spied.getSystemService(Context.NOTIFICATION_SERVICE) } returns nm
+        every { spied.getSystemService(NotificationManager::class.java) } returns nm
+        assertTrue(NotificationFixJump.isMessageGroupBlocked(spied))
     }
 }

@@ -93,6 +93,7 @@ class MessageContentProcessorWeakContactTest {
             weakContactReconciler = weakContactReconciler,
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
+            criticalAlertHighlightWriter = mockk(relaxed = true),
         )
     }
 
