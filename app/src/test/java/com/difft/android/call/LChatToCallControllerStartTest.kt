@@ -5,9 +5,13 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import com.difft.android.base.call.CallEncryptOutcome
 import com.difft.android.base.call.CallEncryptResult
+import com.difft.android.base.user.CallConfig
+import com.difft.android.base.user.Data
+import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.call.session.CallSessionLauncher
 import com.difft.android.call.util.CallWaitDialogUtil
+import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.test.rules.GlobalStaticMockRule
 import difft.android.messageserialization.For
 import io.mockk.coEvery
@@ -17,8 +21,10 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.runs
 import io.mockk.unmockkAll
+import io.mockk.verify
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -35,6 +41,9 @@ import java.util.Collections
  * and the refused start releases only its own share, so the first start's dialog stays up for its
  * call page. Real wait-dialog slot on a Robolectric Activity; the start runs on the real `appScope`
  * and main Looper, so the test idles the Looper until both starts report back.
+ *
+ * Each start reads one call-config snapshot: a server flip of `createCallMsg` in a warm process
+ * reaches the next start, and the envelope and the session launch share the snapshot (#1395).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = CallJoinStarterTest.TestApplication::class, sdk = [33])
@@ -56,7 +65,7 @@ class LChatToCallControllerStartTest {
         every { CallWaitDialogUtil.show(any()) } answers {
             ComposeDialogManager.showWait(firstArg(), layoutId = android.R.layout.simple_list_item_1)
         }
-        every { launcher.launch(any(), any(), any()) } returnsMany listOf(true, false)
+        every { launcher.launch(any(), any(), any(), any()) } returnsMany listOf(true, false)
     }
 
     @After
@@ -82,16 +91,77 @@ class LChatToCallControllerStartTest {
         controller.destroy()
     }
 
-    private fun startController() = LChatToCallControllerImpl(
+    @Test
+    fun `a createCallMsg flip in a warm process reaches the next start's envelope and launch`() {
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        val configs = mutableListOf(configWith(createCallMsg = false))
+        val envelopeFlags = Collections.synchronizedList(mutableListOf<Boolean>())
+        val launchedConfigs = Collections.synchronizedList(mutableListOf<CallConfig?>())
+        every { launcher.launch(any(), any(), any(), any()) } answers {
+            launchedConfigs += arg<CallConfig?>(3)
+            true
+        }
+        val start = startController(
+            globalConfigs = { configs.last() },
+            onEnvelope = { envelopeFlags += it },
+        )
+
+        start.startCall(activity, For.Account("peer-1"), "peer") { ok, _ -> results += ok }
+        idleUntil { results.size == 1 }
+        configs += configWith(createCallMsg = true)
+        start.startCall(activity, For.Account("peer-1"), "peer") { ok, _ -> results += ok }
+        idleUntil { results.size == 2 }
+
+        assertEquals(listOf(false, true), envelopeFlags.toList())
+        assertEquals(listOf(false, true), launchedConfigs.map { it?.createCallMsg })
+    }
+
+    @Test
+    fun `one start reads the config once and shares that snapshot between envelope and launch`() {
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        val a = configWith(createCallMsg = true)
+        val b = configWith(createCallMsg = false)
+        val served = mutableListOf(a, b, b, b)
+        val envelopeFlags = Collections.synchronizedList(mutableListOf<Boolean>())
+        var launched: CallConfig? = null
+        every { launcher.launch(any(), any(), any(), any()) } answers {
+            launched = arg(3)
+            true
+        }
+        val globalConfigs = mockk<GlobalConfigsManager>(relaxed = true) {
+            every { getNewGlobalConfigs() } answers { served.removeAt(0) }
+        }
+        val start = startController(globalConfigsManager = globalConfigs, onEnvelope = { envelopeFlags += it })
+
+        start.startCall(activity, For.Account("peer-1"), "peer") { ok, _ -> results += ok }
+        idleUntil { results.size == 1 }
+
+        verify(exactly = 1) { globalConfigs.getNewGlobalConfigs() }
+        assertEquals(listOf(true), envelopeFlags.toList())
+        assertSame(a.data?.call, launched)
+    }
+
+    private fun configWith(createCallMsg: Boolean) =
+        NewGlobalConfig(data = Data(call = CallConfig(createCallMsg = createCallMsg)))
+
+    private fun startController(
+        globalConfigs: () -> NewGlobalConfig? = { null },
+        globalConfigsManager: GlobalConfigsManager =
+            mockk(relaxed = true) { every { getNewGlobalConfigs() } answers { globalConfigs() } },
+        onEnvelope: (Boolean) -> Unit = {},
+    ) = LChatToCallControllerImpl(
         httpClient = mockk(relaxed = true),
         callMessageCreator = mockk {
             coEvery {
                 createCallMessage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
-            } returns CallEncryptOutcome.Success(CallEncryptResult())
+            } answers {
+                onEnvelope(arg(11))
+                CallEncryptOutcome.Success(CallEncryptResult())
+            }
         },
         messageEncryptor = mockk(relaxed = true),
         dbRoomStore = mockk(relaxed = true),
-        globalConfigsManager = mockk(relaxed = true) { every { getNewGlobalConfigs() } returns null },
+        globalConfigsManager = globalConfigsManager,
         contactorCacheManager = mockk(relaxed = true),
         callMessageHandler = mockk(relaxed = true),
         sessionLauncher = { launcher },

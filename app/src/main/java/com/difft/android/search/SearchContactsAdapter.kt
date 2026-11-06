@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.setSearchRowSelected
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.search.setHighLightText
@@ -37,7 +38,17 @@ abstract class SearchContactAdapter : ListAdapter<ContactorModel, SearchContactV
         holder.bind(searchKey, data) {
             onContactClicked(data, position)
         }
+        holder.itemView.setSearchRowSelected(data.id == selectedId)
     }
+
+    /** Two-pane: the contact whose conversation or card is open; its row is highlighted. */
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val old = field
+            field = value
+            currentList.forEachIndexed { index, item -> if (item.id == old || item.id == value) notifyItemChanged(index) }
+        }
 
     private var searchKey: String = ""
 

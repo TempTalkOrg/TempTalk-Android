@@ -7,6 +7,9 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.storage.user.StorageBoundUserManager
 import com.difft.android.test.fakes.RecordingPreferencesDataStore
+import com.difft.android.test.fakes.TestMessagingPause
+import com.difft.android.migration.v2.pause.SenderMessagePause
+import com.difft.android.migration.v2.pause.SenderVerdictSettlement
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.migration.crypto.BackupCrypto
 import com.difft.android.migration.snapshot.BackupSnapshotter
@@ -92,7 +95,11 @@ class MigrationTransferServiceTest {
         setField("snapshotter", mockk<BackupSnapshotter>(relaxed = true))
         setField("notificationHelper", notificationHelper)
         setField("userManager", mockk<StorageBoundUserManager>(relaxed = true))
-        setField("pendingVerdictStore", PendingVerdictStore(RecordingPreferencesDataStore()))
+        val pendingStore = PendingVerdictStore(RecordingPreferencesDataStore())
+        setField("pendingVerdictStore", pendingStore)
+        val messaging = TestMessagingPause().open()
+        setField("senderMessagePause", mockk<SenderMessagePause>(relaxed = true))
+        setField("verdictSettlement", SenderVerdictSettlement(messaging.pause, pendingStore))
     }
 
     @After
@@ -313,7 +320,7 @@ class MigrationTransferServiceTest {
     fun `runSender PRODUCTION selects the production controller and writes Sent on success`() = runTest {
         mockkConstructor(MigrationP2pSendController::class)
         coEvery {
-            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } returns true
         try {
             service.runSender(sendTarget)
@@ -324,7 +331,7 @@ class MigrationTransferServiceTest {
                 "PRODUCTION send success must write Sent",
             )
             coVerify(exactly = 1) {
-                anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+                anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
             }
             // The old device stays signed in: whether its session ends is the receiver's registration
             // and the app-wide kick-out detection's business (a desktop receiver links as a secondary
@@ -340,7 +347,7 @@ class MigrationTransferServiceTest {
         mockkConstructor(MigrationP2pSendController::class)
         val includeSlot = slot<Boolean>()
         coEvery {
-            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), capture(includeSlot), any(), any(), any(), any(), any(), any(), any(), any())
+            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), capture(includeSlot), any(), any(), any(), any(), any(), any(), any(), any(), any())
         } returns true
         try {
             service.runSender(sendTarget, includeAttachments = false)
@@ -366,7 +373,7 @@ class MigrationTransferServiceTest {
         val (completer, reconciler) = handoffCollaborators()
         mockkConstructor(MigrationP2pSendController::class)
         coEvery {
-            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), captureLambda(), any(), any(), any())
+            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), captureLambda(), any(), any(), any(), any())
         } answers {
             lambda<(Map<String, String>) -> Unit>().captured.invoke(mapOf(UploadReplyHeaders.HANDOFF_INSTALLED to "true"))
             true
@@ -388,7 +395,7 @@ class MigrationTransferServiceTest {
         val (completer, reconciler) = handoffCollaborators()
         mockkConstructor(MigrationP2pSendController::class)
         coEvery {
-            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), captureLambda(), any(), any(), any())
+            anyConstructed<MigrationP2pSendController>().sendRealExport(any(), any(), any(), any(), any(), any(), any(), any(), any(), captureLambda(), any(), any(), any(), any())
         } answers {
             lambda<(Map<String, String>) -> Unit>().captured.invoke(emptyMap<String, String>())
             true

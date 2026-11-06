@@ -8,6 +8,8 @@ import androidx.core.content.ContextCompat
 import com.difft.android.base.migration.LegacyMigrationGate
 import com.difft.android.base.migration.PeerApps
 import com.difft.android.base.network.NetworkRiskNotifier
+import com.difft.android.base.monitor.LateDeliveryRule
+import com.difft.android.base.monitor.LateDeliveryTracker
 import com.difft.android.base.notification.NotificationReadiness
 import com.difft.android.base.notification.NotificationReadinessProvider
 import com.difft.android.base.notification.ReadinessIssue
@@ -45,6 +47,7 @@ class StartupPromptProviders @Inject constructor(
     private val updateChecker: StartupUpdateChecker,
     private val securityChecks: StartupSecurityChecks,
     private val globalConfigsManager: GlobalConfigsManager,
+    private val lateDeliveryTracker: LateDeliveryTracker,
 ) {
 
     /** Starts the checks whose results gate or feed the prompts. */
@@ -57,14 +60,7 @@ class StartupPromptProviders @Inject constructor(
         when (id) {
             PromptId.LEGACY_MIGRATION -> legacyMigrationAnswer()
             PromptId.NOTIFICATIONS -> notificationsAnswer(readinessProvider.readBlocking(), isPermissionRequestable())
-            PromptId.BACKGROUND_CONNECTION -> ProviderAnswer(
-                backgroundConnectionEligibility(
-                    fcm = pushUtil.fcmInitResult.value,
-                    serviceRunning = MessageForegroundService.isRunning,
-                    autoStart = userManager.getUserData()?.autoStartMessageService ?: true,
-                    requirementsMet = messageServiceManager::checkBackgroundConnectionRequirements,
-                )
-            )
+            PromptId.BACKGROUND_CONNECTION -> backgroundConnectionAnswer()
             PromptId.FULL_SCREEN -> fullScreenAnswer(readinessProvider.readBlocking())
             PromptId.OPTIONAL_UPDATE -> optionalUpdateAnswer(updateChecker.state.value)
         }
@@ -90,6 +86,18 @@ class StartupPromptProviders @Inject constructor(
         pushUtil.fcmInitResult.map { },
         updateChecker.state.map { },
     )
+
+    private suspend fun backgroundConnectionAnswer(): ProviderAnswer {
+        if (MessageForegroundService.isRunning) return ProviderAnswer.NOT_ELIGIBLE
+        return backgroundConnectionAnswer(
+            fcm = pushUtil.fcmInitResult.value,
+            serviceRunning = false,
+            autoStart = userManager.getUserData()?.autoStartMessageService ?: true,
+            requirementsMet = messageServiceManager::checkBackgroundConnectionRequirements,
+            notificationsEnabled = notificationsAnswer(readinessProvider.readBlocking(), false).eligibility != Eligibility.ELIGIBLE,
+            lateDays = lateDeliveryTracker.lateDays(),
+        )
+    }
 
     private fun legacyMigrationAnswer(): ProviderAnswer {
         if (!PeerApps.isLegacy(context)) return ProviderAnswer.NOT_ELIGIBLE
@@ -129,8 +137,8 @@ fun fullScreenAnswer(readiness: NotificationReadiness): ProviderAnswer =
     readiness.callPromptIssue()?.let { ProviderAnswer(Eligibility.ELIGIBLE, it) } ?: ProviderAnswer.NOT_ELIGIBLE
 
 /**
- * Background-connection slot. Eligible only when FCM is unavailable, the service is not running and
- * [FcmFallbackStarter] cannot start it (auto-start off, or a requirement not met).
+ * Trigger 1 of the background-connection slot: eligible only when FCM is unavailable, the service is
+ * not running and [FcmFallbackStarter] cannot start it (auto-start off, or a requirement not met).
  */
 fun backgroundConnectionEligibility(
     fcm: FcmInitResult,
@@ -144,6 +152,34 @@ fun backgroundConnectionEligibility(
         serviceRunning -> Eligibility.NOT_ELIGIBLE
         autoStart && requirementsMet() -> Eligibility.NOT_ELIGIBLE
         else -> Eligibility.ELIGIBLE
+    }
+}
+
+/**
+ * Background-connection slot. Eligible when the service is not running, notifications are enabled and
+ * any [BackgroundTrigger] holds: FCM unavailable (see [backgroundConnectionEligibility]), at least
+ * [LateDeliveryRule.MIN_DAYS] days with a late delivery in the window. Dismissal history is applied by
+ * the coordinator, not here.
+ */
+fun backgroundConnectionAnswer(
+    fcm: FcmInitResult,
+    serviceRunning: Boolean,
+    autoStart: Boolean,
+    requirementsMet: () -> Boolean,
+    notificationsEnabled: Boolean,
+    lateDays: Int,
+): ProviderAnswer {
+    if (serviceRunning) return ProviderAnswer.NOT_ELIGIBLE
+    val fcmEligibility = backgroundConnectionEligibility(fcm, serviceRunning, autoStart, requirementsMet)
+    val triggers = buildSet {
+        if (fcmEligibility == Eligibility.ELIGIBLE) add(BackgroundTrigger.FCM_UNAVAILABLE)
+        if (lateDays >= LateDeliveryRule.MIN_DAYS) add(BackgroundTrigger.LATE_DELIVERY)
+    }
+    return when {
+        !notificationsEnabled -> ProviderAnswer.NOT_ELIGIBLE
+        triggers.isNotEmpty() -> ProviderAnswer(Eligibility.ELIGIBLE, triggers = triggers)
+        fcmEligibility == Eligibility.UNKNOWN -> ProviderAnswer.UNKNOWN
+        else -> ProviderAnswer.NOT_ELIGIBLE
     }
 }
 

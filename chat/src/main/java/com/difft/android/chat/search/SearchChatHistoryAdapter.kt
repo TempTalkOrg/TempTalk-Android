@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.setSearchRowSelected
 import com.difft.android.base.R
 import com.difft.android.chat.databinding.SearchItemMessageBinding
 import com.difft.android.chat.search.setHighLightText
@@ -59,7 +60,19 @@ abstract class SearchChatHistoryAdapter(private val isForMessageSearch: Boolean 
     override fun onBindViewHolder(holder: SearchChatHistoryViewHolder, position: Int) {
         val data = getItem(position)
         holder.bind(data, searchKey) { onItemClicked(data, position) }
+        holder.itemView.setSearchRowSelected(data.conversationId == selectedId)
     }
+
+    /** Two-pane: the conversation open in the detail pane; its rows are highlighted. */
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val old = field
+            field = value
+            currentList.forEachIndexed { index, item ->
+                if (item.conversationId == old || item.conversationId == value) notifyItemChanged(index)
+            }
+        }
 }
 
 class SearchChatHistoryViewHolder(container: ViewGroup, private val isForMessageSearch: Boolean) : RecyclerView.ViewHolder(run {

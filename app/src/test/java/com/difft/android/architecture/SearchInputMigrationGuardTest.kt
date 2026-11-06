@@ -53,16 +53,22 @@ class SearchInputMigrationGuardTest {
         // Inputs that deliberately need no onClear side effect (pure local text, read on demand,
         // zero TextWatcher today). Layout-level allowlist, each entry justified:
         //  - activity_enter_code: invite code read once on Add; no watcher existed
+        //  - chat_layout_forward_dialog: forward note read once on Send; no watcher existed
         val noSideEffectLayouts = setOf(
             "activity_enter_code.xml",
+            "chat_layout_forward_dialog.xml",
         )
 
         val violations = componentLayouts.mapNotNull { layout ->
             if (layout.name in noSideEffectLayouts) return@mapNotNull null
             val module = layout.path.substringBefore("/src/")
+            // A layout reached through <include> is hosted by whoever binds the including layout.
+            val names = listOf(layout.nameWithoutExtension) + layoutFiles()
+                .filter { it.readText().contains("layout=\"@layout/${layout.nameWithoutExtension}\"") }
+                .map { it.nameWithoutExtension }
             val hosts = kotlinFiles().filter { k ->
                 k.path.startsWith("$module/src/") && stripLineComments(k.readText())
-                    .let { src -> src.contains(layout.nameWithoutExtension.toBindingRef()) || src.contains("R.layout.${layout.nameWithoutExtension}") }
+                    .let { src -> names.any { n -> src.contains(n.toBindingRef()) || src.contains("R.layout.$n") } }
             }
             if (hosts.isEmpty()) return@mapNotNull "${layout.path}: no Kotlin host found (loud failure, not a skip)"
             val wired = hosts.any { stripLineComments(it.readText()).contains(Regex("""onClear\s*=""")) }
@@ -80,7 +86,7 @@ class SearchInputMigrationGuardTest {
         )
         // Out-of-scope pseudo-search entry points that must SURVIVE untouched (they are
         // AppCompatTextViews acting as tap-through search entries, per the task's exclusion list).
-        val allowlist = setOf("SearchInputFragment.kt", "GroupInfoActivity.kt") + revertedCallSheet
+        val allowlist = setOf("SearchInputFragment.kt", "GroupInfoFragment.kt") + revertedCallSheet
         val hits = scanKotlin { file, line ->
             file.name !in allowlist && pattern.containsMatchIn(line)
         }

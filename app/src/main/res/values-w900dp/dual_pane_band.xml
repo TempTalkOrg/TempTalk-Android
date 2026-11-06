@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tablet band marker, paired with values-w900dp/dimens.xml (see values/dual_pane_band.xml). -->
+    <string name="dual_pane_band" translatable="false">tablet</string>
+</resources>

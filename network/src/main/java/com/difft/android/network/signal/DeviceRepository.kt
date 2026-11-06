@@ -54,6 +54,7 @@ class DeviceRepository @Inject constructor(
         logTag: String,
         apiCall: suspend () -> Response<ResponseBody>,
         onSuccess: (Response<ResponseBody>) -> T,
+        reportAuthFailure: Boolean = true,
     ): T {
         val response = try {
             apiCall()
@@ -66,7 +67,7 @@ class DeviceRepository @Inject constructor(
             return onSuccess(response)
         }
         L.w { "$logTag: error code=$code" }
-        validateDeviceResponse(code, response) // throws
+        validateDeviceResponse(code, response, reportAuthFailure) // throws
     }
 
     /**
@@ -112,15 +113,37 @@ class DeviceRepository @Inject constructor(
      * @throws AccountOfflineException on 404 with status 10105/10110
      * @throws NotFoundException on other 404
      * @throws PushNetworkException on network failure
+     * @param logSuccess false for a periodic caller that logs only failures.
      */
-    suspend fun checkDeviceAuth() {
+    suspend fun checkDeviceAuth(logSuccess: Boolean = true) {
         executeDeviceCall(
             logTag = "[DeviceRepository] checkDeviceAuth",
             apiCall = { deviceApiService.getDevices() },
             onSuccess = { response ->
-                L.i { "[DeviceRepository] checkDeviceAuth: success (${response.code()})" }
+                if (logSuccess) L.i { "[DeviceRepository] checkDeviceAuth: success (${response.code()})" }
                 response.body()?.close()
             },
+        )
+    }
+
+    /**
+     * [checkDeviceAuth] bound to one credential: the request carries exactly [basicAuth], so the
+     * answer is about that login even if the stored credential changes meanwhile (#1382 A09).
+     *
+     * @param reportAuthFailure false for the migration pause's own probe, whose 403 must not reach
+     *   [AuthFailureSink]; the global 401/403 policy is otherwise unchanged.
+     * @throws AuthorizationFailedException on 401/403
+     * @throws PushNetworkException on network failure
+     */
+    suspend fun checkDeviceAuthAs(basicAuth: String, reportAuthFailure: Boolean, logSuccess: Boolean = true) {
+        executeDeviceCall(
+            logTag = "[DeviceRepository] checkDeviceAuthAs",
+            apiCall = { deviceApiService.getDevicesAs(basicAuth) },
+            onSuccess = { response ->
+                if (logSuccess) L.i { "[DeviceRepository] event=check_device_auth_as_ok code=${response.code()}" }
+                response.body()?.close()
+            },
+            reportAuthFailure = reportAuthFailure,
         )
     }
 
@@ -186,7 +209,8 @@ class DeviceRepository @Inject constructor(
      */
     private fun validateDeviceResponse(
         code: Int,
-        response: Response<ResponseBody>
+        response: Response<ResponseBody>,
+        reportAuthFailure: Boolean = true,
     ): Nothing {
         when (code) {
             401, 403 -> {
@@ -194,7 +218,7 @@ class DeviceRepository @Inject constructor(
                 response.errorBody()?.close()
                 // Signal only: the sink confirms against /v1/devices/ before any logout, so a
                 // transient edge rejection here costs one extra probe, never a session.
-                authFailureSink.get().onAuthRejected(AuthFailureSource.DEVICE_API)
+                if (reportAuthFailure) authFailureSink.get().onAuthRejected(AuthFailureSource.DEVICE_API)
                 throw AuthorizationFailedException(code, "Authorization failed!")
             }
             404 -> throw parseOfflineOrNotFound(response)

@@ -1,5 +1,6 @@
 package com.difft.android.call
 
+import com.difft.android.base.migration.pause.MessagingTicket
 import android.app.Activity
 import android.content.Intent
 import com.difft.android.base.call.Args
@@ -12,12 +13,8 @@ import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.Notification
 import com.difft.android.base.call.StartCallRequestBody
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.AutoLeave
-import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
-import com.difft.android.base.user.CountdownTimer
-import com.difft.android.base.user.PromptReminder
-import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.user.callConfigSnapshot
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.MD5Utils
 import com.difft.android.base.utils.ResUtils
@@ -59,15 +56,6 @@ class LChatToCallControllerImpl @Inject constructor(
     private val sessionLauncher: Lazy<CallSessionLauncher>,
 ) : LChatToCallController {
 
-    private val callConfig: CallConfig by lazy {
-        globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(
-            autoLeave = AutoLeave(promptReminder = PromptReminder()),
-            chatPresets = defaultBarrageTexts,
-            chat = CallChat(),
-            countdownTimer = CountdownTimer()
-        )
-    }
-
     private val mySelfId: String by lazy {
         globalServices.myId
     }
@@ -89,6 +77,8 @@ class LChatToCallControllerImpl @Inject constructor(
             // refused second tap leaves the first start's dialog up.
             var waitToken = CallWaitDialogUtil.NO_CLAIM
             try {
+                // One config snapshot per start: the envelope and the session launch share it (#1395).
+                val callConfig = globalConfigsManager.callConfigSnapshot()
                 waitToken = withContext(Dispatchers.Main) { CallWaitDialogUtil.show(activity) }
 
                 dbRoomStore.createRoomIfNotExist(forWhat)
@@ -112,7 +102,7 @@ class LChatToCallControllerImpl @Inject constructor(
                     createdAt = System.currentTimeMillis()
                 )) {
                     is CallEncryptOutcome.Success -> {
-                        val result = startCallInternal(activity, forWhat, outcome.result, chatRoomName, waitToken)
+                        val result = startCallInternal(activity, forWhat, outcome.result, chatRoomName, waitToken, callConfig)
                         if (!result) {
                             withContext(Dispatchers.Main) { CallWaitDialogUtil.dismiss(waitToken) }
                         }
@@ -132,8 +122,8 @@ class LChatToCallControllerImpl @Inject constructor(
         }
     }
 
-    override fun handleCallMessage(message: SignalServiceDataClass) {
-        callMessageHandler.handleCallMessage(message)
+    override fun handleCallMessage(message: SignalServiceDataClass, admission: MessagingTicket, fromServerPush: Boolean) {
+        callMessageHandler.handleCallMessage(message, admission, fromServerPush)
     }
 
 
@@ -162,6 +152,7 @@ class LChatToCallControllerImpl @Inject constructor(
         callEncryptResult: CallEncryptResult,
         chatRoomName: String?,
         waitToken: Int,
+        callConfig: CallConfig,
     ): Boolean {
         val callType = resolveCallType(forWhat)
 
@@ -204,7 +195,7 @@ class LChatToCallControllerImpl @Inject constructor(
 
         // Main: the page launch and the session start share one main-thread message.
         return withContext(Dispatchers.Main) {
-            sessionLauncher.get().launch(activity, callIntentBuilder.build(), waitToken)
+            sessionLauncher.get().launch(activity, callIntentBuilder.build(), waitToken, callConfig)
         }
     }
 

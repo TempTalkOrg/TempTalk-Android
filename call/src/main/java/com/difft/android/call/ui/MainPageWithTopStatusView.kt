@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,8 +39,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.call.CallType
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.utils.ApplicationHelper
@@ -51,9 +54,12 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallStatus
 import com.difft.android.call.data.WeakNetworkBanner
+import com.difft.android.call.ui.actionbar.rememberCallSideRail
 import com.difft.android.call.ui.actionbar.rememberChromeAlpha
 import com.difft.android.call.ui.actionbar.rememberChromeVisible
+import com.difft.android.call.ui.actionbar.rememberTitleRowTop
 import com.difft.android.call.ui.alert.CallCriticalAlertView
+import com.difft.android.call.ui.tabletop.LocalCallTabletop
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.Participant
@@ -130,10 +136,11 @@ fun MainPageWithTopStatusView(
         // correctly excluded.
         weakNetwork = WeakNetworkBanner.resolve(networkQuality, participants.size),
     )
-    // Every scenario collapses on tap (the 1v1 always-visible carve-out is gone), and an open
-    // panel fades the chrome out without touching the toggle itself.
+    // Every scenario collapses on tap; in bar mode an open panel also fades the chrome out without
+    // touching the toggle itself (beside the side rail it does not, #1451).
     val isTopVisible by rememberChromeVisible(viewModel.callUiController, viewModel.callUiController.showTopStatusViewEnabled)
     val topAlpha = rememberChromeAlpha(viewModel.callUiController, viewModel.callUiController.showTopStatusViewEnabled)
+    val titleCutoutExtra = rememberTitleCutoutExtra(isLandscape, isUserSharingScreen)
 
     // 关键：`tapInterceptor` 只挂在内层 [TopStatusBar]（52dp 高，与全 app 标题栏一致），而不是
     // 整个 Column。该 Column 是 Material `Surface` 的直接子节点，Surface 会把
@@ -148,11 +155,11 @@ fun MainPageWithTopStatusView(
                 if (!isLandscape || !isUserSharingScreen) {
                     Modifier.windowInsetsPadding(WindowInsets.statusBars)
                         .padding(
-                            top = LCallUiConstants.TOP_BAR_MARGIN_TOP_DP.dp,
+                            top = LCallUiConstants.TOP_BAR_MARGIN_TOP_DP.dp + titleCutoutExtra,
                             bottom = LCallUiConstants.TOP_BAR_MARGIN_BOTTOM_DP.dp,
                         )
                 } else {
-                    Modifier.padding(bottom = LCallUiConstants.TOP_BAR_MARGIN_BOTTOM_DP.dp)
+                    Modifier.padding(top = titleCutoutExtra, bottom = LCallUiConstants.TOP_BAR_MARGIN_BOTTOM_DP.dp)
                 }
             )
             // Read in the draw phase only: the 200ms fade never recomposes this subtree.
@@ -212,7 +219,24 @@ fun MainPageWithTopStatusView(
 }
 
 /**
+ * How far the title row moves below its status-bar rule to clear the display cutout (#1451). A
+ * landscape share draws the row from the window top, elsewhere it starts under the status bar.
+ */
+@Composable
+private fun rememberTitleCutoutExtra(isLandscape: Boolean, isUserSharingScreen: Boolean): Dp {
+    val baseTop = if (isLandscape && isUserSharingScreen) 0.dp else WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val extra = (rememberTitleRowTop(baseTop, alignWithRail = !isUserSharingScreen) - baseTop).coerceAtLeast(0.dp)
+    val extraDp = extra.value.toInt()
+    val baseDp = baseTop.value.toInt()
+    LaunchedEffect(extraDp) {
+        if (extraDp > 0) L.i { "[Call] titleRowCutout extraDp=$extraDp baseDp=$baseDp share=$isUserSharingScreen landscape=$isLandscape" }
+    }
+    return extra
+}
+
+/**
  * 顶部状态栏容器：左侧缩小按钮 + 中间状态内容
+ * With the side rail shown the minimize button moves to the rail's top, so the leading slot is empty (#1451).
  */
 @Composable
 private fun TopStatusBar(
@@ -225,12 +249,15 @@ private fun TopStatusBar(
     onE2eeHintClick: () -> Unit,
     statusContent: @Composable () -> Unit,
 ) {
+    // Over a share, and half open flat where the cards start at the top (decision 23), the bar lies
+    // on the picture and gets a gradient.
+    val overPicture = isUserSharingScreen || LocalCallTabletop.current != null
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(LCallUiConstants.TOP_BAR_HEIGHT_DP.dp)
             .then(
-                if (isUserSharingScreen) Modifier.background(
+                if (overPicture) Modifier.background(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color.Black.copy(alpha = 0.4f),
@@ -240,7 +267,9 @@ private fun TopStatusBar(
                 ) else Modifier
             ),
     ) {
-        if (!isInPipMode) {
+        // With the side rail minimize moves onto the rail (#1451); the title stays centred either way.
+        val onRail = rememberCallSideRail() != null
+        if (!isInPipMode && !onRail) {
             val controlPadding = if (!isLandscape) 16.dp else 18.dp
             Box(
                 modifier = Modifier

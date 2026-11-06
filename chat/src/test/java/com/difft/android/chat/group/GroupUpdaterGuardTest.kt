@@ -94,7 +94,7 @@ class GroupUpdaterGuardTest {
 
         // Producer guard: enqueue is dropped while DB is inaccessible, so nothing lands in the
         // buffered channel that no consumer will ever drain.
-        updater.handleGroupNotifyMessage(mockk(relaxed = true), mockk(relaxed = true))
+        updater.handleGroupNotifyMessage(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
 
         val channel = notifyChannelOf(updater)
         assertTrue(

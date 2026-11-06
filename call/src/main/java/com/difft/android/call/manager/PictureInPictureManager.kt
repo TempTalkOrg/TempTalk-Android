@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * 管理画中画（Picture-in-Picture）模式
@@ -26,6 +27,7 @@ class PictureInPictureManager(
     private var isInitialized = false
     private var isPipParamsSet = false
     private var pipParamsJob: Job? = null
+    private var currentAspectRatio: Rational? = null
 
     /**
      * 初始化 PIP 参数
@@ -42,9 +44,9 @@ class PictureInPictureManager(
             return
         }
 
-        val aspectRatio = Rational(16, 9)
         pipBuilderParams = PictureInPictureParams.Builder()
-        pipBuilderParams.setAspectRatio(aspectRatio)
+        pipBuilderParams.setAspectRatio(DEFAULT_ASPECT_RATIO)
+        currentAspectRatio = DEFAULT_ASPECT_RATIO
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             pipBuilderParams.setAutoEnterEnabled(false)
@@ -126,6 +128,33 @@ class PictureInPictureManager(
     }
 
     /**
+     * Shapes the PiP window like the video it shows (#1424). [aspect] is width / height, null restores 16:9.
+     * Quantised and deduplicated so small frame-size steps (simulcast, CPU adaptation) cause no Binder churn.
+     */
+    fun updateAspectRatio(aspect: Float?) {
+        if (!isInitialized) return
+        val ratio = aspect?.let {
+            val clamped = it.coerceIn(MIN_ASPECT, MAX_ASPECT)
+            Rational((clamped * ASPECT_QUANTUM).roundToInt(), ASPECT_QUANTUM)
+        } ?: DEFAULT_ASPECT_RATIO
+        if (ratio == currentAspectRatio) return
+        val previous = currentAspectRatio ?: DEFAULT_ASPECT_RATIO
+        pipBuilderParams.setAspectRatio(ratio)
+        try {
+            activity.setPictureInPictureParams(pipBuilderParams.build())
+            currentAspectRatio = ratio
+            L.i { "[Call] PictureInPictureManager updateAspect aspect=$ratio result=applied" }
+        } catch (e: IllegalArgumentException) {
+            // A narrower device range must not leave a ratio in the builder that enterPipMode would also reject.
+            pipBuilderParams.setAspectRatio(previous)
+            L.w { "[Call] PictureInPictureManager updateAspect aspect=$ratio result=rejected ${e.stackTraceToString()}" }
+        } catch (e: IllegalStateException) {
+            pipBuilderParams.setAspectRatio(previous)
+            L.w { "[Call] PictureInPictureManager updateAspect aspect=$ratio result=failed ${e.stackTraceToString()}" }
+        }
+    }
+
+    /**
      * 尝试设置 PIP 参数（Binder IPC，可能耗时较长）
      */
     private fun tryToSetPictureInPictureParams() {
@@ -151,3 +180,9 @@ class PictureInPictureManager(
     }
 }
 
+private val DEFAULT_ASPECT_RATIO = Rational(16, 9)
+
+// Platform limits are about 1:2.39 to 2.39:1 and device-configurable; stay inside them.
+private const val MIN_ASPECT = 1f / 2.3f
+private const val MAX_ASPECT = 2.3f
+private const val ASPECT_QUANTUM = 100

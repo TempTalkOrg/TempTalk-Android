@@ -2,6 +2,7 @@ package com.difft.android.chat.jobs
 
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
 import difft.android.messageserialization.For
 import com.google.gson.Gson
 import dagger.assisted.Assisted
@@ -39,7 +40,8 @@ class PushReadReceiptSendJob @AssistedInject constructor(
     private val sendSyncToSelf: Boolean,
     private val newSignalServiceMessageSender: NewSignalServiceMessageSender,
     private val gson: Gson,
-) : PushSendJob(parameters ?: buildParameters(recipientId)) {
+    messagingGate: MessagingGate,
+) : PushSendJob(parameters ?: buildParameters(recipientId), messagingGate) {
 
     private val room: For by lazy {
         val groupId = readPosition1.groupId?.toString(Charsets.UTF_8)
@@ -68,6 +70,8 @@ class PushReadReceiptSendJob @AssistedInject constructor(
     }
 
     public override suspend fun onPushSend() {
+        // Outside the try: its catch-all rethrows, and a refusal must not look like a failure.
+        val admission = admitSend() ?: return
         try {
             //change upon to dsl builder
             val receiptMessage = receiptMessage {
@@ -93,7 +97,8 @@ class PushReadReceiptSendJob @AssistedInject constructor(
                 receiptMessage,
                 readMessages,
                 sendReceiptToSender,
-                sendSyncToSelf
+                sendSyncToSelf,
+                admission
             )
         } catch (e: NoValidRecipientKeysException) {
             // issue #970 ②: invalid group / account deregistered → permanent. Intentionally swallowed

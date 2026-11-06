@@ -406,6 +406,12 @@ class ContainerReaderImpl @Inject constructor(
                             lastAttachmentRef = (decoded.record as? NeutralRecord.Attachment)?.value?.stableId
                         }
                         is RecordJsonCodec.Decoded.Skipped -> {
+                            if (decoded.mustNotSkip) {
+                                // A skipped pending envelope would lose an action the sender already
+                                // consumed while the import still reported success (#1382).
+                                L.e { "[MigrationV2][Container] event=required_record_undecodable type=${decoded.tag}" }
+                                throw MigrationException.DecryptionFailed("record ${decoded.tag} did not decode")
+                            }
                             if (decoded.undecodable) {
                                 skippedUndecodable++
                                 L.w { "[MigrationV2][Container] record type=${decoded.tag} did not decode — skipped: ${decoded.reason}" }

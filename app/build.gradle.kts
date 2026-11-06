@@ -7,9 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.roborazzi)
+    id("kotlin-parcelize")
 }
 
-val appVersionName = "2.4.8"
+val appVersionName = "2.4.9"
 
 fun getCurrentDayTimestamp(): String {
     val simpleDateFormat = SimpleDateFormat("yyyyMMddHHmm")
@@ -20,7 +22,7 @@ fun getCurrentDayTimestamp(): String {
 
 // F-Droid uses a fixed versionCode (official channel versionCode + 1).
 // No getTimeBasedVersionCode()/VERSION_CODE env — F-Droid builds reproducibly.
-val appVersionCode = 953958
+val appVersionCode = 967070
 val resolvedBuildTimestamp = getCurrentDayTimestamp()
 
 fun getBuildTime(): String {
@@ -171,6 +173,22 @@ android {
     }
 
     signingConfigs {
+        // Team-shared debug key so TTDev debug builds (the test package on the test server) from
+        // every developer machine carry the same certificate and can update each other on shared
+        // test phones; applied in androidComponents below. TTOnline debug builds share the
+        // production package id, so they keep the per-machine debug key. The open_source / f-droid
+        // branches strip the key and its gradle.properties entries (release-sync diff-manifest),
+        // so there the config is not created and every debug build keeps the per-machine key.
+        val sharedDebugKey = rootProject.file("chative_debug.key")
+        val sharedDebugStorePassword = providers.gradleProperty("sharedDebugStorePassword").orNull
+        if (sharedDebugKey.exists() && sharedDebugStorePassword != null) {
+            create("sharedDebug") {
+                storeFile = sharedDebugKey
+                storePassword = sharedDebugStorePassword
+                keyAlias = providers.gradleProperty("sharedDebugKeyAlias").get()
+                keyPassword = providers.gradleProperty("sharedDebugKeyPassword").get()
+            }
+        }
         create("release") {
             storeFile = file(getStoreFile())
             storePassword = getStorePassword()
@@ -270,6 +288,11 @@ kotlin {
  * the one baked into the flavor config, and every APK in one build shares the suffix.
  */
 androidComponents {
+    val sharedDebugSigning = android.signingConfigs.findByName("sharedDebug")
+    // "environment" is the env flavor dimension declared in android { flavorDimensions }.
+    onVariants(selector().withBuildType("debug").withFlavor("environment" to "TTDev")) { variant ->
+        sharedDebugSigning?.let { variant.signingConfig.setConfig(it) }
+    }
     onVariants { variant ->
         val flavor1 = variant.productFlavors.getOrNull(0)?.second.orEmpty()
         val flavor2 = variant.productFlavors.getOrNull(1)?.second.orEmpty()

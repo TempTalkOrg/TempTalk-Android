@@ -50,6 +50,24 @@ class FavoriteKeyRepo @Inject constructor(
         return FavKeyEntry(keyId, raw)
     }
 
+    internal fun matchesSession(accountId: String, authorization: String?): Boolean =
+        userManager.getUserData()?.let { it.account == accountId && it.baseAuth == authorization } == true
+
+    /** Rotation callback guard runs inside UserManager's atomic memory update. */
+    internal fun saveForSession(accountId: String, authorization: String?, keyId: String, favKey: ByteArray): Boolean {
+        require(keyId.isNotEmpty())
+        require(favKey.size == FavoriteCrypto.FAV_KEY_SIZE)
+        var applied = false
+        userManager.update(commit = true) {
+            if (account == accountId && baseAuth == authorization) {
+                favKeyId = keyId
+                this.favKey = Base64.encodeToString(favKey, Base64.NO_WRAP)
+                applied = true
+            }
+        }
+        return applied
+    }
+
     /** True if a usable favKey is cached locally. */
     fun hasKey(): Boolean = getFavKey() != null
 

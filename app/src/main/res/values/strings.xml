@@ -345,5 +345,7 @@
     <string name="migration_m3_body">Update Quicall on this device, then start the transfer again.</string>
     <string name="migration_m3_body_peer">This version of “%1$s” doesn\'t support transfers. Update it to the latest version first.</string>
     <string name="migration_m3_go">Update Quicall</string>
+    <string name="migration_m3_body_new_device">Update the app on the new device to the latest version, then try again.</string>
+    <string name="migration_m3_got_it">OK</string>
     <string name="share_file_access_error">Unable to access the shared file. Please try sharing again.</string>
 </resources>

@@ -101,7 +101,8 @@ constructor(
         // it via pendingRedeleteRoomIds once the in-flight loop releases. Same structure as
         // processingMessageIds above.
         private val deletingRoomIds = ConcurrentHashMap.newKeySet<String>()
-        private val pendingRedeleteRoomIds = ConcurrentHashMap.newKeySet<String>()
+        private val pendingRedeleteRoomIds = ConcurrentHashMap<String, () -> Boolean>()
+        private val allowLegacyDelete: () -> Boolean = { true }
     }
 
     override fun deleteMessage(messageIds: List<String>) {
@@ -124,22 +125,27 @@ constructor(
         }
     }
 
-    override fun removeRoomAndMessages(roomId: String) {
+    override fun removeRoomAndMessages(roomId: String, commitAllowed: (() -> Boolean)?) {
+        if (commitAllowed?.invoke() == false) return
         // #969 per-room guard: take the in-flight mark SYNCHRONOUSLY here (outside appScope.launch)
         // so two rapid calls can't both launch before either adds — putting the add inside the
         // coroutine would race the guard away. A duplicate while one is in flight is skipped; if it
         // was a legitimately newer delete (new messages arrived past the in-flight snapshot), it is
         // re-driven once via pendingRedeleteRoomIds when the in-flight loop releases (ARCH-CRIT-1).
         if (!deletingRoomIds.add(roomId)) {
-            pendingRedeleteRoomIds.add(roomId)
+            // A queued unguarded redelete must not inherit a session guard that may have ended by then.
+            pendingRedeleteRoomIds.compute(roomId) { _, queued ->
+                if (queued === allowLegacyDelete || commitAllowed == null) allowLegacyDelete else commitAllowed
+            }
             L.i { "[Message] removeRoomAndMessages: $roomId already deleting, queuing redelete" }
             return
         }
         appScope.launch {
             try {
-                // Fail-soft: skip if the cipher key is unavailable. Guard must be the first
-                // statement INSIDE try (not before it) so return@launch still runs the finally
-                // below that releases deletingRoomIds.
+                // The caller's session can end after this work was queued, or between pages.
+                if (commitAllowed?.invoke() == false) return@launch
+                // Fail-soft: skip if the cipher key is unavailable. Both guards stay inside try
+                // so either early return still releases deletingRoomIds in finally.
                 if (wcdb.isDbInaccessible) {
                     L.w { "[Message] skip removeRoomAndMessages, DB inaccessible: $roomId" }
                     return@launch
@@ -167,10 +173,13 @@ constructor(
                 //
                 // Deleting the room row does not affect the databaseId-bounded message delete below
                 // (independent tables, no FK cascade).
+                if (commitAllowed?.invoke() == false) return@launch
                 wcdb.room.deleteObjects(DBRoomModel.roomId.eq(roomId))
                 deleteMessagesPaged(
-                    DBMessageModel.roomId.eq(roomId).and(DBMessageModel.databaseId.le(snapshotMax))
+                    DBMessageModel.roomId.eq(roomId).and(DBMessageModel.databaseId.le(snapshotMax)),
+                    commitAllowed = commitAllowed,
                 )
+                if (commitAllowed?.invoke() == false) return@launch
                 RoomChangeTracker.trackRoom(roomId, RoomChangeType.MESSAGE)
                 L.i { "[Message] remove room and messages success: $roomId (snapshotMax=$snapshotMax)" }
             } catch (e: CancellationException) {
@@ -186,9 +195,10 @@ constructor(
                 // ran, re-drive it once: it takes a fresh snapshot covering any messages that
                 // arrived past this loop's snapshotMax. Idempotent — a no-op if the room is empty.
                 deletingRoomIds.remove(roomId)
-                if (pendingRedeleteRoomIds.remove(roomId)) {
+                val queuedGuard = pendingRedeleteRoomIds.remove(roomId)
+                if (queuedGuard != null) {
                     L.i { "[Message] removeRoomAndMessages: re-driving queued redelete for $roomId" }
-                    removeRoomAndMessages(roomId)
+                    removeRoomAndMessages(roomId, queuedGuard)
                 }
             }
         }

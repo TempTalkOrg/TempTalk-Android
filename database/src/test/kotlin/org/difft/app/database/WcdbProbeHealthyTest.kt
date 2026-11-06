@@ -87,4 +87,25 @@ class WcdbProbeHealthyTest {
         assertTrue(wcdb.keyUnavailable)
         assertTrue(wcdb.dbCorrupted)
     }
+
+    /**
+     * #1395: every probe exit marks [WCDB.probeFinished], including the short-circuits, so a gate
+     * waiting for the first probe never waits out its timeout on a known-bad DB; a probe that did
+     * not pass leaves [WCDB.isHealthyProbed] false.
+     */
+    @Test
+    fun `every probe exit marks the probe finished without marking it healthy`() {
+        every { WCDBKeyManager.getOrCreateKey(any()) } throws
+            WCDBKeyUnavailableException("boom", IllegalStateException("keystore down"))
+        val keyFailed = WCDB(ctx, TestScope())
+        assertFailsWith<WCDBKeyUnavailableException> { keyFailed.resolveCipherKeyOnce() }
+        val corrupt = WCDB(ctx, TestScope()).apply { markCorrupted() }
+
+        listOf(keyFailed, corrupt).forEach { wcdb ->
+            assertFalse(wcdb.probeFinished.value, "not finished before the first probe")
+            wcdb.probeHealthy()
+            assertTrue(wcdb.probeFinished.value)
+            assertFalse(wcdb.isHealthyProbed)
+        }
+    }
 }

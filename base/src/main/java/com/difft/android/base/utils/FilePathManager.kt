@@ -12,7 +12,8 @@ import java.io.File
  *
  * Strategy:
  * - Call getExternalFilesDir(null) ONCE to get base directory
- * - Derive all subdirectories using File(baseDir, subdir) constructor
+ * - Derive subdirectories using File(baseDir, subdir); [upgradeDir] and [shareImportDir] are
+ *   always internal (filesDir) because other apps must not be able to write them
  * - Cache File objects using lazy delegation (thread-safe, initialized once)
  * - After first access, all subsequent calls return cached File objects (no lock contention)
  *
@@ -71,10 +72,12 @@ object FilePathManager {
     }
 
     /**
-     * App upgrade files directory
+     * Downloaded update APKs. Always internal storage, not [baseDir]: on Android 8–10 other apps
+     * with the storage permission could replace a verified APK in the app-specific external dir
+     * before the installer reads it (#1433).
      */
     val upgradeDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        File(baseDir, FileUtil.FILE_DIR_UPGRADE).also {
+        File(application.filesDir, FileUtil.FILE_DIR_UPGRADE).also {
             ensureExists(it)
             L.d { "Initialized upgradeDir: ${it.absolutePath}" }
         }
@@ -88,6 +91,15 @@ object FilePathManager {
             ensureExists(it)
             L.d { "Initialized draftAttachmentsDir: ${it.absolutePath}" }
         }
+    }
+
+    /**
+     * Files shared in by other apps. Always internal storage: on Android 8–10 other apps with the
+     * storage permission can read the app-specific external dir (#1429). Like [upgradeDir], not
+     * derived from [baseDir]; registered in [getCachedDir] so `getFilePath` never resolves it there.
+     */
+    val shareImportDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        File(application.filesDir, FileUtil.SHARE_IMPORT_DIRECTORY).also { ensureExists(it) }
     }
 
     /**
@@ -126,6 +138,7 @@ object FilePathManager {
         FileUtil.FILE_DIR_ATTACHMENT -> attachmentDir
         FileUtil.FILE_DIR_UPGRADE -> upgradeDir
         FileUtil.DRAFT_ATTACHMENTS_DIRECTORY -> draftAttachmentsDir
+        FileUtil.SHARE_IMPORT_DIRECTORY -> shareImportDir
         FileUtil.FILE_DIR_GIF_FAVORITES -> gifFavoritesDir
         else -> null
     }

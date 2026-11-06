@@ -57,6 +57,7 @@ class CreateQuoteThumbnailAttachmentTest {
             gson = mockk(relaxed = true),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = mockk(relaxed = true),
+            groupFocusRepository = mockk(relaxed = true),
         )
     }
 

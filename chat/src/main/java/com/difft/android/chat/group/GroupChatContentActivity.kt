@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.utils.pane.ConversationTarget
+import com.difft.android.chat.ui.ConversationShells
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatActivityGroupChatContentBinding
 import com.difft.android.chat.ui.ChatActivity.Companion.jumpMessageTimeStamp
@@ -32,10 +34,11 @@ class GroupChatContentActivity : BaseActivity(), ChatMessageListProvider {
             groupID: String,
             jumpMessageTimeStamp: Long? = null
         ) {
-            val intent = Intent(activity, GroupChatContentActivity::class.java)
-            intent.groupID = groupID
-            intent.jumpMessageTimeStamp = jumpMessageTimeStamp
-            activity.startActivity(intent)
+            // Routed like ChatActivity.startActivity (ConversationShells).
+            ConversationShells.open(
+                activity,
+                ConversationTarget(ConversationTarget.Kind.GROUP, groupID, jumpMessageTimeStamp),
+            )
         }
     }
 

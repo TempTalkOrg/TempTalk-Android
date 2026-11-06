@@ -1,7 +1,6 @@
 package com.difft.android.setting
 
 import android.content.Context
-import com.difft.android.base.notification.CallPopupLevel
 import com.difft.android.base.notification.CategoryLevel
 import com.difft.android.base.notification.ReadinessIssue
 import com.difft.android.base.notification.ReadinessStatus
@@ -19,34 +18,44 @@ internal object NotificationReadinessText {
         else -> null
     }
 
-    fun categoryLevelLabel(context: Context, level: CategoryLevel): String = context.getString(
-        when (level) {
-            CategoryLevel.ON -> ChatR.string.notification_enable
-            CategoryLevel.NO_BANNER -> ChatR.string.notification_level_no_banner
-            CategoryLevel.LOCK_HIDDEN -> ChatR.string.notification_level_lock_hidden
-            CategoryLevel.SILENT -> ChatR.string.notification_level_silent
-            CategoryLevel.OFF -> ChatR.string.notification_disable
-            CategoryLevel.UNKNOWN -> ChatR.string.notification_level_check
-            CategoryLevel.CONFIRMED -> ChatR.string.notification_level_confirmed
-            CategoryLevel.TESTED_OK -> ChatR.string.notification_test_passed
-        }
-    )
+    /**
+     * The status shown for a category row, or null for none: only a level the system reports is
+     * shown; an unreadable level and one only vouched for by a notification test show nothing,
+     * since a later change to an unreadable vendor switch would not invalidate the test.
+     */
+    fun categoryLevelLabel(context: Context, level: CategoryLevel): String? = when (level) {
+        CategoryLevel.ON -> ChatR.string.notification_enable
+        CategoryLevel.NO_BANNER -> ChatR.string.notification_level_no_banner
+        CategoryLevel.LOCK_HIDDEN -> ChatR.string.notification_level_lock_hidden
+        CategoryLevel.SILENT -> ChatR.string.notification_level_silent
+        CategoryLevel.NEEDS_CHECK -> ChatR.string.notification_status_check
+        CategoryLevel.OFF -> ChatR.string.notification_disable
+        CategoryLevel.UNKNOWN, CategoryLevel.CONFIRMED, CategoryLevel.TESTED_OK -> null
+    }?.let(context::getString)
 
-    /** The call pop-up row (C3): the last still-valid call test (#1350). */
-    fun callPopupLabel(context: Context, level: CallPopupLevel): String = context.getString(
-        when (level) {
-            CallPopupLevel.TESTED_OK -> ChatR.string.notification_test_passed
-            CallPopupLevel.NOT_SHOWN -> ChatR.string.notification_test_not_shown
-            CallPopupLevel.UNTESTED -> ChatR.string.notification_status_check
-        }
-    )
+    /** Levels that are a problem the user should fix. */
+    fun isProblem(level: CategoryLevel): Boolean =
+        level == CategoryLevel.OFF || level == CategoryLevel.NO_BANNER || level == CategoryLevel.LOCK_HIDDEN ||
+            level == CategoryLevel.SILENT || level == CategoryLevel.NEEDS_CHECK
 
-    /** Status wording of the call and lock-screen rows. */
-    fun itemStatusLabel(context: Context, status: ReadinessStatus): String = context.getString(
-        when (status) {
-            ReadinessStatus.OK -> ChatR.string.notification_status_ok
-            ReadinessStatus.UNKNOWN -> ChatR.string.notification_status_check
-            ReadinessStatus.PROBLEM -> ChatR.string.notification_status_problem
-        }
-    )
+    /** Wording of a summary or dependency status; null shows nothing. */
+    fun statusLabel(context: Context, label: StatusLabel?): String? = when (label) {
+        StatusLabel.ON -> ChatR.string.notification_enable
+        StatusLabel.OFF -> ChatR.string.notification_disable
+        StatusLabel.NO_BANNER -> ChatR.string.notification_level_no_banner
+        StatusLabel.LOCK_HIDDEN -> ChatR.string.notification_level_lock_hidden
+        StatusLabel.SILENT -> ChatR.string.notification_level_silent
+        StatusLabel.NEEDS_CHECK -> ChatR.string.notification_status_check
+        StatusLabel.DND_BLOCKED -> ChatR.string.critical_alert_status_dnd_blocked
+        StatusLabel.NEEDS_FULL_SCREEN -> ChatR.string.notification_status_needs_full_screen
+        StatusLabel.NEEDS_CONNECTION -> ChatR.string.critical_alert_status_needs_connection
+        null -> null
+    }?.let(context::getString)
+
+    /** Status wording of the full-screen row. */
+    fun itemStatusLabel(context: Context, status: ReadinessStatus): String? = when (status) {
+        ReadinessStatus.OK -> ChatR.string.notification_status_ok
+        ReadinessStatus.PROBLEM -> ChatR.string.notification_disable
+        ReadinessStatus.UNKNOWN -> null
+    }?.let(context::getString)
 }

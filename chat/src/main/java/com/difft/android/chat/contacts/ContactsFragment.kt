@@ -8,6 +8,7 @@ import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.difft.android.chat.R
+import com.difft.android.chat.common.HomeHeaderCollapser
 import com.difft.android.chat.contacts.contactsall.ContactsAllFragment
 import com.difft.android.chat.contacts.contactsgroup.GroupsFragment
 import com.difft.android.chat.databinding.ChatFragmentContactsBinding
@@ -16,6 +17,10 @@ import com.difft.android.chat.recent.DualPaneSelectionListener
 
 class ContactsFragment : Fragment(), DualPaneSelectionListener {
     private lateinit var binding: ChatFragmentContactsBinding
+
+    /** Extra bottom room the pager pages keep while the collapsible title is expanded (0 if fixed). */
+    var headerCollapseRangePx: Int = 0
+        private set
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -32,6 +37,9 @@ class ContactsFragment : Fragment(), DualPaneSelectionListener {
         binding.ibAddContact.setOnClickListener {
             InviteCodeActivity.startActivity(requireActivity())
         }
+        val collapsibleHeader = HomeHeaderCollapser.isEligible(requireActivity())
+        HomeHeaderCollapser.bind(binding.homeAppBar, binding.homeHeader, collapsibleHeader)
+        headerCollapseRangePx = HomeHeaderCollapser.collapseRangePx(binding.homeHeader, collapsibleHeader)
 
         initPage()
     }
@@ -55,6 +63,9 @@ class ContactsFragment : Fragment(), DualPaneSelectionListener {
                 override fun onPageSelected(position: Int) {
                     super.onPageSelected(position)
                     selectPagerButton(position)
+                    // Both pages share one app bar: a title collapsed on one page must not stay
+                    // collapsed over the other page's list, which starts at its top.
+                    binding.homeAppBar.setExpanded(true, false)
                 }
             })
         }

@@ -1,5 +1,7 @@
 package com.difft.android.call.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,36 +47,57 @@ import com.difft.android.call.onMediaControlTapped
 import com.difft.android.call.permission.CallMediaPermission
 import com.difft.android.call.ui.actionbar.ActionBarLabels
 import com.difft.android.call.ui.actionbar.ActionBarLayout
+import com.difft.android.call.ui.actionbar.ActionBarPlan
 import com.difft.android.call.ui.actionbar.ActionBarSlots
 import com.difft.android.call.ui.actionbar.ActionCountBadge
 import com.difft.android.call.ui.actionbar.CallActionBarPlanner
 import com.difft.android.call.ui.actionbar.CallActionButton
+import com.difft.android.call.ui.actionbar.CallSideRailOverlay
+import com.difft.android.call.ui.actionbar.CallSideRailSpec
+import com.difft.android.call.ui.actionbar.BookActionBar
+import com.difft.android.call.ui.actionbar.CallTabletopDock
+import com.difft.android.call.layout.Posture
+import com.difft.android.call.layout.Rect as LayoutRect
+import com.difft.android.call.ui.actionbar.ControlsPlacementLog
 import com.difft.android.call.ui.actionbar.OutsideEmojiButton
+import com.difft.android.call.ui.actionbar.RailGroupEndButton
 import com.difft.android.call.ui.actionbar.SingleRowActionBar
 import com.difft.android.call.ui.actionbar.SplitActionBar
 import com.difft.android.call.ui.actionbar.TwoRowActionBar
+import com.difft.android.call.ui.actionbar.dockSlots
+import com.difft.android.call.ui.actionbar.railSlots
 import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
+import com.difft.android.call.ui.actionbar.rememberCallChromeLayout
 import com.difft.android.call.ui.actionbar.rememberChromeAlpha
+import com.difft.android.call.ui.tabletop.rememberTabletopBottomInsetDp
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 
 
+/** Control size on the tabletop dock (iOS standing console). */
+private const val TABLETOP_DOCK_BUTTON_DP = 56
+
 /**
  * Call action bar. The layout (two rows / split / one row / emoji outside / compact) comes from
  * [rememberCallActionBarPlan], a pure width-budget decision; this composable only binds the
- * controls to view-model state and hands them to the matching layout.
+ * controls to view-model state and hands them to the matching layout. Tall landscape windows
+ * get the side rail instead of the bar (#1451).
  */
 @Composable
 fun MainPageWithBottomControlView(
     viewModel: LCallViewModel,
     isOneVOneCall: Boolean,
+    isUserSharingScreen: Boolean,
     onInviteUsersClick: () -> Unit,
+    onWindowZoomOutClick: () -> Unit,
     endCallAction: (callType: String, callEndType: CallEndType) -> Unit,
 ) {
     val controller = viewModel.callUiController
-    val plan = rememberCallActionBarPlan(isGroup = !isOneVOneCall)
+    val (plan, rail, dock) = rememberCallChromeLayout(isGroup = !isOneVOneCall)
+    val onRail = rail != null
+    ControlsPlacementLog(rail = rail, isGroup = !isOneVOneCall, dock = dock)
 
     // The fade is read in the draw phase only. Once fully faded out the controls leave the tree,
     // so a hidden bar neither swallows taps meant for the 1v1 self-video underneath nor needs a
@@ -95,8 +118,14 @@ fun MainPageWithBottomControlView(
     val showMicPermissionBadge = micPermissionState.showsBadge
     val context = LocalContext.current
 
-    val size = plan.buttonSizeDp.dp
-    val glyph = plan.iconSizeDp.dp
+    // The rail always has room for full-size controls; only the bar shrinks them (COMPACT). The
+    // tabletop dock uses the standing console's larger controls.
+    val size = when {
+        dock != null -> TABLETOP_DOCK_BUTTON_DP.dp
+        onRail -> CallSideRailSpec.BUTTON_DP.dp
+        else -> plan.buttonSizeDp.dp
+    }
+    val glyph = if (onRail || dock != null) CallActionBarPlanner.ICON_DP.dp else plan.iconSizeDp.dp
     val onMediaTap: (CallMediaPermission) -> Unit = { permission ->
         if (viewModel.isControlButtonClickEnabled() && context is LCallActivity) {
             context.onMediaControlTapped(permission)
@@ -137,11 +166,56 @@ fun MainPageWithBottomControlView(
                 controller.setShowSimpleBarrageEnabled(true)
             }
         },
-        end = { EndActionButton(controller, currentCallType, size, endCallAction) },
+        end = { EndActionButton(controller, currentCallType, size, onRail || dock != null, endCallAction) },
     )
 
+    if (dock != null) {
+        val peopleAvailable = participantsPanelAvailable(isUserSharingScreen, rememberParticipantsPanelWide())
+        CallTabletopDock(
+            dock = dock,
+            rows = dockSlots(isGroup = !isOneVOneCall, peopleAvailable = peopleAvailable),
+            slots = slots,
+            micEnabled = micEnabled,
+            isGroup = !isOneVOneCall,
+            bottomInsetDp = rememberTabletopBottomInsetDp(),
+        )
+    } else if (rail != null) {
+        CallSideRailOverlay(
+            rail = rail,
+            order = railSlots(
+                isGroup = !isOneVOneCall,
+                isScreenShare = isUserSharingScreen,
+                fitsSevenControls = rail.fitsSevenControls,
+            ),
+            slots = slots,
+            onMinimize = onWindowZoomOutClick,
+            composed = barComposed,
+            alpha = { bottomAlpha.value },
+        )
+    } else {
+        // Book posture: the bar splits around the fold the plan was laid out with (design §4.5).
+        val layoutState by viewModel.layout.state.collectAsState()
+        val bookFold = viewModel.layout.lastInput?.fold?.takeIf { layoutState.plan?.posture == Posture.BOOK }
+        BottomActionBar(plan, slots, controller, micEnabled, videoEnabled, participants, barComposed, bottomAlpha, bookFold)
+    }
+}
+
+/** The bottom bar for [plan]: the planned layout, with the outside Emoji pill above it when planned. */
+@Composable
+private fun BottomActionBar(
+    plan: ActionBarPlan,
+    slots: ActionBarSlots,
+    controller: CallUiController,
+    micEnabled: Boolean,
+    videoEnabled: Boolean,
+    participants: List<Participant>,
+    barComposed: Boolean,
+    bottomAlpha: Animatable<Float, AnimationVector1D>,
+    bookFold: LayoutRect?,
+) {
     val remoteCameraOn = rememberRemoteCameraOn(participants)
-    val showPlate = plan.layout == ActionBarLayout.TWO_ROW && (videoEnabled || remoteCameraOn)
+    // The book bar is one row with Emoji in it: no plate and no outside pill (it reserves one row).
+    val showPlate = bookFold == null && plan.layout == ActionBarLayout.TWO_ROW && (videoEnabled || remoteCameraOn)
     val bottomMargin = if (showPlate) CallActionBarPlanner.TWO_ROW_PLATE_BOTTOM_DP.dp else plan.bottomMarginDp.dp
 
     Column(
@@ -155,7 +229,7 @@ fun MainPageWithBottomControlView(
                 .fillMaxWidth()
                 .graphicsLayer { alpha = bottomAlpha.value },
         ) {
-            if (!plan.emojiInline) {
+            if (!plan.emojiInline && bookFold == null) {
                 OutsideEmojiButton(
                     onClick = { controller.setShowSimpleBarrageEnabled(true) },
                     modifier = Modifier.padding(
@@ -164,8 +238,9 @@ fun MainPageWithBottomControlView(
                     ),
                 )
             }
-            when (plan.layout) {
-                ActionBarLayout.TWO_ROW -> TwoRowActionBar(
+            when {
+                bookFold != null -> BookActionBar(plan = plan, slots = slots, fold = bookFold)
+                plan.layout == ActionBarLayout.TWO_ROW -> TwoRowActionBar(
                     slots = slots,
                     labels = ActionBarLabels(
                         mic = stringResource(id = if (micEnabled) R.string.call_action_mute else R.string.call_action_unmute),
@@ -177,7 +252,7 @@ fun MainPageWithBottomControlView(
                     ),
                     showPlate = showPlate,
                 )
-                ActionBarLayout.SPLIT -> SplitActionBar(plan = plan, slots = slots)
+                plan.layout == ActionBarLayout.SPLIT -> SplitActionBar(plan = plan, slots = slots)
                 else -> SingleRowActionBar(plan = plan, slots = slots)
             }
         }
@@ -223,16 +298,22 @@ private fun PeopleActionButton(controller: CallUiController, participantCount: I
     }
 }
 
-/** 1v1: hang up. Group: leave, with the chevron tail opening the end menu. */
+/**
+ * 1v1: hang up. Group: leave, with the chevron tail opening the end menu; on the rail and the
+ * tabletop dock ([onRail]) a single End control opens that menu directly.
+ */
 @Composable
 private fun EndActionButton(
     controller: CallUiController,
     callType: String,
     size: Dp,
+    onRail: Boolean,
     endCallAction: (callType: String, callEndType: CallEndType) -> Unit,
 ) {
     if (callType == CallType.ONE_ON_ONE.type) {
         OneOnOneHangupButton(onHangup = { endCallAction(callType, CallEndType.END) }, size = size)
+    } else if (onRail) {
+        RailGroupEndButton(onShowEndMenu = { controller.setShowBottomCallEndViewEnable(true) }, size = size)
     } else {
         GroupCallLeaveButton(
             onLeave = { endCallAction(callType, CallEndType.LEAVE) },

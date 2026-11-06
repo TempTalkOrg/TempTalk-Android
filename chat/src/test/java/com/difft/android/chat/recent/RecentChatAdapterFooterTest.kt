@@ -116,7 +116,6 @@ class RecentChatAdapterFooterTest {
     /** Mirrors [RecentChatFragment.submitSortedChatRooms]'s exact assembly. */
     private fun buildListItems(rooms: List<RoomViewData>): List<ListItem> {
         val items = mutableListOf<ListItem>()
-        items.add(ListItem.SearchInput)
         items.addAll(rooms.map { ListItem.ChatItem(it) })
         items.add(ListItem.E2eeFooter)
         return items
@@ -188,7 +187,7 @@ class RecentChatAdapterFooterTest {
         val unattached = newUnattachedAdapter()
         submitAndAwait(buildListItems(emptyList()), target = unattached)
 
-        assertEquals(2, unattached.currentList.size) // SearchInput + footer
+        assertEquals(1, unattached.currentList.size) // footer only (search lives in the home chrome)
         assertTrue(unattached.currentList.last() is ListItem.E2eeFooter)
     }
 
@@ -204,7 +203,7 @@ class RecentChatAdapterFooterTest {
 
         submitAndAwait(buildListItems(rooms), target = unattached)
 
-        assertEquals(5, unattached.currentList.size) // SearchInput + 3 rooms + footer
+        assertEquals(4, unattached.currentList.size) // 3 rooms + footer
         assertTrue(unattached.currentList.last() is ListItem.E2eeFooter)
     }
 

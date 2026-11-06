@@ -1,6 +1,7 @@
 package com.difft.android.call.session
 
 import android.app.Application
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.base.user.UserManager
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.core.CallTlsProvider
@@ -40,4 +41,5 @@ class CallSessionDeps @Inject constructor(
     val proxyConfigProvider: ProxyConfigProvider,
     val authTokenProvider: AuthTokenProvider,
     val ongoingCallService: OngoingCallServiceController,
+    val messagingGate: MessagingGate,
 )

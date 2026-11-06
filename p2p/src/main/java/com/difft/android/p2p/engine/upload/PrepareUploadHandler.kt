@@ -40,7 +40,7 @@ class PrepareUploadHandler(
     private val pinPolicy: PinPolicy,
     private val requirePin: Boolean,
     private val migrationValidator: MigrationHandshakeValidator? = null,
-    private val caps: List<String> = listOf(ReceiverCaps.STATUS_V1, ReceiverCaps.BEAT_V1),
+    private val caps: List<String> = ReceiverCaps.BASE,
     private val pairingRegistry: PairingSessionRegistry? = null,
     private val storagePrecheck: StoragePrecheck? = null,
 ) {

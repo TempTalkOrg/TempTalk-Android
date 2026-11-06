@@ -3,6 +3,8 @@ package com.difft.android.call.handler
 
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.call.CallIntent
@@ -20,6 +22,7 @@ import difft.android.messageserialization.For
 import io.livekit.android.room.Room
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
@@ -41,9 +44,23 @@ class CriticalAlertDispatcher(
     private val roomIdGetter: () -> String?,
     private val showBarrage: (identity: io.livekit.android.room.participant.Participant, message: String) -> Unit,
     private val showToast: (message: String) -> Unit,
+    private val messagingGate: MessagingGate,
 ) {
 
+    /**
+     * A critical alert is delivered to its recipients as a message, so it is admitted like any
+     * send (#1382): refused while messaging is paused, and holding its ticket until the delivery
+     * rows are written.
+     */
     suspend fun send(gid: String? = null): Boolean {
+        val admission = messagingGate.tryAdmit(AdmissionKind.SEND, SOURCE) ?: run {
+            L.w { "[MigrationPause] event=send_refused source=$SOURCE" }
+            return false
+        }
+        return admission.use { sendAdmitted(gid) }
+    }
+
+    private suspend fun sendAdmitted(gid: String?): Boolean {
         val chatHttpClient = httpClientProvider()
         var baseTimestamp = System.currentTimeMillis()
 
@@ -77,7 +94,7 @@ class CriticalAlertDispatcher(
                 )
                 response.serverTimestamp?.let { serverTimestamp ->
                     L.i { "[Call] sendCriticalAlert response serverTimestamp:$serverTimestamp" }
-                    scope.launch { persistDeliveries(requestBody, response, serverTimestamp, gid) }
+                    persistUnderTicket(requestBody, response, serverTimestamp, gid)
                 }
                 true
             } else {
@@ -100,6 +117,23 @@ class CriticalAlertDispatcher(
                 }
             }
             false
+        }
+    }
+
+    /**
+     * Awaited under the send ticket and not cancelled with the caller's UI scope. A local write
+     * failure does not turn the delivered alert into a failed send.
+     */
+    private suspend fun persistUnderTicket(
+        requestBody: CriticalAlertRequestBodyNew,
+        response: BaseResponse<CriticalAlertResponse>,
+        serverTimestamp: Long,
+        gid: String?,
+    ) = withContext(NonCancellable) {
+        try {
+            persistDeliveries(requestBody, response, serverTimestamp, gid)
+        } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+            L.e { "[Call] event=critical_alert_persist_failed ${e.stackTraceToString()}" }
         }
     }
 
@@ -136,5 +170,9 @@ class CriticalAlertDispatcher(
                 uiState.setGroupCriticalAlert(status)
             }
         }
+    }
+
+    private companion object {
+        const val SOURCE = "critical_alert"
     }
 }

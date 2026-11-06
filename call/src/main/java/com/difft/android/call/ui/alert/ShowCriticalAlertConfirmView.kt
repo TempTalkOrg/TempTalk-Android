@@ -59,6 +59,7 @@ import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+import com.difft.android.call.ui.screenshare.isCallImmersive
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,6 +106,7 @@ fun ShowCriticalAlertConfirmView(viewModel: LCallViewModel, onDismiss: () -> Uni
             sheetState = sheetState,
             contentWindowInsets = { WindowInsets.navigationBars },
             hideNavigationBar = true,
+            hideSystemBars = isCallImmersive(),
             onDismissRequest = {
                 onDismiss()
             },

@@ -35,24 +35,26 @@ internal class SenderVerdictTracker(
         session = ref
     }
 
-    /** The last body byte left: from here the outcome must survive this process, so it goes to disk. */
-    fun onBodySent() {
+    /**
+     * The last body byte left: from here the outcome must survive this process, so a link's receipt
+     * goes to disk. Only when [persist], i.e. no pause: a paused export wrote its receipt with the
+     * commit marker, and a late save here could resurrect one a settlement already deleted (#1382
+     * A11). Nothing is saved for a receiver that does not answer `/status`.
+     */
+    fun onBodySent(persist: Boolean = true) {
+        if (!persist) return
         val current = session?.takeIf { it.supportsStatus } ?: return
         scope.launch { pendingStore.save(PendingVerdict(current, System.currentTimeMillis())) }
     }
 
-    /** The outcome is known for certain — confirmed, refused, failed or cancelled — so nothing is pending. */
-    suspend fun settled() = pendingStore.clear()
-
-    /** What a verdict from `/status` makes the transfer. Only an unknown one leaves the pending record in place. */
-    suspend fun stateFor(verdict: Verdict): TransferState = when (verdict) {
-        Verdict.Succeeded -> {
-            pendingStore.clear()
-            TransferState.Sent
-        }
+    /**
+     * What a verdict from `/status` makes the transfer. The pending record is settled by the caller
+     * through `SenderVerdictSettlement`, which keeps it only for an unknown verdict.
+     */
+    fun stateFor(verdict: Verdict): TransferState = when (verdict) {
+        Verdict.Succeeded -> TransferState.Sent
         is Verdict.Ended -> {
             L.w { "[MigrationV2][P2P][FGS] receiver reported terminal=${verdict.terminal}" }
-            pendingStore.clear()
             TransferState.Failed(reasonFor(verdict))
         }
         is Verdict.Unknown -> {

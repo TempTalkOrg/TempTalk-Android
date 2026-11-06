@@ -71,6 +71,8 @@
         <attr name="dsi_height" format="dimension" />
         <attr name="dsi_minHeight" format="dimension" />
         <attr name="dsi_maxLength" format="integer" />
+        <!-- Above 1: a text area that grows to this many lines and never shows the clear icon. -->
+        <attr name="dsi_maxLines" format="integer" />
         <attr name="dsi_contentPaddingStart" format="dimension" />
         <attr name="dsi_clearMode" format="enum">
             <enum name="whenNotEmpty" value="0" />

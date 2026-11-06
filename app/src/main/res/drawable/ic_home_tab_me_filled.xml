@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tabler "mood-smile-filled": the selected Me tab glyph when no avatar is available (design
+     prototype i-smile / iOS). Eyes and smile are even-odd holes. Tinted by the composable. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M12,2C17.523,2 22,6.477 22,12C22,17.523 17.523,22 12,22C6.477,22 2,17.523 2,12C2,6.477 6.477,2 12,2ZM9.01,9C8.457,9 8.01,9.448 8.01,10C8.01,10.552 8.457,11 9.01,11C9.562,11 10.01,10.552 10.01,10C10.01,9.448 9.562,9 9.01,9ZM15.01,9C14.457,9 14.01,9.448 14.01,10C14.01,10.552 14.457,11 15.01,11C15.562,11 16.01,10.552 16.01,10C16.01,9.448 15.562,9 15.01,9ZM15.2,14.286C14.806,13.9 14.173,13.906 13.786,14.3C13.317,14.778 12.675,15.047 12.006,15.047C11.336,15.047 10.695,14.778 10.226,14.3C9.839,13.906 9.206,13.9 8.812,14.286C8.417,14.673 8.411,15.306 8.798,15.7C9.643,16.561 10.799,17.047 12.006,17.047C13.212,17.047 14.369,16.561 15.214,15.7C15.6,15.306 15.594,14.673 15.2,14.286Z"
+      android:fillColor="@color/icon"
+      android:fillType="evenOdd" />
+</vector>

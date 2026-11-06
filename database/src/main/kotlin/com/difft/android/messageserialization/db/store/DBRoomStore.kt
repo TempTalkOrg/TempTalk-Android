@@ -237,6 +237,9 @@ class DBRoomStore @Inject constructor(
      * @param messageClearAnchor Message clear anchor
      * @param conversationConfigVersion Server config version the written fields came from; written in
      * the same statement so a crash can never leave the version ahead of the fields
+     * @param allowMentionMe Mute sub-option: still notify on @me while muted
+     * @param allowMentionAll Mute sub-option: still notify on @all while muted
+     * @param allowGroupCall Mute sub-option: still notify on group calls while muted
      */
     fun updateConversationSettings(
         roomId: String,
@@ -245,7 +248,10 @@ class DBRoomStore @Inject constructor(
         confidentialMode: Int? = null,
         messageExpiry: Long? = null,
         messageClearAnchor: Long? = null,
-        conversationConfigVersion: Int? = null
+        conversationConfigVersion: Int? = null,
+        allowMentionMe: Boolean? = null,
+        allowMentionAll: Boolean? = null,
+        allowGroupCall: Boolean? = null
     ) {
         val values = mutableListOf<Value>()
         val fields = mutableListOf<Column>()
@@ -261,6 +267,21 @@ class DBRoomStore @Inject constructor(
             values.add(Value(it))
             fields.add(DBRoomModel.muteStatus)
             fieldNames.add("muteStatus")
+        }
+        allowMentionMe?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.allowMentionMe)
+            fieldNames.add("allowMentionMe")
+        }
+        allowMentionAll?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.allowMentionAll)
+            fieldNames.add("allowMentionAll")
+        }
+        allowGroupCall?.let {
+            values.add(Value(it))
+            fields.add(DBRoomModel.allowGroupCall)
+            fieldNames.add("allowGroupCall")
         }
         blockStatus?.let {
             values.add(Value(it))

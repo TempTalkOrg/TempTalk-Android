@@ -1,7 +1,9 @@
 package com.difft.android.websocket.api
 
+import com.difft.android.base.migration.pause.AdmissionKind
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.network.signal.MessageSendRepository
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.services.NewMessagingService
 import com.difft.android.websocket.api.util.EncryptResult
@@ -51,6 +53,9 @@ class SendActivityNoticeBehaviorTest {
     private val messageEncryptor: INewMessageContentEncryptor = mockk(relaxed = true)
     private val conversationManager: ConversationManager = mockk(relaxed = true)
     private val messageSendRepository: MessageSendRepository = mockk(relaxed = true)
+
+    /** An open send ticket: every public send requires one (#1382). */
+    private val admission = TestMessagingPause().open().gate.tryAdmit(AdmissionKind.SEND, "test")!!
 
     private lateinit var sender: NewSignalServiceMessageSender
 
@@ -114,6 +119,7 @@ class SendActivityNoticeBehaviorTest {
             message = sampleProto(),
             sendSyncToSelf = true,
             sendTimestamp = 1_700_000_000_001L,
+            admission = admission,
         )
 
         coVerify(exactly = 1) { messageSendRepository.sendMessage(any(), any()) }
@@ -139,6 +145,7 @@ class SendActivityNoticeBehaviorTest {
             message = sampleProto(),
             sendSyncToSelf = false,
             sendTimestamp = 1_700_000_000_004L,
+            admission = admission,
         )
 
         assertEquals(15, captured.captured.msgType)
@@ -160,6 +167,7 @@ class SendActivityNoticeBehaviorTest {
             message = sampleProto(),
             sendSyncToSelf = false,
             sendTimestamp = 1_700_000_000_002L,
+            admission = admission,
         )
 
         coVerify(exactly = 1) { messageSendRepository.sendMessage(any(), any()) }
@@ -185,6 +193,7 @@ class SendActivityNoticeBehaviorTest {
             message = sampleProto(),
             sendSyncToSelf = false,
             sendTimestamp = 1_700_000_000_003L,
+            admission = admission,
         )
 
         coVerify(exactly = 1) { messageSendRepository.sendMessage(any(), any()) }

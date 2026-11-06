@@ -8,11 +8,14 @@ import com.difft.android.call.session.harness.CallSessionTestHarness
 import com.difft.android.call.ui.barrage.BarrageRenderable
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.responses.CriticalAlertResponse
+import difft.android.messageserialization.For
 import com.difft.android.test.TestDispatcherRule
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.test.rules.GlobalStaticMockRule
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -33,6 +36,7 @@ import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
 import java.util.Collections
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The critical-alert send feedback as session UI output: [CriticalAlertDispatcher] built by the
@@ -106,7 +110,42 @@ class CriticalAlertDispatcherOutputTest {
         assertEquals("sent", (barrage.renderable as BarrageRenderable.Default).message.message)
     }
 
+    @Test
+    fun `while messaging is paused no critical alert is sent`() {
+        every { h.deps.messagingGate } returns TestMessagingPause().open().pauseMessaging().gate
+
+        val sent = runBlocking { session.handleCriticalAlertNew() }
+        testDispatcher.scheduler.runCurrent()
+
+        assertFalse(sent)
+        coVerify(exactly = 0) { h.deps.httpClient.get().httpService.sendCriticalAlertNew(any()) }
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `an admitted critical alert persists its delivery rows before its ticket is released`() {
+        val pause = TestMessagingPause().open()
+        every { h.deps.messagingGate } returns pause.gate
+        val response = mockk<BaseResponse<CriticalAlertResponse>>(relaxed = true) {
+            every { status } returns 0
+            every { serverTimestamp } returns SERVER_TS
+            every { data } returns CriticalAlertResponse(result = true, delivers = emptyList())
+        }
+        coEvery { h.deps.httpClient.get().httpService.sendCriticalAlertNew(any()) } returns response
+
+        val sent = runBlocking { session.handleCriticalAlertNew(gid = "g1") }
+
+        assertTrue(sent)
+        // Persisted inline under the ticket, not left to a later launch.
+        coVerify(exactly = 1) {
+            h.deps.callToChatController.createCriticalAlertMessage(SERVER_TS, any(), any(), For.Group("g1"), any())
+        }
+        pause.pauseMessaging()
+        assertTrue(runBlocking { pause.gate.closeAndAwaitIdle(TestMessagingPause.OWNER, 1.seconds) })
+    }
+
     private companion object {
+        const val SERVER_TS = 1_700_000_000_000L
         const val AWAIT_TIMEOUT_MS = 5_000L
         const val AWAIT_POLL_MS = 5L
     }

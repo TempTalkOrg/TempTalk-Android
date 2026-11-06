@@ -24,17 +24,29 @@ interface TransferProgressReporter {
     fun attachmentBytesLanded(delta: Long)
 
     /**
-     * The import has passed the point after which a `/cancel` can no longer undo it (the data is being
-     * promoted into the live library). From here a cancel is answered `too_late` and the transfer runs
-     * to its end.
+     * The live session whose upload body has started; null when there is none. An import reads it
+     * once when it starts and passes it to [committing], so its commit is bound to the session that
+     * delivered its bytes.
      */
-    fun committing()
+    fun bodySessionId(): String?
+
+    /**
+     * The import of [sessionId] has passed the point after which a `/cancel` can no longer undo it
+     * (the data is being promoted into the live library). From here a cancel is answered `too_late`
+     * and the transfer runs to its end.
+     *
+     * Returns false unless [sessionId] is still the live session and its upload body started: when it
+     * was cancelled or ended, even if a newer session is live now, the caller must abort without
+     * promoting, because the sender may have been told `stopped` or `rolled_back` (#1382).
+     */
+    fun committing(sessionId: String?): Boolean
 
     /** For callers that have nothing to report to. */
     object None : TransferProgressReporter {
         override fun stage(stage: String) = Unit
         override fun recordsImported(total: Long) = Unit
         override fun attachmentBytesLanded(delta: Long) = Unit
-        override fun committing() = Unit
+        override fun bodySessionId(): String? = null
+        override fun committing(sessionId: String?) = true
     }
 }

@@ -4,6 +4,8 @@ package com.difft.android.call.manager
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.LCallToChatController
 import com.difft.android.network.HttpService
@@ -27,6 +29,7 @@ import javax.inject.Singleton
 class CallMessageManager @Inject constructor(
     private val callToChatController: LCallToChatController,
     @ChativeHttpClientModule.Chat private val chatHttpClient: dagger.Lazy<ChativeHttpClient>,
+    private val messagingGate: MessagingGate,
 ) {
 
     private val chatHttpService by lazy {
@@ -83,20 +86,31 @@ class CallMessageManager @Inject constructor(
      */
     fun removePendingMessage(source: String, timestamp: String) {
         appScope.launch(Dispatchers.IO) {
-            try {
-                val result = chatHttpService.removePendingMessage(
-                    source,
-                    timestamp
-                )
-
-                if (result.isSuccess()) {
-                    L.i { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp success" }
-                } else {
-                    L.e { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp failed -> ${result.reason}" }
-                }
-            } catch (e: Exception) {
-                L.e { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp failed -> ${e.message}" }
+            // The delete runs after the processing that asked for it has finished, so it takes its
+            // own ticket (#1382); while messaging is paused the call message stays queued.
+            val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "call-delete")
+            if (admission == null) {
+                L.i { "[MigrationPause] event=receive_dropped source=call-delete count=1" }
+                return@launch
             }
+            admission.use { deletePendingMessage(source, timestamp) }
+        }
+    }
+
+    private suspend fun deletePendingMessage(source: String, timestamp: String) {
+        try {
+            val result = chatHttpService.removePendingMessage(
+                source,
+                timestamp
+            )
+
+            if (result.isSuccess()) {
+                L.i { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp success" }
+            } else {
+                L.e { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp failed -> ${result.reason}" }
+            }
+        } catch (e: Exception) {
+            L.e { "[Call] CallMessageManager removePendingMessage remove pending message $timestamp failed -> ${e.message}" }
         }
     }
 

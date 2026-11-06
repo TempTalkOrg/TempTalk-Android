@@ -270,27 +270,6 @@
                         android:padding="7dp"
                         android:src="@drawable/chat_icon_send"
                         android:visibility="invisible" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/button_keyboard"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:enabled="false"
-                        android:padding="10dp"
-                        android:src="@drawable/chat_keyboard"
-                        android:tint="@color/icon"
-                        android:visibility="gone" />
-
-                    <androidx.appcompat.widget.AppCompatImageView
-                        android:id="@+id/button_voice"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:enabled="false"
-                        android:paddingHorizontal="16dp"
-                        android:paddingVertical="10dp"
-                        android:scaleType="centerCrop"
-                        android:src="@drawable/chat_ic_mic_24"
-                        android:tint="@color/icon" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>

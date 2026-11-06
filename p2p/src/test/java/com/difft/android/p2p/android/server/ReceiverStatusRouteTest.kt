@@ -86,7 +86,8 @@ class ReceiverStatusRouteTest {
         assertTrue(status(port, id, token).progressRevision > revBefore)
 
         // Past the commit point a cancel is too_late and the session stays live.
-        sessions.committing()
+        sessions.authorizeUpload(id, "f", prepared.slots.getValue("f").token, "127.0.0.1")
+        assertTrue(sessions.committing(id))
         val late = request(port, "POST", "/api/localsend/v2/cancel?sessionId=$id&token=$token")
         assertEquals(200, late.status)
         assertEquals(CancelState.TOO_LATE, P2pJson.decodeFromString<CancelResponse>(late.body).state)

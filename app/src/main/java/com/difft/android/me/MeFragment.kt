@@ -7,7 +7,6 @@ import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -24,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -33,6 +33,7 @@ import com.difft.android.R
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneHost
+import com.difft.android.base.utils.padBottomForHomeTabBar
 import com.difft.android.base.utils.EnvironmentHelper
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.TextSizeUtil
@@ -40,6 +41,7 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.chat.common.AvatarUtil
+import com.difft.android.chat.common.HomeHeaderCollapser
 import com.difft.android.chat.media.AvatarEncryptedProvider
 import com.difft.android.chat.media.AvatarPreview
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -141,17 +143,31 @@ class MeFragment : Fragment() {
     }
 
     /**
-     * The list-pane header (rail toggle · Me) exists only in dual-pane mode, where every tab
-     * header carries the rail toggle in the same place; phones keep the header-less layout.
+     * The title row shows in the two-pane list and on a foldable, and collapses with the page on a
+     * short window like the Chats and Contacts titles ([HomeHeaderCollapser]); other phones keep the
+     * header-less layout with its top gap.
      */
-    private fun applyDualPaneHeaderVisibility() {
-        binding.dualPaneHeader.visibility =
-            if ((activity as? DualPaneHost)?.isDualPaneMode == true) View.VISIBLE else View.GONE
+    private fun applyHomeHostChrome() {
+        val host = activity as? DualPaneHost
+        val showHeader = host?.isDualPaneMode == true || HomeHeaderCollapser.isFoldable(requireActivity())
+        val collapsible = showHeader && HomeHeaderCollapser.isEligible(requireActivity())
+        binding.homeHeader.visibility = if (showHeader) View.VISIBLE else View.GONE
+        HomeHeaderCollapser.bind(binding.homeAppBar, binding.homeHeader, collapsible)
+        binding.scrollView2.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+            topMargin = if (showHeader) 0 else resources.getDimensionPixelSize(R.dimen.me_headerless_top_gap)
+        }
+        // The page scrolls under the floating home tab capsule; keep the last card reachable,
+        // plus the title's collapse range while it is expanded.
+        binding.scrollView2.padBottomForHomeTabBar(
+            viewLifecycleOwner,
+            host,
+            extraPx = HomeHeaderCollapser.collapseRangePx(binding.homeHeader, collapsible),
+        )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        applyDualPaneHeaderVisibility()
+        applyHomeHostChrome()
         binding.avatar.setOnClickListener {
             openAvatarPreview()
         }
@@ -329,48 +345,19 @@ class MeFragment : Fragment() {
         }
     }
 
-    private fun refreshTextSize(isLarger: Boolean) {
-        val textViews = findAllTextViews(binding.root)
-        textViews.forEach { textView ->
-            textView.textSize = if (isLarger) 24f else 16f
-        }
-        binding.tvProfile.textSize = if (isLarger) 21f else 14f
-    }
-
-    private fun findAllTextViews(root: View): List<TextView> {
-        val textViews = mutableListOf<TextView>()
-        val stack = mutableListOf<View>()
-        stack.add(root)
-
-        var viewCount = 0
-        while (stack.isNotEmpty()) {
-            val current = stack.removeAt(stack.size - 1)
-            viewCount++
-
-            if (current is TextView) {
-                textViews.add(current)
-            } else if (current is ViewGroup) {
-                for (i in current.childCount - 1 downTo 0) {
-                    stack.add(current.getChildAt(i))
-                }
-            }
-        }
-        return textViews
-    }
-
     private fun updateTextSizeSettings(isLarger: Boolean) {
         binding.tvTextSize.text = if (isLarger) getString(R.string.me_text_size_lage) else getString(R.string.me_text_size_default)
-        refreshTextSize(isLarger)
+        MeTextScaling.apply(binding, isLarger)
     }
 
     /**
-     * Navigate to detail fragment in dual-pane mode, or start Activity in single-pane mode
+     * Navigate through the home detail stack in either layout; other hosts keep their Activity entry
      * @param fragment The fragment to show in dual-pane mode
      * @param fallbackAction The action to perform in single-pane mode (usually starting an Activity)
      */
     private fun navigateToDetailOrActivity(fragment: Fragment, fallbackAction: () -> Unit) {
         val dualPaneHost = activity as? DualPaneHost
-        if (dualPaneHost?.isDualPaneMode == true) {
+        if (dualPaneHost != null) {
             dualPaneHost.showDetailFragment(fragment)
         } else {
             fallbackAction()

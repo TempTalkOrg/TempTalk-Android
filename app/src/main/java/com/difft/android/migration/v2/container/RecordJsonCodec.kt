@@ -8,6 +8,7 @@ import com.difft.android.migration.v2.model.NeutralCredential
 import com.difft.android.migration.v2.model.NeutralGroupKey
 import com.difft.android.migration.v2.model.NeutralIdentity
 import com.difft.android.migration.v2.model.NeutralMessage
+import com.difft.android.migration.v2.model.NeutralPendingEnvelope
 import com.difft.android.migration.v2.model.NeutralRecord
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -18,6 +19,7 @@ import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
+import java.util.Base64
 
 /**
  * JSONL codec for [NeutralRecord]: one record per JSON line, plus the [ContainerManifest] as a JSON
@@ -59,6 +61,7 @@ internal class RecordJsonCodec {
             is NeutralRecord.GroupKey -> record.value
             is NeutralRecord.Identity -> record.value
             is NeutralRecord.Credential -> record.value
+            is NeutralRecord.PendingEnvelope -> record.value
         }
         val envelope = JsonObject().apply {
             addProperty(KEY_TYPE, tag)
@@ -74,8 +77,16 @@ internal class RecordJsonCodec {
         /**
          * The line is skipped: its `type` is not one this build knows, or its value did not decode.
          * [ownsBytes] is true for an attachment record, whose byte frame must be drained with it.
+         * [mustNotSkip] is true for a record this build promised to import (a pending envelope,
+         * #1382): the reader fails the import instead of skipping it.
          */
-        class Skipped(val tag: String, val ownsBytes: Boolean, val undecodable: Boolean, val reason: String) : Decoded
+        class Skipped(
+            val tag: String,
+            val ownsBytes: Boolean,
+            val undecodable: Boolean,
+            val reason: String,
+            val mustNotSkip: Boolean = false,
+        ) : Decoded
     }
 
     /**
@@ -92,7 +103,13 @@ internal class RecordJsonCodec {
                 ?: return Decoded.Skipped(tag, ownsBytes = false, undecodable = false, reason = "unknown type")
             Decoded.Record(record.also(AbsentDefaults::restore))
         } catch (e: RuntimeException) {
-            Decoded.Skipped(tag, ownsBytes = tag == TAG_ATTACHMENT, undecodable = true, reason = e.message ?: e.javaClass.simpleName)
+            Decoded.Skipped(
+                tag,
+                ownsBytes = tag == TAG_ATTACHMENT,
+                undecodable = true,
+                reason = e.message ?: e.javaClass.simpleName,
+                mustNotSkip = tag == TAG_PENDING_ENVELOPE,
+            )
         }
     }
 
@@ -118,8 +135,25 @@ internal class RecordJsonCodec {
             TAG_GROUP_KEY -> NeutralRecord.GroupKey(gson.fromJson(value, NeutralGroupKey::class.java))
             TAG_IDENTITY -> NeutralRecord.Identity(gson.fromJson(value, NeutralIdentity::class.java))
             TAG_CREDENTIAL -> NeutralRecord.Credential(gson.fromJson(value, NeutralCredential::class.java))
+            TAG_PENDING_ENVELOPE -> NeutralRecord.PendingEnvelope(pendingEnvelope(value))
             else -> null
         }
+
+    /**
+     * Strict, unlike the other records: Gson leaves a missing field null or 0 behind Kotlin's
+     * non-null types, and a pending envelope with no id or bytes cannot be applied (#1382).
+     */
+    private fun pendingEnvelope(value: JsonElement): NeutralPendingEnvelope {
+        val decoded = gson.fromJson(value, NeutralPendingEnvelope::class.java)
+            ?: throw IllegalArgumentException("pending envelope is null")
+        @Suppress("SENSELESS_COMPARISON")
+        require(decoded.messageId != null && decoded.messageId.isNotBlank()) { "pending envelope has no messageId" }
+        require(decoded.originalMessageTimeStamp > 0) { "pending envelope has no originalMessageTimeStamp" }
+        @Suppress("SENSELESS_COMPARISON")
+        require(decoded.messageEnvelopBytes != null) { "pending envelope has no messageEnvelopBytes" }
+        require(PendingEnvelopeBytes.decode(decoded.messageEnvelopBytes).isNotEmpty()) { "pending envelope bytes are empty" }
+        return decoded
+    }
 
     private fun tagOf(record: NeutralRecord): String = when (record) {
         is NeutralRecord.Message -> TAG_MESSAGE
@@ -128,6 +162,7 @@ internal class RecordJsonCodec {
         is NeutralRecord.GroupKey -> TAG_GROUP_KEY
         is NeutralRecord.Identity -> TAG_IDENTITY
         is NeutralRecord.Credential -> TAG_CREDENTIAL
+        is NeutralRecord.PendingEnvelope -> TAG_PENDING_ENVELOPE
     }
 
     /**
@@ -195,5 +230,16 @@ internal class RecordJsonCodec {
          * loopback handoff container carries it; every other reader skips it as an unknown tag.
          */
         const val TAG_CREDENTIAL = "credential"
+
+        /** Frozen wire tag for [NeutralPendingEnvelope]; skipped by a reader that predates it. */
+        const val TAG_PENDING_ENVELOPE = "pendingEnvelope"
     }
+}
+
+/** The `messageEnvelopBytes` text encoding of [NeutralPendingEnvelope]: standard base64, padded, no wrap. */
+internal object PendingEnvelopeBytes {
+    fun encode(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
+
+    /** Throws [IllegalArgumentException] on text that is not base64. */
+    fun decode(text: String): ByteArray = Base64.getDecoder().decode(text)
 }

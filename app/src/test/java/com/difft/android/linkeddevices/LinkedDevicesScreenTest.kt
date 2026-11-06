@@ -49,7 +49,7 @@ class LinkedDevicesScreenTest {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
         Locale.setDefault(Locale.US)
         composeTestRule.setContent {
-            DifftTheme { LinkedDevicesScreen(vm, showBackButton = true, onBack = {}) }
+            DifftTheme { LinkedDevicesScreen(vm, onUnlinkConfirm = {}, showBackButton = true, onBack = {}) }
         }
     }
 

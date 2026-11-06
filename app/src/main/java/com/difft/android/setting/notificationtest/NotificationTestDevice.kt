@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.notification.NotificationFixJump
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +28,9 @@ class NotificationTestDevice @Inject constructor(
 
     fun isKeyguardLocked(): Boolean =
         context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+
+    /** Whether the vendor pop-up fix opens a vendor page directly (Xiaomi, or vivo OriginOS 6+). A binder call. */
+    fun opensVendorPopupDirectly(): Boolean = NotificationFixJump.opensOemPopupDirectly(context)
 
     /** Whether a PIN, pattern, password or biometric lock is set; read for diagnostics only. */
     fun isDeviceSecure(): Boolean =

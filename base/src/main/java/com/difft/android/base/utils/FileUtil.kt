@@ -45,6 +45,9 @@ object FileUtil {
     const val FILE_DIR_ATTACHMENT = "attachment"
     const val FILE_DIR_UPGRADE = "upgrade"
     const val DRAFT_ATTACHMENTS_DIRECTORY: String = "draft_blobs"
+
+    /** Files shared in by other apps, staged in internal storage until a chat is picked (#1429). */
+    const val SHARE_IMPORT_DIRECTORY: String = "share_import"
     const val FILE_DIR_GIF_FAVORITES = "gif_favorites"
 
     /** Large file threshold for manual download prompt (10MB) */
@@ -381,6 +384,9 @@ object FileUtil {
                 var read: Int
                 while (input.read(buffer).also { read = it } != -1) {
                     size += read
+                    // Past the limit the exact size is irrelevant: a result >= MAX_SUPPORT_FILE_SIZE
+                    // means "at least this large", and every caller rejects it.
+                    if (size >= MAX_SUPPORT_FILE_SIZE) return size
                 }
                 return size
             }
@@ -510,7 +516,7 @@ object FileUtil {
      * Clear temp directories on startup.
      * These directories are used for intermediate files during attachment processing.
      * Only files written by a previous process are orphans: a share received during this cold
-     * start may already be staged in draft_blobs by the time the sweep runs, so files newer than
+     * start may already be staged in share_import by the time the sweep runs, so files newer than
      * the process start are kept.
      */
     fun clearDraftAttachmentsDirectory() {
@@ -528,6 +534,14 @@ object FileUtil {
                     .filter { it.isFile && it.lastModified() < staleBeforeMs }
                 stale.forEach { it.delete() }
                 L.i { "[FileUtil] draft_blobs sweep deleted=${stale.size}" }
+            }
+
+            val shareImportDir = FilePathManager.shareImportDir
+            if (shareImportDir.exists()) {
+                val stale = shareImportDir.listFiles().orEmpty()
+                    .filter { it.isFile && it.lastModified() < staleBeforeMs }
+                stale.forEach { it.delete() }
+                L.i { "[FileUtil] share_import sweep deleted=${stale.size}" }
             }
 
             // Clear legacy temp_attachments directory (for users upgrading from older versions).

@@ -8,6 +8,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.PUT
 import retrofit2.http.Path
 
@@ -31,6 +32,14 @@ interface DeviceApiService {
      */
     @GET("v1/devices/")
     suspend fun getDevices(): Response<ResponseBody>
+
+    /**
+     * GET /v1/devices/ sent with exactly [basicAuth], so a caller can tell which login an answer is
+     * about even if the stored credential changes while the call is in flight (#1382 A09).
+     */
+    @Auth(AuthStyle.EXPLICIT)
+    @GET("v1/devices/")
+    suspend fun getDevicesAs(@Header("Authorization") basicAuth: String): Response<ResponseBody>
 
     /** DELETE /v1/devices/{deviceId}. Server contract unverified. */
     @DELETE("v1/devices/{deviceId}")

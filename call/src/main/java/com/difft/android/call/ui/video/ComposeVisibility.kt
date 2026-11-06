@@ -35,8 +35,20 @@ open class ComposeVisibility : VideoSinkVisibility() {
     private var lastVisible = isVisible()
     private var lastSize = size()
 
+    /**
+     * Hidden whatever the layout says, e.g. a tile kept composed but not drawn in picture in picture:
+     * zero alpha alone keeps it subscribed, so adaptive stream would go on sending its video.
+     */
+    var forceHidden: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            lastVisible = isVisible()
+            notifyChanged()
+        }
+
     override fun isVisible(): Boolean {
-        if (disposed) return false
+        if (disposed || forceHidden) return false
         val coords = coordinates ?: return true
         return (coords.isAttached &&
             coords.size.width != 0 &&

@@ -2,6 +2,7 @@ package com.difft.android.chat.ui
 
 import android.app.Activity
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.ChatMessageViewModelFactory
@@ -149,8 +150,30 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     init {
         L.i { "[message]=========open ${if (forWhat is For.Group) "group" else "one to one"} chat page===========${forWhat.id}." }
-        // Opening the room supersedes a manual "unread" mark: send CLEAR to the other devices.
+    }
+
+    // Set by the first onShown(); onCleared closes the room only when it was opened.
+    private var shown = false
+
+    /**
+     * Called from every owner's onResume. The first call opens the room: it supersedes a manual
+     * "unread" mark (CLEAR to the other devices). Not done at creation: a conversation restored
+     * covered or in a hidden tab is created eagerly but is not open until shown.
+     */
+    fun onShown() {
+        if (shown) return
+        shown = true
         conversationUnreadMarker.onConversationOpened(forWhat)
+        viewModelScope.launch { conversationUnreadMarker.clearOnOpen(forWhat) }
+    }
+
+    /**
+     * The user opened this conversation again while it was kept as a detail stack's root (no new
+     * ViewModel). Supersedes a manual "unread" mark like a fresh open, without counting the room
+     * as opened a second time. Before the first [onShown] there is nothing to redo: it clears.
+     */
+    fun onReopened() {
+        if (!shown) return
         viewModelScope.launch { conversationUnreadMarker.clearOnOpen(forWhat) }
     }
 
@@ -237,8 +260,32 @@ class ChatMessageViewModel @AssistedInject constructor(
 
     private val _readInfoList = MutableStateFlow<List<ReadInfoModel>>(emptyList())
 
-    val forwardMultiMessage = MutableStateFlow<ForwardContextData?>(null)
-    val saveMultiMessageToNote = MutableStateFlow<ForwardContextData?>(null)
+    // One-off effects: a StateFlow would replay the last value to the view recreated after a
+    // configuration change and reopen the picker / save the note again (#1440).
+    private val _forwardMultiMessage = Channel<ForwardContextData>(Channel.BUFFERED)
+    val forwardMultiMessage: Flow<ForwardContextData> = _forwardMultiMessage.receiveAsFlow()
+    private val _saveMultiMessageToNote = Channel<ForwardContextData>(Channel.BUFFERED)
+    val saveMultiMessageToNote: Flow<ForwardContextData> = _saveMultiMessageToNote.receiveAsFlow()
+
+    /**
+     * Sends on Main.immediate so a collector waiting on the main thread receives and processes the
+     * element in the same frame; a send from IO would resume it through a dispatch that a
+     * lifecycle-driven cancellation can overtake, losing the element. Unreceived elements stay
+     * buffered for the next collector.
+     */
+    private suspend fun sendMultiMessageEffect(channel: Channel<ForwardContextData>, data: ForwardContextData, name: String) {
+        withContext(Dispatchers.Main.immediate) {
+            if (channel.trySend(data).isFailure) {
+                L.w { "[ChatMessageViewModel] $name send failed" }
+            }
+        }
+    }
+
+    // The trigger (onForwardClick) builds a WCDB winq query that cannot load on the JVM, so unit
+    // tests enter at the send.
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    internal suspend fun sendForwardMultiMessage(data: ForwardContextData) =
+        sendMultiMessageEffect(_forwardMultiMessage, data, "forwardMultiMessage")
 
     val selectMessagesState = MutableStateFlow(SelectMessageState(false, emptySet(), 0))
 
@@ -473,12 +520,6 @@ class ChatMessageViewModel @AssistedInject constructor(
     val messageResend: MutableSharedFlow<ChatMessage> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val messageEmojiReaction: MutableSharedFlow<EmojiReactionEvent> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    val voiceVisibilityChange = MutableStateFlow(false)
-
-    fun setVoiceVisibility(visible: Boolean) {
-        voiceVisibilityChange.value = visible
-    }
-
     val avatarLongClicked: MutableSharedFlow<ContactorModel> = MutableSharedFlow(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun longClickAvatar(contactorModel: ContactorModel) {
@@ -545,13 +586,17 @@ class ChatMessageViewModel @AssistedInject constructor(
         showOrHideFullInput.tryEmit(show to inputContent)
     }
 
-    val confidentialViewReceipt: MutableSharedFlow<ChatMessage> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    // Not replayed: a recreated chat view must not enqueue the last receipt again (#1440).
+    private val _confidentialViewReceipt = Channel<ChatMessage>(Channel.BUFFERED)
+    val confidentialViewReceipt: Flow<ChatMessage> = _confidentialViewReceipt.receiveAsFlow()
 
     val speechToTextEvent: MutableSharedFlow<Pair<String, SpeechToTextData>> = MutableSharedFlow(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     fun sendConfidentialViewReceipt(message: ChatMessage) {
         L.i { "[Confidential] Send view receipt, messageId: ${message.id}, timestamp: ${message.timeStamp}" }
-        confidentialViewReceipt.tryEmit(message)
+        if (_confidentialViewReceipt.trySend(message).isFailure) {
+            L.w { "[ChatMessageViewModel] confidentialViewReceipt send failed" }
+        }
     }
 
     fun quoteMessage(data: ChatMessage) {
@@ -720,7 +765,7 @@ class ChatMessageViewModel @AssistedInject constructor(
     }
 
     override fun onCleared() {
-        conversationUnreadMarker.onConversationClosed(forWhat)
+        if (shown) conversationUnreadMarker.onConversationClosed(forWhat)
         autoTranslate.close()
         super.onCleared()
     }
@@ -1091,7 +1136,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             listOfNotNull(combinedContext) to ForwardNoticeData.Scene.COMBINED
         }
 
-        forwardMultiMessage.value = ForwardContextData(
+        val forwardData = ForwardContextData(
             "",
             forwardContexts,
             scene,
@@ -1101,6 +1146,7 @@ class ChatMessageViewModel @AssistedInject constructor(
             combinedForwardMode = mode,
             carriesForeignContent = carriesForeignContent,
         )
+        sendForwardMultiMessage(forwardData)
         resetSelectMessageState()
     }
 
@@ -1222,11 +1268,12 @@ class ChatMessageViewModel @AssistedInject constructor(
         // PRD v2.0 §改动1/§改动2 条件①④: save-to-notes leaves a trace only if it moves someone
         // else's real message out of the conversation. The save ACTION proceeds either way.
         val carriesForeignContent = NoticeAggregator.forwardCarriesForeignContentFromTextMessages(loadedMessages, myId)
+        val saveData: ForwardContextData
         if (loadedMessages.size == 1 && loadedMessages.firstOrNull()?.sharedContact != null) {
             val sharedContactId = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.phone?.getOrNull(0)?.value
             val sharedContactName = loadedMessages.firstOrNull()?.sharedContact?.getOrNull(0)?.name?.displayName
             // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
-            saveMultiMessageToNote.value =
+            saveData =
                 ForwardContextData(
                     "",
                     listOf(ForwardContext(emptyList(), false, sharedContactId, sharedContactName)),
@@ -1253,7 +1300,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                 )
             }, forWhat is For.Group)
             // PRD §5.3.4: priority-sort authors; messageCount = selected count (CF as 1).
-            saveMultiMessageToNote.value =
+            saveData =
                 ForwardContextData(
                     "",
                     listOfNotNull(forwardContext),
@@ -1265,6 +1312,7 @@ class ChatMessageViewModel @AssistedInject constructor(
                     carriesForeignContent = carriesForeignContent,
                 )
         }
+        sendMultiMessageEffect(_saveMultiMessageToNote, saveData, "saveMultiMessageToNote")
         resetSelectMessageState()
     }
 

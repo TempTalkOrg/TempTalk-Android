@@ -8,6 +8,7 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -19,6 +20,9 @@ import com.difft.android.IndexActivity
 import com.difft.android.MainActivity
 import com.difft.android.base.BuildConfig
 import com.difft.android.base.application.ScopeApplication
+import com.difft.android.base.utils.pane.ConversationOpener
+import com.difft.android.base.utils.pane.ConversationTarget
+import com.difft.android.dualpane.ConversationRouter
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.difft.android.base.log.LogHelper
@@ -89,11 +93,12 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
+import com.difft.android.chat.focus.settings.FocusGroupPickerActivity
 
 // App-init orchestrator: already past the LargeClass threshold as a pre-existing god class.
 @Suppress("LargeClass")
 @HiltAndroidApp
-class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")).plus(dbKeyFailSoftExceptionHandler), AppForegroundObserver.Listener, androidx.work.Configuration.Provider {
+class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().plus(CoroutineName("TempTalkApplication")).plus(dbKeyFailSoftExceptionHandler), AppForegroundObserver.Listener, androidx.work.Configuration.Provider, ConversationOpener {
     // On-demand WorkManager init: WorkManagerInitializer is disabled in the manifest, so this lets
     // WorkManager self-initialize lazily if a still-merged component (e.g. SystemForegroundService)
     // calls getInstance(), instead of crashing. Never invoked on the normal startup path.
@@ -144,10 +149,16 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     lateinit var messageArchiveManager: dagger.Lazy<com.difft.android.chat.setting.archive.MessageArchiveManager>
 
     @Inject
+    lateinit var warmProcessResync: dagger.Lazy<WarmProcessResync>
+
+    @Inject
     lateinit var restoreColdStartRecovery: dagger.Lazy<com.difft.android.migration.v2.restore.RestoreColdStartRecovery>
 
     @Inject
     lateinit var conversationSettingsManager: dagger.Lazy<com.difft.android.chat.setting.ConversationSettingsManager>
+
+    @Inject
+    lateinit var groupFocusRepository: dagger.Lazy<com.difft.android.chat.focus.GroupFocusRepository>
 
     @Inject
     lateinit var translateModelStore: dagger.Lazy<com.difft.android.chat.translate.model.TranslateModelStore>
@@ -161,12 +172,37 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     @Inject
     lateinit var inactiveDeviceDialogPresenter: dagger.Lazy<InactiveDeviceDialogPresenter>
 
+    @Inject
+    lateinit var focusInvalidDialogPresenter: dagger.Lazy<com.difft.android.chat.focus.invalid.FocusInvalidDialogPresenter>
+
+    @Inject
+    lateinit var focusGroupNameCache: dagger.Lazy<com.difft.android.chat.focus.invalid.FocusGroupNameCache>
+
     /**
      * Resolves a same-device handoff whose receipt never arrived here (the process died between the
      * transfer and the receipt). Lazy — only the retiring app family ever reconciles.
      */
     @Inject
     lateinit var migrationHandoffReconciler: dagger.Lazy<MigrationHandoffReconciler>
+
+    /** Message pause of a device-replacement export (#1382); messaging stays closed until it has loaded. */
+    @Inject
+    lateinit var migrationMessagePause: com.difft.android.base.migration.pause.MigrationMessagePause
+
+    /** Applies the pause to the socket, the pull and the local drains whenever messaging opens or closes. */
+    @Inject
+    lateinit var messagingPauseReceiveCoordinator: com.difft.android.chat.messages.MessagingPauseReceiveCoordinator
+
+    /** Resolves a pause that outlived its process, and watches for the end of the login it waits on. */
+    @Inject
+    lateinit var migrationPauseRecovery: dagger.Lazy<com.difft.android.migration.v2.pause.MigrationPauseRecovery>
+
+    @Inject
+    lateinit var migrationPauseAuthProbe: dagger.Lazy<com.difft.android.chat.websocket.MigrationPauseAuthProbe>
+
+    /** Ends a pause when any path installs another login's credential in this process. */
+    @Inject
+    lateinit var migrationPauseLoginScope: dagger.Lazy<com.difft.android.base.migration.pause.MigrationPauseLoginScope>
 
     /** Foreground sessions for the startup prompts (#1355); registered next to the app lock's callbacks. */
     @Inject
@@ -188,10 +224,25 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
     private val screenLockPending = ScreenLockPending()
 
+    // A lock check found only the routing MainActivity; the next real host's resume re-runs it.
+    // Cleared only once the lock is started (or already showing), so it also survives a background.
+    private var lockCheckDeferred = false
+    private var restoreIncomingCallAfterDeferredCheck = false
+    private var deferredRerunJob: Job? = null
+
+    @VisibleForTesting
+    internal var restoreIncomingCallScreen: () -> Unit = { LCallManager.restoreIncomingCallScreenIfActive() }
+
     /** True while an app-lock decision is scheduled but not applied; non-consuming (#1355). */
     val screenLockPendingState: kotlinx.coroutines.flow.StateFlow<Boolean> get() = screenLockPending.state
 
     fun isScreenLockPending(): Boolean = screenLockPending.state.value
+
+    // Every conversation open (chat factories, ShellNavigation) goes through the router.
+    override fun openConversation(context: Context, target: ConversationTarget) =
+        ConversationRouter.open(context, target)
+
+    override fun closeConversation(conversationId: String) = ConversationRouter.close(conversationId)
 
     // Activity 计数，用于准确判断前后台切换
     private var startedActivityCount = 0
@@ -207,6 +258,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addBlocking("init log", this::initLog)
             // Needs L; must precede every task that may spawn a thread.
             .addBlocking("installCrashFilter") { CrashFilter.install(this) }
+            // Off the main thread and not awaited; independent of the storage preload below. Every
+            // messaging gate stays closed until this read completes (#1382).
+            .addBlocking("start migration pause load") { migrationMessagePause.startLoad() }
+            .addBlocking("observe migration pause") { messagingPauseReceiveCoordinator.start() }
             .addBlocking("init Logger", this::initializeLogging)
             .addBlocking("init tls provider", this::initTlsProvider)
             .addBlocking("init SecurityCheck") {
@@ -266,6 +321,11 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             .addNonBlocking("observe inactive device") {
                 inactiveDeviceDialogPresenter.get().observe { currentResumedActivity?.get() }
             }
+            // The lock screen must not be covered by the forced focus dialog; it shows on the next host.
+            .addNonBlocking("observe focus invalid") {
+                focusInvalidDialogPresenter.get().observe { currentResumedActivity?.get()?.takeIf(::isFocusDialogHost) }
+            }
+            .addNonBlocking("init focus name cache") { focusGroupNameCache.get().start() }
             .addNonBlocking("init coordinator") { coordinator.get().initialize() }
             // Already on Dispatchers.IO per AppStartup; single runBlocking bridge, no re-dispatch.
             // Retiring family only: if this process died after handing its session over, the receipt
@@ -275,6 +335,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                     @Suppress("BanRunBlockingOutsideTests")
                     runBlocking { migrationHandoffReconciler.get().onColdStart() }
                 }
+            }
+            // After the user data has loaded (a blocking task above): the scope check reads the login.
+            .addNonBlocking("migration pause recovery") {
+                migrationPauseRecovery.get().start()
+                migrationPauseLoginScope.get().watchCredentialChanges(appScope)
+                migrationPauseAuthProbe.get().start()
             }
             .addNonBlocking("probe process exit reasons") {
                 @Suppress("BanRunBlockingOutsideTests")
@@ -555,6 +621,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 // Names follow the app language; only re-submits a channel whose name differs.
                 runCatching { messageNotificationUtil.get().refreshChannelNames() }
                 scheduleGrayConfigUpdateCheck()
+                // A 12/24-hour change made in system settings applies when the user returns (#1395).
+                util.TimeFormatter.refreshHourFormat()
                 // NOTE: incoming-call restore is intentionally NOT triggered here. On a cold start this
                 // fires too early — the launcher's IndexActivity + the app lock come up afterwards and
                 // bury the ringing screen. Restore now runs at the end of scheduleQuickScreenLockCheck,
@@ -565,6 +633,12 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 coordinator.get().startPeriodicTest(isForeground = true)
                 // Full conversation-config refetch on foreground (covers background drift); throttled internally.
                 conversationSettingsManager.get().syncConversationSettings()
+                // Group focus: re-judge the cached state locally first (a timer may have slept through `until`, and a
+                // failed GET leaves the UI as is), then GET on every foreground (coalesced, never throttled away).
+                groupFocusRepository.get().apply {
+                    recomputeLocally()
+                    requestRefresh("foreground")
+                }
                 // Reconcile auto-translate models. No-op (one SQL query, no ML Kit call) when no
                 // conversation has the setting on, so users of the feature pay and nobody else does.
                 translateModelStore.get().onForeground()
@@ -572,6 +646,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
                 processExitProbe.reportHealthIfDue()
             }
         }
+        // #1395 warm-process catch-up (archive loop, FCM bind). Outside fgBgMutex: its gate wait
+        // and network calls must not delay onBackground.
+        appScope.launch { warmProcessResync.get().onForeground() }
     }
 
     // Mirror of onForeground: body runs on appScope (IO). Same constraints apply.
@@ -608,6 +685,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         // 取消待处理的锁屏检查
         lockCheckJob?.cancel()
         lockCheckJob = null
+        // lockCheckDeferred stays set: the lock is still owed, whatever last-use time got flushed.
+        deferredRerunJob?.cancel()
+        deferredRerunJob = null
+        restoreIncomingCallAfterDeferredCheck = false
         screenLockPending.onDecided()
     }
 
@@ -638,10 +719,13 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
             override fun onActivityResumed(activity: Activity) {
                 L.d { "[ScreenLock] onActivityResumed: ${activity::class.simpleName}" }
+                AppForegroundObserver.notifyActivityResumed(activity)
 
                 // 维护当前 Activity 引用
                 if (activity is FragmentActivity) {
                     currentResumedActivity = WeakReference(activity)
+
+                    rerunDeferredLockCheck(activity)
 
                     // 刷新截屏状态（根据屏幕锁决定）
                     SecureModeUtil.refreshByScreenLock(activity)
@@ -651,6 +735,9 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
                     // 451 停用提示同理：socket 线程置位，前台 Activity 可用时再弹窗
                     inactiveDeviceDialogPresenter.get().onActivityResumed(activity)
+
+                    // The focus group is gone (D5 / D5b): same retry for a dialog raised while no host was resumed
+                    if (isFocusDialogHost(activity)) focusInvalidDialogPresenter.get().onActivityResumed(activity)
                 }
 
                 // Call feedback overlay. Only a ComponentActivity can carry the ViewTree owners it
@@ -675,7 +762,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivityCount--
-                AppForegroundObserver.notifyActivityStopped()
+                AppForegroundObserver.notifyActivityStopped(activity)
                 L.d { "[ScreenLock] onActivityStopped: ${activity::class.simpleName}, count=$startedActivityCount" }
 
                 // Clear the temporary bypass flag whenever a call/incoming-call screen LEAVES the foreground
@@ -783,8 +870,13 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             // Note: other callers (call-end re-lock, in-call re-check) must NOT restore, otherwise a
             // just-rejected call whose notifying flag hasn't cleared yet would be relaunched (showing
             // "app lock + another incoming-call screen").
+            // A deferred check has no decision yet; the restore runs after its re-run instead.
             if (restoreIncomingCallAfterCheck) {
-                LCallManager.restoreIncomingCallScreenIfActive()
+                if (lockCheckDeferred) {
+                    restoreIncomingCallAfterDeferredCheck = true
+                } else {
+                    LCallManager.restoreIncomingCallScreenIfActive()
+                }
             }
         }
     }
@@ -817,15 +909,28 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     /**
+     * Hosts allowed to show the forced focus dialog: never the lock screen or a login / registration screen (all in the
+     * login module). The dialog also checks the signed-in state itself, so a signed-out cache never covers them.
+     */
+    private fun isFocusDialogHost(activity: Activity): Boolean =
+        activity !is ScreenLockActivity &&
+            activity !is LIncomingCallActivity &&
+            activity !is LCallActivity &&
+            // The reselect picker answers the dialog itself; re-showing it over the picker would loop.
+            activity !is FocusGroupPickerActivity &&
+            !activity.javaClass.name.startsWith(LOGIN_MODULE_PACKAGE)
+
+    /**
      * Popup gate for [MainActivity.processIntent]. The positional `is ScreenLockActivity` is an
      * early-out only (the lock screen is already paused at popup-decision time, so it false-negatives
-     * in the bug scenario); shouldShowScreenLock is the authoritative check. recentlyUnlocked lets a
-     * just-unlocked replay through.
+     * in the bug scenario); shouldShowScreenLock is the authoritative check, plus a deferred lock that
+     * is still owed while a lock stays configured. recentlyUnlocked lets a just-unlocked replay through.
      */
     fun isScreenLockRequiredOrShowing(): Boolean {
         if (ScreenLockUtil.recentlyUnlocked) return false
         if (currentResumedActivity?.get() is ScreenLockActivity) return true
         val userData = userManager.getUserData() ?: return false
+        if (lockCheckDeferred && isLockConfigured(userData)) return true
         return shouldShowScreenLock(userData)
     }
 
@@ -833,7 +938,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
      * Shows the app lock, rescheduling a bounded retry (3×150ms) when no resumed Activity is
      * available yet instead of giving up. Re-evaluates shouldShowScreenLock each hop and
      * self-terminates once backgrounded (startedActivityCount == 0), so it never outlives a
-     * background transition.
+     * background transition. On the routing MainActivity it defers instead; [rerunDeferredLockCheck]
+     * picks the owed lock up on the next host, also after a background.
      */
     private fun showScreenLockIfNeeded(retriesLeft: Int = 3) {
         val activity = currentResumedActivity?.get()
@@ -841,6 +947,7 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         // Never stack a second lock screen.
         if (activity is ScreenLockActivity) {
             L.d { "[ScreenLock] Already showing ScreenLockActivity" }
+            lockCheckDeferred = false
             screenLockPending.onDecided()
             return
         }
@@ -848,13 +955,33 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         val userData = userManager.getUserData()
         if (userData == null || !shouldShowScreenLock(userData)) {
             L.d { "[ScreenLock] Lock not needed" }
+            // A transient skip (call, alert, exemption) keeps an owed lock; a lock no longer
+            // configured (logged out, lock turned off) drops it.
+            if (lockCheckDeferred && (userData == null || !isLockConfigured(userData))) {
+                L.i { "[ScreenLock] deferred lock dropped reason=not_configured" }
+                lockCheckDeferred = false
+                restoreIncomingCallAfterDeferredCheck = false
+                PasscodeUtil.needRecordLastUseTime = true
+            }
             screenLockPending.onDecided()
+            return
+        }
+
+        // The routing MainActivity is about to start the next page, which would stack above a lock
+        // started from it. Keep the decision pending until that page resumes. The app is logically
+        // locked from here on, so stop last-use recording as ScreenLockActivity does: a refreshed
+        // timestamp would otherwise un-expire the timeout after a background before the lock shows.
+        if (activity != null && !isLockHost(activity)) {
+            L.i { "[ScreenLock] deferred host=${activity::class.simpleName}" }
+            lockCheckDeferred = true
+            PasscodeUtil.needRecordLastUseTime = false
             return
         }
 
         if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
             L.i { "[ScreenLock] Starting ScreenLockActivity from ${activity::class.simpleName}" }
             ScreenLockActivity.startActivity(activity)
+            lockCheckDeferred = false
             screenLockPending.onDecided()
         } else if (retriesLeft > 0 && startedActivityCount > 0) {
             L.i { "[ScreenLock] No valid activity yet, retrying (retriesLeft=$retriesLeft)" }
@@ -868,6 +995,41 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
             screenLockPending.onDecided()
         }
     }
+
+    /** MainActivity switched to an in-place recovery screen and can host a deferred lock now. */
+    fun onLockHostReady(activity: Activity) = rerunDeferredLockCheck(activity)
+
+    /**
+     * Re-runs a check deferred by [showScreenLockIfNeeded] once a real host resumes. Runs beside
+     * [lockCheckJob]: cancelling it would drop a deeplink full check's second pass. The delay lets the
+     * host's own onResume finish, so the call/alert foreground flags are current.
+     */
+    private fun rerunDeferredLockCheck(activity: Activity) {
+        if (!lockCheckDeferred || !isLockHost(activity)) return
+        L.i { "[ScreenLock] deferred check resumed host=${activity::class.simpleName}" }
+        // A long routing may have outlived the pending watchdog; hold startup prompts again.
+        screenLockPending.onCheckScheduled()
+        deferredRerunJob?.cancel()
+        deferredRerunJob = launch(Dispatchers.Main) {
+            delay(100)
+            showScreenLockIfNeeded()
+            // Restore once after the first decision, as a non-deferred check does. Holding it for a
+            // later lock would reopen a call the user rejected meanwhile; a call screen already in
+            // front makes the restore a no-op.
+            if (restoreIncomingCallAfterDeferredCheck) {
+                restoreIncomingCallAfterDeferredCheck = false
+                restoreIncomingCallScreen()
+            }
+        }
+    }
+
+    /** MainActivity hosts the lock only on its in-place recovery screens; while routing it always leaves. */
+    private fun isLockHost(activity: Activity): Boolean =
+        activity !is MainActivity || activity.hostsLockScreen
+
+    private fun isLockConfigured(userData: UserData): Boolean =
+        !(userData.passcode.isNullOrEmpty() && userData.pattern.isNullOrEmpty()) &&
+            !userData.baseAuth.isNullOrEmpty()
 
     private fun shouldShowScreenLock(userData: UserData): Boolean {
         // 1. 通用的临时豁免
@@ -927,8 +1089,10 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
         }
 
         // 4. 超时检查
+        // A deferred check already found the timeout expired; foreground last-use recording while
+        // MainActivity routes must not un-expire it.
         val lastUseTime = pendingLastUseTime.current()
-        val isTimeout = userData.passcodeTimeout == 0 ||
+        val isTimeout = lockCheckDeferred || userData.passcodeTimeout == 0 ||
                 System.currentTimeMillis() - lastUseTime >= userData.passcodeTimeout.seconds.inWholeMilliseconds
 
         if (!isTimeout) {
@@ -971,9 +1135,8 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
     private fun scheduleGrayConfigUpdateCheck() {
-        val userData = userManager.getUserData() ?: return
         launch(Dispatchers.IO) {
-            FeatureGrayManager.checkUpdateConfigFromServer(userData.lastUseTime)
+            FeatureGrayManager.checkUpdateConfigFromServer()
         }
     }
 
@@ -1001,3 +1164,5 @@ class TempTalkApplication : ScopeApplication(), CoroutineScope by MainScope().pl
     }
 
 }
+
+private const val LOGIN_MODULE_PACKAGE = "com.difft.android.login."

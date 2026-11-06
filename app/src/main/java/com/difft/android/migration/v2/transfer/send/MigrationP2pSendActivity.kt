@@ -35,8 +35,9 @@ import com.difft.android.migration.v2.handoff.HandoffAuthPolicy
 import com.difft.android.migration.v2.handoff.HandoffSpaceCheck
 import com.difft.android.migration.v2.handoff.MigrationHandoffGate
 import com.difft.android.migration.v2.handoff.MigrationHandoffReconciler
+import com.difft.android.migration.v2.pause.MigrationVerdictRecheck
+import com.difft.android.migration.v2.pause.SenderVerdictSettlement
 import com.difft.android.migration.v2.transfer.PendingVerdictStore
-import com.difft.android.migration.v2.transfer.VerdictProbe
 import com.difft.android.migration.v2.handoff.MigrationStatusClient
 import com.difft.android.migration.v2.transfer.DeviceNames
 import com.difft.android.p2p.android.client.EndpointRace
@@ -86,6 +87,16 @@ class MigrationP2pSendActivity : BaseActivity() {
     @Inject
     lateinit var pendingVerdictStore: PendingVerdictStore
 
+    @Inject
+    lateinit var verdictSettlement: SenderVerdictSettlement
+
+    /** Owns every `/status` re-check, so this page never polls alongside the app's own (#1382). */
+    @Inject
+    lateinit var verdictRecheck: MigrationVerdictRecheck
+
+    // After injection: the view model, its only user, is created in onCreate.
+    private val verdicts by lazy { SendScreenVerdicts(pendingVerdictStore, verdictSettlement) }
+
     private val fromLink: Boolean by lazy { intent.getBooleanExtra(PeerApps.EXTRA_FROM_LINK, false) }
 
     /**
@@ -127,9 +138,12 @@ class MigrationP2pSendActivity : BaseActivity() {
                         awaitPeerConfirm = intent.getBooleanExtra(PeerApps.EXTRA_AWAIT_PEER_CONFIRM, false),
                         resolveEndpoint = { target -> EndpointRace.resolve(target) },
                         claimPairing = { target -> SenderHttpClient(target).claimPairing(selfDeviceInfo(), target.pin) },
-                        loadPendingVerdict = { pendingVerdictStore.load() },
-                        clearPendingVerdict = { pendingVerdictStore.clear() },
-                        probeVerdict = VerdictProbe::check,
+                        loadPendingVerdict = verdicts::load,
+                        clearPendingVerdict = verdicts::clear,
+                        probeVerdict = verdictRecheck::probe,
+                        settleVerdict = verdicts::settle,
+                        // A Desktop link never pauses messaging; every other send replaces this phone.
+                        deviceReplacement = !fromLink,
                     ) as T
             },
         )[MigrationP2pSendViewModel::class.java]

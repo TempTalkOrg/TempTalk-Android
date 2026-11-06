@@ -56,20 +56,17 @@
         app:layout_constraintTop_toBottomOf="@+id/cl_avatar"
         tools:text="Bess" />
 
-    <androidx.appcompat.widget.AppCompatEditText
+    <com.difft.android.base.widget.DifftClearableInputView
         android:id="@+id/et_message"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:background="@drawable/forward_input_bg"
-        android:hint="@string/chat_leave_a_message"
-        android:inputType="text"
-        android:lines="1"
-        android:paddingStart="10dp"
-        android:paddingEnd="10dp"
-        android:textColor="@color/t.primary"
-        android:textColorHint="@color/t.disable"
         android:textSize="14sp"
+        app:difft_inputSize="large"
+        app:difft_inputStyle="search"
+        app:dsi_hint="@string/chat_leave_a_message"
+        app:dsi_imeAction="done"
+        app:dsi_surface="popup"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textContent" />
 

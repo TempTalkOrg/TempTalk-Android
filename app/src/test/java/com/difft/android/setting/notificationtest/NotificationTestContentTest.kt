@@ -82,10 +82,10 @@ class NotificationTestContentTest {
 
     @Test
     fun `the question dialog dispatches the answer`() {
-        show(State(loaded = true, running = NotificationTestKind.LOCKSCREEN, phase = Phase.POSTED, dialog = Dialog.Question(NotificationTestKind.LOCKSCREEN)))
+        show(State(loaded = true, running = NotificationTestKind.LOCKSCREEN, phase = Phase.POSTED, dialog = Dialog.Question(NotificationTestKind.LOCKSCREEN, "run")))
         composeTestRule.onNodeWithText(context.getString(R.string.notification_test_lockscreen_question)).assertExists()
         composeTestRule.onNodeWithText(context.getString(R.string.notification_test_no)).performClick()
-        assertEquals(listOf<Intent>(Intent.Answer(seen = false)), intents)
+        assertEquals(listOf<Intent>(Intent.Answer(seen = false, runId = "run")), intents)
     }
 
     @Test
@@ -109,4 +109,29 @@ class NotificationTestContentTest {
         composeTestRule.onNodeWithText(context.getString(android.R.string.ok)).performClick()
         assertEquals(listOf<Intent>(Intent.DismissDialog), intents)
     }
+    @Test
+    fun `a hidden owner keeps its question in state without opening a dialog`() {
+        val visible = androidx.compose.runtime.mutableStateOf(false)
+        val state = State(loaded = true, running = NotificationTestKind.BANNER, phase = Phase.POSTED, runId = "run", dialog = Dialog.Question(NotificationTestKind.BANNER, "run"))
+        composeTestRule.setContent {
+            DifftTheme(applyWindowBackground = false) {
+                NotificationTestContent(state, { intents += it }, dialogsVisible = visible.value)
+            }
+        }
+        composeTestRule.onNodeWithText(context.getString(R.string.notification_test_banner_question)).assertDoesNotExist()
+        composeTestRule.runOnIdle { visible.value = true }
+        composeTestRule.onNodeWithText(context.getString(R.string.notification_test_banner_question)).assertExists()
+        composeTestRule.onNodeWithText(context.getString(R.string.notification_test_yes)).performClick()
+        assertEquals(listOf<Intent>(Intent.Answer(true, "run")), intents)
+    }
+
+    @Test
+    fun `Finishing disables every button while the result is being saved`() {
+        show(State(loaded = true, running = NotificationTestKind.BANNER, phase = Phase.FINISHING))
+        NotificationTestKind.entries.forEach { kind ->
+            composeTestRule.onNodeWithTag(testButtonTag(kind)).assertIsNotEnabled()
+        }
+        assertEquals(emptyList(), intents)
+    }
+
 }

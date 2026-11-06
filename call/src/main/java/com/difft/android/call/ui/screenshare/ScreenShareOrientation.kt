@@ -11,18 +11,24 @@ import com.difft.android.base.utils.OrientationPolicy
 /**
  * Orientation while a remote screen share is on screen. A phone-sized display turns landscape and
  * follows the sensor between the two landscapes (both are allowed, as on iOS); a large display
- * keeps [OrientationPolicy]'s free rotation. Re-run on every display/configuration change so a
- * fold or unfold mid-share moves between the two.
+ * keeps [OrientationPolicy]'s free rotation. A phone-sized display with a [halfOpen] fold is a flip
+ * phone standing on its lower half: it keeps the policy's portrait lock, the share above the fold,
+ * and a share already turned landscape turns back upright (design decision 38). Re-run on every
+ * display/configuration change and on every half-open change, so a fold or unfold mid-share moves
+ * between them.
  *
  * Returns the value [OrientationPolicy] wrote (the caller's ownership token), or null while the
  * share's own landscape lock holds the orientation.
  */
 @SuppressLint("SourceLockedOrientationActivity")
-internal fun applyScreenShareOrientation(activity: Activity, display: Display? = null): Int? {
+internal fun applyScreenShareOrientation(activity: Activity, display: Display? = null, halfOpen: Boolean = false): Int? {
     val hostDisplay = display ?: ContextCompat.getDisplayOrDefault(activity)
     val sides = OrientationPolicy.readShortSides(activity, hostDisplay)
     val target = OrientationPolicy.targetForDisplayShortSide(sides.resolvedDp)
-    if (target != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+    if (target != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT || halfOpen) {
+        if (halfOpen && activity.requestedOrientation == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {
+            L.i { "[Call] screen share orientation back to policy: fold half open displaySwDp=${sides.resolvedDp}" }
+        }
         return OrientationPolicy.applyTo(activity, display)
     }
     if (activity.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE) {

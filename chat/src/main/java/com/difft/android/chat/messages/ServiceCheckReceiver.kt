@@ -15,8 +15,9 @@ import kotlinx.coroutines.launch
 /**
  * Periodic AlarmManager check that recovers [MessageForegroundService] and wakes the
  * WebSocket monitor. Fires every 5 min outside Doze; inside Doze the system stretches it to
- * ~15 min with the exact-alarm permission or 30 min - 2 h without. Each delivery re-arms the
- * next alarm, so the chain is one-shot + re-arm.
+ * ~15 min with the exact-alarm permission or 30 min - 2 h without. On Xiaomi and vivo at night it is
+ * an alarm clock every 2 min instead ([NightAlarmClockWake]). Each delivery re-arms the next alarm,
+ * so the chain is one-shot + re-arm.
  */
 class ServiceCheckReceiver : BroadcastReceiver() {
 

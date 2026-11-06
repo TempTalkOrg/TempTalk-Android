@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -20,44 +19,43 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.difft.android.base.notification.NotificationFix
-import com.difft.android.base.notification.ReadinessItem
+import com.difft.android.base.notification.OemBrand
 import com.difft.android.base.ui.compose.DifftButton
 import com.difft.android.base.ui.compose.DifftButtonSize
 import com.difft.android.base.ui.compose.DifftButtonVariant
 import com.difft.android.base.ui.compose.settings.DifftSettingsCaption
 import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
 import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
-import com.difft.android.base.ui.compose.settings.DifftSettingsRow
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.PackageUtil
-import com.difft.android.call.R as CallR
 import com.difft.android.chat.R as ChatR
+import com.difft.android.chat.focus.settings.NotifyFocusCard
+import com.difft.android.chat.focus.settings.NotifyGroupNotificationRow
+import com.difft.android.chat.focus.settings.groupNotificationNote
+import com.difft.android.chat.focus.settings.NotifyFocusSettingsContract
 
 internal const val TAG_BANNER = "notification_banner"
+internal const val TAG_GROUP_APP_NOTIFICATIONS = "group_app_notifications"
+internal const val TAG_ROW_APP_NOTIFICATIONS = "row_app_notifications"
 internal const val TAG_ROW_MESSAGE = "row_message"
-internal const val TAG_ROW_CALL = "row_call"
-internal const val TAG_ROW_FULL_SCREEN = "row_full_screen"
-internal const val TAG_ROW_OEM_POPUP = "row_oem_popup"
+internal const val TAG_ROW_CALLS = "row_calls"
 internal const val TAG_ROW_CRITICAL = "row_critical"
-internal const val TAG_GROUP_LOCK_SCREEN = "group_lock_screen"
+internal const val TAG_ROW_BACKGROUND = "row_background_connection"
+internal const val TAG_ACTION_NOTIFICATION_OVERVIEW = "notification_overview_action"
 
 /** Labels that come from user settings rather than from the readiness checks. */
 internal data class NotificationSettingsLabels(
     val groupNotification: String,
     val displayContent: String,
-    /** Current MESSAGE category sound; null until read (or below API 26). */
-    val messageSound: String? = null,
 )
 
 internal class NotificationSettingsActions(
     val onFix: (NotificationFix) -> Unit,
+    /** Opens the Calls page. */
+    val onCalls: () -> Unit,
+    /** Opens the Critical Alerts page. */
     val onCriticalAlerts: () -> Unit,
     val onGroupNotification: () -> Unit,
-    val onMessageSound: () -> Unit,
     val onDisplayContent: () -> Unit,
     val onBackgroundConnection: () -> Unit,
     val onGuide: () -> Unit,
@@ -66,9 +64,8 @@ internal class NotificationSettingsActions(
 )
 
 /**
- * The notification settings page as one grouped list. Status rows show a status only when it can
- * be determined and open exactly one settings page. Captions appear only where the system keeps
- * switches that cannot be read.
+ * The notification settings page as one grouped list. Calls and Critical Alerts summarise their own
+ * pages: "on" when readable, otherwise the first definite problem, otherwise nothing.
  */
 @Composable
 internal fun NotificationSettingsContent(
@@ -76,8 +73,9 @@ internal fun NotificationSettingsContent(
     labels: NotificationSettingsLabels,
     actions: NotificationSettingsActions,
     modifier: Modifier = Modifier,
+    focus: NotifyFocusSettingsContract.State = NotifyFocusSettingsContract.State(),
+    onFocusIntent: (NotifyFocusSettingsContract.Intent) -> Unit = {},
 ) {
-    val context = LocalContext.current
     Column(
         modifier
             .fillMaxSize()
@@ -90,65 +88,26 @@ internal fun NotificationSettingsContent(
             Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
         }
 
-        DifftSettingsGroup {
-            ValueRow(
-                label = stringResource(ChatR.string.notification_message_notifications),
-                value = state?.let { NotificationReadinessText.categoryLevelLabel(context, it.messageLevel) },
-                onClick = { actions.onFix(NotificationFix.MESSAGE_CATEGORY) },
-                modifier = Modifier.testTag(TAG_ROW_MESSAGE),
-            )
-            ValueRow(
-                label = stringResource(ChatR.string.notification_group_chat_notification),
-                value = labels.groupNotification,
-                onClick = actions.onGroupNotification,
-            )
-            ValueRow(
-                label = stringResource(ChatR.string.notification_message_sounds),
-                value = labels.messageSound,
-                onClick = actions.onMessageSound,
-            )
-            ValueRow(
-                label = stringResource(ChatR.string.notification_display),
-                value = labels.displayContent,
-                onClick = actions.onDisplayContent,
-            )
-        }
-
-        Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
-        DifftSettingsGroup {
-            ValueRow(
-                label = stringResource(ChatR.string.notification_call_notifications),
-                value = state?.let { NotificationReadinessText.categoryLevelLabel(context, it.callLevel) },
-                onClick = { actions.onFix(NotificationFix.CALL_CATEGORY) },
-                modifier = Modifier.testTag(TAG_ROW_CALL),
-            )
-        }
-
-        if (state?.showLockScreenGroup == true) {
+        if (state?.showAppNotificationsGroup == true) {
+            AppNotificationsGroup(state, actions)
             Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
-            LockScreenGroup(state, actions)
         }
 
+        MessageGroup(state, labels, actions, focus, onFocusIntent)
+
         Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
-        DifftSettingsGroup(
-            // The access explanation shows only while Do Not Disturb access is missing; the delivery
-            // note shows when push is unavailable and the background connection is off.
-            footer = if (state?.showDndAccessCaption == true || state?.showCriticalDeliveryCaption == true) {
-                {
-                    if (state.showDndAccessCaption) {
-                        DifftSettingsCaption(stringResource(ChatR.string.critical_alerts_content, PackageUtil.getAppName().orEmpty()))
-                    }
-                    if (state.showCriticalDeliveryCaption) {
-                        DifftSettingsCaption(stringResource(ChatR.string.critical_alert_delivery_caption))
-                    }
-                }
-            } else null,
-        ) {
-            ValueRow(
+        DifftSettingsGroup {
+            StatusValueRow(
+                label = stringResource(ChatR.string.notification_calls),
+                status = state?.callSummary,
+                tag = TAG_ROW_CALLS,
+                onClick = actions.onCalls,
+            )
+            StatusValueRow(
                 label = stringResource(ChatR.string.critical_alerts),
-                value = state?.let { criticalLabel(context, it.criticalStatus) },
+                status = state?.criticalSummary,
+                tag = TAG_ROW_CRITICAL,
                 onClick = actions.onCriticalAlerts,
-                modifier = Modifier.testTag(TAG_ROW_CRITICAL),
             )
         }
 
@@ -156,7 +115,11 @@ internal fun NotificationSettingsContent(
         DifftSettingsGroup {
             ValueRow(
                 label = stringResource(ChatR.string.background_connection),
+                value = state?.let {
+                    stringResource(if (it.backgroundConnectionOn) ChatR.string.notification_enable else ChatR.string.background_connection_status_off)
+                },
                 onClick = actions.onBackgroundConnection,
+                modifier = Modifier.testTag(TAG_ROW_BACKGROUND),
             )
         }
 
@@ -164,54 +127,33 @@ internal fun NotificationSettingsContent(
     }
 }
 
-/** Full-screen display (API 34+) and, on China OEM skins, the vendor pop-up row whose value comes from the call test (#1350). */
+/**
+ * The app-level switch every category depends on. Xiaomi, vivo and OPPO keep more app-level switches
+ * on that page, so the caption names them and links there.
+ */
 @Composable
-private fun LockScreenGroup(state: NotificationSettingsUiState, actions: NotificationSettingsActions) {
-    val context = LocalContext.current
+private fun AppNotificationsGroup(state: NotificationSettingsUiState, actions: NotificationSettingsActions) {
     DifftSettingsGroup(
-        modifier = Modifier.testTag(TAG_GROUP_LOCK_SCREEN),
-        footer = {
-            DifftSettingsCaption(stringResource(ChatR.string.notification_group_lock_screen_caption))
-            if (state.showXiaomiPopupHint) {
-                DifftSettingsCaption(stringResource(CallR.string.notification_hint_oem_xiaomi))
+        modifier = Modifier.testTag(TAG_GROUP_APP_NOTIFICATIONS),
+        footer = if (state.showOverviewHint) {
+            {
+                // The link ends the sentence instead of taking a line of its own.
+                CaptionWithLink(
+                    caption = stringResource(overviewCaption(state.oemBrand)),
+                    link = stringResource(ChatR.string.notification_overview_action),
+                    tag = TAG_ACTION_NOTIFICATION_OVERVIEW,
+                    onLink = { actions.onFix(NotificationFix.APP_NOTIFICATIONS) },
+                )
             }
-        },
+        } else null,
     ) {
-        state.fullScreenItem?.let {
-            StatusRow(ChatR.string.notification_full_screen_display, it, TAG_ROW_FULL_SCREEN) {
-                actions.onFix(NotificationFix.FULL_SCREEN_INTENT)
-            }
-        }
-        if (state.oemPopupItem != null) {
-            val label = if (state.oemPopupOpensGuide) ChatR.string.notification_vendor_settings else ChatR.string.notification_oem_popup
-            ValueRow(
-                label = stringResource(label),
-                value = NotificationReadinessText.callPopupLabel(context, state.callPopupLevel),
-                onClick = { if (state.oemPopupOpensGuide) actions.onGuide() else actions.onFix(NotificationFix.OEM_POPUP) },
-                modifier = Modifier.testTag(TAG_ROW_OEM_POPUP),
-            )
-        }
+        ValueRow(
+            label = stringResource(ChatR.string.notification_app_notifications),
+            value = if (state.appNotificationsOn) stringResource(ChatR.string.notification_enable) else null,
+            onClick = { actions.onFix(NotificationFix.APP_NOTIFICATIONS) },
+            modifier = Modifier.testTag(TAG_ROW_APP_NOTIFICATIONS),
+        )
     }
-}
-
-private fun criticalLabel(context: android.content.Context, status: CriticalAlertStatus): String = context.getString(
-    when (status) {
-        CriticalAlertStatus.ON -> ChatR.string.notification_enable
-        CriticalAlertStatus.OFF -> ChatR.string.notification_disable
-        CriticalAlertStatus.NEEDS_ATTENTION -> ChatR.string.notification_status_problem
-        CriticalAlertStatus.CHECK -> ChatR.string.notification_status_check
-    }
-)
-
-@Composable
-private fun StatusRow(label: Int, item: ReadinessItem?, tag: String, onClick: () -> Unit) {
-    val context = LocalContext.current
-    ValueRow(
-        label = stringResource(label),
-        value = item?.let { NotificationReadinessText.itemStatusLabel(context, it.status) },
-        onClick = onClick,
-        modifier = Modifier.testTag(tag),
-    )
 }
 
 @Composable
@@ -242,36 +184,65 @@ private fun NotificationOffBanner(onEnable: () -> Unit) {
 }
 
 /**
- * Settings row whose title always shows in full: the value is single-line, right-aligned and
- * ellipsised into whatever width the title leaves. (The shared [DifftSettingsRow] label/value form
- * truncates the label first, which hides titles beside long values.)
+ * The message category and the message preferences. With the group focus feature on, "Group Focus"
+ * is its own card after them, each state or restore sentence below its card.
  */
 @Composable
-private fun ValueRow(
-    label: String,
-    modifier: Modifier = Modifier,
-    value: String? = null,
-    onClick: (() -> Unit)? = null,
+private fun MessageGroup(
+    state: NotificationSettingsUiState?,
+    labels: NotificationSettingsLabels,
+    actions: NotificationSettingsActions,
+    focus: NotifyFocusSettingsContract.State,
+    onFocusIntent: (NotifyFocusSettingsContract.Intent) -> Unit,
 ) {
-    DifftSettingsRow(modifier = modifier, onClick = onClick) {
-        Text(
-            text = label,
-            style = DifftSettingsDefaults.LabelTextStyle,
-            color = DifftTheme.colors.textPrimary,
+    val context = LocalContext.current
+    val messageRow: @Composable () -> Unit = {
+        ValueRow(
+            label = stringResource(ChatR.string.notification_message_notifications),
+            value = state?.let { NotificationReadinessText.categoryLevelLabel(context, it.messageLevel) },
+            warning = state?.let { NotificationReadinessText.isProblem(it.messageLevel) } == true,
+            onClick = { actions.onFix(NotificationFix.MESSAGE_CATEGORY) },
+            modifier = Modifier.testTag(TAG_ROW_MESSAGE),
         )
-        if (value != null) {
-            Spacer(Modifier.width(DifftSettingsDefaults.TrailingGap))
-            Text(
-                text = value,
-                style = DifftSettingsDefaults.LabelTextStyle,
-                color = DifftTheme.colors.textTertiary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
+    }
+    val groupRow: @Composable () -> Unit = {
+        NotifyGroupNotificationRow(state = focus, onIntent = onFocusIntent) {
+            ValueRow(
+                label = stringResource(ChatR.string.notification_group_chat_notification),
+                value = labels.groupNotification,
+                onClick = actions.onGroupNotification,
             )
-        } else {
-            Spacer(Modifier.weight(1f))
         }
     }
+    val displayRow: @Composable () -> Unit = {
+        ValueRow(
+            label = stringResource(ChatR.string.notification_display),
+            value = labels.displayContent,
+            onClick = actions.onDisplayContent,
+        )
+    }
+    if (!focus.featureEnabled) {
+        DifftSettingsGroup {
+            messageRow()
+            groupRow()
+            displayRow()
+        }
+        return
+    }
+    // Display is a message preference, so it stays with the message rows; Group Focus follows as its own card.
+    val groupNote = groupNotificationNote(focus)
+    DifftSettingsGroup(footer = groupNote?.let { note -> { DifftSettingsCaption(note) } }) {
+        messageRow()
+        groupRow()
+        displayRow()
+    }
+    Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
+    NotifyFocusCard(state = focus, onIntent = onFocusIntent)
+}
+
+/** The overview caption names the verified section and switches on Xiaomi and vivo; other skins get the generic one. */
+private fun overviewCaption(brand: OemBrand): Int = when (brand) {
+    OemBrand.XIAOMI -> ChatR.string.notification_overview_caption_xiaomi
+    OemBrand.VIVO -> ChatR.string.notification_overview_caption_vivo
+    else -> ChatR.string.notification_overview_caption
 }

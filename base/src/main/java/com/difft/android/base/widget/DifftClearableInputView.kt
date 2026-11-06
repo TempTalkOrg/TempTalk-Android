@@ -84,6 +84,18 @@ open class DifftClearableInputView @JvmOverloads constructor(
     private var maxLengthState by mutableStateOf<Int?>(null)
     private var autoFocusState = false
     private var containerColorState by mutableStateOf<Int?>(null)
+    private var maxLinesState by mutableStateOf(1)
+
+    /**
+     * Whether the field takes focus (and the keyboard) when first composed; from
+     * `app:dsi_autoFocus`. Set it before the view is attached. A page in a detail stack turns it
+     * off and opens the keyboard itself, only on a fresh open (not after a fold recreation).
+     */
+    var autoFocus: Boolean
+        get() = autoFocusState
+        set(value) {
+            autoFocusState = value
+        }
     private var surfaceState by mutableStateOf(DifftInputSurface.Page)
     private var heightState by mutableStateOf(defaultHeight)
     private var minHeightState by mutableStateOf(0.dp)
@@ -134,6 +146,30 @@ open class DifftClearableInputView @JvmOverloads constructor(
         get() = maxLengthState
         set(value) {
             maxLengthState = value
+        }
+
+    /**
+     * Visible lines before the text scrolls; from `app:dsi_maxLines`. Above 1 the field is a text
+     * area: it never shows the clear icon ([ClearMode.Never], the component's rule) and its box
+     * grows with the text from `dsi_minHeight` up to this many lines.
+     */
+    var maxLines: Int
+        get() = maxLinesState
+        set(value) {
+            maxLinesState = value.coerceAtLeast(1)
+            if (maxLinesState > 1) clearModeState = ClearMode.Never
+        }
+
+    /**
+     * Fill of the box, or null for the style's own fill; from `app:dsi_containerColor`. Setting it
+     * means the host owns the box: the component paints this colour and draws no border, and a
+     * single-line field drops its own content padding and clear-icon end inset (the host's box
+     * supplies them). A transparent value lets the view's own background drawable show through.
+     */
+    var containerColor: Int?
+        get() = containerColorState
+        set(value) {
+            containerColorState = value
         }
 
     /** Fires only on user typing. External setters, [clear], and the ✕ tap never fire it. */
@@ -209,6 +245,9 @@ open class DifftClearableInputView @JvmOverloads constructor(
                 dpOrNull(R.styleable.DifftClearableInputView_dsi_minHeight)?.let {
                     minHeightState = it
                     heightState = null
+                }
+                if (hasValue(R.styleable.DifftClearableInputView_dsi_maxLines)) {
+                    maxLines = getInt(R.styleable.DifftClearableInputView_dsi_maxLines, 1)
                 }
                 if (hasValue(R.styleable.DifftClearableInputView_android_textSize)) {
                     textSizeSpState = getDimension(R.styleable.DifftClearableInputView_android_textSize, 0f) /
@@ -343,6 +382,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
             defaultTextStyle.copy(fontSize = androidx.compose.ui.unit.TextUnit(it, androidx.compose.ui.unit.TextUnitType.Sp))
         } ?: defaultTextStyle
         val hostOwnsBox = containerColorState != null || forceDark
+        val multiLine = maxLinesState > 1
 
         DifftClearableTextField(
             value = queryState,
@@ -357,7 +397,7 @@ open class DifftClearableInputView @JvmOverloads constructor(
             hint = hintState?.toString(),
             style = styleState,
             size = sizeState,
-            clearMode = clearModeState,
+            clearMode = if (multiLine) ClearMode.Never else clearModeState,
             leadingIcon = when (defaultLeadingIcon) {
                 LeadingIcon.None -> null
                 LeadingIcon.Search -> ({
@@ -377,11 +417,15 @@ open class DifftClearableInputView @JvmOverloads constructor(
             containerColor = containerColorState?.let { Color(it) }
                 ?: if (forceDark) DifftTheme.colors.bg5 else null,
             textStyle = textStyle,
-            height = heightState,
+            // A text area wraps its lines; dsi_minHeight is its floor.
+            height = if (multiLine) null else heightState,
             minHeight = minHeightState,
-            // Zero shell insets only when the host layout owns the box; a component-drawn box
-            // keeps the library's 12dp insets so text and the clear icon clear the border.
-            contentPadding = contentPaddingState ?: if (hostOwnsBox) defaultContentPadding else null,
+            maxLines = maxLinesState,
+            // Zero shell insets only when the host layout owns a single-line box; a component-drawn
+            // box keeps the library's 12dp insets so text and the clear icon clear the border, and
+            // a text area keeps them because its fill is the box itself.
+            contentPadding = contentPaddingState
+                ?: if (hostOwnsBox && !multiLine) defaultContentPadding else null,
             clearIconEndInset = if (hostOwnsBox) defaultClearIconEndInset else DifftInputDefaults.ClearIconEndInset,
             maxLength = maxLengthState,
             autoFocus = autoFocusState,

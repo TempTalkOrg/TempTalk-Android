@@ -1,9 +1,14 @@
 package com.difft.android.websocket.api
 
+import com.difft.android.base.migration.pause.AdmissionKind
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.network.signal.MessageSendRepository
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.messages.PublicKeyInfo
 import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
+import com.difft.android.websocket.api.push.exceptions.PushNetworkException
+import com.difft.android.websocket.api.websocket.WebSocketResponseTimeoutException
+import com.difft.android.websocket.internal.push.NewOutgoingPushMessage
 import com.difft.android.websocket.api.services.NewMessagingService
 import com.difft.android.websocket.api.util.EncryptResult
 import com.difft.android.websocket.api.util.INewMessageContentEncryptor
@@ -53,6 +58,9 @@ class NewSignalServiceMessageSenderRetryTest {
     private val messageEncryptor: INewMessageContentEncryptor = mockk(relaxed = true)
     private val conversationManager: ConversationManager = mockk(relaxed = true)
     private val messageSendRepository: MessageSendRepository = mockk(relaxed = true)
+
+    /** An open send ticket: every public send requires one (#1382). */
+    private val admission = TestMessagingPause().open().gate.tryAdmit(AdmissionKind.SEND, "test")!!
 
     private lateinit var sender: NewSignalServiceMessageSender
 
@@ -156,7 +164,7 @@ class NewSignalServiceMessageSenderRetryTest {
         coEvery { conversationManager.updatePublicKeyInfoData(capture(capturedUids)) } returns true
 
         runCatching {
-            sender.sendDataMessage(recipient, room, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, room, buildDataMessage(), null, admission)
         }
 
         // Distinct: a, b, c; c is recipient — no duplicates.
@@ -179,7 +187,7 @@ class NewSignalServiceMessageSenderRetryTest {
         coEvery { conversationManager.updatePublicKeyInfoData(capture(capturedUids)) } returns true
 
         runCatching {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
 
         assertEquals(setOf("c"), capturedUids.captured.toSet())
@@ -199,10 +207,42 @@ class NewSignalServiceMessageSenderRetryTest {
         coEvery { conversationManager.updatePublicKeyInfoData(capture(capturedUids)) } returns true
 
         runCatching {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
 
         assertEquals(setOf("a", "b", "c"), capturedUids.captured.toSet())
+    }
+
+    // -----------------------------------------------------------------
+    // WebSocket response timeout is an IOException: HTTP fallback / retryable
+    // -----------------------------------------------------------------
+
+    @Test
+    fun ws_response_timeout_falls_back_to_http_once_with_same_message() = runTest {
+        val recipient = For.Account("c")
+        coEvery { messagingService.send(any(), any()) } throws WebSocketResponseTimeoutException(10_000L)
+        val sentMessages = mutableListOf<NewOutgoingPushMessage>()
+        coEvery { messageSendRepository.sendMessage(capture(sentMessages), any()) } returns
+            NewSendMessageResponse().apply { status = 0; data = NewSendMessageResponse.Data() }
+
+        sender.sendDataMessage(recipient, recipient, buildDataMessage(timestamp = 4242L), null, admission)
+
+        coVerify(exactly = 1) { messageSendRepository.sendMessage(any(), any()) }
+        assertEquals(1, sentMessages.size)
+        assertEquals(4242L, sentMessages.single().timestamp)
+    }
+
+    @Test
+    fun ws_response_timeout_with_http_failure_propagates_retryable_io_exception() = runTest {
+        val recipient = For.Account("c")
+        coEvery { messagingService.send(any(), any()) } throws WebSocketResponseTimeoutException(10_000L)
+        coEvery { messageSendRepository.sendMessage(any(), any()) } throws PushNetworkException("http down")
+
+        val thrown = assertFailsWith<IOException> {
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
+        }
+        assertTrue(thrown is PushNetworkException, "was $thrown")
+        coVerify(exactly = 1) { messageSendRepository.sendMessage(any(), any()) }
     }
 
     // -----------------------------------------------------------------
@@ -220,7 +260,7 @@ class NewSignalServiceMessageSenderRetryTest {
         coEvery { conversationManager.updatePublicKeyInfoData(capture(capturedUids)) } returns true
 
         runCatching {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
 
         assertEquals(listOf("c"), capturedUids.captured)
@@ -243,7 +283,7 @@ class NewSignalServiceMessageSenderRetryTest {
         } throws RustEncryptionException(RuntimeException("KeyDataLengthException: key too short"))
 
         runCatching {
-            sender.sendDataMessage(recipient, room, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, room, buildDataMessage(), null, admission)
         }
 
         // For-keyed overload invoked for group Rust retry.
@@ -291,7 +331,7 @@ class NewSignalServiceMessageSenderRetryTest {
         coEvery { conversationManager.updatePublicKeyInfoData(capture(capturedUids)) } returns true
 
         runCatching {
-            sender.sendDataMessage(recipient, room, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, room, buildDataMessage(), null, admission)
         }
 
         // Only the flagged stale uid should be captured. For.Group recipient.id is a gid,
@@ -339,7 +379,7 @@ class NewSignalServiceMessageSenderRetryTest {
         )
 
         runCatching {
-            sender.sendDataMessage(recipient, room, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, room, buildDataMessage(), null, admission)
         }
 
         // For-keyed overload invoked — facade resolves all members internally.
@@ -369,7 +409,7 @@ class NewSignalServiceMessageSenderRetryTest {
             PublicKeyUpdateResult.EntityInvalid
 
         val thrown = assertFailsWith<NoValidRecipientKeysException> {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
         // Critical: NOT an IOException (would be re-tried forever by PushSendJob.onShouldRetry).
         // Reflective check (not `is`) so the assertion can't be statically folded away.
@@ -394,7 +434,7 @@ class NewSignalServiceMessageSenderRetryTest {
 
         // IOException, NOT NoValidRecipientKeysException (which is not an IOException subtype).
         assertFailsWith<IOException> {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
     }
 
@@ -410,7 +450,7 @@ class NewSignalServiceMessageSenderRetryTest {
         // NoValidRecipientKeysException is NOT an IOException subtype, catching IOException here
         // already guarantees it is not the permanent type — weak net stays retryable.
         assertFailsWith<IOException> {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
     }
 
@@ -423,7 +463,7 @@ class NewSignalServiceMessageSenderRetryTest {
             PublicKeyUpdateResult.Unresolved
 
         assertFailsWith<IOException> {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
     }
 
@@ -443,7 +483,7 @@ class NewSignalServiceMessageSenderRetryTest {
             PublicKeyUpdateResult.EntityInvalid
 
         assertFailsWith<NoValidRecipientKeysException> {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
     }
 
@@ -461,7 +501,7 @@ class NewSignalServiceMessageSenderRetryTest {
         // assertFailsWith<IOException> proves transient; permanent type is excluded by the
         // type hierarchy (NoValidRecipientKeysException !is IOException).
         assertFailsWith<IOException> {
-            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null)
+            sender.sendDataMessage(recipient, recipient, buildDataMessage(), null, admission)
         }
     }
 }

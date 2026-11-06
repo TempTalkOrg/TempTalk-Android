@@ -44,7 +44,7 @@ object WindowSizeClassUtil {
      *
      * DECLARED value only. The gate is ENFORCED by the resource directory
      * `app/src/main/res/layout-w673dp-h480dp/` — that qualifier is what decides whether
-     * `activity_index.xml` inflates a `detail_pane`, so dual-pane mode is derived from the
+     * `activity_index.xml` inflates the two-pane tree (`list_pane`), so dual-pane mode is derived from the
      * inflated view tree, not from this constant. Do NOT add a runtime check against it:
      * `WindowMetricsCalculator` bounds include system-decoration insets while `w<N>dp` matches
      * `Configuration.screenWidthDp` (the available width), so the two disagree near the
@@ -52,21 +52,20 @@ object WindowSizeClassUtil {
      * has no detail pane.
      *
      * When runtime code needs the EXPECTATION — would the current configuration inflate a
-     * `detail_pane`? — it reads the sanctioned mirror `R.bool.dual_pane_layout_active`
+     * `list_pane`? — it reads the sanctioned mirror `R.bool.dual_pane_layout_active`
      * (`app/src/main/res/values/bools.xml` + `values-w673dp-h480dp/bools.xml`), never this
      * constant: that bool's qualifier set is identical to the layout directory's, so the same
      * resolver answers it from the same `Configuration` at the same instant as inflation and
      * the two cannot disagree by construction. `PaneGateResourceAgreementTest` pins
-     * `getBoolean(dual_pane_layout_active) == (findViewById(detail_pane) != null)` across the
+     * `getBoolean(dual_pane_layout_active) == (findViewById(list_pane) != null)` across the
      * gate boundaries, and `DualPaneBudgetResourceInvariantTest` pins that bool against this
      * constant and [MIN_HEIGHT_FOR_DUAL_PANE_DP], so the directories cannot be renamed apart.
      *
-     * 673dp is the pane-budget feasibility floor: it must equal
-     * `dual_pane_rail_width` + `dual_pane_divider_width` + `dual_pane_list_min_width` +
-     * `dual_pane_detail_min_width` from `app/src/main/res/values/dimens.xml`
-     * (72 + 1 + 280 + 320), i.e. the narrowest window where both panes still meet their
-     * declared minimums. The equality and the directory name are test-pinned so they cannot
-     * drift apart.
+     * 673dp must cover the pane-budget feasibility floor `dual_pane_list_min_width` +
+     * `dual_pane_detail_min_width` from `app/src/main/res/values/dimens.xml` (280 + 320 =
+     * 600); the extra 73dp dates from the 72dp navigation rail (+ 1dp seam) that used to sit
+     * beside the panes before the home tabs moved into the floating capsule. The bound and
+     * the directory name are test-pinned so they cannot drift apart.
      */
     const val DUAL_PANE_MIN_WIDTH_DP = 673
 

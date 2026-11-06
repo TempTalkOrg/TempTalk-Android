@@ -1,5 +1,7 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.test.fakes.TestMessagingPause
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.GlobalHiltEntryPoint
@@ -53,6 +55,9 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Forwar
 @Config(sdk = [28])
 class MessageContentProcessorForwardNoticeTest {
 
+    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
+
     private val testDispatcher = UnconfinedTestDispatcher()
 
     private lateinit var context: Application
@@ -99,6 +104,7 @@ class MessageContentProcessorForwardNoticeTest {
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = mockk(relaxed = true),
+            groupFocusRepository = mockk(relaxed = true),
         )
     }
 
@@ -138,7 +144,7 @@ class MessageContentProcessorForwardNoticeTest {
             .build()
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
         assertSame(fakeNotifyResult, result)
 
         val operatorSlot = slot<String>()
@@ -181,7 +187,7 @@ class MessageContentProcessorForwardNoticeTest {
         val envelope = minimalEnvelope(peer, 100L)
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val forWhatSlot = slot<For>()
         coVerify(exactly = 1) {
@@ -214,7 +220,7 @@ class MessageContentProcessorForwardNoticeTest {
         val envelope = minimalEnvelope(peer, 600L)
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
         assertNull(result)
         coVerify(exactly = 0) {
             localMessageCreator.createForwardNoticeMessage(any(), any(), any(), any(), any(), any())
@@ -237,7 +243,7 @@ class MessageContentProcessorForwardNoticeTest {
         val envelope = minimalEnvelope(MY_ID, 300L)
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val forWhatSlot = slot<For>()
         coVerify(exactly = 1) {
@@ -270,7 +276,7 @@ class MessageContentProcessorForwardNoticeTest {
         val envelope = minimalEnvelope(peer, 100L)
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val noticeSlot = slot<ForwardNoticeData>()
         coVerify(exactly = 1) {
@@ -300,7 +306,7 @@ class MessageContentProcessorForwardNoticeTest {
         val envelope = minimalEnvelope(peer, 100L)
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val noticeSlot = slot<ForwardNoticeData>()
         coVerify(exactly = 1) {
@@ -336,7 +342,7 @@ class MessageContentProcessorForwardNoticeTest {
             .build()
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val sysTsSlot = slot<Long>()
         val tsSlot = slot<Long>()
@@ -385,7 +391,7 @@ class MessageContentProcessorForwardNoticeTest {
         val envelope = minimalEnvelope(peer, 800L)
         val content = Content.newBuilder().setForwardNotice(forwardNotice).build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val noticeSlot = slot<ForwardNoticeData>()
         coVerify(exactly = 1) {

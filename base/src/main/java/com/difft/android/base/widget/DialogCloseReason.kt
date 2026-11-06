@@ -28,6 +28,8 @@ internal class MessageDialogCloser(
     private var closed = false
     private var dismissNotified = false
 
+    val isClosed: Boolean get() = closed
+
     fun confirm(autoDismiss: Boolean, onConfirm: () -> Unit) {
         if (closed) return
         onConfirm()

@@ -47,7 +47,7 @@ class LinkedDevicesBackButtonTest {
         coEvery { repo.getDevices() } returns emptyList()
         val vm = buildViewModel()
         composeTestRule.setContent {
-            DifftTheme { LinkedDevicesScreen(vm, showBackButton = false, onBack = {}) }
+            DifftTheme { LinkedDevicesScreen(vm, onUnlinkConfirm = {}, showBackButton = false, onBack = {}) }
         }
         vm.refresh()
         composeTestRule.waitForIdle()
@@ -59,7 +59,7 @@ class LinkedDevicesBackButtonTest {
         coEvery { repo.getDevices() } returns emptyList()
         val vm = buildViewModel()
         composeTestRule.setContent {
-            DifftTheme { LinkedDevicesScreen(vm, showBackButton = true, onBack = {}) }
+            DifftTheme { LinkedDevicesScreen(vm, onUnlinkConfirm = {}, showBackButton = true, onBack = {}) }
         }
         vm.refresh()
         composeTestRule.waitForIdle()

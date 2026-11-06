@@ -13,6 +13,7 @@ import com.difft.android.call.manager.CriticalAlertManager
 import com.difft.android.call.state.CriticalAlertCallGate
 import com.difft.android.call.state.CriticalAlertRoomRegistry
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.test.fakes.TestMessagingPause
 import difft.android.messageserialization.For
 import io.mockk.every
 import io.mockk.just
@@ -52,6 +53,7 @@ class MessageNotificationUtilCriticalAlertTest {
     private lateinit var callGate: CriticalAlertCallGate
     private val registry = CriticalAlertRoomRegistry()
     private lateinit var util: MessageNotificationUtil
+    private val messaging = TestMessagingPause().open()
 
     @Before
     fun setUp() {
@@ -95,6 +97,8 @@ class MessageNotificationUtilCriticalAlertTest {
             channelManager = mockk(relaxed = true),
             repostGuard = repostGuard,
             criticalAlertCallGate = callGate,
+            groupNotifyGate = mockk(relaxed = true),
+            messagingGate = messaging.gate,
         )
     }
 
@@ -171,6 +175,17 @@ class MessageNotificationUtilCriticalAlertTest {
 
         verify(exactly = 0) { criticalAlertManager.playSoundAndFlashLight(any(), any(), any()) }
         verify(exactly = 0) { criticalAlertManager.startCriticalAlertActivity(any(), any(), any(), any(), any()) }
+    }
+
+    // T29 (#1382): the migration message pause suppresses ordinary notifications, never critical alerts.
+    @Test
+    fun `critical alert is still posted while messaging is paused`() {
+        every { AppForegroundObserver.isForegrounded() } returns false
+        messaging.pauseMessaging()
+
+        show()
+
+        assertBackgroundPath()
     }
 
     // N6

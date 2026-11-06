@@ -27,6 +27,16 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
+ * The receiver did not advertise every capability this container needs (#1382); its message is the
+ * wire-style reason [RECEIVER_UPDATE_REQUIRED] the failure page classifies.
+ */
+class ReceiverCapabilityMissingException(val missing: Set<String>) : IllegalStateException(RECEIVER_UPDATE_REQUIRED) {
+    companion object {
+        const val RECEIVER_UPDATE_REQUIRED = "migration-receiver-update-required"
+    }
+}
+
+/**
  * The sender half of [P2pContainerFusion]: the pipe between the container writer and the upload,
  * the verdict race that decides what the send returns, and the `/cancel` notice a stopped sender
  * owes its receiver. Split out so the fusion class stays the module edge rather than also being the
@@ -61,11 +71,16 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
         onProgress: (Float) -> Unit,
         onBodySent: () -> Unit = {},
         onReply: (Map<String, String>) -> Unit = {},
+        // The receiver's typed refusal on a non-200 upload (`SenderHttpClient.typedRejection`).
+        onRejected: (String) -> Unit = {},
         senderAlias: String = "migration-sender",
         totals: ContainerTotals? = null,
         onSessionPrepared: (SenderSessionRef) -> Unit = {},
         verdictWatch: VerdictWatch? = null,
         onVerdictStall: (Boolean) -> Unit = {},
+        commitHooks: SendCommitHooks? = null,
+        // Checked once the receiver's caps are known and before the writer frames anything.
+        requiredCaps: Set<String> = emptySet(),
     ): Boolean {
         val pipe = P2pContainerPipe(declaredLength = declaredLength)
         val client = SenderHttpClient(target)
@@ -118,7 +133,8 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
 
         // Writer and uploader on separate coroutines, both children of this scope so a failure in
         // either is contained. Whatever ends this early, the receiver is told by name.
-        return abortingSessionOnFailure(client, prepared.sessionId, prepared.sessionToken) {
+        return abortingSessionOnFailure(client, prepared.sessionId, prepared.sessionToken, commitHooks) {
+            requireCaps(requiredCaps, session)
             coroutineScope {
                 val writeJob = async(Dispatchers.IO) {
                     writer.write(
@@ -129,6 +145,7 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
                         sourceAccount = sourceAccount,
                         sourceAppVersion = sourceAppVersion,
                         totals = totals,
+                        beforeFinalize = commitHooks?.let(::finalizeHook),
                     )
                 }
                 // The moment the last body byte left, for the verdict watch's clocks.
@@ -153,6 +170,7 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
                                 onBodySent()
                             },
                             onReply = onReply,
+                            onRejected = onRejected,
                         )
                     }.onFailure {
                         // The uploader is gone before it drained the pipe — it never opened the body, or
@@ -181,6 +199,19 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
                 L.i { "[MigrationV2][P2P][Tx] upload complete result=$ok" }
                 ok
             }
+        }
+    }
+
+    /**
+     * Refuses a receiver that lacks a capability this container needs (#1382). Called after
+     * `prepare-upload` and before the writer frames anything, so no receiver can commit; the caller's
+     * `/cancel` then ends the receiver's session.
+     */
+    private fun requireCaps(required: Set<String>, session: SenderSessionRef) {
+        val missing = required - session.caps.toSet()
+        if (missing.isNotEmpty()) {
+            L.w { "[MigrationV2][P2P][Tx] event=receiver_caps_missing caps=$missing" }
+            throw ReceiverCapabilityMissingException(missing)
         }
     }
 
@@ -225,6 +256,16 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
         )
     }
 
+    /**
+     * The writer's last step before the end marker. The end-marker flag is raised once the hook has
+     * passed, a little before the marker itself: an over-cautious "may be written" never releases a
+     * pause (#1382).
+     */
+    private fun finalizeHook(hooks: SendCommitHooks): suspend () -> Unit = {
+        hooks.beforeFinalize()
+        hooks.onEndMarker()
+    }
+
     private fun Verdict.confirmed(): Boolean =
         if (this is Verdict.Succeeded) true else throw SendVerdictException(this)
 
@@ -232,12 +273,14 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
      * iOS parity: a sender that stops — cancelled, or its upload failed — names its session on
      * `POST /cancel`, so the receiver reads the abort as the source leaving rather than a dropped
      * link. The hang-up itself has already happened by then (cancelling the call closes the socket),
-     * so the notice runs non-cancellable with its own short deadline, best-effort.
+     * so the notice runs non-cancellable with its own short deadline, best-effort. The receiver's
+     * answer goes to [hooks] before the failure is rethrown, so the owner can settle on it.
      */
     private suspend inline fun <T> abortingSessionOnFailure(
         client: SenderHttpClient,
         sessionId: String,
         sessionToken: String?,
+        hooks: SendCommitHooks?,
         block: () -> T,
     ): T =
         try {
@@ -247,9 +290,10 @@ internal class P2pSenderPipeline(private val writer: ContainerWriter) {
             // told to stop. On a timeout in particular a cancel could only turn "still importing" into
             // an ambiguity the status route exists to remove.
             if (e !is SendVerdictException) {
-                withContext(NonCancellable) {
+                val answer = withContext(NonCancellable) {
                     withTimeoutOrNull(CANCEL_NOTICE_TIMEOUT_MS) { client.cancel(sessionId, sessionToken) }
                 }
+                hooks?.onAbortAnswer(answer)
             }
             throw e
         }

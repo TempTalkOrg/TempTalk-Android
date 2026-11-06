@@ -8,6 +8,7 @@ import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.network.UrlManager
 import com.difft.android.network.speedtest.DomainSpeedTestCoordinator
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import com.difft.android.websocket.internal.websocket.WebSocketConnection
@@ -73,6 +74,7 @@ class WebSocketHealthMonitorHostTest {
             coordinator = coordinator,
             keepAliveWakeAlarm = KeepAliveWakeAlarm(context, userManager),
             powerSampler = mockk<BackgroundPowerSampler>(relaxed = true),
+            messagingGate = TestMessagingPause().open().gate,
         )
     }
 

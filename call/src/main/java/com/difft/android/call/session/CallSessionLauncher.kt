@@ -5,13 +5,9 @@ import android.content.Intent
 import androidx.annotation.MainThread
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.AutoLeave
-import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
-import com.difft.android.base.user.CountdownTimer
-import com.difft.android.base.user.PromptReminder
 import com.difft.android.base.user.UserManager
-import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.user.callConfigSnapshot
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallManager
 import com.difft.android.call.data.VoicePreset
@@ -37,14 +33,16 @@ class CallSessionLauncher @Inject constructor(
      * Launches the call page for [intent] and starts its session. Returns false, and starts nothing,
      * when a call is already live, the page launch throws or the session failed to start; the
      * caller then releases its wait-dialog claim [entryWaitToken]. On success the session owns it.
+     * [callConfig] is the entry point's snapshot (START passes the one its envelope used, #1395);
+     * null reads the live config now.
      */
     @MainThread
-    fun launch(context: Context, intent: Intent, entryWaitToken: Int): Boolean {
+    fun launch(context: Context, intent: Intent, entryWaitToken: Int, callConfig: CallConfig? = null): Boolean {
         holder.current.value?.let {
             L.w { "[Call][Session] launch refused: id=${it.id} live" }
             return false
         }
-        val params = paramsFor(CallIntent(intent), entryWaitToken)
+        val params = paramsFor(CallIntent(intent), entryWaitToken, callConfig ?: globalConfigsManager.callConfigSnapshot())
         CallIntent.putSessionKey(intent, params.launchKey)
         try {
             context.startActivity(intent)
@@ -57,15 +55,10 @@ class CallSessionLauncher @Inject constructor(
         return true
     }
 
-    private fun paramsFor(callIntent: CallIntent, entryWaitToken: Int) = CallSessionParams(
+    private fun paramsFor(callIntent: CallIntent, entryWaitToken: Int, callConfig: CallConfig) = CallSessionParams(
         e2eeEnable = true,
         callIntent = callIntent,
-        callConfig = globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(
-            autoLeave = AutoLeave(promptReminder = PromptReminder()),
-            chatPresets = defaultBarrageTexts,
-            chat = CallChat(),
-            countdownTimer = CountdownTimer(),
-        ),
+        callConfig = callConfig,
         callRole = if (callIntent.callRole == CallRole.CALLER.type) CallRole.CALLER else CallRole.CALLEE,
         initialVoicePreset = VoicePreset.fromSdkKey(
             userManager.getUserData()?.callVoiceChangerPreset ?: VoicePreset.ORIGINAL.sdkKey

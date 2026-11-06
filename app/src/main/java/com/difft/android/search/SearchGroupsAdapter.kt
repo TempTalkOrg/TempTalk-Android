@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView.ViewHolder
 import com.difft.android.R
+import com.difft.android.base.utils.setSearchRowSelected
 import com.difft.android.chat.group.GroupUIData
 import com.difft.android.chat.group.getAvatarData
 import com.difft.android.chat.search.setHighLightText
@@ -26,9 +27,19 @@ abstract class SearchGroupsAdapter : ListAdapter<GroupUIData, SearchGroupItemVie
         val data = getItem(position)
         holder.bind(searchKey, data)
         holder.itemView.setOnClickListener { onItemClick(data) }
+        holder.itemView.setSearchRowSelected(data.gid == selectedId)
     }
 
     abstract fun onItemClick(group: GroupUIData)
+
+    /** Two-pane: the group whose conversation is open; its row is highlighted. */
+    var selectedId: String? = null
+        set(value) {
+            if (field == value) return
+            val old = field
+            field = value
+            currentList.forEachIndexed { index, item -> if (item.gid == old || item.gid == value) notifyItemChanged(index) }
+        }
 
     private var searchKey: String = ""
 

@@ -202,7 +202,7 @@ class IndexStartupPromptHost @Inject constructor(
                 }
             }
             PromptId.BACKGROUND_CONNECTION ->
-                showPromptDialog(ticket, activity.getString(R.string.notification_no_google_tip), cancelable = false) {
+                showPromptDialog(ticket, activity.getString(R.string.background_connection_prompt_delay), cancelable = false) {
                     BackgroundConnectionSettingsActivity.startActivity(activity)
                 }
             PromptId.FULL_SCREEN -> {

@@ -6,6 +6,9 @@ import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import io.mockk.every
@@ -15,6 +18,7 @@ import io.mockk.verify
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -125,6 +129,57 @@ class OemSettingsLauncherTest {
             val chain = NotificationFixJump.chain(context, NotificationFix.OEM_POPUP, it)
             assertEquals(listOf(Settings.ACTION_APPLICATION_DETAILS_SETTINGS), chain.map { i -> i.action }, "brand=$it")
         }
+    }
+
+    @Test
+    fun `vivo OriginOS 6 opens its permission page first and keeps app details last`() {
+        val chain = NotificationFixJump.chain(context, NotificationFix.OEM_POPUP, OemBrand.VIVO, originOsMajor = 6)
+        assertEquals("permission.intent.action.softPermissionDetail", chain[0].action)
+        assertEquals(context.packageName, chain[0].getStringExtra("packagename"))
+        assertEquals("com.vivo.permissionmanager", chain[0].`package`)
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, chain.last().action)
+        assertEquals(2, chain.size)
+    }
+
+    @Test
+    fun `vivo before OriginOS 6, Funtouch or unknown has only app details`() {
+        listOf(5, null).forEach {
+            val chain = NotificationFixJump.chain(context, NotificationFix.OEM_POPUP, OemBrand.VIVO, originOsMajor = it)
+            assertEquals(listOf(Settings.ACTION_APPLICATION_DETAILS_SETTINGS), chain.map { i -> i.action }, "major=$it")
+        }
+    }
+
+    @Test
+    fun `the OriginOS version never adds a vendor page for other brands`() {
+        OemBrand.entries.filter { it != OemBrand.XIAOMI && it != OemBrand.VIVO }.forEach {
+            val chain = NotificationFixJump.chain(context, NotificationFix.OEM_POPUP, it, originOsMajor = 6)
+            assertEquals(listOf(Settings.ACTION_APPLICATION_DETAILS_SETTINGS), chain.map { i -> i.action }, "brand=$it")
+        }
+    }
+
+    @Test
+    fun `the vendor pop-up opens directly on Xiaomi, and on vivo only when eligible and resolvable`() {
+        assertTrue(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.XIAOMI))
+        assertFalse(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.HUAWEI))
+        assertFalse(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.VIVO, originOsMajor = 5))
+        // Eligible OS, but nothing installed here handles the vivo action.
+        assertFalse(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.VIVO, originOsMajor = 6))
+
+        val pm = shadowOf(context.packageManager)
+        val action = "permission.intent.action.softPermissionDetail"
+        pm.addOrUpdateActivity(
+            ActivityInfo().apply {
+                packageName = "com.vivo.permissionmanager"
+                name = "com.vivo.permissionmanager.activity.SoftPermissionDetailActivity"
+                exported = true
+                applicationInfo = ApplicationInfo().apply { packageName = "com.vivo.permissionmanager" }
+            }
+        )
+        pm.addIntentFilterForActivity(
+            ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.SoftPermissionDetailActivity"),
+            IntentFilter(action).apply { addCategory(Intent.CATEGORY_DEFAULT) },
+        )
+        assertTrue(NotificationFixJump.opensOemPopupDirectly(context, OemBrand.VIVO, originOsMajor = 6))
     }
 
     @Test

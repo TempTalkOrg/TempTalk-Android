@@ -2,6 +2,7 @@ package util
 
 import android.content.Context
 import android.text.format.DateFormat
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.R
 import com.difft.android.base.utils.application
 import java.text.SimpleDateFormat
@@ -14,9 +15,35 @@ object TimeFormatter {
 
     private const val MILLIS_PER_DAY = 86_400_000L
 
-    // Cache the result to avoid repeated ContentProvider IPC calls on every message bind.
-    // The 12/24-hour format setting rarely changes; the app restart picks up any change.
-    private val is24HourFormat by lazy { DateFormat.is24HourFormat(application) }
+    // Cached to avoid a ContentProvider IPC on every message bind. Re-read on each app foreground
+    // ([refreshHourFormat]) so a 12/24-hour change made in system settings applies when the user
+    // returns, even in a long-lived process (#1395).
+    @Volatile
+    private var hourFormatCache: Boolean? = null
+
+    private val is24HourFormat: Boolean
+        get() = hourFormatCache ?: hourFormatReader().also { hourFormatCache = it }
+
+    /** Reads the system 12/24-hour setting; replaceable in tests. */
+    @VisibleForTesting
+    internal var hourFormatReader: () -> Boolean = { DateFormat.is24HourFormat(application) }
+
+    /** Re-reads the system 12/24-hour setting; called when the app comes to the foreground. */
+    fun refreshHourFormat() {
+        hourFormatCache = hourFormatReader()
+    }
+
+    /**
+     * Everything besides the timestamp a formatted time text depends on: [language], the cached
+     * 12/24-hour setting and the default time zone. Callers that retain formatted texts compare it
+     * to know when to re-format (#1395).
+     */
+    fun formatSignature(language: String): String = "$language|$is24HourFormat|${TimeZone.getDefault().id}"
+
+    @VisibleForTesting
+    internal fun resetHourFormatForTest() {
+        hourFormatCache = null
+    }
 
     fun formatConversationTime(language: String, timestamp: Long): String {
         val currentLocale = Locale(language)

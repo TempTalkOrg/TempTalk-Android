@@ -100,6 +100,18 @@ class VerdictWatchTest {
     }
 
     @Test
+    fun `only succeeded, failed and cancelled are definite, any other terminal is unknown`() = runTest {
+        assertEquals(Verdict.Succeeded, VerdictWatch.verdictOf(TransferTerminal.SUCCEEDED))
+        assertEquals(Verdict.Ended(TransferTerminal.FAILED), VerdictWatch.verdictOf(TransferTerminal.FAILED))
+        assertEquals(Verdict.Ended(TransferTerminal.CANCELLED), VerdictWatch.verdictOf(TransferTerminal.CANCELLED))
+        val unknown = Verdict.Unknown(Verdict.Unknown.Reason.UNRECOGNIZED_TERMINAL)
+        for (terminal in listOf("aborted", "FAILED", "canceled", "", "rolled_back")) {
+            assertEquals("terminal=$terminal", unknown, VerdictWatch.verdictOf(terminal))
+        }
+        assertEquals(unknown, watch().run(bodySentAt = 0, status = { status(3, "partially-imported") }))
+    }
+
+    @Test
     fun `an unreachable receiver counts as no progress and is asked again`() = runTest {
         var polls = 0
         val stalls = mutableListOf<Boolean>()

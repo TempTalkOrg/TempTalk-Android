@@ -1,6 +1,7 @@
 package com.difft.android.chat.messages
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.base.utils.appScope
@@ -11,6 +12,7 @@ import org.difft.app.database.wcdb
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import difft.android.messageserialization.model.ReadPosition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -57,7 +59,9 @@ class ReceiptMessageHelper @Inject constructor(
 ) {
     private data class PendingReceiptMessage(
         val message: SignalServiceProtos.ReceiptMessage,
-        val signalService: SignalServiceDataClass
+        val signalService: SignalServiceDataClass,
+        // Retained from the envelope's receive ticket; closed once the receipt is applied (#1382).
+        val held: MessagingTicket?,
     )
 
     private val receiptMessageChannel = Channel<PendingReceiptMessage>(Channel.BUFFERED)
@@ -72,18 +76,37 @@ class ReceiptMessageHelper @Inject constructor(
         while (true) {
             try {
                 val pendingMessage = receiptMessageChannel.receive()
-                processReceiptMessage(pendingMessage.message, pendingMessage.signalService)
+                pendingMessage.held.use {
+                    processReceiptMessage(pendingMessage.message, pendingMessage.signalService)
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 L.e(e) { "[ReceiptMessageHelper] Error processing receipt message, continuing with next message" }
             }
         }
     }
 
-    suspend fun handleReceiptMessage(message: SignalServiceProtos.ReceiptMessage, signalService: SignalServiceDataClass) {
+    /**
+     * Queues the receipt for the consumer, handing it a ticket retained from [admission] so the
+     * migration pause waits until the receipt is applied (#1382).
+     */
+    suspend fun handleReceiptMessage(
+        message: SignalServiceProtos.ReceiptMessage,
+        signalService: SignalServiceDataClass,
+        admission: MessagingTicket,
+    ) {
+        val held = admission.retain("receipt")
+        var queued = false
         try {
-            receiptMessageChannel.send(PendingReceiptMessage(message, signalService))
+            receiptMessageChannel.send(PendingReceiptMessage(message, signalService, held))
+            queued = true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.e(e) { "[ReceiptMessageHelper] Failed to send message to channel: ${e.message}" }
+        } finally {
+            if (!queued) held?.close()
         }
     }
 

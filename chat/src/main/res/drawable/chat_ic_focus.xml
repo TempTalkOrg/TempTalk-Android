@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Tabler "focus-2", taken from the group focus prototype (symbol i-focus2). Tinted by the caller. -->
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M11.5,12a0.5,0.5 0,1 0,1 0a0.5,0.5 0,1 0,-1 0M5,12a7,7 0,1 0,14 0a7,7 0,1 0,-14 0M12,3l0,2M3,12l2,0M12,19l0,2M19,12l2,0"
+        android:strokeWidth="2"
+        android:strokeColor="@color/gray_200"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -50,7 +50,11 @@ data class ConversationSettingUpdate(
     val saveToPhotos: Int? = null,
     // Auto-translate target (null: no change, 0: off, 1: Chinese, 2: English). The value is
     // non-null in the model, so null alone already means "not changed" — no sentinel needed.
-    val translateSetting: Int? = null
+    val translateSetting: Int? = null,
+    // Mute sub-options (null: no change)
+    val allowMentionMe: Boolean? = null,
+    val allowMentionAll: Boolean? = null,
+    val allowGroupCall: Boolean? = null
 )
 
 // All wcdb calls in this class run on Dispatchers.IO.

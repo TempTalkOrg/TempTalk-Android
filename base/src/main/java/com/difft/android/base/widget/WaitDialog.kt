@@ -45,6 +45,7 @@ fun WaitDialog(
                 { }
             }
         ) {
+            DialogAnchor.Effect()
             // 如果有自定义布局，使用透明背景
             if (layoutId != null) {
                 AndroidView(

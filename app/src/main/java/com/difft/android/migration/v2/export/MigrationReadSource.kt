@@ -14,6 +14,7 @@ import org.difft.app.database.models.DBForwardModel
 import org.difft.app.database.models.DBGroupCryptoKeysModel
 import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.DBPendingMessageModelNew
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBReadInfoModel
@@ -25,6 +26,7 @@ import org.difft.app.database.models.MentionModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBSharedContactModel
 import org.difft.app.database.models.DBSharedContactPhoneModel
+import org.difft.app.database.models.PendingMessageModelNew
 import org.difft.app.database.models.QuoteModel
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.ReadInfoModel
@@ -62,6 +64,9 @@ interface MigrationReadSource {
      * [com.difft.android.migration.v2.model.NeutralConversationLocal.participantReadPositions].
      */
     val readInfo: Table<ReadInfoModel>
+
+    /** Consumed envelopes waiting for their target message (#1382); see [PendingEnvelopeExport]. */
+    val pendingMessageNew: Table<PendingMessageModelNew>
 }
 
 /** [MigrationReadSource] backed by the live [WCDB] singleton; the Hilt default binding. */
@@ -80,6 +85,7 @@ class LiveReadSource @Inject constructor(
     override val sharedContactPhone: Table<SharedContactPhoneModel> get() = wcdb.sharedContactPhone
     override val groupCryptoKeys: Table<GroupCryptoKeysModel> get() = wcdb.groupCryptoKeys
     override val readInfo: Table<ReadInfoModel> get() = wcdb.readInfo
+    override val pendingMessageNew: Table<PendingMessageModelNew> get() = wcdb.pendingMessageNew
 }
 
 /**
@@ -106,6 +112,7 @@ class SnapshotReadSource(
     override val sharedContactPhone: Table<SharedContactPhoneModel> by lazy { open("shared_contact_phone", DBSharedContactPhoneModel) }
     override val groupCryptoKeys: Table<GroupCryptoKeysModel> by lazy { open("group_crypto_keys", DBGroupCryptoKeysModel) }
     override val readInfo: Table<ReadInfoModel> by lazy { open("read_info", DBReadInfoModel) }
+    override val pendingMessageNew: Table<PendingMessageModelNew> by lazy { open("pending_message_new", DBPendingMessageModelNew) }
 
     private fun <T> open(name: String, binding: TableBinding<T>): Table<T> {
         db.createTable(name, binding)

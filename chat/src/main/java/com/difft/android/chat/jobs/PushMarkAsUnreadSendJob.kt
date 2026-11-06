@@ -2,6 +2,7 @@ package com.difft.android.chat.jobs
 
 import com.difft.android.PushMarkAsUnreadSendJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
@@ -40,7 +41,8 @@ class PushMarkAsUnreadSendJob @AssistedInject constructor(
     private val flag: Int,
     private val newSignalServiceMessageSender: NewSignalServiceMessageSender,
     private val dbRoomStore: DBRoomStore,
-) : PushSendJob(parameters ?: buildParameters(roomId)) {
+    messagingGate: MessagingGate,
+) : PushSendJob(parameters ?: buildParameters(roomId), messagingGate) {
 
     private val room: For
         get() = if (isGroup) For.Group(roomId) else For.Account(roomId)
@@ -61,9 +63,10 @@ class PushMarkAsUnreadSendJob @AssistedInject constructor(
             L.w { "[MarkUnread][PushMarkAsUnreadSendJob] unknown flag=$flag room=$roomId, dropping job" }
             return
         }
+        val admission = admitSend() ?: return
         L.i { "[MarkUnread][PushMarkAsUnreadSendJob] send flag=${protoFlag.name} room=$roomId attempt=$runAttempt" }
         val success = try {
-            newSignalServiceMessageSender.sendMarkAsUnread(room, protoFlag, System.currentTimeMillis()).success
+            newSignalServiceMessageSender.sendMarkAsUnread(room, protoFlag, System.currentTimeMillis(), admission).success
         } catch (e: NoValidRecipientKeysException) {
             L.w { "[MarkUnread][PushMarkAsUnreadSendJob] permanent failure, dropping job room=$roomId: ${e.stackTraceToString()}" }
             return

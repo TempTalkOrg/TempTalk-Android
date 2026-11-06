@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import com.difft.android.base.BaseActivity
+import com.difft.android.base.utils.pane.ConversationTarget
 import com.difft.android.chat.R
 import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE
 import com.difft.android.chat.contacts.contactsdetail.BUNDLE_KEY_SOURCE_TYPE
@@ -28,12 +29,12 @@ class ChatActivity : BaseActivity(), ChatMessageListProvider, ChatInputFocusable
             source: String? = null,
             jumpMessageTimeStamp: Long? = null
         ) {
-            val intent = Intent(activity, ChatActivity::class.java)
-            intent.contactorID = contactID
-            intent.sourceType = sourceType
-            intent.source = source
-            intent.jumpMessageTimeStamp = jumpMessageTimeStamp
-            activity.startActivity(intent)
+            // Routed: the home detail stack when it is in front or the window is two-pane,
+            // otherwise this full-window shell (ConversationShells).
+            ConversationShells.open(
+                activity,
+                ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, contactID, jumpMessageTimeStamp, sourceType, source),
+            )
         }
 
         var Intent.contactorID: String?

@@ -1,5 +1,6 @@
 package com.difft.android.chat.jobs
 
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobmanager.impl.NetworkConstraint
 import com.difft.android.chat.setting.sync.ConversationSettingsApplier
@@ -17,6 +18,7 @@ import com.difft.android.network.HttpService
 import com.difft.android.network.NetworkException
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.network.responses.GetConversationSetResponseBody
+import com.difft.android.test.fakes.TestMessagingPause
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -55,6 +57,7 @@ class SettingSyncJobTest {
         ts: Long = 1_000,
         phase: SettingSyncJob.Phase = SettingSyncJob.Phase.SEND,
         acceptedVersion: Int = 0,
+        gate: MessagingGate = TestMessagingPause().open().gate,
     ) = SettingSyncJob(
         parameters = null,
         roomId = ROOM,
@@ -67,7 +70,8 @@ class SettingSyncJobTest {
         dbRoomStore = dbRoomStore,
         applier = applier,
         syncState = q.state,
-    )
+        messagingGate = gate,
+    ).bindLogin()
 
     private fun acceptSet(version: Int) {
         coEvery { httpService.fetchConversationSet(any()) } returns
@@ -113,6 +117,54 @@ class SettingSyncJobTest {
     }
 
     // --- SEND ---
+
+    @Test
+    fun `SET is deferred without a request while messaging is paused`() = runTest {
+        acceptSet(version = 11)
+        val paused = TestMessagingPause().open().pauseMessaging().gate
+
+        val result = job(gate = paused).run()
+
+        assertTrue(result.isDeferred())
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
+    }
+
+    @Test
+    fun `SET of another login or of an untagged job fails without a request`() = runTest {
+        acceptSet(version = 11)
+
+        listOf("login-b", null).forEach { creator ->
+            val result = job().bindLogin(creator = creator, current = TEST_LOGIN).run()
+
+            assertTrue(result.isFailure(), "creator=$creator: expected failure, was $result")
+        }
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
+    }
+
+    // #1382 A04: an abandoned change must not keep gating server snapshots for the field.
+    @Test
+    fun `a SET of another login stops gating the field once it fails`() = runTest {
+        acceptSet(version = 11)
+        val j = job(ts = 1_000).bindLogin(creator = "login-b", current = TEST_LOGIN)
+        q.state.recordIntent(ROOM, field, 1_000)
+        q.queue(pendingSpec(j.id, 1_000))
+
+        assertTrue(j.run().isFailure())
+        j.onFailure()
+
+        assertFalse(q.state.isPending(ROOM, field), "the failed change still gates server snapshots")
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
+    }
+
+    @Test
+    fun `SET is deferred without a request while no login is signed in`() = runTest {
+        acceptSet(version = 11)
+
+        val result = job().bindLogin(current = null).run()
+
+        assertTrue(result.isDeferred(), "expected deferred, was $result")
+        coVerify(exactly = 0) { httpService.fetchConversationSet(any()) }
+    }
 
     @Test
     fun `accepted SET persists RECONCILE and the echoed version without writing anything locally`() = runTest {

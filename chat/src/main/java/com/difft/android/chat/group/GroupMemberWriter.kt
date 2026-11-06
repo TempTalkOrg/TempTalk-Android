@@ -24,12 +24,17 @@ class GroupMemberWriter @Inject constructor() {
      * @param serverMembers Caller-supplied `signatureVerify` is overwritten —
      *                      this method owns inheritance.
      */
-    suspend fun replaceAllForGroup(gid: String, serverMembers: List<GroupMemberContactorModel>) {
+    suspend fun replaceAllForGroup(
+        gid: String,
+        serverMembers: List<GroupMemberContactorModel>,
+        commitAllowed: (() -> Boolean)? = null,
+    ) {
         require(gid.isNotEmpty()) {
             "GroupMemberWriter.replaceAllForGroup: gid must not be empty (W5 stub-row contract guard)"
         }
         withContext(Dispatchers.IO) {
             try {
+                requireGroupWriteSession(commitAllowed)
                 // Inherit the verified flag only when the member's uidSignature is UNCHANGED.
                 // On a key rotation every uidSignature is re-signed under the new pk_bind, so
                 // keying inheritance on (uid → old uidSignature) naturally drops the stale
@@ -49,6 +54,7 @@ class GroupMemberWriter @Inject constructor() {
                         if (verifiedSigByUid.containsKey(uid) && verifiedSigByUid[uid] == m.uidSignature) true else null
                 }
 
+                requireGroupWriteSession(commitAllowed)
                 wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq(gid))
                 if (serverMembers.isNotEmpty()) {
                     wcdb.groupMemberContactor.insertObjects(serverMembers)

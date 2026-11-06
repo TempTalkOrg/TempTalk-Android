@@ -1,57 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- CoordinatorLayout + AppBarLayout like the Chats and Contacts pages: on a short window
+     (HomeHeaderCollapser) the title row collapses with the page's nested scroll; elsewhere it has no scroll flag and the layout behaves like a plain column. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <!-- Dual-pane only header (MeFragment shows it when hosted in the list pane): the same
-         "rail toggle · title" structure as the Chats and Contacts headers, so the way back from
-         a collapsed navigation rail sits in the same place on every tab. Phones keep no header. -->
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/dual_pane_header"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/home_app_bar"
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent">
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
+        app:liftOnScroll="false">
 
-        <com.difft.android.base.widget.DualPaneRailToggleView
-            android:id="@+id/rail_toggle"
-            android:layout_width="44dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="6dp"
-            android:contentDescription="@string/dual_pane_rail_collapse_hint"
-            android:padding="10dp"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+        <!-- Title row, the same as the Chats and Contacts headers. Shown in the two-pane list and
+             on a foldable (MeFragment decides); other phones keep no header. -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/home_header"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:visibility="gone">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_title"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
-            android:gravity="center_vertical"
-            android:text="@string/chat_me"
-            android:textColor="@color/t.primary"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            app:layout_constraintStart_toEndOf="@id/rail_toggle"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_goneMarginStart="16dp" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/tv_title"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginStart="16dp"
+                android:gravity="center_vertical"
+                android:text="@string/chat_me"
+                android:textColor="@color/t.primary"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
-    <ScrollView
+    <!-- Nested scrolling so the coordinator can collapse the title with it. -->
+    <androidx.core.widget.NestedScrollView
         android:id="@+id/scrollView2"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="0dp"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
         android:scrollbars="none"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/dual_pane_header"
-        app:layout_goneMarginTop="25dp">
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -645,15 +639,6 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
         </LinearLayout>
 
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 
-    <FrameLayout
-        android:id="@+id/fragment_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="parent" />
-
-</androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

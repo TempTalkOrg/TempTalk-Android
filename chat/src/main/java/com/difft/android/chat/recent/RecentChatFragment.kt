@@ -8,14 +8,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupWindow
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.difft.android.base.call.CallData
-import com.difft.android.base.call.CallType
+import com.difft.android.base.utils.DualPaneHost
+import com.difft.android.base.utils.padBottomForHomeTabBar
+import com.difft.android.chat.common.HomeHeaderCollapser
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.ResUtils
@@ -23,8 +24,6 @@ import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ChativePopupView
 import com.difft.android.base.widget.ChativePopupWindow
-import com.difft.android.base.widget.ComposeDialogManager
-import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.chat.R
 import com.difft.android.chat.databinding.ChatFragmentRecentChatBinding
@@ -35,7 +34,6 @@ import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.invite.ScanActivity
 import com.difft.android.chat.recent.RoomViewData.Type
 import com.difft.android.chat.ui.ChatActivity
-import com.difft.android.messageserialization.db.store.ConversationUtils
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.ui.compose.e2ee.E2eeInfoSheet
@@ -44,14 +42,15 @@ import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.proxy.ProxyConfigProvider
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
 import dagger.hilt.android.AndroidEntryPoint
-import difft.android.messageserialization.model.MENTIONS_TYPE_NONE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.onEach
 
 import kotlinx.coroutines.withContext
 import org.difft.app.database.cache.OfficialAccountCache
-import com.difft.android.chat.dependencies.ApplicationDependencies
+import com.difft.android.chat.focus.FocusActionLauncher
+import com.difft.android.chat.focus.invalid.FocusInvalidController
+import com.difft.android.chat.focus.invalid.bindFocusStatusStrip
 import com.difft.android.chat.util.MessageNotificationUtil
 import com.difft.android.chat.websocket.WebSocketManager
 import javax.inject.Inject
@@ -99,6 +98,12 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
     @Inject
     lateinit var urlManager: UrlManager
 
+    @Inject
+    lateinit var focusActionLauncher: FocusActionLauncher
+
+    @Inject
+    lateinit var focusInvalidController: FocusInvalidController
+
     private lateinit var binding: ChatFragmentRecentChatBinding
     private var popupWindow: PopupWindow? = null
     private lateinit var popupItemList: MutableList<ChativePopupView.Item>
@@ -108,13 +113,31 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         callDataManagerLazy.get()
     }
 
+    private val rowActions: ChatListRowActions by lazy {
+        ChatListRowActions(requireActivity(), recentChatViewModel, focusActionLauncher, globalServices.myId)
+    }
+
     private val mAdapter: RecentChatAdapter by lazy {
         object : RecentChatAdapter(requireActivity()) {
-            override fun onReadToggle(roomViewData: RoomViewData) = toggleRead(roomViewData)
+            override fun onReadToggle(roomViewData: RoomViewData) = rowActions.toggleRead(roomViewData)
 
-            override fun onPinToggle(roomViewData: RoomViewData) = togglePin(roomViewData)
+            override fun onPinToggle(roomViewData: RoomViewData) = rowActions.togglePin(roomViewData)
 
-            override fun onDeleteRequested(roomViewData: RoomViewData) = confirmDelete(roomViewData)
+            override fun onDeleteRequested(roomViewData: RoomViewData) = rowActions.confirmDelete(roomViewData)
+
+            override fun onFocusToggle(roomViewData: RoomViewData) = rowActions.toggleFocus(roomViewData)
+
+            // The home screen is the chat list's only host, so there is no Activity fallback.
+            override fun onFoldedGroupsClicked() {
+                if ((activity as? ListPaneLayerOpener)?.openFoldedGroupsLayer() != true) {
+                    L.w { "[ChatList] folded_open_ignored reason=no_opener" }
+                }
+            }
+
+            override fun onFoldedGroupsLongClicked(view: View, touchX: Int, touchY: Int) =
+                rowActions.showFoldedGroupsActions(view, touchX, touchY)
+
+            override fun onFoldedGroupsEndFocus() = rowActions.endFocus()
 
             override fun onItemClicked(
                 roomViewData: RoomViewData,
@@ -164,7 +187,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
 
             override fun onItemLongClicked(view: View, roomViewData: RoomViewData, position: Int, touchX: Int, touchY: Int) {
                 if (roomViewData.hasOngoingCall) return
-                showItemActionsPop(view, roomViewData, touchX, touchY)
+                rowActions.showItemActions(view, roomViewData, touchX, touchY)
             }
 
             override fun onFooterClicked() {
@@ -192,163 +215,36 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
             .distinctUntilChanged()
             .onEach { callingList ->
                 L.d { "[Call] RecentChatFragment registerCallingListener: callingList = $callingList" }
-                val currentList: List<RoomViewData> = recentChatViewModel.allRecentRoomsStateFlow.value
-                sortingChatRoomsByCall(currentList, callingList)
+                assembleAndSubmit(recentChatViewModel.chatListSource.value, callingList)
             }
             .launchIn(lifecycleScope)
     }
 
-    private fun buildSortedListForCalling(
-        currentList: List<RoomViewData>,
-        callingList: Map<String, CallData>?,
-        instantCallRoomViewData: Map<String, RoomViewData>,
-        instantCallDefaultName: String
-    ): Pair<List<RoomViewData>, Map<String, RoomViewData>> {
-        L.d { "[Call] RecentChatFragment moveCallingRoomsToTheTop: callingList = $callingList" }
-        val workingList = currentList.map { it.copy() }.toMutableList()
-        val instantCallRoomViewDataMap = instantCallRoomViewData.toMutableMap()
-        // 如果没有callingList，则清除currentList中的callData 并清除instantCallRoomViewData的记录
-        if (callingList.isNullOrEmpty()) {
-            workingList.forEach { item ->
-                item.callData = null
-            }
-            instantCallRoomViewDataMap.clear()
-        }
-
-        // 针对instant call 创建roomViewData
-        val currentRoomIds: List<String> = workingList.map { it.roomId }.toList()
-        callingList?.forEach { callDataMap ->
-            val callData = callDataMap.value
-            val roomId = callData.roomId
-            when (callData.type) {
-                CallType.INSTANT.type -> {
-                    if (!currentRoomIds.contains(roomId) && !instantCallRoomViewDataMap.containsKey(roomId)) {
-                        val callName = callData.callName ?: instantCallDefaultName
-                        val roomViewData = RoomViewData(
-                            roomId = roomId,
-                            type = Type.Group,
-                            roomName = callName,
-                            lastActiveTime = callData.createdAt,
-                            unreadMessageNum = 0,
-                            pinnedTime = null,
-                            muteStatus = 0,
-                            mentionType = MENTIONS_TYPE_NONE,
-                            isInstantCall = true,
-                            callData = callData
-                        )
-                        instantCallRoomViewDataMap[roomId] = roomViewData
-                    }
-                }
-            }
-        }
-
-        workingList.forEach { item ->
-            val conversationId = item.roomId
-            val callData = item.callData
-            if (callData != null) {
-                val roomId = item.callData?.roomId
-                //取消join按钮的判断 roomId不在callingList
-                if (!roomId.isNullOrEmpty()) {
-                    if (callingList?.containsKey(roomId) != true) {
-                        item.callData = null
-                        instantCallRoomViewDataMap.remove(roomId)
-                    } else if ((callData.type == CallType.INSTANT.type && !callingList.containsKey(item.roomId))) {
-                        item.callData = null
-                    }
-                }
-            } else {
-                // callingList not empty，则判断是否在callingList中，如果在，则设置isJoinEnable = true
-                callingList?.mapNotNull { callDataMap ->
-                    val conversation = callDataMap.value.conversation
-                    val type = callDataMap.value.type
-                    if (!type.isNullOrEmpty()) {
-                        when (type) {
-                            CallType.GROUP.type -> {
-                                if (!conversation.isNullOrEmpty() && conversationId.isNotEmpty() && conversationId == conversation) {
-                                    item.callData = callDataMap.value
-                                    item.lastActiveTime = callDataMap.value.createdAt
-                                }
-                            }
-
-                            CallType.ONE_ON_ONE.type -> {
-                                val id = callDataMap.value.caller.uid
-                                if (!id.isNullOrEmpty() && id != globalServices.myId && conversationId.isNotEmpty() && id == conversationId) {
-                                    item.callData = callDataMap.value
-                                    item.lastActiveTime = callDataMap.value.createdAt
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        val sortedList = ArrayList<RoomViewData>()
-
-        // filter the pinned rooms
-        val pinnedRooms = workingList.filter { item ->
-            item.isPinned && item.callData == null
-        }
-        // filter the meeting rooms
-        val meetingRooms = workingList.filter { item ->
-            item.callData != null && item.callData?.type != CallType.INSTANT.type
-        }
-        // filter draft rooms (has draft, not pinned, not in call)
-        val draftRooms = workingList.filter { item ->
-            item.draftPreview != null && !item.isPinned && item.callData == null
-        }
-        // filter the others rooms
-        val otherRooms = workingList.filter { item ->
-            item.callData == null && item.draftPreview == null && meetingRooms.contains(item).not() && pinnedRooms.contains(item).not()
-        }
-
-        // add instant call rooms
-        val currentInstantCallRooms = workingList.filter { item ->
-            item.callData != null && item.callData?.type == CallType.INSTANT.type
-        }
-        if (instantCallRoomViewDataMap.isNotEmpty()) {
-            val existingRoomIds = currentInstantCallRooms.map { it.roomId }.toSet()
-            val newInstantRooms = instantCallRoomViewDataMap.values.filterNot { it.roomId in existingRoomIds }
-            val roomsToAdd = if (newInstantRooms.isNotEmpty()) {
-                currentInstantCallRooms + newInstantRooms
-            } else {
-                currentInstantCallRooms
-            }
-            sortedList.addAll(roomsToAdd.sortedByDescending { it.sortTime })
-
-        } else {
-            sortedList.addAll(currentInstantCallRooms.sortedByDescending { it.sortTime })
-        }
-
-        // add meeting rooms
-        sortedList.addAll(meetingRooms.sortedByDescending { it.sortTime })
-        // add pinned rooms
-        sortedList.addAll(pinnedRooms.sortedByDescending { it.sortTime })
-        // add draft rooms (sorted by sortTime descending)
-        sortedList.addAll(draftRooms.sortedByDescending { it.sortTime })
-        // add other rooms (sorted by sortTime descending)
-        sortedList.addAll(otherRooms.sortedByDescending { it.sortTime })
-        return sortedList to instantCallRoomViewDataMap
-    }
-
-    private fun submitSortedChatRooms(sortedList: List<RoomViewData>) {
+    private fun submitSortedChatRooms(rows: List<ListItem>) {
         val items = mutableListOf<ListItem>()
-        items.add(ListItem.SearchInput)
-        items.addAll(sortedList.map { ListItem.ChatItem(it) })
+        items.addAll(rows)
         items.add(ListItem.E2eeFooter) // shown even on an empty list, deliberately not gated on room count
-        mAdapter.submitList(items)
+        mAdapter.submitListKeepingTop(binding.recyclerViewRecentMessage, items)
     }
 
-    private suspend fun sortingChatRoomsByCall(currentList: List<RoomViewData>, callingList: Map<String, CallData>? = null) {
-        val instantSnapshot = recentChatViewModel.instantCallRoomViewData.toMap()
-        val instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
-        val (sortedList, updatedInstantMap) = withContext(Dispatchers.Default) {
-            buildSortedListForCalling(currentList, callingList, instantSnapshot, instantCallDefaultName)
-        }
+    /** Assembles the list off the main thread ([ChatListAssembler]) and submits it. */
+    private suspend fun assembleAndSubmit(source: ChatListSource, callingList: Map<String, CallData>?) {
+        val input = ChatListInput(
+            rooms = source.rooms,
+            callingList = callingList,
+            instantCallCache = recentChatViewModel.instantCallRoomViewData.toMap(),
+            instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default),
+            myId = globalServices.myId,
+            now = System.currentTimeMillis(),
+            focus = source.focus,
+            synthesizedFocusRoom = source.synthesizedFocusRoom,
+            deletedFocusGids = source.deletedFocusGids,
+        )
+        val assembly = withContext(Dispatchers.Default) { ChatListAssembler.assemble(input) }
         if (!isAdded || view == null || !this::binding.isInitialized) return
         recentChatViewModel.instantCallRoomViewData.clear()
-        recentChatViewModel.instantCallRoomViewData.putAll(updatedInstantMap)
-        submitSortedChatRooms(sortedList)
+        recentChatViewModel.instantCallRoomViewData.putAll(assembly.instantCallCache)
+        submitSortedChatRooms(assembly.rows)
     }
 
     override fun onCreateView(
@@ -366,23 +262,34 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         super.onViewCreated(view, savedInstanceState)
 
         initActions()
+        binding.focusStatusStrip.bindFocusStatusStrip(focusInvalidController) { focusActionLauncher.openNotificationSettings(requireActivity()) }
 
+        val collapsibleHeader = HomeHeaderCollapser.isEligible(requireActivity())
+        HomeHeaderCollapser.bind(binding.homeAppBar, binding.homeHeader, collapsibleHeader)
         binding.recyclerViewRecentMessage.apply {
             this.adapter = mAdapter
             layoutManager = LinearLayoutManager(requireContext())
             itemAnimator = null
+            addItemDecoration(ChatListDividerDecoration(requireContext()))
+            padBottomForHomeTabBar(
+                viewLifecycleOwner,
+                activity as? DualPaneHost,
+                extraPx = HomeHeaderCollapser.collapseRangePx(binding.homeHeader, collapsibleHeader),
+            )
         }
 
         recentChatViewModel.retrieveCallingList()
 
+        // The home screen's one-pane detail layer covers this list without pausing it.
+        (activity as? ConversationNavigationCallback)?.detailCoversList
+            ?.onEach { listVisibility.onCoveredChanged(it) }
+            ?.launchIn(viewLifecycleOwner.lifecycleScope)
+
         observeChatWSConnection()
 
-        recentChatViewModel.allRecentRoomsStateFlow
+        recentChatViewModel.chatListSource
             .flowWithLifecycle(viewLifecycleOwner.lifecycle, Lifecycle.State.STARTED)
-            .onEach { list ->
-                L.d { "[ChatList] Conversation list refresh ====== -> size:" + list.size }
-                sortingChatRooms(list)
-            }
+            .onEach { source -> assembleAndSubmit(source, callDataManager.getCallListData()) }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
         recentChatViewModel.createNote()
@@ -412,6 +319,9 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 if (nextUnreadItemPosition == -1) {
                     nextUnreadItemPosition = 0
                 }
+                // A programmatic jump is not a nested scroll: bring a collapsed title back with
+                // it when the jump lands on the top of the list.
+                if (nextUnreadItemPosition == 0) binding.homeAppBar.setExpanded(true, true)
                 binding.recyclerViewRecentMessage.post {
                     if (canScrollDown) {
                         binding.recyclerViewRecentMessage.smoothScrollToPositionWithHelper(requireContext(), nextUnreadItemPosition, 100f)
@@ -444,16 +354,28 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         }
     }
 
+    private val listVisibility = ConversationListVisibility(onReturnedToList = { onReturnedToList() })
+
     override fun onResume() {
         super.onResume()
 
-        ConversationUtils.isConversationListVisible = true
+        listVisibility.onResumedChanged(true)
+        onReturnedToList()
+    }
 
+    /**
+     * Refresh for "the user is back on the list": from onResume, and when the home screen's
+     * one-pane detail layer uncovers the still-resumed list (closing a conversation there does not
+     * resume this fragment the way closing ChatActivity did).
+     */
+    private fun onReturnedToList() {
         // Proxy toggle may have changed in settings while we were away — re-gate the shield.
         updateProxyStatusIcon()
         refreshLegacyMigrationEntry()
 
         recentChatViewModel.retrieveCallingList()
+        // The retained texts may predate a language, 12/24-hour or time-zone change (#1395).
+        recentChatViewModel.refreshIfFormatChanged()
 
         // Restore selected state for dual-pane mode
         val navigationCallback = activity as? ConversationNavigationCallback
@@ -473,7 +395,7 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
     override fun onPause() {
         super.onPause()
 
-        ConversationUtils.isConversationListVisible = false
+        listVisibility.onResumedChanged(false)
     }
 
     private fun initActions() {
@@ -571,21 +493,6 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
         binding.ivProxyStatus.setImageResource(icon)
     }
 
-    private suspend fun sortingChatRooms(
-        list: List<RoomViewData>
-    ) {
-        val callingList = callDataManager.getCallListData()
-        val instantSnapshot = recentChatViewModel.instantCallRoomViewData.toMap()
-        val instantCallDefaultName = getString(com.difft.android.call.R.string.call_instant_call_title_default)
-        val (sortedList, updatedInstantMap) = withContext(Dispatchers.Default) {
-            buildSortedListForCalling(list, callingList, instantSnapshot, instantCallDefaultName)
-        }
-        if (!isAdded || view == null || !this::binding.isInitialized) return
-        recentChatViewModel.instantCallRoomViewData.clear()
-        recentChatViewModel.instantCallRoomViewData.putAll(updatedInstantMap)
-        submitSortedChatRooms(sortedList)
-    }
-
     private fun observeChatWSConnection() {
         webSocketManager.getWebSocketConnection()
             .webSocketConnectionState
@@ -622,79 +529,6 @@ class RecentChatFragment : Fragment(), DualPaneSelectionListener {
                 }
             }
             .launchIn(viewLifecycleOwner.lifecycleScope)
-    }
-
-    /**
-     * Long-press menu (chat-list gesture design): Read/Unread → Pin/Unpin → Delete. Mute and
-     * leave/disband live in the chat settings only; Note-to-Self cannot be deleted.
-     */
-    private fun showItemActionsPop(rootView: View, data: RoomViewData, touchX: Int, touchY: Int) {
-        val itemList = mutableListOf<ChativePopupView.Item>().apply {
-            if (data.displayUnreadNum > 0) {
-                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_mark_read), getString(R.string.chat_action_mark_read)) {
-                    recentChatViewModel.markAsRead(data)
-                    popupWindow?.dismiss()
-                })
-            } else {
-                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_mark_unread), getString(R.string.chat_action_mark_unread)) {
-                    recentChatViewModel.markAsUnread(data)
-                    popupWindow?.dismiss()
-                })
-            }
-
-            if (data.isPinned) {
-                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_unstick), getString(R.string.chat_unstick)) {
-                    togglePin(data)
-                    popupWindow?.dismiss()
-                })
-            } else {
-                add(ChativePopupView.Item(ResUtils.getDrawable(R.drawable.chat_icon_stick), getString(R.string.chat_stick)) {
-                    togglePin(data)
-                    popupWindow?.dismiss()
-                })
-            }
-
-            if (data.roomId != globalServices.myId) {
-                val destructive = ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)
-                add(
-                    ChativePopupView.Item(
-                        drawable = ResUtils.getDrawable(R.drawable.chat_message_action_delete),
-                        label = getString(R.string.me_delete),
-                        iconColor = destructive,
-                        textColor = destructive,
-                    ) {
-                        confirmDelete(data)
-                        popupWindow?.dismiss()
-                    }
-                )
-            }
-        }
-        popupWindow = ChativePopupWindow.showAtTouchPosition(rootView, itemList, touchX, touchY)
-    }
-
-    private fun toggleRead(data: RoomViewData) {
-        if (data.displayUnreadNum > 0) recentChatViewModel.markAsRead(data) else recentChatViewModel.markAsUnread(data)
-    }
-
-    /** The ViewModel toasts "Pinned" / "Unpinned" once the write succeeded. */
-    private fun togglePin(data: RoomViewData) {
-        recentChatViewModel.pinChattingRoom(!data.isPinned, data)
-    }
-
-    private fun confirmDelete(data: RoomViewData) {
-        val name = data.roomName?.toString()?.takeIf { it.isNotBlank() } ?: data.roomId
-        ComposeDialogManager.showMessageDialog(
-            context = requireActivity(),
-            title = getString(R.string.chat_delete_chat_title),
-            message = getString(R.string.chat_delete_chat_message, name),
-            confirmText = getString(R.string.me_delete),
-            cancelText = getString(R.string.group_leave_cancel),
-            confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.error)),
-            onConfirm = {
-                ApplicationDependencies.getMessageStore().removeRoomAndMessages(data.roomId)
-                ToastUtil.show(R.string.chat_toast_deleted)
-            }
-        )
     }
 
     /**

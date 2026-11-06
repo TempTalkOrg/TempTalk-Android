@@ -121,19 +121,29 @@ class SessionAuthGuard @Inject constructor(
         }
     }
 
-    /** The device call is the tie-breaker: 401/403 = kicked, 2xx = false alarm, error = unknown. */
+    /**
+     * The device call is the tie-breaker: 401/403 = kicked, 2xx = false alarm, error = unknown. The
+     * call carries the credential read here, and a rejection is acted on only while that is still
+     * the stored credential, so a confirm in flight across a re-login never logs out the new
+     * session (#1382 A09).
+     */
     private suspend fun confirm(source: String) {
-        if (userManager.getUserData()?.baseAuth.isNullOrEmpty()) {
+        val credential = currentCredential()
+        if (credential == null) {
             L.i { "[SessionAuthGuard] confirm skipped source=$source reason=noCredential" }
             return
         }
         L.i { "[SessionAuthGuard] confirming source=$source" }
         try {
-            deviceRepository.checkDeviceAuth()
+            deviceRepository.checkDeviceAuthAs(credential, reportAuthFailure = true)
             L.i { "[SessionAuthGuard] confirm: credential still valid, false alarm source=$source" }
         } catch (e: CancellationException) {
             throw e
         } catch (e: AuthorizationFailedException) {
+            if (currentCredential() != credential) {
+                L.w { "[SessionAuthGuard] confirm ignored code=${e.code} source=$source reason=credentialChanged" }
+                return
+            }
             if (!loggedOut.compareAndSet(false, true)) return
             L.w { "[SessionAuthGuard] kick-out confirmed code=${e.code} source=$source, logging out" }
             logoutManager.get().doLogoutWithoutRemoveData()
@@ -141,6 +151,8 @@ class SessionAuthGuard @Inject constructor(
             L.w { "[SessionAuthGuard] confirm inconclusive source=$source: ${e.stackTraceToString()}" }
         }
     }
+
+    private fun currentCredential(): String? = userManager.getUserData()?.baseAuth?.takeIf { it.isNotEmpty() }
 
     private fun drainSignals() {
         while (signals.tryReceive().isSuccess) Unit

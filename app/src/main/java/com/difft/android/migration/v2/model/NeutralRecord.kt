@@ -34,4 +34,11 @@ sealed interface NeutralRecord {
      * a memory sink and installed into secure storage right after promote. Never staged, never logged.
      */
     data class Credential(val value: NeutralCredential) : NeutralRecord
+
+    /**
+     * An already-consumed envelope whose target message was not yet on the source device (#1382),
+     * carried to the destination's pending table; see [NeutralPendingEnvelope]. Requires the
+     * receiver capability `pending-envelope-v1`.
+     */
+    data class PendingEnvelope(val value: NeutralPendingEnvelope) : NeutralRecord
 }

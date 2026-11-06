@@ -6,6 +6,8 @@ import android.content.Context
 import android.os.SystemClock
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
+import com.difft.android.base.migration.pause.MessagingPauseState
 import com.difft.android.base.monitor.BackgroundPowerSampler
 import com.difft.android.base.monitor.PowerEvent
 import com.difft.android.base.utils.NetworkUtils
@@ -56,6 +58,7 @@ class WebSocketHealthMonitor
     private val coordinator: DomainSpeedTestCoordinator,
     private val keepAliveWakeAlarm: KeepAliveWakeAlarm,
     private val powerSampler: BackgroundPowerSampler,
+    private val messagingGate: MessagingGate,
 ) : HealthMonitor, CoroutineScope by appScope {
 
     @Volatile
@@ -489,6 +492,18 @@ class WebSocketHealthMonitor
         }
         delayWhenRetry(webSocketConnection)
         waitForNetworkFine(webSocketConnection.name)
+        waitUntilMessagingOpen(webSocketConnection.name)
+    }
+
+    /**
+     * Second line of the migration message pause (#1382), last before the connect: no connect
+     * while messaging is closed, whichever path started the monitor. The pause itself stops
+     * monitoring, which cancels this wait.
+     */
+    private suspend fun waitUntilMessagingOpen(websocketName: String) {
+        if (messagingGate.isOpen) return
+        L.i { "$websocketName [MigrationPause] event=connect_deferred state=${messagingGate.state.javaClass.simpleName}" }
+        messagingGate.onChanged.first { it == MessagingPauseState.Open }
     }
 
     private suspend fun waitUntilLoginStatus() {

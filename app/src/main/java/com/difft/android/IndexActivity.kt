@@ -4,17 +4,18 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import com.difft.android.setting.notificationtest.NotificationTestReturnRoute
+import com.difft.android.setting.notificationtest.NotificationTestReturns
+import com.difft.android.setting.notificationtest.NotificationTestFragment
+import com.difft.android.setting.notificationtest.NotificationTestDestination
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.TextUtils
-import android.view.GestureDetector
-import android.view.MotionEvent
+import android.view.Display
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.webkit.MimeTypeMap
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.core.animation.doOnEnd
 import androidx.fragment.app.Fragment
@@ -29,15 +30,21 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.AppScheme
 import com.difft.android.base.utils.DualPaneCollapseUtil
-import com.difft.android.base.utils.DualPaneRailUtil
 import com.difft.android.base.utils.DualPaneRatioUtil
-import com.difft.android.base.utils.EdgeToEdgeUtils
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.difft.android.base.utils.EnvironmentHelper
+import com.difft.android.base.utils.FilePathManager
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.LinkDataEntity
+import com.difft.android.base.utils.SharedUriGuard
+import com.difft.android.base.utils.SizeLimitExceededException
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
+import com.difft.android.base.utils.pane.ConversationTarget
+import com.difft.android.base.utils.copyToBounded
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.security.SafeLinkOpener
 import com.difft.android.base.widget.ToastUtil
@@ -47,10 +54,10 @@ import com.difft.android.chat.R
 import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.contactsdetail.ContactDetailBottomSheetDialogFragment
-import com.difft.android.chat.contacts.contactsdetail.ContactDetailFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
 import com.difft.android.chat.attachment.migration.ForwardAttachmentMigration
 import com.difft.android.chat.media.LegacyPlaintextAttachmentMigration
+import com.difft.android.chat.widget.AudioAmplitudesHelper
 import com.difft.android.base.glide.GlideCacheKeyManager
 import com.difft.android.chat.media.LegacyPlaintextAvatarCleanup
 import com.difft.android.chat.group.GroupChatContentActivity
@@ -59,20 +66,38 @@ import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.invite.InviteUtils
 import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.chat.recent.DualPaneSelectionListener
-import androidx.core.content.ContextCompat
-import com.difft.android.dualpane.DualPaneRailController
+import com.difft.android.chat.recent.ListPaneLayerOpener
 import com.difft.android.dualpane.DualPaneReconciler
-import com.difft.android.dualpane.RailSplitBackgroundDrawable
+import com.difft.android.dualpane.IndexBackCallback
+import com.difft.android.dualpane.IndexDetailPages
+import com.difft.android.dualpane.ListPaneLayer
+import com.difft.android.dualpane.ListPaneLayerRoot
+import com.difft.android.dualpane.OpenConversationExtra
+import com.difft.android.dualpane.PaneImeRouter
+import com.difft.android.dualpane.PaneNavigator
+import com.difft.android.dualpane.PaneSplitBackgroundDrawable
+import com.difft.android.home.ChatsBadge
+import com.difft.android.home.HomeTabCapsule
+import com.difft.android.home.HomeTabCapsuleState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.difft.android.base.ui.theme.DifftTheme
+import kotlinx.coroutines.flow.update
+import com.difft.android.dualpane.StaleLayoutMonitor
+import com.difft.android.dualpane.StaleLayoutOverride
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import com.difft.android.chat.recent.RecentChatFragment
 import com.difft.android.chat.recent.RecentChatUtil
 import com.difft.android.chat.recent.RecentChatViewModel
+import com.difft.android.chat.focus.GroupFocusRepository
 import com.difft.android.chat.setting.ConversationSettingsManager
 import com.difft.android.chat.translate.model.TranslateModelStore
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.ui.ChatActivity
-import com.difft.android.chat.ui.ChatBackgroundDrawable
 import com.difft.android.chat.ui.ChatFragment
 import com.difft.android.chat.ui.ChatInputFocusable
 import com.difft.android.chat.ui.ChatMessageListFragment
@@ -116,25 +141,37 @@ import javax.inject.Inject
 
 
 @AndroidEntryPoint
-class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessageListProvider, ChatInputFocusable {
+class IndexActivity :
+    BaseActivity(),
+    ConversationNavigationCallback,
+    ChatMessageListProvider,
+    ChatInputFocusable,
+    PaneNavigator.Owner,
+    ListPaneLayer.Owner,
+    ListPaneLayerOpener {
     private lateinit var binding: ActivityIndexBinding
 
-    // Dual-pane layout support for large screens
-    // Using a marker view to detect dual-pane mode (w673dp-h480dp layout)
+    // Two-pane layout (w673dp-h480dp), read from the resource mirror of the layout gate: both
+    // layouts carry detail_pane (the per-tab stacks restore into either tree).
     override var isDualPaneMode = false
         private set
     override val currentSelectedConversationId: String?
-        get() = currentConversationId
-    private var currentConversationId: String? = null
-        set(value) {
-            field = value
-            if (::startupPromptHost.isInitialized) startupPromptHost.onDetailPaneChanged()
-        }
+        get() = if (::navigator.isInitialized) navigator.currentSelectedId else null
 
-    // Store detail fragment for each tab (tab index -> Fragment)
-    // This allows preserving fragment state when switching tabs
-    private val tabDetailFragments = mutableMapOf<Int, Fragment?>()
-    private var currentTabIndex = 0
+    // Per-tab detail stacks (both layouts); owns the detail pane, the one-pane layer and the
+    // root background.
+    private lateinit var navigator: PaneNavigator
+    override val paneNavigator: PaneNavigator get() = navigator
+
+    // The list pane's layer (search, folded groups; both layouts): over the tab content, next to the navigator.
+    override lateinit var listLayer: ListPaneLayer
+        private set
+
+    // "The list is covered": the one-pane detail layer or the list-pane layer is up.
+    private lateinit var listCovered: StateFlow<Boolean>
+
+    // Two-pane: keyboard insets reach only the pane that holds the focused field.
+    private var paneImeRouter: PaneImeRouter? = null
 
     // Set on the first onRestoreInstanceState; a second one must not replay pager state.
     private var hierarchyStateRestored = false
@@ -142,34 +179,23 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     // Drives the list-pane collapse/expand snap; owns list_pane's width while running.
     private var paneAnimator: ValueAnimator? = null
 
-    // Enabled only while the list pane is collapsed: back re-opens the list.
-    private var collapsedBackCallback: OnBackPressedCallback? = null
-
-    // True once restoreDetailFragmentsState has run: the ViewPager2 restore dispatches
-    // onPageSelected BEFORE the posted reclaim, and that premature empty-tab pass must not
-    // auto-expand a persisted collapsed pane.
-    private var detailRestoreSettled = false
-
-    // Recreation (rotate / fold) restores the persisted collapse even over an empty detail
-    // pane; only a true cold start silently un-collapses it (blank-first-screen avoidance).
-    private var recreatedFromSavedState = false
-
     // Rebuilds the pane tree when the window crosses the dual-pane gate WITHOUT an OS relaunch
     // (ColorOS fold/unfold, floating window, split-screen). paneStarted gates recreate(), which
     // is a silent no-op while stopped; onStart is the retry edge for a deferred rebuild.
     private lateinit var paneReconciler: DualPaneReconciler
     private var paneStarted = false
 
-    // Navigation rail collapse (dual-pane only); null in single-pane mode.
-    private var railController: DualPaneRailController? = null
+    // Floating home tab capsule (HomeTabCapsule): selected tab, Chats badge, own avatar.
+    private val homeTabState = MutableStateFlow(HomeTabCapsuleState())
 
-    private val indicators by lazy {
-        listOf(
-            binding.indicatorviewChats,
-            binding.indicatorviewContacts,
-            binding.indicatorviewMe
-        )
-    }
+    // #1454: a fold whose Configuration never arrives (see StaleLayoutMonitor); the panel key a
+    // size override was applied for in attachBaseContext, if any.
+    private lateinit var staleMonitor: StaleLayoutMonitor
+    private var staleOverridePanel: String? = null
+
+    // Height of the capsule host (capsule + gaps + navigation-bar inset); the home pages pad
+    // their scrolling content by it so the last row clears the capsule.
+    private val homeTabBarObstruction = MutableStateFlow(0)
 
     @Inject
     lateinit var groupUtil: GroupUtil
@@ -213,6 +239,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     lateinit var conversationSettingsManager: ConversationSettingsManager
 
     @Inject
+    lateinit var groupFocusRepository: GroupFocusRepository
+
+    @Inject
     lateinit var translateModelStore: TranslateModelStore
 
     @Inject
@@ -239,22 +268,34 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     @Inject
     lateinit var forwardAttachmentMigration: ForwardAttachmentMigration
 
+    @Inject
+    lateinit var notificationTestReturns: NotificationTestReturns
+    private val handledTestReturns = LinkedHashSet<String>()
+    private var testReturnGeneration = 0
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        recreatedFromSavedState = savedInstanceState != null
+        handledTestReturns.addAll(savedInstanceState?.getStringArrayList("handled_notification_test_returns").orEmpty())
         binding = ActivityIndexBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         // Setup dual-pane layout for large screens (w673dp-h480dp)
         setupDualPaneLayout()
+        if (isDualPaneMode) paneImeRouter = PaneImeRouter(binding.root).also { it.attach() }
+        navigator = PaneNavigator(this, isDualPaneMode, IndexDetailPages, paneListener)
+        navigator.attach(savedInstanceState)
+        listLayer = ListPaneLayer(this, navigator.chrome, IndexDetailPages, navigator.detailCoversList) {
+            if (::startupPromptHost.isInitialized) startupPromptHost.onDetailPaneChanged()
+        }
+        listLayer.attach(savedInstanceState)
+        listCovered = combine(navigator.detailCoversList, listLayer.activeState) { detailLayer, listPaneLayer -> detailLayer || listPaneLayer }
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, navigator.detailCoversList.value || listLayer.active)
         paneReconciler = DualPaneReconciler(this, binding.root, isStarted = { paneStarted })
         paneReconciler.attach()
+        staleMonitor = StaleLayoutMonitor(this, paneReconciler, isStarted = { paneStarted }, activeOverridePanel = staleOverridePanel)
 
-        if (!isDualPaneMode) {
-            // The bar owns the navigation-bar strip (see shouldApplyNavigationBarPadding).
-            EdgeToEdgeUtils.applyBottomInsetAsPadding(binding.clTab)
-        }
+        mountHomeTabCapsule()
 
         // Measured here on the main thread: L lambdas run on the logger thread, and first-touching
         // androidx.window there races BaseActivity's FoldPostureWatcher into a class-init deadlock.
@@ -274,7 +315,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
             .onEach { textSize ->
                 val isLarger = textSize == TextSizeUtil.TEXT_SIZE_LAGER
-                indicators.forEach { it.updateSize(isLarger) }
                 applyListPaneWidth(isLarger)
             }
             .launchIn(lifecycleScope)
@@ -285,83 +325,15 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             .launchIn(lifecycleScope)
 
         setupDualPaneDivider()
+        // A collapsed list over an empty detail pane would be a blank first screen, so a cold
+        // start opens it; a recreation (rotate / fold) keeps the user's collapse.
+        if (savedInstanceState == null && isDualPaneMode) expandListPane(animate = false)
 
-        binding.indexViewpager.apply {
-            offscreenPageLimit = 1
-            isUserInputEnabled = false
-            // Disable overscroll effect in dual-pane mode
-            if (isDualPaneMode) {
-                overScrollMode = View.OVER_SCROLL_NEVER
-                // Also disable on internal RecyclerView
-                (getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)?.overScrollMode = View.OVER_SCROLL_NEVER
-            }
-            adapter = object : FragmentStateAdapter(this@IndexActivity) {
-                private val fragmentClasses =
-                    listOf(
-                        RecentChatFragment::class.java,
-                        ContactsFragment::class.java,
-                        MeFragment::class.java,
-                    )
-
-                override fun getItemCount(): Int = fragmentClasses.size
-
-                override fun createFragment(position: Int): Fragment {
-                    val fragmentClass = fragmentClasses[position]
-                    val fragment = fragmentClass.newInstance()
-                    return fragment
-                }
-            }
-
-            registerOnPageChangeCallback(object : OnPageChangeCallback() {
-                override fun onPageSelected(position: Int) {
-                    super.onPageSelected(position)
-                    // position 0 是会话列表，不允许截屏
-//                    ScreenShotUtil.refreshWithPagePolicy(this@IndexActivity, position != 0)
-                    selectIndicator(position)
-                    // Handle detail pane visibility when tab changes in dual-pane mode
-                    handleTabChangeForDualPane(position)
-                    // Sync root background to the active tab so edge-to-edge system
-                    // bars match the page underneath (recent/contacts = bg1 flat;
-                    // me = bg settings-idiom).
-                    applyRootBackgroundForTab(position)
-                }
-            }.also {
-                // 初始化时手动触发一次，因为 OnPageChangeCallback 默认不会触发第一页
-                it.onPageSelected(currentItem)
-            })
-
-            indicators.forEach {
-                it.setOnClickListener { view ->
-                    val index = indicators.indexOf(view)
-                    if (index < 0) return@setOnClickListener
-
-                    // Tapping any rail tab is the discoverable way back from a collapsed
-                    // list pane while the rail is visible; with the rail collapsed too, the
-                    // divider handle and Back remain.
-                    if (isDualPaneMode && DualPaneCollapseUtil.isCollapsed) {
-                        expandListPane()
-                    }
-                    binding.indexViewpager.setCurrentItem(index, false)
-                }
-            }
-        }
-
-        // Reclaim recreation-restored detail fragments once the adapter + restored currentItem are ready.
-        binding.indexViewpager.post { restoreDetailFragmentsState() }
-
-        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                RecentChatUtil.emitChatDoubleTab()
-                return true
-            }
-        })
-
-        binding.indicatorviewChats.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-        }
+        setupViewPager(restoring = savedInstanceState != null)
+        observeMyContactForHomeTab()
 
         // Handle Intent data (deeplink or external share)
-        handleIntentData(intent)
+        handleIntentData(intent, isRecreation = savedInstanceState != null)
         recordUA()
 
         initWCDB()
@@ -391,7 +363,11 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             activity = this,
             updateManager = updateManager,
             lockPending = (application as TempTalkApplication).screenLockPendingState,
-            dualPaneConversationOpen = { isDualPaneMode && currentConversationId != null },
+            // No prompt over a conversation (two-pane detail content, or the one-pane layer) or over the list-pane layer.
+            dualPaneConversationOpen = {
+                (isDualPaneMode && (navigator.currentSelectedId != null || navigator.depth() > 1)) ||
+                    navigator.detailCoversList.value || listLayer.active
+            },
         )
 
         syncContactAndGroupInfo()
@@ -406,22 +382,78 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         globalConfigsManager.syncMineConfigs()
 
-        // Sync conversation settings
-        conversationSettingsManager.syncConversationSettings()
+        // Sync conversation settings and the group focus state
+        syncConversationAndFocusState()
 
         // Reconcile the auto-translate models with what the conversations actually need. Costs one
         // SQL query and returns before touching ML Kit when no conversation has the setting on.
         translateModelStore.syncOnStart()
 
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                moveTaskToBack(true)
-            }
-        })
+        // The only Activity-level Back callback; hosted pages register theirs with
+        // detailBackOwner(), so the visible top page's callbacks run first.
+        onBackPressedDispatcher.addCallback(
+            this,
+            IndexBackCallback(
+                navigator = navigator,
+                listLayer = listLayer,
+                isListCollapsed = { isDualPaneMode && DualPaneCollapseUtil.isCollapsed },
+                expandList = { expandListPane() },
+                moveTaskToBack = { moveTaskToBack(true) },
+            )
+        )
 
         fetchCallServiceUrlAndCache()
 
         fetchFeatureGrayConfigs()
+    }
+
+    private fun setupViewPager(restoring: Boolean) {
+        binding.indexViewpager.apply {
+            offscreenPageLimit = 1
+            isUserInputEnabled = false
+            // Disable overscroll effect in dual-pane mode
+            if (isDualPaneMode) {
+                overScrollMode = View.OVER_SCROLL_NEVER
+                // Also disable on internal RecyclerView
+                (getChildAt(0) as? androidx.recyclerview.widget.RecyclerView)?.overScrollMode = View.OVER_SCROLL_NEVER
+            }
+            adapter = object : FragmentStateAdapter(this@IndexActivity) {
+                private val fragmentClasses =
+                    listOf(
+                        RecentChatFragment::class.java,
+                        ContactsFragment::class.java,
+                        MeFragment::class.java,
+                    )
+
+                override fun getItemCount(): Int = fragmentClasses.size
+
+                override fun createFragment(position: Int): Fragment {
+                    val fragmentClass = fragmentClasses[position]
+                    val fragment = fragmentClass.newInstance()
+                    return fragment
+                }
+            }
+
+            // Start on the navigator's restored tab: ViewPager2 restores its own item only later,
+            // and the first onPageSelected below must not switch the restored stacks away.
+            if (restoring) setCurrentItem(navigator.currentTab, false)
+
+            registerOnPageChangeCallback(object : OnPageChangeCallback() {
+                override fun onPageSelected(position: Int) {
+                    super.onPageSelected(position)
+                    // position 0 是会话列表，不允许截屏
+//                    ScreenShotUtil.refreshWithPagePolicy(this@IndexActivity, position != 0)
+                    selectIndicator(position)
+                    // Shows this tab's detail stack and hides the others; the navigator also
+                    // repaints the root background for the tab.
+                    navigator.selectTab(position)
+                }
+            }.also {
+                // 初始化时手动触发一次，因为 OnPageChangeCallback 默认不会触发第一页
+                it.onPageSelected(currentItem)
+            })
+
+        }
     }
 
     /** Last logged (notMuted, muted, dotNotMuted, dotMuted) so the badge log only fires on change. */
@@ -443,27 +475,94 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                     lastLoggedBadgeState = badgeState
                     L.i { "[IndexActivity] unread badge notMuted=$unreadNotMuteMessageCount muted=$unreadMuteMessageCount dotNotMuted=$manualNotMuted dotMuted=$manualMuted" }
                 }
-                when {
-                    unreadNotMuteMessageCount > 0 -> displayBadge(R.drawable.chat_missing_number_bg, unreadNotMuteMessageCount)
-                    manualNotMuted -> binding.indicatorviewChats.setBadgeDot(R.drawable.chat_missing_number_bg)
-                    unreadMuteMessageCount > 0 -> displayBadge(R.drawable.chat_missing_number_bg_muted, unreadMuteMessageCount)
-                    manualMuted -> binding.indicatorviewChats.setBadgeDot(R.drawable.chat_missing_number_bg_muted)
-                    else -> displayBadge(R.drawable.chat_missing_number_bg, 0)
+                val badge = when {
+                    unreadNotMuteMessageCount > 0 -> ChatsBadge.Count(unreadNotMuteMessageCount, muted = false)
+                    manualNotMuted -> ChatsBadge.Dot(muted = false)
+                    unreadMuteMessageCount > 0 -> ChatsBadge.Count(unreadMuteMessageCount, muted = true)
+                    manualMuted -> ChatsBadge.Dot(muted = true)
+                    else -> ChatsBadge.None
                 }
+                homeTabState.update { it.copy(chatsBadge = badge) }
                 userManager.update { unreadMsgNum = unreadNotMuteMessageCount }
                 appIconBadgeManager.updateAppIconBadgeNum(unreadNotMuteMessageCount)
             }
             .launchIn(lifecycleScope)
     }
 
-    private fun displayBadge(backgroundColorRes: Int, unreadMessageCount: Int) {
-        val badgeText = when {
-            unreadMessageCount <= 0 -> null
-            unreadMessageCount > 99 -> "99+"
-            else -> unreadMessageCount.toString()
+    /**
+     * Mounts [HomeTabCapsule] into both layouts' `home_tab_capsule` host. The list column runs
+     * under the navigation bar in both layouts (see shouldApplyNavigationBarPadding), so the
+     * host keeps its own gap above the bar. The host's laid-out height feeds
+     * [homeTabBarObstructionPx] so the home pages can scroll their last row clear of it.
+     */
+    private fun mountHomeTabCapsule() {
+        // iOS keeps the chrome 28dp above the screen bottom (over the home indicator). The host
+        // sees the navigation-bar inset: gesture navigation (24) lands on the same 28; a
+        // 3-button bar must stay clear, so the gap grows to the inset plus 4.
+        val gapPx = (HOME_TAB_BAR_BOTTOM_GAP_DP * resources.displayMetrics.density).toInt()
+        val clearancePx = (HOME_TAB_BAR_NAV_CLEARANCE_DP * resources.displayMetrics.density).toInt()
+        ViewCompat.setOnApplyWindowInsetsListener(binding.homeTabBar) { view, windowInsets ->
+            val navBottom = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            ).bottom
+            view.updatePadding(bottom = maxOf(gapPx, navBottom + clearancePx))
+            windowInsets
         }
+        binding.homeTabBar.requestApplyInsets()
+        binding.homeTabCapsule.setContent {
+            // Embedded composition: the host window keeps its own background (#1131).
+            DifftTheme(applyWindowBackground = false) {
+                val state by homeTabState.collectAsStateWithLifecycle()
+                HomeTabCapsule(
+                    state = state,
+                    onTabClick = ::onHomeTabClick,
+                    onChatsDoubleTap = RecentChatUtil::emitChatDoubleTab,
+                    onSearch = ::onHomeSearchClick,
+                )
+            }
+        }
+        binding.homeTabBar.addOnLayoutChangeListener { v, _, top, _, bottom, _, _, _, _ ->
+            homeTabBarObstruction.value = if (v.visibility == View.VISIBLE) bottom - top else 0
+        }
+    }
 
-        binding.indicatorviewChats.setBadgeText(badgeText, backgroundColorRes)
+    // Same reveal rule as a tab tap: search must not open inside a list pane that is collapsing.
+    private fun onHomeSearchClick() {
+        if (isDualPaneMode && DualPaneCollapseUtil.isCollapsed) {
+            expandListPane()
+        }
+        openSearchLayer()
+    }
+
+    private fun onHomeTabClick(index: Int) {
+        // Tapping a tab is the discoverable way back from a collapsed list pane (the capsule
+        // collapses with the list, so this only fires while it is being revealed); the
+        // divider handle and Back remain.
+        if (isDualPaneMode && DualPaneCollapseUtil.isCollapsed) {
+            expandListPane()
+        }
+        // The list-pane layer is global, not per tab: a tab tap leaves it, as iOS hides the tab bar under search.
+        listLayer.close()
+        binding.indexViewpager.setCurrentItem(index, false)
+    }
+
+    /** The Me tab shows the user's own avatar; MeFragment reads the same contact the same way. */
+    private fun observeMyContactForHomeTab() {
+        lifecycleScope.launch { loadMyContactForHomeTab() }
+        ContactorUtil.contactsUpdate
+            .onEach { updatedIds -> if (updatedIds.contains(globalServices.myId)) loadMyContactForHomeTab() }
+            .launchIn(lifecycleScope)
+    }
+
+    private suspend fun loadMyContactForHomeTab() {
+        try {
+            val result = withContext(Dispatchers.IO) { ContactorUtil.getContactWithID(this@IndexActivity, globalServices.myId) }
+            homeTabState.update { it.copy(me = result.orElse(null)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.w { "[IndexActivity] home tab own contact load failed: ${e.message}" }
+        }
     }
 
     /**
@@ -501,6 +600,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         handleIntentData(intent)
     }
 
+    /** Full conversation-settings pull plus the group focus GET (the only source of its feature switch). */
+    private fun syncConversationAndFocusState() {
+        conversationSettingsManager.syncConversationSettings()
+        groupFocusRepository.requestRefresh("index-start")
+    }
+
     private fun syncContactAndGroupInfo() {
         lifecycleScope.launch(Dispatchers.IO) {
             ContactorUtil.fetchAndSaveContactors(false)
@@ -523,60 +628,8 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
 
     private fun selectIndicator(indicatorPosition: Int) {
-        indicators
-            .forEachIndexed { index, indicator ->
-                val shouldSelected = index == indicatorPosition
-                indicator.isSelected = shouldSelected
-            }
+        homeTabState.update { it.copy(selected = indicatorPosition) }
     }
-
-    private fun applyRootBackgroundForTab(position: Int) {
-        // Recent (0) and Contacts (1) tabs are flat-surface immersive lists → bg1
-        // Me (2) tab is settings-idiom (gray page + elevated cards) → bg
-        // Edge-to-edge, no opaque system-bar background: the root colour shows through the
-        // status bar. The navigation-bar strip belongs to cl_tab here and to the root only in
-        // dual-pane, where there is no bottom bar.
-        val bgRes = if (position == 2) {
-            com.difft.android.base.R.color.bg
-        } else {
-            com.difft.android.base.R.color.bg1
-        }
-        // Dual-pane: the status/navigation bar strips keep the colour of the column below them
-        // (rail, list pane, detail pane), so no column is cut by a strip of another colour.
-        val rail = binding.root.findViewById<View>(com.difft.android.R.id.navigation_rail_container)
-        val detailPane = binding.root.findViewById<View>(com.difft.android.R.id.detail_pane)
-        if (rail == null || detailPane == null) {
-            binding.root.setBackgroundResource(bgRes)
-            return
-        }
-        binding.root.background = RailSplitBackgroundDrawable(
-            rail = rail,
-            detailPane = detailPane,
-            railColor = ContextCompat.getColor(this, com.difft.android.base.R.color.bg1),
-            listColor = ContextCompat.getColor(this, bgRes),
-            detailColor = ContextCompat.getColor(this, detailPaneBackgroundRes(position)),
-        )
-        if (!railLayoutListenerAdded) {
-            railLayoutListenerAdded = true
-            binding.root.viewTreeObserver.addOnGlobalLayoutListener {
-                (binding.root.background as? RailSplitBackgroundDrawable)?.onPanesLaidOut()
-                syncListDetailDivider()
-            }
-        }
-    }
-
-    // Background of what the detail pane shows: settings pages (Me tab) and the contact card use
-    // the settings background; chats and the empty state sit on bg1.
-    private fun detailPaneBackgroundRes(position: Int): Int {
-        val detail = tabDetailFragments[position]
-        return if (position == 2 || detail is ContactDetailFragment) {
-            com.difft.android.base.R.color.bg
-        } else {
-            com.difft.android.base.R.color.bg1
-        }
-    }
-
-    private var railLayoutListenerAdded = false
 
     // A collapsed list pane would leave the list/detail line beside the rail's own divider.
     private fun syncListDetailDivider() {
@@ -587,15 +640,20 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     /**
-     * Phone layout: the bottom tab bar consumes the navigation-bar inset itself, so its bg1
-     * keeps that strip bg1 on every tab. Dual-pane keeps the root padding — its rail and panes
-     * reach the window bottom and there is no bottom bar.
-     *
-     * Runs inside [setContentView], before [isDualPaneMode] is assigned, so it reads the
-     * pinned resource mirror of the inflated layout (see `PaneGateResourceAgreementTest`).
+     * Never: in both layouts the list and detail columns run under the navigation bar. The
+     * floating tab capsule keeps its own gap above it ([mountHomeTabCapsule]) and every page
+     * in a pane or layer pads its own bottom (`containerPadsBottom()` is false there), the same
+     * way a one-pane page always has.
      */
-    override fun shouldApplyNavigationBarPadding(): Boolean =
-        resources.getBoolean(com.difft.android.R.bool.dual_pane_layout_active)
+    override fun shouldApplyNavigationBarPadding(): Boolean = false
+
+    /** #1454 snapshot extras: the dual-pane gate, tree and state, read like [DualPaneReconciler] does. */
+    override fun extraFoldDiag(): String {
+        val gate = resources.getBoolean(com.difft.android.R.bool.dual_pane_layout_active)
+        val tree = DualPaneReconciler.treeIsDualPane(this)
+        val rootPx = if (::binding.isInitialized) "${binding.root.width}x${binding.root.height}" else "none"
+        return " gate=$gate tree=$tree dualPane=$isDualPaneMode started=$paneStarted paneRootPx=$rootPx"
+    }
 
     private var insiderUpdateChecked = false
 
@@ -672,6 +730,9 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             FileUtil.deleteMessageAttachmentEmptyDirectories()
             // One-time purge of legacy plaintext media (re-encrypt to .encrypt, delete plaintext).
             LegacyPlaintextAttachmentMigration.runIfNeeded()
+            // One-time removal of decrypted copies left beside a usable ciphertext (#1438).
+            LegacyPlaintextAttachmentMigration.purgeRedundantPlaintextIfNeeded()
+            AudioAmplitudesHelper.clearStaleTemps()
             // One-time purge of legacy plaintext avatar cache (delete; re-downloads encrypted, docs §15).
             LegacyPlaintextAvatarCleanup.runIfNeeded()
         }
@@ -702,10 +763,48 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      * Unified handler for Intent data.
      * Routes to deeplink handler or share handler based on action.
      */
-    private fun handleIntentData(intent: Intent) {
+    private fun handleIntentData(intent: Intent, isRecreation: Boolean = false) {
+        testReturnGeneration++
+        if (intent.hasCategory(NotificationTestReturnRoute.CATEGORY)) {
+            handleNotificationTestReturn(intent)
+            return
+        }
+        // Router rule 2: another Activity in a two-pane window asked for a conversation here.
+        OpenConversationExtra.consume(intent, isRecreation)?.let { openExternalConversation(it) }
         when (intent.action) {
             Intent.ACTION_SEND -> handleShareIntent(intent)
-            else -> handleDeeplinkFromIntent(intent)
+            else -> handleDeeplinkFromIntent(intent, isRecreation)
+        }
+    }
+
+    private fun handleNotificationTestReturn(intent: Intent) {
+        val route = NotificationTestReturnRoute.read(intent) ?: run {
+            L.w { "[NotificationTest] return_rejected reason=invalid_identity" }
+            return
+        }
+        if (route.runId in handledTestReturns) return
+        val generation = testReturnGeneration
+        val requestVersion = navigator.requestVersion
+        lifecycleScope.launch {
+            val exists = notificationTestReturns.decide(route, navigator.retainedMePages()) is NotificationTestReturns.Decision.Existing
+            if (!exists && !notificationTestReturns.discardStale(route)) {
+                ToastUtil.show(com.difft.android.chat.R.string.notification_test_persistence_failed)
+            }
+            if (generation != testReturnGeneration || intent !== this@IndexActivity.intent) return@launch
+            navigator.openMePage(
+                keepExisting = { pages ->
+                    notificationTestReturns.decide(route, pages) is NotificationTestReturns.Decision.Existing ||
+                        pages.filterIsInstance<NotificationTestFragment>().any { it.hasActiveRun() }
+                },
+                createPage = { NotificationTestDestination.newFragment() },
+                shouldOpen = { generation == testReturnGeneration && intent === this@IndexActivity.intent && route.runId !in handledTestReturns },
+                expectedRequestVersion = requestVersion,
+                onPresented = {
+                    handledTestReturns.add(route.runId)
+                    // Bound saved state even if a long-lived home handles many old notification taps.
+                    if (handledTestReturns.size > 32) handledTestReturns.remove(handledTestReturns.first())
+                },
+            )
         }
     }
 
@@ -713,7 +812,7 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      * Handle deeplink data from Intent (notification click, push, scheme URL).
      * Priority: linkCategory > pushData > schemeUri
      */
-    private fun handleDeeplinkFromIntent(intent: Intent) {
+    private fun handleDeeplinkFromIntent(intent: Intent, isRecreation: Boolean) {
         val linkCategory = intent.getIntExtra(LinkDataEntity.LINK_CATEGORY, -1)
         val pushData = intent.getStringExtra("pushData")
         val groupId = intent.getStringExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID)
@@ -751,7 +850,18 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             }
         }
         
-        linkDataEntity?.let { handleDeeplink(it) }
+        // A recreation (language, theme) keeps the launch intent. Its chat was already opened, and
+        // reopening it would pull the user back in (#1395). Other categories re-run as before: an
+        // invite lookup or share started before the recreation does not survive it.
+        val chatAlreadyOpened = isRecreation && linkDataEntity?.category.let {
+            it == LinkDataEntity.CATEGORY_PUSH || it == LinkDataEntity.CATEGORY_MESSAGE
+        }
+        if (!chatAlreadyOpened) linkDataEntity?.let { handleDeeplink(it) }
+    }
+
+    /** Notification, link or router request: opens in the Chats tab's detail stack (both layouts). */
+    private fun openExternalConversation(target: ConversationTarget) {
+        navigator.openConversation(target, PaneNavigator.Origin.External)
     }
 
     private fun handleDeeplink(linkData: LinkDataEntity) {
@@ -762,16 +872,13 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             LinkDataEntity.CATEGORY_PUSH, LinkDataEntity.CATEGORY_MESSAGE -> {
                 if (!TextUtils.isEmpty(linkData.gid)) {
                     if (ValidatorUtil.isGid(linkData.gid.toString())) {
-                        GroupChatContentActivity.startActivity(
-                            this,
-                            linkData.gid ?: ""
-                        )
+                        openExternalConversation(ConversationTarget(ConversationTarget.Kind.GROUP, linkData.gid ?: ""))
                     } else {
                         L.e { "[Deeplink] CATEGORY_PUSH gid:${linkData.gid} is invalid" }
                     }
                 } else if (!TextUtils.isEmpty(linkData.uid)) {
                     if (ValidatorUtil.isUid(linkData.uid.toString())) {
-                        ChatActivity.startActivity(this, linkData.uid ?: "")
+                        openExternalConversation(ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, linkData.uid ?: ""))
                     } else {
                         L.e { "[Deeplink] CATEGORY_PUSH uid:${linkData.uid} is invalid" }
                     }
@@ -821,12 +928,26 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     override fun onStop() {
         super.onStop()
         paneStarted = false
+        staleMonitor.onStop()
+    }
+
+    // Before anything reads this activity's resources: Activity.attach() builds the window from them.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        staleOverridePanel = StaleLayoutOverride.applyIfActive(this, newBase)
+    }
+
+    override fun onHostDisplayChanged(display: Display) {
+        if (::staleMonitor.isInitialized) staleMonitor.onHostDisplayChanged()
     }
 
     override fun onDestroy() {
         paneAnimator?.cancel()
         paneAnimator = null
         paneReconciler.detach()
+        staleMonitor.detach()
+        paneImeRouter?.detach()
+        paneImeRouter = null
         super.onDestroy()
     }
 
@@ -893,6 +1014,15 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      */
     private fun handleSharedFileUri(uri: Uri) {
         lifecycleScope.launch {
+            val rejected = withContext(Dispatchers.IO) {
+                SharedUriGuard.pointsIntoAppStorage(uri, SharedUriGuard.appStorageRoots(this@IndexActivity))
+            }
+            if (rejected) {
+                L.w { "[Share] rejected file uri into app storage" }
+                ToastUtil.showLong(R.string.unsupported_file_type)
+                return@launch
+            }
+
             // 优先判断文件大小是否超过200MB
             val fileSize = withContext(Dispatchers.IO) {
                 FileUtil.getFileSize(uri)
@@ -903,14 +1033,18 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                 return@launch
             }
 
-            val file = withContext(Dispatchers.IO) {
-                runCatching { copyUriToFile(uri) }
-                    .onFailure { L.e { "copyUriToFile failed: ${it.stackTraceToString()}" } }
-                    .getOrNull()
-            }
-
+            val copied = withContext(Dispatchers.IO) { runCatching { copyUriToFile(uri) } }
+            val file = copied.getOrNull()
             if (file == null) {
-                ToastUtil.showLong(R.string.unsupported_file_type)
+                val error = copied.exceptionOrNull()
+                if (error is SizeLimitExceededException) {
+                    // The provider reported a size under the limit but streamed more.
+                    L.w { "[Share] shared stream exceeded size limit reported=$fileSize" }
+                    ToastUtil.showLong(getString(R.string.max_support_file_size_limit))
+                } else {
+                    L.e { "[Share] copy shared file failed: ${error?.stackTraceToString()}" }
+                    ToastUtil.showLong(R.string.unsupported_file_type)
+                }
                 return@launch
             }
 
@@ -955,15 +1089,22 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         } ?: "tmp" // Default to a .tmp extension if MIME type is unknown
 
         val fileName = "shared_file_${System.currentTimeMillis()}.$extension"
-        // Staged in draft_blobs like every other pre-send intermediate: sendFile copies it into
-        // attachment storage, and the startup sweep reclaims whatever a cancel or crash left behind.
-        val file = File(FileUtil.getFilePath(FileUtil.DRAFT_ATTACHMENTS_DIRECTORY), fileName)
+        // Staged in internal storage, not draft_blobs: the copy happens before the user picks a chat,
+        // and draft_blobs may sit on external storage other apps can read (#1429). sendFile copies it
+        // into attachment storage, and the startup sweep reclaims whatever a cancel or crash left behind.
+        val file = File(FilePathManager.shareImportDir, fileName)
 
         // Copy the bytes, capturing the exact failure so "unsupported file type" reports have a root
         // cause in logcat. Try openInputStream first, then fall back to openFileDescriptor — some
         // providers (e.g. our decrypting EncryptedAttachmentProvider, OEM file managers) succeed on
         // one path but not the other.
-        if (!copyUriContent(uri, file)) {
+        val copied = try {
+            copyUriContent(uri, file)
+        } catch (e: SizeLimitExceededException) {
+            file.delete()
+            throw e
+        }
+        if (!copied) {
             file.delete()
             throw java.io.FileNotFoundException("[IndexActivity] no readable stream for shared uri=${uri.redactedForLog()} (mime=$mimeType)")
         }
@@ -971,26 +1112,35 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
         return file
     }
 
+    /**
+     * The sender controls both the reported size and the stream, so the copy itself enforces the
+     * limit; [SizeLimitExceededException] propagates instead of falling back to the next path.
+     */
     private fun copyUriContent(uri: Uri, target: File): Boolean {
-        runCatching {
+        val maxBytes = FileUtil.MAX_SUPPORT_FILE_SIZE - 1L
+        try {
             contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { input.copyTo(it) }
+                target.outputStream().use { input.copyToBounded(it, maxBytes) }
                 return true
             }
             L.w { "[IndexActivity] openInputStream returned null for ${uri.redactedForLog()}" }
-        }.onFailure {
-            L.w { "[IndexActivity] openInputStream failed for ${uri.redactedForLog()}: ${it.stackTraceToString()}" }
+        } catch (e: SizeLimitExceededException) {
+            throw e
+        } catch (e: Exception) {
+            L.w { "[IndexActivity] openInputStream failed for ${uri.redactedForLog()}: ${e.stackTraceToString()}" }
         }
 
-        runCatching {
+        try {
             contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                 java.io.FileInputStream(pfd.fileDescriptor).use { input ->
-                    target.outputStream().use { input.copyTo(it) }
+                    target.outputStream().use { input.copyToBounded(it, maxBytes) }
                 }
                 return true
             }
-        }.onFailure {
-            L.e { "[IndexActivity] openFileDescriptor failed for ${uri.redactedForLog()}: ${it.stackTraceToString()}" }
+        } catch (e: SizeLimitExceededException) {
+            throw e
+        } catch (e: Exception) {
+            L.e { "[IndexActivity] openFileDescriptor failed for ${uri.redactedForLog()}: ${e.stackTraceToString()}" }
         }
 
         return false
@@ -1032,24 +1182,16 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      * Detects dual-pane mode by checking for detail_pane view which only exists in that layout.
      */
     private fun setupDualPaneLayout() {
-        // Check for detail_pane view which only exists in the w673dp-h480dp layout variant
-        val detailPane = findViewById<View>(com.difft.android.R.id.detail_pane)
-        isDualPaneMode = detailPane != null
+        // Same configuration as the inflation that just ran, so the mirror agrees with the tree
+        // (PaneGateResourceAgreementTest).
+        isDualPaneMode = resources.getBoolean(com.difft.android.R.bool.dual_pane_layout_active)
 
         if (isDualPaneMode) {
-            // Empty state by default; restoreDetailFragmentsState() (posted from onCreate) reclaims
-            // any recreation-restored detail fragments — too early to reclaim here.
-            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
-            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
-
-            // Navigation rail collapse: load the persisted state and apply it here, before the
-            // first layout, so a collapsed rail never flashes; the list-pane budget below is
-            // rail-independent (it always subtracts the rail dimen).
-            val rail = findViewById<View>(com.difft.android.R.id.navigation_rail_container)
-            val railDivider = findViewById<View>(com.difft.android.R.id.divider_rail)
-            if (rail != null && railDivider != null) {
-                DualPaneRailUtil.loadAndEmit()
-                railController = DualPaneRailController(rail, railDivider).also { it.bind(this) }
+            // The navigator paints the root as list / detail columns; redraw them and the
+            // list/detail line whenever the panes move.
+            binding.root.viewTreeObserver.addOnGlobalLayoutListener {
+                (binding.root.background as? PaneSplitBackgroundDrawable)?.onPanesLaidOut()
+                syncListDetailDivider()
             }
 
             // Apply list pane width based on current text size (avoid flicker on cold start)
@@ -1169,13 +1311,13 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
                             expandListPane()
                         } else {
                             // Retract the peek; keep the peeked content at its laid-out width.
-                            animateListPaneWidth(COLLAPSED_LIST_WIDTH_PX, frozenContentPx = binding.indexViewpager.layoutParams.width)
+                            animateListPaneWidth(COLLAPSED_LIST_WIDTH_PX, frozenContentPx = binding.listContent.layoutParams.width)
                         }
                     } else {
                         virtualWidthPx = overshoot
                         // Peek: reveal the edge of the (fully laid-out) list as feedback.
-                        if (binding.indexViewpager.layoutParams.width == android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
-                            binding.indexViewpager.layoutParams = binding.indexViewpager.layoutParams.apply {
+                        if (binding.listContent.layoutParams.width == android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                            binding.listContent.layoutParams = binding.listContent.layoutParams.apply {
                                 width = resolveListTargetPx(TextSizeUtil.isLarger)
                             }
                         }
@@ -1241,36 +1383,13 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
             if (DualPaneCollapseUtil.isCollapsed) expandListPane()
         }
 
-        // Restore the collapsed back handler for a state persisted across recreation —
-        // posted so registration lands AFTER onCreate's other back callbacks (see below).
-        binding.root.post {
-            if (DualPaneCollapseUtil.isCollapsed) ensureCollapsedBackCallback()
-        }
-
         updateDividerAccessibility(divider)
     }
 
-    /**
-     * Register the back-to-expand handler LAZILY — at first collapse, or posted after
-     * onCreate for a restored collapsed state: onCreate registers an always-enabled
-     * moveTaskToBack callback AFTER setupDualPaneDivider runs, and OnBackPressedDispatcher
-     * is LIFO — a handler registered before it would never receive Back.
-     */
-    private fun ensureCollapsedBackCallback() {
-        if (collapsedBackCallback != null) {
-            collapsedBackCallback?.isEnabled = true
-            return
-        }
-        collapsedBackCallback = onBackPressedDispatcher.addCallback(this) {
-            expandListPane()
-        }.apply { isEnabled = true }
-    }
-
-    /** Collapse the list pane so the detail pane takes the full width. */
+    /** Collapse the list pane so the detail pane takes the full width (Back re-opens it). */
     private fun collapseListPane() {
         if (DualPaneCollapseUtil.isCollapsed) return
         DualPaneCollapseUtil.setCollapsed(true)
-        ensureCollapsedBackCallback()
         animateListPaneWidth(COLLAPSED_LIST_WIDTH_PX)
         findViewById<DraggableDividerView>(com.difft.android.R.id.divider_pane)
             ?.let { updateDividerAccessibility(it) }
@@ -1280,7 +1399,6 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     private fun expandListPane(animate: Boolean = true) {
         if (!DualPaneCollapseUtil.isCollapsed) return
         DualPaneCollapseUtil.setCollapsed(false)
-        collapsedBackCallback?.isEnabled = false
         applyCollapsedContentImportance()
         if (animate) {
             animateListPaneWidth(resolveListTargetPx(TextSizeUtil.isLarger))
@@ -1294,14 +1412,16 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     /**
      * Animate list_pane between the collapsed constant and an expanded target.
      *
-     * The pane content ([ActivityIndexBinding.indexViewpager]) is frozen at the wider endpoint
-     * for the duration, so the list is revealed/concealed by the pane's clip instead of its
-     * rows re-laying out on every frame (widths inside 1..min are never a layout state the
-     * rows see); restored to MATCH_PARENT when the animation lands.
+     * The pane content ([ActivityIndexBinding.listContent]: the pager plus the floating tab
+     * capsule, start-aligned) is frozen at the wider endpoint for the duration, so the list is
+     * revealed/concealed by the pane's clip instead of its rows re-laying out on every frame
+     * (widths inside 1..min are never a layout state the rows see) and the capsule keeps its
+     * place instead of re-centring in the shrinking pane; restored to MATCH_PARENT when the
+     * animation lands.
      */
     private fun animateListPaneWidth(targetPx: Int, frozenContentPx: Int = 0) {
         val listPane = findViewById<View>(com.difft.android.R.id.list_pane) ?: return
-        val content = binding.indexViewpager
+        val content = binding.listContent
         // Cancel BEFORE freezing: cancel() fires the old animator's doOnEnd synchronously,
         // which restores MATCH_PARENT — done after the freeze it would defeat it.
         paneAnimator?.cancel()
@@ -1349,12 +1469,12 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      */
     private fun applyCollapsedContentImportance() {
         val collapsed = DualPaneCollapseUtil.isCollapsed
-        binding.indexViewpager.importantForAccessibility = if (collapsed) {
+        binding.listContent.importantForAccessibility = if (collapsed) {
             View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         } else {
             View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
         }
-        (binding.indexViewpager as? android.view.ViewGroup)?.descendantFocusability = if (collapsed) {
+        binding.listContent.descendantFocusability = if (collapsed) {
             android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
         } else {
             android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
@@ -1406,19 +1526,15 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
     }
 
     private fun availablePaneSpacePx(): Int {
-        // Rail + rail divider widths come from the banded dual_pane_* dimens
-        // (values/dimens.xml vs values-w900dp/dimens.xml), mirroring
-        // layout-w673dp-h480dp/activity_index.xml. divider_pane is a floating overlay
-        // (negative marginStart) and does NOT consume horizontal layout space.
+        // The list and detail panes share the whole root width: the list/detail line and
+        // divider_pane are floating overlays (the latter with a negative marginStart) and do
+        // NOT consume horizontal layout space, and the home tabs float over the list pane.
         // WindowMetrics bounds INCLUDE system decoration, but the panes lay out inside the
         // root that BaseActivity's edge-to-edge pass pads by the horizontal insets — without
         // subtracting that padding the detail-pane floor is overstated by the inset (a side
         // navigation bar or landscape cutout) and the drag clamp can starve it below 360dp.
         val insetPaddingPx = binding.root.paddingLeft + binding.root.paddingRight
-        val railPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_rail_width)
-        val dividersPx = resources.getDimensionPixelSize(com.difft.android.R.dimen.dual_pane_divider_width)
-        return (WindowSizeClassUtil.getWindowWidthPx(this) - insetPaddingPx - railPx - dividersPx)
-            .coerceAtLeast(0)
+        return (WindowSizeClassUtil.getWindowWidthPx(this) - insetPaddingPx).coerceAtLeast(0)
     }
 
     /** Pane minimums resolved from the banded dual_pane_* dimens for one apply/drag pass. */
@@ -1463,222 +1579,36 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
 
         const val PANE_SNAP_ANIM_MS = 220L
 
-        // Single-pane hosts have no rail: the contract promises a constant false.
-        private val NO_RAIL: StateFlow<Boolean> = MutableStateFlow(false)
+        // Floating home chrome: bottom gap matching iOS's 28, and the clearance kept above a
+        // 3-button navigation bar.
+        const val HOME_TAB_BAR_BOTTOM_GAP_DP = 28
+        const val HOME_TAB_BAR_NAV_CLEARANCE_DP = 4
     }
 
-    // Per-tab tag (not per-conversation) — one detail fragment per tab, ceiling 3.
-    private fun detailFragmentTagForTab(tabIndex: Int): String = "detail_tab_$tabIndex"
-    private val detailFragmentTagRegex = Regex("""detail_tab_(\d+)""")
-
-    /**
-     * After a config-change recreation, FragmentManager auto-restores the detail fragments but our
-     * [tabDetailFragments] map (an Activity field) is lost. Rebuild it from each fragment's per-tab
-     * tag, then show the current tab's fragment and hide the rest — they share one container, so
-     * without this they'd overlap (the bug #438 avoided by clearing instead).
-     */
-    private fun restoreDetailFragmentsState() {
-        if (!isDualPaneMode) return
-
-        // List-pane fragments to exclude (same whitelist as the old clear path).
-        val viewPagerFragmentTypes = setOf(
-            RecentChatFragment::class.java,
-            ContactsFragment::class.java,
-            MeFragment::class.java
-        )
-
-        // Restored detail fragments = non-list fragments with a per-tab tag (already attached, don't re-add).
-        val restored = supportFragmentManager.fragments.filter { fragment ->
-            !viewPagerFragmentTypes.contains(fragment.javaClass) &&
-                fragment.tag?.let { detailFragmentTagRegex.matches(it) } == true
-        }
-
-        if (restored.isEmpty()) {
-            // Cold start with nothing open: a persisted collapsed state over the empty detail
-            // pane would be a blank first screen — silently un-collapse. On RECREATION the
-            // user's collapse survives (the edge handle / tabs / back all lead out of it).
-            if (!recreatedFromSavedState) expandListPane(animate = false)
-            detailRestoreSettled = true
-            return
-        }
-
-        restored.forEach { fragment ->
-            val tabIndex = detailFragmentTagRegex.matchEntire(fragment.tag!!)!!.groupValues[1].toInt()
-            tabDetailFragments[tabIndex] = fragment
-        }
-
-        currentTabIndex = binding.indexViewpager.currentItem
-
-        // Show only the current tab's fragment, hide the rest (overlap fix).
-        val transaction = supportFragmentManager.beginTransaction()
-        tabDetailFragments.forEach { (tab, fragment) ->
-            if (fragment != null) {
-                if (tab == currentTabIndex) transaction.show(fragment) else transaction.hide(fragment)
-            }
-        }
-        // Deferred post (viewpager.post) can dequeue after onSaveInstanceState during background
-        // recreation; tolerate state loss (show/hide is re-derived on any later recreate).
-        if (supportFragmentManager.isStateSaved) {
-            L.w { "[IndexActivity] restoreDetailFragmentsState committing after state save (tolerated via commitAllowingStateLoss)" }
-        }
-        transaction.commitAllowingStateLoss()
-
-        detailRestoreSettled = true
-
-        // Restore current tab's chrome + currentConversationId (mirrors handleTabChangeForDualPane).
-        val current = tabDetailFragments[currentTabIndex]
-        if (current != null) {
-            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
-            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
-            currentConversationId = when (current) {
-                is ChatFragment -> {
-                    setDetailPaneChatBackground()
-                    current.arguments?.getString(ChatFragment.ARG_CONTACT_ID)
-                }
-                is GroupChatFragment -> {
-                    setDetailPaneChatBackground()
-                    current.arguments?.getString(GroupChatFragment.ARG_GROUP_ID)
-                }
-                is ContactDetailFragment -> {
-                    clearDetailPaneChatBackground()
-                    current.arguments?.getString(ContactDetailFragment.ARG_CONTACT_ID)
-                }
-                else -> {
-                    clearDetailPaneChatBackground()
-                    null
-                }
-            }
-        } else {
-            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
-            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
-            clearDetailPaneChatBackground()
-            currentConversationId = null
-        }
-
-        L.i { "[IndexActivity] restoreDetailFragmentsState reclaimed=${tabDetailFragments.size} currentTab=$currentTabIndex hasDetail=${current != null}" }
-        applyRootBackgroundForTab(currentTabIndex)
-        notifyListFragmentSelectionChanged()
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        navigator.saveState(outState)
+        listLayer.saveState(outState)
+        outState.putStringArrayList("handled_notification_test_returns", ArrayList(handledTestReturns))
     }
 
-    /**
-     * Show a one-on-one chat in the detail pane
-     */
-    private fun showChatInDetailPane(contactId: String, jumpMessageTimestamp: Long? = null) {
-        if (!isDualPaneMode) return
-
-        // Hide empty state
-        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
-        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
-
-        // Set chat background on detail_pane (not affected by IME padding in Fragment)
-        setDetailPaneChatBackground()
-
-        currentConversationId = contactId
-
-        val newFragment = ChatFragment.newInstance(
-            contactId = contactId,
-            jumpMessageTimestamp = jumpMessageTimestamp
-        )
-
-        replaceDetailFragmentForCurrentTab(newFragment)
-    }
-
-    /**
-     * Show a group chat in the detail pane
-     */
-    private fun showGroupChatInDetailPane(groupId: String, jumpMessageTimestamp: Long? = null) {
-        if (!isDualPaneMode) return
-
-        // Hide empty state
-        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
-        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
-
-        // Set chat background on detail_pane (not affected by IME padding in Fragment)
-        setDetailPaneChatBackground()
-
-        currentConversationId = groupId
-
-        val newFragment = GroupChatFragment.newInstance(
-            groupId = groupId,
-            jumpMessageTimestamp = jumpMessageTimestamp
-        )
-
-        replaceDetailFragmentForCurrentTab(newFragment)
-    }
-
-    /**
-     * Set chat background on detail_pane.
-     * Background is set here (not in Fragment) so it stays fixed when keyboard appears.
-     */
-    private fun setDetailPaneChatBackground() {
-        findViewById<View>(com.difft.android.R.id.detail_pane)?.background =
-            ChatBackgroundDrawable(this)
-    }
-
-    /**
-     * Clear chat background from detail_pane.
-     */
-    private fun clearDetailPaneChatBackground() {
-        findViewById<View>(com.difft.android.R.id.detail_pane)?.background = null
-    }
-
-    /**
-     * Handle tab change in dual-pane mode
-     * Hide current tab's detail fragment and show the target tab's detail fragment
-     */
-    private fun handleTabChangeForDualPane(newTabIndex: Int) {
-        if (!isDualPaneMode) return
-        if (newTabIndex == currentTabIndex) return
-
-        val oldFragment = tabDetailFragments[currentTabIndex]
-        val newFragment = tabDetailFragments[newTabIndex]
-
-        val transaction = supportFragmentManager.beginTransaction()
-
-        // Hide old fragment
-        oldFragment?.let { transaction.hide(it) }
-
-        // Show or restore new fragment
-        if (newFragment != null) {
-            transaction.show(newFragment)
-            // Hide empty state
-            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
-            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
-            // Update currentConversationId and background based on fragment type
-            currentConversationId = when (newFragment) {
-                is ChatFragment -> {
-                    setDetailPaneChatBackground()
-                    newFragment.arguments?.getString(ChatFragment.ARG_CONTACT_ID)
-                }
-                is GroupChatFragment -> {
-                    setDetailPaneChatBackground()
-                    newFragment.arguments?.getString(GroupChatFragment.ARG_GROUP_ID)
-                }
-                is ContactDetailFragment -> {
-                    clearDetailPaneChatBackground()
-                    newFragment.arguments?.getString(ContactDetailFragment.ARG_CONTACT_ID)
-                }
-                else -> {
-                    clearDetailPaneChatBackground()
-                    null
-                }
-            }
-        } else {
-            // No fragment for this tab, show empty state
-            clearDetailPaneChatBackground()
-            findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
-            findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
-            currentConversationId = null
-            // Guarded: the ViewPager2 restore dispatches a premature empty-tab pass before
-            // the posted reclaim; expanding there would wipe a persisted collapse.
-            if (detailRestoreSettled) expandListPane()
+    private val paneListener = object : PaneNavigator.Listener {
+        override fun onDetailStateChanged() {
+            if (::startupPromptHost.isInitialized) startupPromptHost.onDetailPaneChanged()
+            notifyListFragmentSelectionChanged()
         }
 
-        transaction.commit()
-        currentTabIndex = newTabIndex
+        // Only system transitions that empty the pane auto-expand; a user collapse over a
+        // non-empty pane stays.
+        override fun onCurrentDetailEmptied() {
+            expandListPane()
+        }
 
-        // Notify the current tab's list fragment to update selection state
-        notifyListFragmentSelectionChanged()
+        // A requested tab switch leaves the list-pane layer like a rail tap, so it never covers another tab's list.
+        override fun onSelectTabRequested(tab: Int) {
+            if (::listLayer.isInitialized) listLayer.close()
+            binding.indexViewpager.setCurrentItem(tab, false)
+        }
     }
 
     /**
@@ -1687,159 +1617,90 @@ class IndexActivity : BaseActivity(), ConversationNavigationCallback, ChatMessag
      */
     private fun notifyListFragmentSelectionChanged() {
         if (!isDualPaneMode) return
+        val selectedId = navigator.currentSelectedId
         supportFragmentManager.fragments.forEach { fragment ->
-            (fragment as? DualPaneSelectionListener)?.updateDualPaneSelection(currentConversationId)
+            (fragment as? DualPaneSelectionListener)?.updateDualPaneSelection(selectedId)
         }
-    }
-
-    /**
-     * Replace the detail fragment for current tab
-     * This removes the old fragment (if any) and adds the new one
-     */
-    private fun replaceDetailFragmentForCurrentTab(newFragment: Fragment, tag: String? = null) {
-        val oldFragment = tabDetailFragments[currentTabIndex]
-
-        val transaction = supportFragmentManager.beginTransaction()
-
-        // Remove old + add new => one detail fragment per tab (ceiling stays 3).
-        oldFragment?.let { transaction.remove(it) }
-
-        // Per-tab tag lets restoreDetailFragmentsState() reclaim this fragment after recreation.
-        val effectiveTag = tag ?: detailFragmentTagForTab(currentTabIndex)
-        transaction.add(com.difft.android.R.id.fragment_container_detail, newFragment, effectiveTag)
-        transaction.commit()
-
-        // Update the map
-        tabDetailFragments[currentTabIndex] = newFragment
-        applyRootBackgroundForTab(currentTabIndex)
-    }
-
-    /**
-     * Clear the detail pane and show empty state for current tab
-     */
-    private fun clearDetailPane() {
-        if (!isDualPaneMode) return
-
-        currentConversationId = null
-        // A collapsed list over an empty detail pane would be a blank screen.
-        expandListPane()
-
-        // Remove fragment for current tab
-        val oldFragment = tabDetailFragments[currentTabIndex]
-        oldFragment?.let {
-            supportFragmentManager.beginTransaction().remove(it).commit()
-        }
-        tabDetailFragments[currentTabIndex] = null
-        applyRootBackgroundForTab(currentTabIndex)
-
-        // Clear chat background
-        clearDetailPaneChatBackground()
-
-        // Show empty state
-        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.VISIBLE
-        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.GONE
     }
 
     // ==================== ConversationNavigationCallback implementation ====================
 
     override fun onOneOnOneConversationSelected(contactId: String, jumpMessageTimestamp: Long?) {
-        if (isDualPaneMode) {
-            showChatInDetailPane(contactId, jumpMessageTimestamp)
-        } else {
-            // Fallback to Activity navigation for single-pane mode
-            ChatActivity.startActivity(this, contactId, jumpMessageTimeStamp = jumpMessageTimestamp)
-        }
+        openConversationFromCurrentTab(ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, contactId, jumpMessageTimestamp))
     }
 
     override fun onGroupConversationSelected(groupId: String, jumpMessageTimestamp: Long?) {
-        if (isDualPaneMode) {
-            showGroupChatInDetailPane(groupId, jumpMessageTimestamp)
-        } else {
-            // Fallback to Activity navigation for single-pane mode
-            GroupChatContentActivity.startActivity(this, groupId, jumpMessageTimestamp)
-        }
+        openConversationFromCurrentTab(ConversationTarget(ConversationTarget.Kind.GROUP, groupId, jumpMessageTimestamp))
+    }
+
+    // Both layouts: one-pane opens the conversation as the full-window detail layer.
+    private fun openConversationFromCurrentTab(target: ConversationTarget) {
+        navigator.openConversation(target, PaneNavigator.Origin.Tab(navigator.currentTab))
     }
 
     override fun onContactDetailSelected(contactId: String) {
         if (isDualPaneMode) {
-            showContactDetailInDetailPane(contactId)
+            navigator.replaceRoot(navigator.currentTab, IndexDetailPages.contactDetail(contactId), selectionId = contactId)
         } else {
             // Single pane: the contact card is the same half-height sheet the chat screen uses.
             ContactDetailBottomSheetDialogFragment.show(this, contactId)
         }
     }
 
-    /**
-     * Show contact detail in the detail pane
-     */
-    private fun showContactDetailInDetailPane(contactId: String) {
-        if (!isDualPaneMode) return
+    override fun openConversation(target: ConversationTarget) {
+        openConversationFromCurrentTab(target)
+    }
 
-        // Hide empty state
-        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
-        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
+    override fun currentConversationOnScreen(): String? =
+        if (::navigator.isInitialized) navigator.currentConversationOnScreen() else null
 
-        // Clear chat background (contact detail doesn't use chat background)
-        clearDetailPaneChatBackground()
+    override val detailCoversList: StateFlow<Boolean>
+        get() = if (::listCovered.isInitialized) listCovered else navigator.detailCoversList
 
-        currentConversationId = contactId
+    // ==================== ListPaneLayerOpener implementation ====================
 
-        val newFragment = ContactDetailFragment.newInstance(contactId = contactId)
+    /** The list's search entry: search in the list pane (two-pane) or full-window (one-pane). */
+    override fun openSearchLayer(): Boolean {
+        listLayer.open(ListPaneLayerRoot.SEARCH)
+        return true
+    }
 
-        replaceDetailFragmentForCurrentTab(newFragment)
+    /** The chat list's folded-groups row: the folded list in the list pane (two-pane) or full-window (one-pane). */
+    override fun openFoldedGroupsLayer(): Boolean {
+        listLayer.open(ListPaneLayerRoot.FOLDED_GROUPS)
+        return true
     }
 
     // ==================== DualPaneHost implementation ====================
 
-    override val navigationRailCollapsed: StateFlow<Boolean>
-        get() = railController?.collapsedState ?: NO_RAIL
-
-    override fun toggleNavigationRail() {
-        railController?.toggle(currentTabIndex)
-    }
+    override val homeTabBarObstructionPx: StateFlow<Int>
+        get() = homeTabBarObstruction
 
     /**
-     * Show any fragment in the detail pane (generic method for all detail pages)
-     * Used by settings pages, profile pages, etc.
+     * MeFragment's settings and profile pages: the root of the Me tab's detail stack (replacing
+     * the previous kind or keeping a matching root). Both layouts use the same stack.
      */
     override fun showDetailFragment(fragment: Fragment, tag: String?) {
-        if (!isDualPaneMode) return
-
-        // Hide empty state
-        findViewById<View>(com.difft.android.R.id.empty_detail_view)?.visibility = View.GONE
-        findViewById<View>(com.difft.android.R.id.fragment_container_detail)?.visibility = View.VISIBLE
-
-        // Clear chat background (generic fragments don't use chat background)
-        clearDetailPaneChatBackground()
-
-        // Clear current conversation id as this is not a conversation
-        currentConversationId = null
-
-        replaceDetailFragmentForCurrentTab(fragment, tag)
+        navigator.showMePage(fragment)
     }
 
     /**
-     * Get ChatMessageListFragment from the detail pane in dual-pane mode
-     * This is used by ConfidentialBottomSheetFragments to access the chat message list
+     * The message list of the current tab's conversation, in either layout (confidential viewers
+     * restored with the Activity ask from their onContentViewCreated, before ViewPager2 restores
+     * its page, so this reads the navigator's restored tab and its host directly).
      */
-    override fun getChatMessageListFragment(): ChatMessageListFragment? {
-        if (!isDualPaneMode) return null
-        val detailFragment = supportFragmentManager.findFragmentById(com.difft.android.R.id.fragment_container_detail)
-        return when (detailFragment) {
-            is ChatFragment -> detailFragment.getChatMessageListFragment()
-            is GroupChatFragment -> detailFragment.getChatMessageListFragment()
+    override fun getChatMessageListFragment(): ChatMessageListFragment? =
+        when (val root = if (::navigator.isInitialized) navigator.currentConversationRoot() else null) {
+            is ChatFragment -> root.getChatMessageListFragment()
+            is GroupChatFragment -> root.getChatMessageListFragment()
             else -> null
         }
-    }
 
     // ==================== ChatInputFocusable implementation ====================
 
     override fun focusCurrentChatInputIfMatches(conversationId: String): Boolean {
-        if (!isDualPaneMode || currentConversationId != conversationId) {
-            return false
-        }
-        val detailFragment = supportFragmentManager.findFragmentById(com.difft.android.R.id.fragment_container_detail)
-        (detailFragment as? ChatFragment)?.focusInputAndShowKeyboard()
+        if (!::navigator.isInitialized || navigator.currentConversationOnScreen() != conversationId) return false
+        (navigator.currentConversationRoot() as? ChatFragment)?.focusInputAndShowKeyboard()
         return true
     }
 }

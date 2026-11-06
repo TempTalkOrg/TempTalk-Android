@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,13 +59,15 @@ class ComposeDialogManagerCloseReasonTest {
     @Test
     fun `confirm reports CONFIRM once and does not call onDismiss`() {
         val baseline = contentRoot.childCount
-        show()
+        val dialog = show()
+        assertTrue(dialog!!.isShowing)
         composeTestRule.onNodeWithText("Yes").performClick()
         composeTestRule.waitForIdle()
         assertEquals(listOf(DialogCloseReason.CONFIRM), reasons)
         assertEquals(1, confirmCalls)
         assertEquals(0, dismissCalls)
         assertEquals(baseline, contentRoot.childCount)
+        assertFalse("a button close is visible to dismissWithView", dialog.isShowing)
     }
 
     @Test

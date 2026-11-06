@@ -3,7 +3,10 @@ package com.difft.android.call.ui
 import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +61,12 @@ import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.CallUserDisplayInfo
+import com.difft.android.call.ui.actionbar.CHROME_RESERVE_ANIMATION_MS
+import com.difft.android.call.ui.actionbar.endPadding
+import com.difft.android.call.ui.actionbar.rememberCallSideRail
+import com.difft.android.call.ui.actionbar.rememberRailBandReserved
+import com.difft.android.call.ui.tabletop.LocalCallTabletop
+import com.difft.android.call.ui.tabletop.tabletopDockRegion
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.LocalParticipant
@@ -65,6 +75,9 @@ import io.livekit.android.room.track.Track
 import io.livekit.android.util.flow
 import kotlin.math.roundToInt
 
+
+/** Above the panel's header while it takes the tabletop dock, which has no status bar to clear. */
+private val TABLETOP_PANEL_TOP_PADDING = 24.dp
 
 /**
  * Whether the window is wide enough for the participants side panel: ≥ 600dp or landscape.
@@ -105,8 +118,10 @@ fun ShowParticipantsListView(
 ) {
     val isInPipMode by viewModel.callUiController.isInPipMode.collectAsState(false)
     val lazyGridState = rememberLazyGridState()
-    val participants by viewModel.participants.collectAsState(initial = emptyList())
+    val joined by viewModel.participants.collectAsState(initial = emptyList())
     val isShowUsersEnabled by viewModel.callUiController.showUsersEnabled.collectAsState()
+    // The panel keeps its own priority order; the call grid follows the layout controller.
+    val participants = rememberParticipantsListOrder(joined, open = isShowUsersEnabled, menuOpen = viewModel.callUiController.participantMenuOpen)
     val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
     val speakingEnabled by viewModel.callUiController.speakingEnabled.collectAsState()
 
@@ -118,11 +133,29 @@ fun ShowParticipantsListView(
 
     val isWideScreen = rememberParticipantsPanelWide()
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val panelTopPadding = if (!isUserSharingScreen && isWideScreen) statusBarTop + 16.dp else 24.dp
+    // In tabletop the panel replaces the dock's console below the fold: the 216dp side panel at the end of the dock region (not full width).
+    val tabletop = LocalCallTabletop.current
+    val panelTopPadding = when {
+        tabletop != null -> TABLETOP_PANEL_TOP_PADDING
+        !isUserSharingScreen && isWideScreen -> statusBarTop + 16.dp
+        else -> 24.dp
+    }
+
+    // Beside the side rail rather than over it, so the rail's End stays reachable; at the edge while
+    // the rail is hidden, easing like the grid (#1451).
+    val rail = rememberCallSideRail()
+    val railBandReserved = rememberRailBandReserved(viewModel.callUiController, rail)
+    val panelEndReserve = animateDpAsState(
+        targetValue = if (railBandReserved && rail != null) rail.widthDp.dp else 0.dp,
+        animationSpec = tween(CHROME_RESERVE_ANIMATION_MS),
+        label = "participantsPanelEndReserve",
+    )
+
+    val panelRegion = if (tabletop != null) Modifier.tabletopDockRegion(tabletop) else Modifier.fillMaxSize()
 
     if (!isInPipMode && isShowUsersEnabled && participantsPanelAvailable(isUserSharingScreen, isWideScreen)) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = panelRegion.endPadding { panelEndReserve.value },
             contentAlignment = Alignment.TopEnd
         ){
             Box(
@@ -130,7 +163,10 @@ fun ShowParticipantsListView(
                     .testTag("call_participants_panel")
                     .fillMaxHeight()
                     .width(216.dp)
-                    .background(DifftTheme.colors.backgroundTertiary),
+                    .background(DifftTheme.colors.backgroundTertiary)
+                    // A tap inside the panel stays in it: falling through to the call surface would
+                    // toggle the chrome, and hiding the chrome closes this panel (#1451).
+                    .pointerInput(Unit) { detectTapGestures {} },
                 contentAlignment = Alignment.TopEnd
             ){
                 ConstraintLayout (

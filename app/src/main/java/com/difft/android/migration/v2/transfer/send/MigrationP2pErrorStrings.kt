@@ -2,6 +2,8 @@ package com.difft.android.migration.v2.transfer.send
 
 import com.difft.android.R
 import com.difft.android.migration.model.MigrationError
+import com.difft.android.migration.v2.pause.SenderPauseSession
+import com.difft.android.migration.v2.transfer.ReceiverCapabilityMissingException
 import com.difft.android.migration.ui.component.MigrationResultTone
 import com.difft.android.p2p.android.client.PrepareUploadReasons
 import com.difft.android.p2p.engine.upload.MigrationRejectReason
@@ -35,18 +37,24 @@ enum class MigrationFailureKind {
 
     /** This device ran out of storage, so the transfer stopped. */
     STORAGE_FULL,
+
+    /**
+     * The new device's app cannot store what this export must carry (#1382); only that device can
+     * update, so the page offers no update action here.
+     */
+    RECEIVER_UPDATE_NEEDED,
     ;
 
     val tone: MigrationResultTone
         get() = when (this) {
             TARGET_NOT_EMPTY, HANDOFF_DISABLED, LOCKED, PEER_CANCELLED, UPDATE_NEEDED,
-            PEER_UPDATE_NEEDED, DESKTOP_NOT_CONNECTED, PAIR_TOKEN -> MigrationResultTone.WARNING
+            PEER_UPDATE_NEEDED, DESKTOP_NOT_CONNECTED, PAIR_TOKEN, RECEIVER_UPDATE_NEEDED -> MigrationResultTone.WARNING
             else -> MigrationResultTone.ERROR
         }
 
     val titleRes: Int
         get() = when (this) {
-            UPDATE_NEEDED, PEER_UPDATE_NEEDED -> R.string.migration_m3_title
+            UPDATE_NEEDED, PEER_UPDATE_NEEDED, RECEIVER_UPDATE_NEEDED -> R.string.migration_m3_title
             TARGET_NOT_EMPTY, HANDOFF_DISABLED, LOCKED, PEER_CANCELLED,
             DESKTOP_NOT_CONNECTED, PAIR_TOKEN -> R.string.migration_p3_blocked_title
             else -> R.string.migration_p3_failed_title
@@ -74,6 +82,7 @@ enum class MigrationFailureKind {
             DESKTOP_NOT_CONNECTED -> R.string.migration_p3_reason_desktop_not_connected
             PAIR_TOKEN -> R.string.migration_p3_reason_pair_token
             STORAGE_FULL -> R.string.migration_p3_reason_storage_full
+            RECEIVER_UPDATE_NEEDED -> R.string.migration_m3_body_new_device
         }
 
     /** Whether the sentence carries the app-name placeholder. */
@@ -88,6 +97,11 @@ enum class MigrationFailureKind {
  * a substring in both, so `contains` resolves on either path.
  */
 internal fun classifyFailure(reason: String): MigrationFailureKind = when {
+    // The old phone could not pause or keep its message pause for this export (#1382). iOS shows its
+    // generic transfer failure for these, and a retry starts a fresh pause.
+    MIGRATION_PAUSE_REASONS.any { reason.contains(it) } -> MigrationFailureKind.UNKNOWN
+    // The new device lacks a capability this export needs (#1382).
+    reason.contains(ReceiverCapabilityMissingException.RECEIVER_UPDATE_REQUIRED) -> MigrationFailureKind.RECEIVER_UPDATE_NEEDED
     // Local precondition, not a peer reject: no LAN address to advertise, so no peer could reach us.
     reason.contains(com.difft.android.migration.v2.transfer.login.NO_LAN_REASON) -> MigrationFailureKind.CONNECTION
     reason.contains(PrepareUploadReasons.PEER_UNREACHABLE) -> MigrationFailureKind.CONNECTION
@@ -142,6 +156,14 @@ internal fun classifyFailure(reason: String): MigrationFailureKind = when {
     reason.contains(MigrationError.Cancelled.code) -> MigrationFailureKind.SOURCE
     else -> MigrationFailureKind.UNKNOWN
 }
+
+private val MIGRATION_PAUSE_REASONS = listOf(
+    SenderPauseSession.REASON_NO_LOGIN,
+    SenderPauseSession.REASON_UNAVAILABLE,
+    SenderPauseSession.REASON_QUIESCENCE_TIMEOUT,
+    SenderPauseSession.REASON_COMMIT_FAILED,
+    SenderPauseSession.REASON_RESIDUAL,
+)
 
 /** Wire token the Desktop returns (403, plain text) when the called endpoint does not match its session direction. */
 internal const val DIRECTION_MISMATCH = "direction-mismatch"

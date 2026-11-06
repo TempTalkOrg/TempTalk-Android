@@ -194,25 +194,55 @@ class JobRunnerTest {
     // -- CancellationException --
 
     @Test
-    fun `launchIn rethrows CancellationException from job run`() = runTest {
-        val job = createTestJob("cancel-ex-1")
-        coEvery { job.run() } throws CancellationException("coroutine cancelled")
+    fun `launchIn keeps running after a stray CancellationException from job run`() = runTest {
+        val strayJob = createTestJob("stray-cancel-1")
+        val nextJob = createTestJob("stray-cancel-2")
+        coEvery { strayJob.run() } throws CancellationException("stray")
+        coEvery { nextJob.run() } returns Job.Result.success()
 
-        // For CancellationException, the runner coroutine gets cancelled before
-        // reaching the second pull. We use a latch on the first pull instead.
-        val pullCalled = CompletableDeferred<Unit>()
+        val allDone = CompletableDeferred<Unit>()
+        var callCount = 0
         coEvery { jobController.pullNextEligibleJobForExecution(any(), any()) } coAnswers {
-            pullCalled.complete(Unit)
-            job
+            callCount++
+            when (callCount) {
+                1 -> strayJob
+                2 -> nextJob
+                else -> {
+                    allDone.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                    error("unreachable")
+                }
+            }
         }
 
         val coroutineJob = jobRunner.launchIn(runnerScope)
-        pullCalled.await()
-        // Wait for the coroutine to finish (it will be cancelled by CancellationException)
+        allDone.await()
+
+        // The stray CancellationException is a job failure; the runner survives for the next job.
+        coVerify { jobController.onFailure(strayJob) }
+        coVerify { jobController.onSuccess(nextJob) }
+        assertTrue("runner must still be active", coroutineJob.isActive)
+    }
+
+    @Test
+    fun `launchIn ends runner when its own scope is cancelled while job run throws CancellationException`() = runTest {
+        val job = createTestJob("real-cancel-1")
+        val inRun = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        coEvery { job.run() } coAnswers {
+            inRun.complete(Unit)
+            release.await()
+            throw CancellationException("coroutine cancelled")
+        }
+        coEvery { jobController.pullNextEligibleJobForExecution(any(), any()) } returns job
+
+        val coroutineJob = jobRunner.launchIn(runnerScope)
+        inRun.await()
+        coroutineJob.cancel()
+        release.complete(Unit)
         coroutineJob.join()
 
-        // The CancellationException should propagate and cancel the coroutine,
-        // NOT be caught as a failure
+        assertTrue(coroutineJob.isCancelled)
         coVerify(exactly = 0) { jobController.onFailure(job) }
         coVerify(exactly = 0) { jobController.onSuccess(job) }
     }

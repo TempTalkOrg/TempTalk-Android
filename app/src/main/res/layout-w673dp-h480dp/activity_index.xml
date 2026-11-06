@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Dual-pane layout (width >= 673dp AND height >= 480dp).
-    673dp is the pane-budget feasibility floor: rail + divider + list_min + detail_min
-    (72 + 1 + 280 + 320, values/dimens.xml) — the narrowest window where both panes still
-    meet their minimums. Unfolded book foldables (690-840dp) qualify; h480dp keeps
+    673dp was the pane-budget feasibility floor when a 72dp navigation rail sat beside the
+    panes (72 + 1 + 280 + 320, values/dimens.xml); the home tabs now live in the floating
+    capsule over the list pane, so the gate keeps its historical value (the 600-672dp band
+    is a separate decision). Unfolded book foldables (690-840dp) qualify; h480dp keeps
     folded/phone-landscape windows out (e.g. Z TriFold folded landscape ~955dp x ~409dp).
     Pane widths are @dimen references so values-w900dp/ can restore the tablet budget
-    (rail 96 / list 360 / detail_min 360) on genuinely large windows.
+    (list 360 / detail_min 360) on genuinely large windows.
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -15,79 +16,69 @@
     android:layout_height="match_parent"
     tools:ignore="InconsistentLayout">
 
-    <!-- NavigationRail for large screens -->
-    <LinearLayout
-        android:id="@+id/navigation_rail_container"
-        android:layout_width="@dimen/dual_pane_rail_width"
-        android:layout_height="match_parent"
-        android:background="@color/bg1"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingTop="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <com.difft.android.views.IndexIndicator
-            android:id="@+id/indicatorview_chats"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:src="@drawable/ic_index_activity_chat"
-            android:text="@string/chat_chats"
-            android:textColor="@color/color_index_activity_index_text" />
-
-        <com.difft.android.views.IndexIndicator
-            android:id="@+id/indicatorview_contacts"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:src="@drawable/ic_index_activity_contact"
-            android:text="@string/chat_contacts"
-            android:textColor="@color/color_index_activity_index_text" />
-
-        <com.difft.android.views.IndexIndicator
-            android:id="@+id/indicatorview_me"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:src="@drawable/ic_index_activity_me"
-            android:text="@string/chat_me"
-            android:textColor="@color/color_index_activity_index_text" />
-
-    </LinearLayout>
-
-    <View
-        android:id="@+id/divider_rail"
-        android:layout_width="@dimen/dual_pane_divider_width"
-        android:layout_height="0dp"
-        android:background="@color/line"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@id/navigation_rail_container"
-        app:layout_constraintTop_toTopOf="parent" />
-
     <!--
         List pane: initial width from @dimen/dual_pane_list_default_width (280dp compact
         band, 360dp in the w900dp tablet band). Resized at runtime by
         IndexActivity.applyListPaneWidth() based on user drag (DualPaneRatioUtil ratio),
-        large-font 50/50 split, or the dimen default.
+        large-font 50/50 split, or the dimen default. The tag records the dimens band this
+        tree was inflated with (DualPaneReconciler compares it against the current config).
     -->
     <FrameLayout
         android:id="@+id/list_pane"
         android:layout_width="@dimen/dual_pane_list_default_width"
         android:layout_height="0dp"
+        android:tag="@string/dual_pane_band"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toEndOf="@id/divider_rail"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- Distinct id — see layout/activity_index.xml. -->
-        <androidx.viewpager2.widget.ViewPager2
-            android:id="@+id/index_viewpager"
+        <!-- Pager plus the floating home tab capsule; frozen as one block at the expanded
+             width while the list pane collapses (IndexActivity.animateListPaneWidth). -->
+        <FrameLayout
+            android:id="@+id/list_content"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- Distinct id — see layout/activity_index.xml. -->
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/index_viewpager"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:nestedScrollingEnabled="false"
+                android:overScrollMode="never" />
+
+            <!-- Floating home tab capsule + search circle over the list pane's bottom edge. The
+                 list pane runs under the navigation bar; IndexActivity keeps the 28dp gap (iOS),
+                 raised above a 3-button bar. -->
+            <FrameLayout
+                android:id="@+id/home_tab_bar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingBottom="28dp">
+
+                <androidx.compose.ui.platform.ComposeView
+                    android:id="@+id/home_tab_capsule"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal" />
+            </FrameLayout>
+        </FrameLayout>
+
+        <!-- List-pane layer over the tab content (search, folded groups), covering the tab
+             capsule too; the detail pane is untouched. ListPaneLayer shows it while the layer is up. The
+             same id as the one-pane layout lets a fold/unfold recreation restore the layer host
+             into either tree. Clickable so touches never reach the covered list. -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/list_layer"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:nestedScrollingEnabled="false"
-            android:overScrollMode="never" />
+            android:clickable="true"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
 
     </FrameLayout>
 
@@ -122,7 +113,7 @@
     </FrameLayout>
 
     <!--
-        1dp line between the list and detail panes, matching divider_rail. Overlays the detail
+        1dp line between the list and detail panes. Overlays the detail
         pane's first dp instead of taking layout space, so the pane widths are unchanged.
     -->
     <View
@@ -152,20 +143,5 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Dual-pane layout: list_pane (runtime-sized) + detail_pane (remaining space) + draggable overlay divider -->
-
-    <!-- Hidden views for compatibility with default layout (needed for ViewBinding) -->
-    <View
-        android:id="@+id/view"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        tools:ignore="MissingConstraints" />
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_tab"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        tools:ignore="MissingConstraints" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

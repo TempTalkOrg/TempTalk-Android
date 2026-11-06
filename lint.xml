@@ -92,7 +92,7 @@
         <!-- 22sp Bold intro title (titleLarge.copy) -->
         <ignore path="login/src/main/java/com/difft/android/login/intro/RegisterIntroPage.kt" />
         <!-- 18sp group name input (bodyMedium.copy) -->
-        <ignore path="chat/src/main/java/com/difft/android/chat/group/GroupInfoActivity.kt" />
+        <ignore path="chat/src/main/java/com/difft/android/chat/group/GroupInfoCryptoFlows.kt" />
         <!-- 48sp barrage bubble text -->
         <ignore path="call/src/main/java/com/difft/android/call/ui/barrage/BubbleView.kt" />
         <!-- 28/38 emoji glyphs in the reaction sheet -->

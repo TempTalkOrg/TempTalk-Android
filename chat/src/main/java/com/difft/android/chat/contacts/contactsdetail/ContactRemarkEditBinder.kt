@@ -1,5 +1,6 @@
 package com.difft.android.chat.contacts.contactsdetail
 
+import com.difft.android.base.utils.pane.PageWait
 import androidx.activity.ComponentDialog
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowInsetsCompat
@@ -9,6 +10,8 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.difft.android.base.utils.pane.detailBackOwner
+import com.difft.android.base.utils.pane.dismissWithView
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
@@ -36,15 +39,17 @@ internal class ContactRemarkEditBinder(
     private val viewModelProvider: () -> ContactRemarkEditViewModel,
     private val onClose: () -> Unit,
 ) {
+    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    private val pageWait = PageWait(fragment)
+
     private val avatarPickLauncher = AvatarPickLauncher.forFragment(fragment) { path ->
         viewModelProvider().dispatch(ContactRemarkEditContract.Intent.AvatarPicked(path))
     }
 
     /**
      * Back while editing behaves like the close button: the ViewModel asks to save when there is an
-     * unsaved change, otherwise closes. Registered only for the duration of an edit: the dispatcher
-     * is LIFO, and a host callback added later (dual-pane IndexActivity adds "expand list pane" on
-     * first collapse) would otherwise win.
+     * unsaved change, otherwise closes. Registered only for the duration of an edit (the dispatcher
+     * is LIFO), with the page's detail back owner so a covered or hidden card never takes Back.
      */
     private val backWhileEditing = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
@@ -60,7 +65,7 @@ internal class ContactRemarkEditBinder(
                 launch {
                     viewModel.state.map { it.isEditing }.distinctUntilChanged().collect { editing ->
                         backWhileEditing.remove()
-                        if (editing) backPressedDispatcher().addCallback(owner, backWhileEditing)
+                        if (editing) backPressedDispatcher().addCallback(fragment.detailBackOwner(), backWhileEditing)
                         sheetHost()?.setExpandedForEditing(editing)
                     }
                 }
@@ -95,8 +100,8 @@ internal class ContactRemarkEditBinder(
                 if (effect.text.isNullOrBlank()) ToastUtil.show(R.string.chat_net_error) else ToastUtil.showLong(effect.text)
             }
 
-            ContactRemarkEditContract.Effect.ShowWait -> ComposeDialogManager.showWait(fragment.requireActivity(), "")
-            ContactRemarkEditContract.Effect.DismissWait -> ComposeDialogManager.dismissWait()
+            ContactRemarkEditContract.Effect.ShowWait -> pageWait.show()
+            ContactRemarkEditContract.Effect.DismissWait -> pageWait.dismiss()
             ContactRemarkEditContract.Effect.HideKeyboard -> hideKeyboard()
             is ContactRemarkEditContract.Effect.DeleteUploadTemp ->
                 AvatarPickTempCleaner.deleteUploadedTemp(fragment.requireContext(), effect.path)
@@ -106,7 +111,7 @@ internal class ContactRemarkEditBinder(
     /** Must pick Save or Discard; tapping outside is not an answer, so the dialog is not cancelable. */
     private fun showUnsavedDialog() {
         val activity = fragment.requireActivity()
-        ComposeDialogManager.showMessageDialog(
+        fragment.dismissWithView(ComposeDialogManager.showMessageDialog(
             context = activity,
             // The prompt is the body text; an empty title avoids a blank block between title and buttons.
             title = "",
@@ -116,13 +121,13 @@ internal class ContactRemarkEditBinder(
             cancelable = false,
             onConfirm = { viewModelProvider().dispatch(ContactRemarkEditContract.Intent.SaveAndClose) },
             onCancel = { viewModelProvider().dispatch(ContactRemarkEditContract.Intent.DiscardAndClose) },
-        )
+        ))
     }
 
     /** Existing remark avatar: offer photos / revert; otherwise the ViewModel goes straight to the picker. */
     private fun showAvatarActionSheet() {
         var dialog: ComposeDialog? = null
-        dialog = ComposeDialogManager.showBottomDialog(fragment.requireActivity()) {
+        dialog = fragment.dismissWithView(ComposeDialogManager.showBottomDialog(fragment.requireActivity()) {
             RemarkAvatarActionSheet(
                 onChoosePhotos = {
                     dialog?.dismiss()
@@ -134,7 +139,7 @@ internal class ContactRemarkEditBinder(
                 },
                 onCancel = { dialog?.dismiss() },
             )
-        }
+        })
     }
 
     /** The card may live in a dialog window (bottom sheet) or the Activity window. */

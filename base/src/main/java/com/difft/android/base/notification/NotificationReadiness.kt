@@ -37,13 +37,22 @@ enum class ReadinessIssue {
     MESSAGE_CATEGORY_SILENT,
     MESSAGE_CATEGORY_NO_BANNER,
     MESSAGE_CATEGORY_LOCK_HIDDEN,
+
+    /**
+     * Xiaomi: the user never set the category. Its reading is unreliable until set once, and the
+     * untouched default usually hides banners, sound and lock-screen display, so it asks for a check.
+     */
+    MESSAGE_CATEGORY_NEVER_SET,
     CALL_CATEGORY_OFF,
     CALL_CATEGORY_NO_BANNER,
     CALL_CATEGORY_LOCK_HIDDEN,
+    CALL_CATEGORY_NEVER_SET,
     FULL_SCREEN_DENIED,
     OEM_POPUP_CHECK,
     CRITICAL_CATEGORY_OFF,
     CRITICAL_CATEGORY_LOW_IMPORTANCE,
+    CRITICAL_CATEGORY_LOCK_HIDDEN,
+    CRITICAL_CATEGORY_NEVER_SET,
 }
 
 data class ReadinessItem(
@@ -57,7 +66,7 @@ data class ReadinessItem(
  * and [TESTED_OK] (call) replace [UNKNOWN] on a skin with unreadable vendor switches when a still-valid
  * notification test vouches for them (#1350).
  */
-enum class CategoryLevel { ON, OFF, NO_BANNER, LOCK_HIDDEN, SILENT, UNKNOWN, CONFIRMED, TESTED_OK }
+enum class CategoryLevel { ON, OFF, NO_BANNER, LOCK_HIDDEN, SILENT, NEEDS_CHECK, UNKNOWN, CONFIRMED, TESTED_OK }
 
 /** What the call pop-up row (C3) shows: the last still-valid call test, if any (#1350). */
 enum class CallPopupLevel { TESTED_OK, NOT_SHOWN, UNTESTED }
@@ -68,6 +77,11 @@ data class ChannelReading(
     val hasSound: Boolean,
     /** The category's own lock-screen override; [VISIBILITY_NO_OVERRIDE] when none. */
     val lockscreenVisibility: Int = VISIBILITY_NO_OVERRIDE,
+    /**
+     * `NotificationChannel.hasUserSetImportance()` (API 29+; true below, where it cannot be read).
+     * Only Xiaomi uses it: HyperOS readings of a category the user never set are unreliable.
+     */
+    val userSetImportance: Boolean = true,
 ) {
     companion object {
         /** `NotificationManager.VISIBILITY_NO_OVERRIDE`, which the SDK stubs do not expose. */
@@ -92,6 +106,12 @@ data class ReadinessInput(
     val oemBrand: OemBrand,
     /** Still-valid notification test results; they never override a standard reading (#1350). */
     val testResults: NotificationTestResults = NotificationTestResults.NONE,
+    /**
+     * Channel ids whose system settings page the user has opened from the app. Xiaomi only: such a
+     * category is treated as set, because HyperOS keeps per-package switches across reinstalls and a
+     * reinstall reads exactly like a never-set category.
+     */
+    val seenCategories: Set<String> = emptySet(),
 )
 
 data class NotificationReadiness(
@@ -146,6 +166,7 @@ data class NotificationReadiness(
             ReadinessIssue.MESSAGE_CATEGORY_NO_BANNER, ReadinessIssue.CALL_CATEGORY_NO_BANNER -> CategoryLevel.NO_BANNER
             ReadinessIssue.MESSAGE_CATEGORY_LOCK_HIDDEN, ReadinessIssue.CALL_CATEGORY_LOCK_HIDDEN -> CategoryLevel.LOCK_HIDDEN
             ReadinessIssue.MESSAGE_CATEGORY_SILENT -> CategoryLevel.SILENT
+            ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET, ReadinessIssue.CALL_CATEGORY_NEVER_SET -> CategoryLevel.NEEDS_CHECK
             else -> CategoryLevel.UNKNOWN
         }
     }
@@ -194,6 +215,7 @@ object NotificationReadinessEvaluator {
         noBanner = ReadinessIssue.MESSAGE_CATEGORY_NO_BANNER,
         lockHidden = ReadinessIssue.MESSAGE_CATEGORY_LOCK_HIDDEN,
         silent = ReadinessIssue.MESSAGE_CATEGORY_SILENT,
+        neverSet = ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET.takeIf { input.neverSetApplies(NotificationChannelIds.MESSAGE) },
     )
 
     private fun evaluateC1(input: ReadinessInput): ReadinessItem = evaluateCategory(
@@ -206,6 +228,7 @@ object NotificationReadinessEvaluator {
         noBanner = ReadinessIssue.CALL_CATEGORY_NO_BANNER,
         lockHidden = ReadinessIssue.CALL_CATEGORY_LOCK_HIDDEN,
         silent = null,
+        neverSet = ReadinessIssue.CALL_CATEGORY_NEVER_SET.takeIf { input.neverSetApplies(NotificationChannelIds.CALL) },
     )
 
     /**
@@ -213,7 +236,8 @@ object NotificationReadinessEvaluator {
      * NONE is off; unspecified importance is unknown; anything below HIGH does not pop up; a SECRET
      * lock-screen override hides it on the lock screen; and, for messages only, HIGH without a sound
      * is silent. ROM-specific switches that only lower standard importance are covered by the
-     * importance rule, never by brand.
+     * importance rule; the one brand rule is [neverSet] (Xiaomi only), raised for an otherwise
+     * fine category the user never set nor opened from the app.
      */
     @Suppress("LongParameterList")
     private fun evaluateCategory(
@@ -226,6 +250,7 @@ object NotificationReadinessEvaluator {
         noBanner: ReadinessIssue,
         lockHidden: ReadinessIssue,
         silent: ReadinessIssue?,
+        neverSet: ReadinessIssue?,
     ): ReadinessItem {
         if (sdkInt < API_O) return ReadinessItem(id, ReadinessStatus.OK)
         val issue = when {
@@ -236,6 +261,7 @@ object NotificationReadinessEvaluator {
             channel.importance < NotificationManager.IMPORTANCE_HIGH -> noBanner
             channel.lockscreenVisibility == Notification.VISIBILITY_SECRET -> lockHidden
             checkSound && !channel.hasSound -> silent
+            !channel.userSetImportance -> neverSet
             else -> null
         }
         return if (issue == null) ReadinessItem(id, ReadinessStatus.OK) else ReadinessItem(id, ReadinessStatus.PROBLEM, issue)
@@ -252,9 +278,17 @@ object NotificationReadinessEvaluator {
                 ReadinessItem(ReadinessItemId.A1, ReadinessStatus.PROBLEM, ReadinessIssue.CRITICAL_CATEGORY_OFF)
             channel.importance < NotificationManager.IMPORTANCE_HIGH ->
                 ReadinessItem(ReadinessItemId.A1, ReadinessStatus.PROBLEM, ReadinessIssue.CRITICAL_CATEGORY_LOW_IMPORTANCE)
+            channel.lockscreenVisibility == Notification.VISIBILITY_SECRET ->
+                ReadinessItem(ReadinessItemId.A1, ReadinessStatus.PROBLEM, ReadinessIssue.CRITICAL_CATEGORY_LOCK_HIDDEN)
+            input.neverSetApplies(NotificationChannelIds.CRITICAL_ALERT) && !channel.userSetImportance ->
+                ReadinessItem(ReadinessItemId.A1, ReadinessStatus.PROBLEM, ReadinessIssue.CRITICAL_CATEGORY_NEVER_SET)
             else -> ReadinessItem(ReadinessItemId.A1, ReadinessStatus.OK)
         }
     }
+
+    /** The Xiaomi never-set rule, skipped for a category whose settings page the user has opened. */
+    private fun ReadinessInput.neverSetApplies(channelId: String): Boolean =
+        oemBrand == OemBrand.XIAOMI && channelId !in seenCategories
 
     private fun evaluateC2(input: ReadinessInput): ReadinessItem =
         if (input.sdkInt >= API_U && input.canUseFullScreenIntent == false) {

@@ -70,7 +70,8 @@ class MessageServiceManager @Inject constructor(
         // Chain considered dead after this silence. Doze legitimately stretches an exact
         // allow-while-idle alarm to ~15 min (3x interval), so keep one extra interval of
         // margin: a false "stale" verdict cancels the pending (possibly imminent) alarm
-        // and postpones the wake instead of healing anything.
+        // and postpones the wake instead of healing anything. The 2-min night alarm clock
+        // ([NightAlarmClockWake]) shares this window: it is never deferred, so 20 min only bounds healing.
         private const val EXACT_ALARM_CHAIN_STALE_MS = 4 * EXACT_ALARM_INTERVAL_MS
 
         // Without exact-alarm permission Doze legitimately defers delivery 30 min - 2 hr
@@ -305,7 +306,8 @@ class MessageServiceManager @Inject constructor(
      * Schedule periodic check (persistent)
      *
      * Strategy:
-     * - With exact alarm permission: use setExactAndAllowWhileIdle (5 min interval, Doze extends to ~15 min)
+     * - With exact alarm permission: use setExactAndAllowWhileIdle (5 min interval, Doze extends to ~15 min);
+     *   on Xiaomi and vivo at night an alarm clock every 2 min instead ([NightAlarmClockWake])
      * - Without exact alarm permission: use setAndAllowWhileIdle (5 min interval, Doze extends to 30min-2hr)
      */
     fun scheduleAlarmCheck() {
@@ -327,26 +329,33 @@ class MessageServiceManager @Inject constructor(
             alarmManager.cancel(pendingIntent)
 
             val hasExactAlarmPermission = hasExactAlarmPermission()
-            val interval = if (hasExactAlarmPermission) EXACT_ALARM_INTERVAL_MS else NON_EXACT_ALARM_INTERVAL_MS
+            var interval = if (hasExactAlarmPermission) EXACT_ALARM_INTERVAL_MS else NON_EXACT_ALARM_INTERVAL_MS
             val triggerTime = SystemClock.elapsedRealtime() + interval
             var armedExact = hasExactAlarmPermission
+            var mode = if (hasExactAlarmPermission) "exact" else "inexact"
 
             if (hasExactAlarmPermission) {
                 // Has permission: use exact alarm
                 // - Below Android 12: no permission needed, use directly
                 // - Android 12+: requires SCHEDULE_EXACT_ALARM permission
                 try {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                        triggerTime,
-                        pendingIntent
-                    )
-                    L.d { "[MessageService] Exact alarm scheduled (5 min, Doze extends to ~15 min)" }
+                    if (NightAlarmClockWake.applies() && armNightAlarmClock(pendingIntent)) {
+                        interval = NightAlarmClockWake.INTERVAL_MS
+                        mode = "alarm_clock"
+                    } else {
+                        alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            triggerTime,
+                            pendingIntent
+                        )
+                    }
                 } catch (e: SecurityException) {
                     // TOCTOU: SCHEDULE_EXACT_ALARM revoked between the permission check and
                     // the set call — degrade to the inexact alarm instead.
                     L.w { "[MessageService] Exact alarm rejected (permission revoked?), falling back to inexact: ${e.message}" }
                     armedExact = false
+                    interval = NON_EXACT_ALARM_INTERVAL_MS
+                    mode = "inexact"
                     alarmManager.setAndAllowWhileIdle(
                         AlarmManager.ELAPSED_REALTIME_WAKEUP,
                         triggerTime,
@@ -363,11 +372,22 @@ class MessageServiceManager @Inject constructor(
                 L.d { "[MessageService] Non-exact alarm scheduled (5 min, Doze may extend to 30min-2hr)" }
             }
             // The scheduled/fired pair is the evidence for vendor-swallowed alarms (#1157).
-            L.i { "[MessageService] alarm armed exact=$armedExact intervalMs=$interval" }
+            L.i { "[MessageService] alarm armed exact=$armedExact mode=$mode intervalMs=$interval" }
             lastAlarmChainActivityElapsed = SystemClock.elapsedRealtime()
         } catch (e: Exception) {
             L.e { "[MessageService] Failed to arm keep-alive alarm: ${e.stackTraceToString()}" }
         }
+    }
+
+    /**
+     * Arms the night alarm clock; any failure returns false so the caller tries the exact alarm next
+     * and, if that is rejected too, the inexact one.
+     */
+    private fun armNightAlarmClock(pendingIntent: PendingIntent): Boolean = try {
+        NightAlarmClockWake.arm(context, alarmManager, pendingIntent)
+    } catch (e: Exception) {
+        L.w { "[MessageService] alarm clock rejected, falling back to exact: ${e.javaClass.simpleName} ${e.message}" }
+        false
     }
 
     /**

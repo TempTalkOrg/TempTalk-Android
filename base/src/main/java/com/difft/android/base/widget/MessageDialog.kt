@@ -113,6 +113,7 @@ fun MessageDialog(
             }
         ) {
             DialogScrimEffect()
+            DialogAnchor.Effect()
             Surface(
                 shape = RoundedCornerShape(DialogCornerRadius),
                 color = bgColor

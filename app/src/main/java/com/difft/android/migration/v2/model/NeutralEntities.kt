@@ -321,3 +321,38 @@ data class NeutralCredential(
     val phoneNumber: String? = null,
     val handoffId: String,
 )
+
+/**
+ * One row of the source's pending table (#1382): a server envelope already consumed and ACKed whose
+ * target message was not on the source yet (a recall, a reaction, a confidential read or delete).
+ * The destination stores it unchanged in its own pending table and applies it through its normal
+ * receive path once the target message is present, whether imported in the same container or
+ * arriving later. The kind is parsed from the envelope itself, so no type field travels.
+ *
+ * Wire record (tag `pendingEnvelope`), one JSONL line inside the encrypted body; every name below
+ * is frozen and shared with iOS:
+ * ```
+ * {"type":"pendingEnvelope","value":{
+ *   "messageId":"<string>",
+ *   "originalMessageTimeStamp":<int64 ms>,
+ *   "messageEnvelopBytes":"<base64>"}}
+ * ```
+ *
+ * - The exporter writes only rows still inside the receive path's expiry window (10 days on
+ *   [originalMessageTimeStamp], not on a receive time) whose bytes parse as an envelope; the
+ *   destination keeps the same expiry, since the timestamp travels unchanged.
+ * - A sender emits this record only to a receiver advertising `pending-envelope-v1`. Such a
+ *   receiver fails the whole import, rather than skip, when one record does not decode (blank id,
+ *   non-positive timestamp, bytes that are not non-empty base64) or cannot be stored.
+ *
+ * @param messageId the pending envelope's own message id; the table's primary key.
+ * @param originalMessageTimeStamp the target message's timestamp (ms): applied once a message with
+ *   this timestamp exists, expired 10 days after it.
+ * @param messageEnvelopBytes the complete serialized server `Envelope` as received, base64 with the
+ *   RFC 4648 standard alphabet, padded, no line breaks.
+ */
+data class NeutralPendingEnvelope(
+    val messageId: String,
+    val originalMessageTimeStamp: Long,
+    val messageEnvelopBytes: String,
+)

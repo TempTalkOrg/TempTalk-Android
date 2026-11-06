@@ -1,6 +1,21 @@
 package com.difft.android.linkeddevices
 
 import android.os.Bundle
+import com.difft.android.base.utils.pane.SettingsIdiomPage
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.graphics.Color
+import com.difft.android.R
+import com.difft.android.base.widget.ComposeDialogManager
+import com.difft.android.base.utils.pane.detailBackOwner
+import com.difft.android.base.utils.pane.dismissWithView
+import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Box
+import com.difft.android.base.utils.pane.ownsWindow
+import com.difft.android.base.utils.pane.detailNavigation
+import com.difft.android.base.utils.pane.detailPageInsets
+import com.difft.android.base.utils.pane.containerPadsBottom
+import com.difft.android.base.utils.DualPaneUtils.showsDetailBackButton
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,11 +29,10 @@ import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * Compose host for the Linked Devices screen on both form factors: a thin ComposeView shell inside
- * [LinkedDevicesActivity] on phones and inside the dual-pane detail pane on tablets, where the back
- * button is hidden. The host's XML root carries the system-bar insets.
+ * [LinkedDevicesActivity] or any home detail stack. The container owns system-bar insets.
  */
 @AndroidEntryPoint
-class LinkedDevicesFragment : Fragment() {
+class LinkedDevicesFragment : Fragment(), SettingsIdiomPage {
 
     companion object {
         fun newInstance() = LinkedDevicesFragment()
@@ -33,15 +47,20 @@ class LinkedDevicesFragment : Fragment() {
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
-            DifftTheme {
-                LinkedDevicesScreen(
+            DifftTheme(applyWindowBackground = ownsWindow()) {
+                Box(Modifier.detailPageInsets(containerPadsBottom())) {
+                    LinkedDevicesScreen(
                     viewModel,
-                    showBackButton = !isInDualPaneMode(),
-                    onBack = { activity?.finish() },
+                    onUnlinkConfirm = ::showUnlinkConfirm,
+                    visibleOwner = detailBackOwner(),
+                    showBackButton = showsDetailBackButton(),
+                    onBack = { detailNavigation().pop(this@LinkedDevicesFragment) },
                 )
+                }
             }
         }
     }
+
 
     override fun onResume() {
         super.onResume()
@@ -51,5 +70,23 @@ class LinkedDevicesFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         viewModel.stopExpecting() // stop the expect-more poll timer while off-screen
+    }
+    /**
+     * Confirm dialog. Resolves the display name + destructive button colour via resources and delegates
+     * to the app-wide [ComposeDialogManager]. Colour token is base R.color.error.
+     */
+    private fun showUnlinkConfirm(device: DeviceUiState) {
+        val context = requireContext()
+        val name = device.displayName ?: context.getString(R.string.linked_devices_unnamed)
+        val dialog = dismissWithView(ComposeDialogManager.showMessageDialog(
+            context = context,
+            title = context.getString(R.string.linked_devices_unlink_confirm_title, name),
+            message = context.getString(R.string.linked_devices_unlink_confirm_body),
+            confirmText = context.getString(R.string.linked_devices_unlink_action),
+            cancelText = context.getString(R.string.linked_devices_unlink_cancel),
+            confirmButtonColor = Color(ContextCompat.getColor(context, com.difft.android.base.R.color.error)),
+            onConfirm = { viewModel.unlink(device.id) },
+        ))
+        dismissWhenLeavingVisibleTop { dialog?.dismiss() }
     }
 }

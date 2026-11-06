@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.difft.android.base.call.CallFeedbackRequestBody
 import com.difft.android.call.data.FeedbackCallInfo
+import com.difft.android.call.ui.screenshare.isCallImmersive
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +33,7 @@ fun CallRatingFeedbackView(
             sheetState = sheetState,
             showDragHandle = false,
             hideNavigationBar = true,
+            hideSystemBars = isCallImmersive(),
             onDismissRequest = {
                 viewState = FeedbackViewState.Dismissed
                 onDismiss()

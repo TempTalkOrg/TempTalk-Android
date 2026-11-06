@@ -817,8 +817,22 @@ fun WCDB.insertForward(
 
 fun MessageModel.delete() {
     deleteRelatedDataForMessage()
+    deletePendingMessagesTargetingThis()
     wcdb.message.deleteObjects(DBMessageModel.databaseId.eq(databaseId))
     RoomChangeTracker.trackRoom(roomId ?: "", RoomChangeType.MESSAGE)
+}
+
+/**
+ * Drops the pending rows (reaction, recall, receipt) waiting on this message, which can never apply
+ * once it is gone. Only a real deletion does this: a confidential placeholder keeps the message, so
+ * a row on it (e.g. a recall that failed transiently) must stay for its retry (#1382).
+ */
+private fun MessageModel.deletePendingMessagesTargetingThis() {
+    try {
+        wcdb.pendingMessageNew.deleteObjects(DBPendingMessageModelNew.originalMessageTimeStamp.eq(timeStamp))
+    } catch (e: Exception) {
+        L.e { "[Message] delete pending rows failed timestamp=$timeStamp: ${e.stackTraceToString()}" }
+    }
 }
 
 // region #909 paged message access
@@ -878,11 +892,19 @@ fun maxMessageDatabaseId(roomId: String): Int =
  * converge on their own and need no databaseId snapshot. Do not re-introduce an unbounded
  * `roomId.eq` delete without a snapshot.
  */
-suspend fun deleteMessagesPaged(condition: Expression, pageSize: Long = 100) = withContext(Dispatchers.IO) {
+suspend fun deleteMessagesPaged(
+    condition: Expression,
+    pageSize: Long = 100,
+    commitAllowed: (() -> Boolean)? = null,
+) = withContext(Dispatchers.IO) {
     while (true) {
+        if (commitAllowed?.invoke() == false) return@withContext
         val page = wcdb.message.getAllObjects(condition, null, pageSize)
         if (page.isEmpty()) break
-        page.forEach { it.delete() }
+        page.forEach {
+            if (commitAllowed?.invoke() == false) return@withContext
+            it.delete()
+        }
         if (page.size < pageSize) break
         delay(100)
     }
@@ -922,6 +944,11 @@ suspend fun forEachMessagePaged(
 }
 // endregion
 
+/**
+ * Removes what this message owns (attachment files and rows, mentions, reactions, forwards, quote,
+ * translations). Pending rows waiting on the message are not owned by it: [delete] drops them, a
+ * confidential placeholder keeps them (#1382).
+ */
 fun MessageModel.deleteRelatedDataForMessage() {
     try {
         deleteOwnAttachmentFiles()
@@ -951,8 +978,6 @@ fun MessageModel.deleteRelatedDataForMessage() {
 
         wcdb.translate.deleteObjects(DBTranslateModel.messageId.eq(id))
         wcdb.speechToText.deleteObjects(DBSpeechToTextModel.messageId.eq(id))
-
-        wcdb.pendingMessageNew.deleteObjects(DBPendingMessageModelNew.originalMessageTimeStamp.eq(this.timeStamp))
     } catch (e: Exception) {
         L.e { "deleteRelatedDataForMessage Error:${e.stackTraceToString()}" }
     }
@@ -1053,7 +1078,8 @@ private fun reclaimLegacyAttachmentDirectory(authorityId: Long) {
 
 /**
  * Convert a confidential message to a placeholder (recipient has read, awaiting sender confirmation to delete).
- * 1. Delete all sub-data (attachments, quotes, mentions, reactions, etc.)
+ * 1. Delete all sub-data (attachments, quotes, mentions, reactions, etc.); pending rows targeting it stay
+ *    for their retry (#1382)
  * 2. Update message type to TYPE_CONFIDENTIAL_PLACEHOLDER
  * 3. Clear message text and related IDs
  * 4. Notify UI to refresh

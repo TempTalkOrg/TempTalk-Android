@@ -1,6 +1,8 @@
 package com.difft.android
 
+import com.difft.android.base.migration.pause.HeldSendJobs
 import com.difft.android.base.session.AuthFailureSink
+import com.difft.android.chat.jobs.MessagingPauseJobHold
 import com.difft.android.base.utils.IConnectionRefresher
 import com.difft.android.base.utils.IGlobalConfigsManager
 import com.difft.android.base.utils.IMessageNotificationUtil
@@ -50,4 +52,9 @@ abstract class ChatHiltBindsModule {
     @Binds
     @Singleton
     abstract fun bindAuthFailureSink(sessionAuthGuard: SessionAuthGuard): AuthFailureSink
+
+    // The migration message pause (:base) drops held sends through the job manager (#1382).
+    @Binds
+    @Singleton
+    abstract fun bindHeldSendJobs(drop: MessagingPauseJobHold.Drop): HeldSendJobs
 }

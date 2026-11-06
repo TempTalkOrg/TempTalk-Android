@@ -3,6 +3,7 @@ package com.difft.android.chat.jobmanager
 import android.content.Context
 import androidx.annotation.WorkerThread
 import com.difft.android.base.log.lumberjack.L
+import java.io.Closeable
 import java.util.UUID
 
 /**
@@ -30,6 +31,24 @@ abstract class Job(val parameters: Parameters) {
 
     val id: String
         get() = parameters.id
+
+    /**
+     * The [JobLoginTag] of the login that added this job (#1382 A04), persisted with its data;
+     * null for a job added while signed out or stored by a version that did not tag jobs.
+     */
+    internal var admissionCreatorCaptured: Boolean = false
+
+    var creatorLogin: String? = null
+        internal set
+
+    /** Where [currentLogin] reads the signed-in login; set by [JobController] for every run. */
+    internal var loginTag: JobLoginTag = JobLoginTag.NONE
+
+    /** The signed-in login's tag now; null when there is none. */
+    internal fun currentLogin(): String? = loginTag.current()
+
+    /** Held by this run until [JobRunner] has recorded its result; see [closeWhenRunEnds]. */
+    private val runResources = mutableListOf<Closeable>()
 
     /**
      * Should only be invoked by [JobController]
@@ -83,6 +102,27 @@ abstract class Job(val parameters: Parameters) {
     abstract suspend fun run(): Result
 
     /**
+     * Keeps [resource] open until [JobRunner] has recorded this run's result (success, retry,
+     * deferral or failure, including [onFailure]), then closes it. Used for a messaging send
+     * ticket (#1382), which must cover the send and every message-state write that follows it.
+     */
+    protected fun closeWhenRunEnds(resource: Closeable) {
+        synchronized(runResources) { runResources += resource }
+    }
+
+    /** Called by [JobRunner] once per run, in a `finally`. */
+    internal fun closeRunResources() {
+        val resources = synchronized(runResources) { runResources.toList().also { runResources.clear() } }
+        resources.forEach { resource ->
+            try {
+                resource.close()
+            } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+                L.e { "[JobRunner] event=run_resource_close_failed job=$id ${e.stackTraceToString()}" }
+            }
+        }
+    }
+
+    /**
      * Called when your job has completely failed and will not be run again.
      */
     @WorkerThread
@@ -104,17 +144,19 @@ abstract class Job(val parameters: Parameters) {
 
         fun isFailure(): Boolean = resultType == ResultType.FAILURE
 
+        fun isDeferred(): Boolean = resultType == ResultType.DEFERRED
+
         fun getException(): RuntimeException? = runtimeException
 
         fun getBackoffInterval(): Long = backoffInterval
 
         override fun toString(): String = when (resultType) {
-            ResultType.SUCCESS, ResultType.RETRY -> resultType.toString()
+            ResultType.SUCCESS, ResultType.RETRY, ResultType.DEFERRED -> resultType.toString()
             ResultType.FAILURE -> if (runtimeException == null) resultType.toString() else "FATAL_FAILURE"
         }
 
         private enum class ResultType {
-            SUCCESS, FAILURE, RETRY
+            SUCCESS, FAILURE, RETRY, DEFERRED
         }
 
         companion object {
@@ -122,6 +164,7 @@ abstract class Job(val parameters: Parameters) {
 
             private val SUCCESS_INSTANCE = Result(ResultType.SUCCESS, null, INVALID_BACKOFF)
             private val FAILURE_INSTANCE = Result(ResultType.FAILURE, null, INVALID_BACKOFF)
+            private val DEFERRED_INSTANCE = Result(ResultType.DEFERRED, null, INVALID_BACKOFF)
 
             /** Job completed successfully. */
             fun success(): Result = SUCCESS_INSTANCE
@@ -133,6 +176,13 @@ abstract class Job(val parameters: Parameters) {
              */
             fun retry(backoffInterval: Long): Result =
                 Result(ResultType.RETRY, null, backoffInterval)
+
+            /**
+             * The job did not start its work because it was not admitted (messaging paused, #1382).
+             * It goes back to the queue without consuming an attempt; neither [onRetry] nor
+             * [onFailure] is called.
+             */
+            fun deferred(): Result = DEFERRED_INSTANCE
 
             /** Job did not complete successfully and should not be tried again. */
             fun failure(): Result = FAILURE_INSTANCE

@@ -38,8 +38,9 @@ interface AuthTokenProvider {
     /**
      * The stored JWT with no expiry test and no refresh. Synchronous, non-suspending.
      *
-     * Sanctioned callers only: the cold-start identity gate (`LocalTokenVerifier`, issue #758)
-     * and this provider's own expiry test. Everything else must use [current].
+     * Sanctioned callers only: the cold-start identity gate (`LocalTokenVerifier`, issue #758),
+     * the warm-process foreground gate that reuses it (`WarmProcessResync`, issue #1395) and this
+     * provider's own expiry test. Everything else must use [current].
      */
     fun peek(): String?
 

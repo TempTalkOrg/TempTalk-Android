@@ -58,14 +58,16 @@ class DualPaneReconcilerTest {
         return host
     }
 
+    // The band marker is stamped on list_pane at inflation (@string/dual_pane_band); a tree
+    // inflated under another dimens band carries a different string.
     private fun Host.staleTheChrome() {
-        val rail = checkNotNull(activity.findViewById<View>(R.id.navigation_rail_container)) { "needs the dual-pane tree" }
-        rail.layoutParams = rail.layoutParams.apply { width += 7 }
+        val listPane = checkNotNull(activity.findViewById<View>(R.id.list_pane)) { "needs the dual-pane tree" }
+        listPane.tag = "other-band"
     }
 
     private fun Host.freshenTheChrome() {
-        val rail = checkNotNull(activity.findViewById<View>(R.id.navigation_rail_container)) { "needs the dual-pane tree" }
-        rail.layoutParams = rail.layoutParams.apply { width = activity.resources.getDimensionPixelSize(R.dimen.dual_pane_rail_width) }
+        val listPane = checkNotNull(activity.findViewById<View>(R.id.list_pane)) { "needs the dual-pane tree" }
+        listPane.tag = activity.resources.getString(R.string.dual_pane_band)
     }
 
     /** One reconcile per throttle window, so this measures the breaker and not the throttle. */
@@ -94,7 +96,7 @@ class DualPaneReconcilerTest {
         val host = host(started = true)
         host.reconciler.attach()
         host.settleFirstTraversal()
-        assertNull("precondition: the folded qualifier inflates the phone layout", host.activity.findViewById(R.id.detail_pane))
+        assertNull("precondition: the folded qualifier inflates the phone layout", host.activity.findViewById(R.id.list_pane))
 
         // ColorOS fold/unfold: the configuration moves to the inner display, the activity stays.
         RuntimeEnvironment.setQualifiers("w763dp-h691dp")
@@ -114,7 +116,7 @@ class DualPaneReconcilerTest {
         val host = host(started = true)
         host.reconciler.attach()
         host.settleFirstTraversal()
-        assertNotNull("precondition: the unfolded qualifier inflates the dual-pane layout", host.activity.findViewById(R.id.detail_pane))
+        assertNotNull("precondition: the unfolded qualifier inflates the dual-pane layout", host.activity.findViewById(R.id.list_pane))
 
         RuntimeEnvironment.setQualifiers("w360dp-h840dp")
         host.reconciler.reconcile("onStart")

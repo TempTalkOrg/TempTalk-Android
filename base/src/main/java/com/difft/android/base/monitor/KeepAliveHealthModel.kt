@@ -137,6 +137,12 @@ object HealthEventKeys {
 
     /** All stall keys in report order. */
     val ALL_STALL_KEYS: List<String> = listOf(STALL_30M, STALL_2H, STALL_MORE, STALL_MIN)
+
+    /**
+     * Deliveries counted by [LateDeliveryTracker] (late more than 5 min, background or catch-up
+     * after opening the app): the evidence behind both the startup prompt and the `L` verdict rule.
+     */
+    const val LATE_5M = "late_5m"
 }
 
 /** Arrival path of an envelope; [key] is the infix of its latency counters (`lat_<key>_<bucket>`). */
@@ -264,7 +270,8 @@ object KeepAliveHealthModel {
         (listOf(
             HealthEventKeys.FGS_STARTS, HealthEventKeys.FCM_RECV, HealthEventKeys.FCM_DEPRIO,
             HealthEventKeys.PULL_OK, HealthEventKeys.PULL_FAIL
-        ) + HealthEventKeys.ALL_LATENCY_KEYS + HealthEventKeys.ALL_FCM_TRANSIT_KEYS + HealthEventKeys.ALL_STALL_KEYS).forEach {
+        ) + HealthEventKeys.ALL_LATENCY_KEYS + HealthEventKeys.ALL_FCM_TRANSIT_KEYS + HealthEventKeys.ALL_STALL_KEYS +
+            HealthEventKeys.LATE_5M).forEach {
             append(' ').append(it).append('=').append(events[it] ?: 0)
         }
         append(" pv=").append(verdict.value)
@@ -276,6 +283,7 @@ object KeepAliveHealthModel {
         append(" pv_fcmt_n=").append(verdict.fcmTransitSamples)
         append(" pv_fcmt_slow=").append(verdict.fcmTransitSlowPercent?.toString() ?: "na")
         append(" pv_stall_2h=").append(verdict.stallsOver2h)
+        append(" pv_late_n=").append(verdict.lateDeliveries)
         append(" fcm_state=").append(fcmState)
         append(" fcm_fail_h=").append(fcmFailHours.coerceAtLeast(0L))
         append(" adb=").append(flag(snapshot.adbEnabled))

@@ -1,93 +1,65 @@
 package com.difft.android.setting.notificationtest
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import androidx.activity.viewModels
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import com.difft.android.base.BaseActivity
-import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.notification.NotificationFix
-import com.difft.android.base.notification.NotificationFixJump
-import com.difft.android.base.ui.TitleBar
-import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.openExternalBrowser
-import com.difft.android.base.widget.ToastUtil
-import com.difft.android.setting.BackgroundConnectionHelpLink
-import com.difft.android.setting.notificationtest.mvi.NotificationTestContract
-import com.difft.android.setting.notificationtest.mvi.NotificationTestViewModel
+import com.difft.android.base.R
+import com.difft.android.base.utils.pane.DetailDestination
+import com.difft.android.base.utils.pane.DetailShellActivity
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import com.difft.android.chat.R as ChatR
 
-/** The notification test page (#1350), opened from the notification settings page. */
+/** Compatibility shell; normal Me navigation uses NotificationTestDestination. */
 @AndroidEntryPoint
-class NotificationTestActivity : BaseActivity() {
+class NotificationTestActivity : DetailShellActivity() {
+    @Inject lateinit var returns: NotificationTestReturns
 
-    private val viewModel: NotificationTestViewModel by viewModels()
+    override fun createPage(): Fragment = NotificationTestFragment.newInstance(shell = true)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
-        val composeView = ComposeView(this)
-        composeView.setContent {
-            DifftTheme {
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                Column(Modifier.fillMaxSize().systemBarsPadding()) {
-                    TitleBar(
-                        titleText = getString(ChatR.string.notification_test_entry),
-                        onBackClick = { finish() },
-                    )
-                    NotificationTestContent(state = state, onIntent = viewModel::dispatch)
-                }
-            }
+        if (savedInstanceState == null) NotificationTestReturnRoute.read(intent)?.let { route ->
+            lifecycleScope.launch { discardStale(route) }
         }
-        setContentView(composeView)
+    }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val route = NotificationTestReturnRoute.read(intent) ?: return
+        // A stale return never restarts a timer or takes ownership of an unrelated live run.
+        val pages = supportFragmentManager.fragments
+        if (returns.decide(route, pages) is NotificationTestReturns.Decision.Existing) return
+        replaceIdleAfterStale(route, pages.filterIsInstance<NotificationTestFragment>().firstOrNull())
+    }
+
+    private suspend fun discardStale(route: NotificationTestReturnRoute) {
+        if (!returns.discardStale(route)) com.difft.android.base.widget.ToastUtil.show(com.difft.android.chat.R.string.notification_test_persistence_failed)
+    }
+
+    private fun replaceIdleAfterStale(route: NotificationTestReturnRoute, originalPage: NotificationTestFragment?) {
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.effect.collect(::handleEffect)
-            }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        viewModel.dispatch(NotificationTestContract.Intent.Resume)
-    }
-
-    private fun handleEffect(effect: NotificationTestContract.Effect) {
-        when (effect) {
-            is NotificationTestContract.Effect.OpenFix -> openFix(effect.fix)
-            NotificationTestContract.Effect.OpenGuide ->
-                openExternalBrowser(BackgroundConnectionHelpLink.build(BackgroundConnectionHelpLink.Source.NOTIFICATION_SETTINGS))
-        }
-    }
-
-    private fun openFix(fix: NotificationFix) {
-        lifecycleScope.launch {
-            val groupBlocked = fix == NotificationFix.MESSAGE_CATEGORY &&
-                withContext(Dispatchers.IO) { NotificationFixJump.isMessageGroupBlocked(applicationContext) }
-            if (!NotificationFixJump.open(this@NotificationTestActivity, fix, groupBlocked)) {
-                L.w { "[NotificationTest] fix jump failed fix=$fix" }
-                ToastUtil.show(ChatR.string.notification_settings_open_fail)
-            }
+            discardStale(route)
+            if (isFinishing || supportFragmentManager.isStateSaved) return@launch
+            val current = supportFragmentManager.findFragmentById(R.id.detail_shell_container)
+            if (current !== originalPage || (current as? NotificationTestFragment)?.hasActiveRun() == true) return@launch
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.detail_shell_container, NotificationTestFragment.newInstance(shell = true)).commit()
         }
     }
 
     companion object {
-        fun start(activity: Activity) {
-            activity.startActivity(Intent(activity, NotificationTestActivity::class.java))
-        }
+        fun createIntent(context: Context): Intent = Intent(context, NotificationTestActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+        fun start(activity: Activity) { activity.startActivity(createIntent(activity)) }
     }
+}
+
+object NotificationTestDestination : DetailDestination {
+    override fun newFragment(): Fragment = NotificationTestFragment.newInstance()
+    override fun shellIntent(context: Context): Intent = NotificationTestActivity.createIntent(context)
 }

@@ -20,9 +20,14 @@ import com.difft.android.migration.v2.model.NeutralConversationLocal
 import com.difft.android.migration.v2.model.NeutralIdentity
 import com.difft.android.migration.v2.model.NeutralAttachment
 import com.difft.android.migration.v2.model.NeutralMessage
+import com.difft.android.migration.v2.model.NeutralPendingEnvelope
 import com.difft.android.migration.v2.model.NeutralRecord
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
+import io.mockk.slot
+import org.difft.app.database.models.PendingMessageModelNew
+import kotlin.test.assertContentEquals
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
@@ -507,6 +512,70 @@ class RestoreOrchestratorStreamingTest {
         assertTrue(!flagStore.exists(), "a pre-commit failure leaves no RESTORING residue")
     }
 
+    // ── #1382: pending envelopes are stored before promote, or the import fails ──────────────────
+
+    private fun pendingEnvelope(text: String = java.util.Base64.getEncoder().encodeToString(byteArrayOf(8, 1))) =
+        NeutralRecord.PendingEnvelope(NeutralPendingEnvelope("recall-1", 1010L, text))
+
+    private suspend fun restorePending(staging: StagingDatabase, promote: PromoteStep, pending: NeutralRecord.PendingEnvelope): RestoreResult =
+        orchestratorWith(ContainerReaderImpl(crypto)).restoreFromStream(
+            source = ByteArrayInputStream(writeRealContainer(account, pending = listOf(pending))),
+            transferKey = transferKey,
+            currentVerifyAccount = account,
+            paths = tmpPaths(),
+            flagStore = RestoreFlagStore(context).also { it.clear() },
+            promoteStep = promote,
+            stagingFactory = { staging },
+            isFreshTarget = { true },
+        )
+
+    @Test
+    fun `a pending envelope is in the staging file before promote`() = runTest {
+        val staging = relaxedStaging()
+        val stored = slot<PendingMessageModelNew>()
+        every { staging.insertPendingEnvelope(capture(stored)) } returns Unit
+        val promote = okPromote()
+
+        val result = restorePending(staging, promote, pendingEnvelope())
+
+        assertEquals(RestoreResult.ReadyForSignIn, result, "actual result was: $result")
+        assertEquals("recall-1", stored.captured.messageId)
+        assertEquals(1010L, stored.captured.originalMessageTimeStamp)
+        assertContentEquals(byteArrayOf(8, 1), stored.captured.messageEnvelopBytes)
+        // Written, checkpointed into the staging file, then promoted with it.
+        coVerifyOrder {
+            staging.insertPendingEnvelope(any())
+            staging.close()
+            promote.promote(any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun `a pending envelope that cannot be stored fails the import and never promotes`() = runTest {
+        val staging = relaxedStaging()
+        every { staging.insertPendingEnvelope(any()) } throws IllegalStateException("disk I/O")
+        val promote = mockk<PromoteStep>()
+
+        val result = restorePending(staging, promote, pendingEnvelope())
+
+        assertIs<RestoreResult.Failed>(result)
+        coVerify(exactly = 1) { staging.discard() }
+        coVerify(exactly = 0) { promote.promote(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `a pending envelope that does not decode fails the import and never promotes`() = runTest {
+        val staging = relaxedStaging()
+        val promote = mockk<PromoteStep>()
+
+        val result = restorePending(staging, promote, pendingEnvelope(text = "%%% not base64 %%%"))
+
+        assertIs<RestoreResult.Failed>(result)
+        coVerify(exactly = 0) { staging.insertPendingEnvelope(any()) }
+        coVerify(exactly = 1) { staging.discard() }
+        coVerify(exactly = 0) { promote.promote(any(), any(), any(), any(), any()) }
+    }
+
     // ── helpers (mirror RestoreOrchestratorTest's seams) ─────────────────────────────────────────
 
     private fun orchestratorWith(reader: ContainerReaderImpl) =
@@ -557,9 +626,10 @@ class RestoreOrchestratorStreamingTest {
         totals: ContainerTotals? = null,
         identity: NeutralIdentity? = null,
         attachments: List<NeutralRecord.Attachment> = emptyList(),
+        pending: List<NeutralRecord.PendingEnvelope> = emptyList(),
     ): ByteArray {
         val out = tmp.newFile("stream-${System.nanoTime()}.ttmig")
-        val records = listOfNotNull<NeutralRecord>(
+        val records = pending + listOfNotNull<NeutralRecord>(
             identity?.let { NeutralRecord.Identity(it) },
             NeutralRecord.ConversationLocal(NeutralConversationLocal(conversationRef = "room-1")),
             msg("m-1", "hello stream", emptyList()),

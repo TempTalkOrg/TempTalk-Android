@@ -5,76 +5,90 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Keep distinct from :chat's @id/viewpager — ids merge by name, and ContactsFragment
-         nests its own pager here, so a shared id collides in the window view-state map. -->
-    <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/index_viewpager"
+    <!-- List content: the tab pager plus the floating home tab capsule over its bottom edge.
+         The same list_content / home_tab_bar ids as the two-pane layout keep IndexActivity's
+         width-freeze and coverage logic layout-agnostic. -->
+    <FrameLayout
+        android:id="@+id/list_content"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:nestedScrollingEnabled="true"
-        app:layout_constraintBottom_toTopOf="@+id/view"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Keep distinct from :chat's @id/viewpager — ids merge by name, and ContactsFragment
+             nests its own pager here, so a shared id collides in the window view-state map.
+             Extends to the window bottom: the pages scroll underneath the capsule and pad
+             themselves by DualPaneHost.homeTabBarObstructionPx. -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/index_viewpager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:nestedScrollingEnabled="true" />
+
+        <!-- Floating home tab capsule + search circle (HomeTabCapsule). Bottom padding = the
+             28dp gap iOS keeps, raised above a 3-button navigation bar by IndexActivity;
+             clipToPadding off so the shadow draws into that gap. -->
+        <FrameLayout
+            android:id="@+id/home_tab_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingBottom="28dp">
+
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/home_tab_capsule"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <!-- Full-window list-pane layer (search, folded groups) over the list and the tab capsule;
+         the detail layer below stays on top of it. ListPaneLayer shows it while the layer is up;
+         the same id as the two-pane layout lets a fold/unfold recreation restore the layer host
+         into either tree. Clickable so touches never reach the covered list. -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/list_layer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@color/bg1"
+        android:clickable="true"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <View
-        android:id="@+id/view"
+    <!-- Full-window detail layer over the list and the tab bar (declared last, drawn on top).
+         PaneNavigator shows it while the current tab's detail stack is non-empty. The same
+         fragment_container_detail id as the two-pane layout lets a fold/unfold recreation
+         restore the per-tab stacks into either tree. Clickable so touches never reach the
+         covered list; not itself an accessibility node (its pages are). -->
+    <FrameLayout
+        android:id="@+id/detail_pane"
         android:layout_width="0dp"
-        android:layout_height="0.5dp"
-        android:background="@color/line"
-        app:layout_constraintBottom_toTopOf="@+id/cl_tab"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <!-- 49 dp of indicator content + 8 dp bottom padding = the 57 dp floor; the padding lives
-         on the bar because layout_index_indicator.xml is shared with the dual-pane rail. The
-         bar also pads itself by the navigation-bar inset (IndexActivity), so its bg1 covers
-         that strip and stays bg1 on every tab. Floor, not a fixed height: the large-text tab
-         (35 dp icon / 21 sp label) has no library counterpart and must still grow. -->
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_tab"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
         android:background="@color/bg1"
-        android:minHeight="57dp"
-        android:paddingBottom="8dp"
-        app:layout_constraintBottom_toBottomOf="parent">
+        android:clickable="true"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <com.difft.android.views.IndexIndicator
-            android:id="@+id/indicatorview_chats"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:src="@drawable/ic_index_activity_chat"
-            android:text="@string/chat_chats"
-            android:textColor="@color/color_index_activity_index_text"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/indicatorview_contacts"
-            app:layout_constraintStart_toStartOf="parent" />
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/fragment_container_detail"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
 
-        <com.difft.android.views.IndexIndicator
-            android:id="@+id/indicatorview_contacts"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_index_activity_contact"
-            android:text="@string/chat_contacts"
-            android:textColor="@color/color_index_activity_index_text"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/indicatorview_me"
-            app:layout_constraintHorizontal_bias="0.5"
-            app:layout_constraintStart_toEndOf="@+id/indicatorview_chats" />
-
-        <com.difft.android.views.IndexIndicator
-            android:id="@+id/indicatorview_me"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:src="@drawable/ic_index_activity_me"
-            android:text="@string/chat_me"
-            android:textColor="@color/color_index_activity_index_text"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@+id/indicatorview_contacts" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

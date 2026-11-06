@@ -31,7 +31,6 @@ import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.crypto.GroupCrypto
 import com.difft.android.chat.crypto.GroupCryptoRepo
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -73,11 +72,13 @@ class GroupUtil @Inject constructor(
      * Marked `internal` so the contract boundary is enforced at compile time —
      * only the chat module's notify-handler / fetch-invalid paths can invoke it.
      */
-    internal suspend fun cleanupGroupLocally(gid: String) {
+    internal suspend fun cleanupGroupLocally(gid: String, expectedSession: GroupWriteSession? = null) {
         if (gid.isEmpty()) return
         L.i { "[GroupUtil] cleanupGroupLocally gid=$gid" }
         withContext(Dispatchers.IO) {
-            messageStore.removeRoomAndMessages(gid)
+            check(expectedSession?.isCurrent(userManager) != false) { "group_session_changed" }
+            messageStore.removeRoomAndMessages(gid, expectedSession?.let { session -> { session.isCurrent(userManager) } })
+            check(expectedSession?.isCurrent(userManager) != false) { "group_session_changed" }
             wcdb.groupMemberContactor.deleteObjects(DBGroupMemberContactorModel.gid.eq(gid))
             wcdb.group.deleteObjects(DBGroupModel.gid.eq(gid))
             groupCryptoRepo.deleteKeys(gid)
@@ -85,6 +86,7 @@ class GroupUtil @Inject constructor(
         // Sentinel: only gid + non-zero status carry meaning here. UI subscribers
         // (GroupsFragment, GroupChatFragment, GroupInfoActivity, ...) already
         // branch on group.status != 0 to remove the group from their views.
+        check(expectedSession?.isCurrent(userManager) != false) { "group_session_changed" }
         emitSingleGroupUpdate(GroupModel().apply {
             this.gid = gid
             this.status = 1
@@ -177,18 +179,49 @@ class GroupUtil @Inject constructor(
         }
     }
 
-    private val groupsInProgress = ConcurrentHashMap.newKeySet<String>()
+    private val singleGroupFetches = SingleFlight<String, GroupModel>()
 
-    suspend fun fetchAndSaveSingleGroupInfo(groupID: String, sendUpdateEvent: Boolean = false): GroupModel? {
-        if (!groupsInProgress.add(groupID)) {
-            L.i { "[GroupUtil] [Group: $groupID] fetch already in progress, skipping" }
-            return null
+    /** Order mark for [fetchAndSaveSingleGroupInfo]'s `startedAfter`: take it when a server write is accepted. */
+    fun fetchMark(): Long = singleGroupFetches.mark()
+
+    /**
+     * Fetches and stores one group. A concurrent call for the same gid joins the in-flight fetch
+     * and receives its result, so callers can treat `null` as a failed fetch only. With
+     * [startedAfter], a fetch that began at or before that mark is waited out and a new GET follows,
+     * so the stored snapshot reflects a write accepted before the mark.
+     */
+    suspend fun fetchAndSaveSingleGroupInfo(
+        groupID: String,
+        sendUpdateEvent: Boolean = false,
+        expectedSession: GroupWriteSession? = null,
+        startedAfter: Long? = null,
+    ): GroupModel? {
+        var joined = false
+        var leaderEmits = false
+        val group = singleGroupFetches.run(groupID, startedAfter, tag = sendUpdateEvent,
+            onJoin = { leaderTag -> joined = true; leaderEmits = leaderTag == true }) {
+            fetchAndSaveSingleGroupInfoNow(groupID, sendUpdateEvent, expectedSession)
         }
+        if (joined) {
+            L.i { "[GroupUtil] fetch_joined gid=$groupID result=${group != null}" }
+            // One update per fetch: the leader emits when it asked to, otherwise the joiner does.
+            if (sendUpdateEvent && !leaderEmits && group != null && group.status == 0) emitSingleGroupUpdate(group)
+        }
+        return group
+    }
 
+    private suspend fun fetchAndSaveSingleGroupInfoNow(
+        groupID: String,
+        sendUpdateEvent: Boolean,
+        expectedSession: GroupWriteSession?,
+    ): GroupModel? {
+        val commitAllowed: (() -> Boolean)? = expectedSession?.let { session -> { session.isCurrent(userManager) } }
         return try {
             withContext(Dispatchers.IO) {
+                requireGroupWriteSession(commitAllowed)
                 val response = groupRepo
                     .getGroupInfo(groupID)
+                requireGroupWriteSession(commitAllowed)
                 val groupInfo = response.data
                 val group = wcdb.group.getFirstObject(
                     DBGroupModel.gid.eq(groupID)
@@ -225,14 +258,18 @@ class GroupUtil @Inject constructor(
                             this.uidSignature = member.uidSignature
                         }
                     } ?: emptyList()
-                    groupMemberWriter.replaceAllForGroup(groupID, members)
+                    groupMemberWriter.replaceAllForGroup(groupID, members, commitAllowed)
+                    requireGroupWriteSession(commitAllowed)
                     decryptGroupFieldsIfNeeded(group)
                     wcdb.group.deleteObjects(DBGroupModel.gid.eq(groupID))
                     wcdb.group.insertObject(group)
                     // Background verify of pending (signatureVerify=null) members.
                     // appScope so the caller's IO isn't held; runCatching isolates the failure.
                     appScope.launch {
-                        runCatching { groupCryptoRepo.verifyAllPendingForGroup(groupID, groupRepo) }
+                        runCatching {
+                            requireGroupWriteSession(commitAllowed)
+                            groupCryptoRepo.verifyAllPendingForGroup(groupID, groupRepo, commitAllowed)
+                        }
                             .onFailure { L.e { "[GroupUtil] verify trigger failed gid=$groupID: ${it.stackTraceToString()}" } }
                     }
                     L.i { "[GroupUtil] [Group: $groupID] fetch success, members: ${members.size}" }
@@ -241,18 +278,15 @@ class GroupUtil @Inject constructor(
                     }
                 } else {
                     L.i { "[GroupUtil] [Group: $groupID] is invalid" }
-                    cleanupGroupLocally(groupID)
+                    cleanupGroupLocally(groupID, expectedSession)
                 }
 
-                groupsInProgress.remove(groupID)
                 group
             }
         } catch (e: CancellationException) {
-            groupsInProgress.remove(groupID)
             throw e
         } catch (throwable: Throwable) {
             L.e(throwable) { "[GroupUtil] [Group: $groupID] fetchAndSaveSingleGroup fail: ${throwable.message}" }
-            groupsInProgress.remove(groupID)
             null
         }
     }

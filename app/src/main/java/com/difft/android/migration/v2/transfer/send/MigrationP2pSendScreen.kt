@@ -1,5 +1,6 @@
 package com.difft.android.migration.v2.transfer.send
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -70,6 +71,15 @@ fun MigrationP2pSendScreen(
     selfContact: ContactorModel? = null,
     selfId: String = "",
 ) {
+    // While a transfer is running the page can only be left through its cancel action, as on iOS:
+    // system back would leave the transfer to the service and let the user reach the chats (#1382).
+    val active = state == MigrationP2pSendState.Preparing ||
+        state == MigrationP2pSendState.AwaitingPeerConfirm ||
+        state is MigrationP2pSendState.Transferring ||
+        state == MigrationP2pSendState.AwaitingVerdict
+    BackHandler(enabled = active) {
+        // Deliberately swallowed: see above.
+    }
     when (state) {
         MigrationP2pSendState.Idle -> IdlePage(onIntent)
         MigrationP2pSendState.Scanning -> BusyPage()
@@ -117,8 +127,7 @@ fun MigrationP2pSendScreen(
             hint = if (fromLink) null else stringResource(R.string.migration_p1_finishing_hint),
             // The wait has no upper bound the user can feel — the peer may verify and import for
             // minutes — so this page must offer the same way out the ongoing notification already
-            // does. Without it the only exit is the system back gesture, which abandons the transfer
-            // to the service with nothing on screen ever pointing back at it.
+            // does; system back is swallowed while the transfer is active.
             cancel = { onIntent(MigrationP2pSendIntent.Cancel) },
         )
         is MigrationP2pSendState.Unconfirmed -> UnconfirmedPage(state, onIntent)
@@ -385,6 +394,15 @@ private fun FailedPage(
     onIntent: (MigrationP2pSendIntent) -> Unit,
 ) {
     val kind = classifyFailure(state.reason)
+    // Only the new device can fix this one (#1382): acknowledge and close, no update page, no retry.
+    if (kind == MigrationFailureKind.RECEIVER_UPDATE_NEEDED) {
+        FailurePage(
+            kind = kind,
+            primary = MigrationAction(stringResource(R.string.migration_m3_got_it)) { onIntent(MigrationP2pSendIntent.Close) },
+            secondary = null,
+        )
+        return
+    }
     val primary = when {
         kind == MigrationFailureKind.UPDATE_NEEDED ->
             MigrationAction(stringResource(R.string.migration_m3_go)) { onIntent(MigrationP2pSendIntent.OpenUpdate) }

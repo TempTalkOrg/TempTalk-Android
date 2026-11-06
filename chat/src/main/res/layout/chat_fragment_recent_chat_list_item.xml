@@ -40,7 +40,7 @@
             tools:text="@string/chat_action_mark_read" />
     </LinearLayout>
 
-    <!-- Revealed by a swipe towards the start edge: pin, then delete at the edge. -->
+    <!-- Revealed by a swipe towards the start edge: pin, focus (groups), then delete at the edge. -->
     <LinearLayout
         android:id="@+id/swipe_end_actions"
         android:layout_width="wrap_content"
@@ -74,6 +74,38 @@
                 android:textColor="@color/t.white"
                 android:textSize="@dimen/chat_list_swipe_action_label"
                 tools:text="@string/chat_stick" />
+        </LinearLayout>
+
+        <!-- Group focus: "Focus" / "End Focus"; the folded-groups row shows only this one. -->
+        <LinearLayout
+            android:id="@+id/action_focus"
+            android:layout_width="@dimen/chat_list_swipe_action_width"
+            android:layout_height="match_parent"
+            android:background="@color/bg.space"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/chat_list_swipe_action_label_padding"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:id="@+id/action_focus_icon"
+                android:layout_width="@dimen/chat_list_swipe_action_icon"
+                android:layout_height="@dimen/chat_list_swipe_action_icon"
+                android:importantForAccessibility="no"
+                android:src="@drawable/chat_ic_focus"
+                app:tint="@color/t.white" />
+
+            <TextView
+                android:id="@+id/action_focus_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/chat_list_swipe_action_label_gap"
+                android:ellipsize="end"
+                android:lines="1"
+                android:textColor="@color/t.white"
+                android:textSize="@dimen/chat_list_swipe_action_label"
+                tools:text="@string/focus_list_swipe_focus" />
         </LinearLayout>
 
         <LinearLayout
@@ -110,12 +142,12 @@
         android:background="@color/bg1"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingVertical="14dp">
+        android:paddingVertical="10dp">
 
         <FrameLayout
             android:id="@+id/frame_layout_avatar"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:layout_marginStart="16dp">
 
             <com.difft.android.chat.common.GroupAvatarView
@@ -188,11 +220,44 @@
                         android:textColor="@color/t.third"
                         android:textSize="16sp"
                         android:visibility="gone"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/imageview_fold_resume"
                         app:layout_constraintHorizontal_bias="0"
                         app:layout_constraintStart_toEndOf="@+id/imageview_bot_badge"
                         app:layout_constraintTop_toTopOf="parent"
                         tools:text="[7d]"
+                        tools:visibility="visible" />
+
+                    <!-- Folded-groups row only: grey "focus icon + HH:MM resume" after the name while focus has an end time. Never truncated; the name gives way first. -->
+                    <androidx.appcompat.widget.AppCompatImageView
+                        android:id="@+id/imageview_fold_resume"
+                        android:layout_width="12dp"
+                        android:layout_height="12dp"
+                        android:layout_marginStart="6dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/chat_ic_focus"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="@id/textview_label"
+                        app:layout_constraintEnd_toStartOf="@+id/textview_fold_resume"
+                        app:layout_constraintStart_toEndOf="@+id/textview_timer"
+                        app:layout_constraintTop_toTopOf="@id/textview_label"
+                        app:tint="@color/t.third"
+                        tools:visibility="visible" />
+
+                    <androidx.appcompat.widget.AppCompatTextView
+                        android:id="@+id/textview_fold_resume"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="2dp"
+                        android:includeFontPadding="false"
+                        android:lines="1"
+                        android:textColor="@color/t.third"
+                        android:textSize="12sp"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="@id/textview_label"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@+id/imageview_fold_resume"
+                        app:layout_constraintTop_toTopOf="@id/textview_label"
+                        tools:text="18:00 恢复"
                         tools:visibility="visible" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -294,7 +359,17 @@
                     tools:text="99+"
                     tools:visibility="visible" />
 
-                <!-- Shares the trailing slot with the badge above; at most one of them is visible. -->
+                <!-- Focus group row only: focus icon in the trailing slot, same rules as the pin icon (the unread badge above wins; the pin icon never shows on that row). -->
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/imageview_focus"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/chat_ic_focus"
+                    android:visibility="gone"
+                    app:tint="@color/t.disable" />
+
+                <!-- Shares the trailing slot with the badge and the focus icon above; at most one of the three is visible. -->
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/imageview_pinned"
                     android:layout_width="18dp"
@@ -305,6 +380,31 @@
                     app:tint="@color/t.disable" />
 
             </LinearLayout>
+
+            <!-- Focus group row only: the 2nd and 3rd of its latest previews, one line each. -->
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/textview_focus_line2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:layout_marginEnd="16dp"
+                android:ellipsize="end"
+                android:lines="1"
+                android:textColor="@color/t.third"
+                android:textSize="14sp"
+                android:visibility="gone" />
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/textview_focus_line3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:layout_marginEnd="16dp"
+                android:ellipsize="end"
+                android:lines="1"
+                android:textColor="@color/t.third"
+                android:textSize="14sp"
+                android:visibility="gone" />
 
         </LinearLayout>
 

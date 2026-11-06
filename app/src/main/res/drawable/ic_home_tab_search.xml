@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tabler "search" (outline, stroke 2): the universal-search circle next to the home tab capsule (iOS lg_search). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0"
+      android:strokeWidth="2"
+      android:strokeColor="@color/icon"
+      android:fillColor="@android:color/transparent" />
+  <path
+      android:pathData="M21 21l-6 -6"
+      android:strokeWidth="2"
+      android:strokeColor="@color/icon"
+      android:strokeLineCap="round" />
+</vector>

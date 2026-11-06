@@ -13,12 +13,17 @@ import com.difft.android.migration.v2.container.FormatCompat
 import com.difft.android.migration.v2.container.TransferProgress
 import com.difft.android.migration.v2.export.NeutralExporterImpl
 import com.difft.android.migration.v2.export.NeutralProjections
+import com.difft.android.migration.v2.export.PendingEnvelopeExport
 import com.difft.android.migration.v2.export.SnapshotReadSource
 import com.difft.android.migration.v2.model.NeutralRecord
+import com.difft.android.migration.v2.pause.SenderPauseSession
 import com.difft.android.migration.v2.transfer.P2pContainerFusion
 import com.difft.android.migration.v2.transfer.SenderSessionRef
 import com.difft.android.migration.v2.transfer.VerdictWatch
 import com.difft.android.p2p.engine.model.QrPayload
+import com.difft.android.p2p.engine.model.ReceiverCaps
+import com.difft.android.base.utils.time.ServerTimeProvider
+import org.difft.app.database.models.PendingMessageModelNew
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.onStart
@@ -58,6 +63,9 @@ class MigrationP2pSendController(
     // Defaults to the real exporter's row enumeration; injectable so unit tests avoid the native-WCDB
     // query builders, for the same JVM reason as `openReadSource` above.
     private val preCount: suspend (NeutralExporterImpl) -> ContainerTotals = { it.preCount() },
+    // The snapshot's pending-envelope rows; injectable for the same JVM reason.
+    private val readPendingRows: (SnapshotReadSource) -> List<PendingMessageModelNew> = { it.pendingMessageNew.allObjects },
+    private val clock: () -> Long = ServerTimeProvider::nowMillis,
 ) {
 
     private val appContext = context.applicationContext
@@ -91,10 +99,15 @@ class MigrationP2pSendController(
         // The upload 200's headers: the receiver's explicit acknowledgments, read by the FGS before
         // it acts on a handoff.
         onReply: (Map<String, String>) -> Unit = {},
+        // The receiver's typed refusal on a non-200 upload (`SenderHttpClient.typedRejection`).
+        onRejected: (String) -> Unit = {},
         // The verdict wait beyond the upload connection — see [P2pContainerFusion.sendRealExport].
         onSessionPrepared: (SenderSessionRef) -> Unit = {},
         verdictWatch: VerdictWatch? = null,
         onVerdictStall: (Boolean) -> Unit = {},
+        // A device-replacement export pauses messaging from just before its snapshot until the outcome
+        // is known (#1382); a Desktop link passes none and never pauses.
+        pauseSession: SenderPauseSession? = null,
     ): Boolean = withContext(Dispatchers.IO) {
         // Read the live account first and fail fast before taking a snapshot, so a device that is
         // unexpectedly not logged in never sends an empty source account nor does a pointless snapshot
@@ -124,6 +137,9 @@ class MigrationP2pSendController(
         // Do not log the raw account or environment, only that the handshake will be sent.
         L.i { "[MigrationV2][P2P][Tx] production send start handshake=true handoff=$credentialHandoff" }
 
+        // Nothing may be received, ACKed or sent past this point, and what was already consumed is in
+        // the database before the snapshot reads it.
+        pauseSession?.enter()
         // Snapshot the live DB for a consistent read (reuse the production snapshot wiring).
         val snapshot: File = snapshotter.takeSnapshot()
         var readSource: SnapshotReadSource? = null
@@ -137,7 +153,16 @@ class MigrationP2pSendController(
             // the snapshot, with no file reads and no re-encode; it must finish before streaming starts
             // because it rides in the first frame. The identity record prepended below is not counted.
             val counted = preCount(exporter)
-            val extraRecords = (if (identity == null) 0 else 1) + (if (credential == null) 0 else 1)
+            // A device replacement carries the envelopes still waiting for their target message, and
+            // only to a receiver that promises to store them (#1382). The paused table cannot change
+            // after the drain, so the snapshot's rows are final. A Desktop link keeps them here.
+            val pendingEnvelopes = if (pauseSession != null) {
+                PendingEnvelopeExport.select(readPendingRows(readSource), clock())
+            } else {
+                emptyList()
+            }
+            val requiredCaps = if (pendingEnvelopes.isEmpty()) emptySet() else setOf(ReceiverCaps.PENDING_ENVELOPE_V1)
+            val extraRecords = (if (identity == null) 0 else 1) + (if (credential == null) 0 else 1) + pendingEnvelopes.size
             val totals = counted.copy(recordCount = counted.recordCount + extraRecords)
             L.i {
                 "[MigrationV2][P2P][Tx] totals records=${totals.recordCount} " +
@@ -148,14 +173,16 @@ class MigrationP2pSendController(
             // nominal scale as the formula so it at least ends near 100% instead of 3× over.
             val estimatedTotal = totals.recordCount * TransferProgress.RECORD_WEIGHT_BYTES + totals.attachmentBytes
             // `onStart` emits the identity record immediately after the manifest frame, then the
-            // credential; both are memory-sink records that never reach the staging database.
+            // credential; both are memory-sink records that never reach the staging database. The
+            // pending envelopes follow, so a receiver that cannot store one fails early.
             val records = exporter.export().let { dbRecords ->
-                if (identity == null && credential == null) {
+                if (identity == null && credential == null && pendingEnvelopes.isEmpty()) {
                     dbRecords
                 } else {
                     dbRecords.onStart {
                         if (identity != null) emit(NeutralRecord.Identity(identity))
                         if (credential != null) emit(NeutralRecord.Credential(credential))
+                        pendingEnvelopes.forEach { emit(it) }
                     }
                 }
             }
@@ -171,6 +198,7 @@ class MigrationP2pSendController(
                 onProgress = onProgress,
                 onBodySent = onBodySent,
                 onReply = onReply,
+                onRejected = onRejected,
                 estimatedTotalBytes = estimatedTotal,
                 totals = totals,
                 senderAlias = DeviceNames.local(appContext),
@@ -180,6 +208,8 @@ class MigrationP2pSendController(
                 onSessionPrepared = onSessionPrepared,
                 verdictWatch = verdictWatch,
                 onVerdictStall = onVerdictStall,
+                commitHooks = pauseSession,
+                requiredCaps = requiredCaps,
             )
         } finally {
             // Resource cleanup only; the caller's scope is not cancelled here. Close the second database

@@ -21,6 +21,12 @@ sealed class EnvelopeProcessResult {
 
     /** Possibly recoverable failure (network, DB lock, missing referenced data). Enqueue for retry with backoff. */
     data class TransientFailure(val cause: Throwable) : EnvelopeProcessResult()
+
+    /**
+     * Refused without any side effect because the caller held no open ticket (#1382): nothing was
+     * stored or deleted, so the caller must neither enqueue a retry nor delete the envelope.
+     */
+    data object Paused : EnvelopeProcessResult()
 }
 
 /**

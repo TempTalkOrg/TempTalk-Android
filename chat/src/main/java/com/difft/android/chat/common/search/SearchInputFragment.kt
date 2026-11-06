@@ -10,6 +10,7 @@ import androidx.fragment.app.viewModels
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.databinding.ChatFragmentSearchInputBinding
+import com.difft.android.chat.recent.ListPaneLayerOpener
 
 class SearchInputFragment : Fragment() {
     private lateinit var binding: ChatFragmentSearchInputBinding
@@ -40,7 +41,10 @@ class SearchInputFragment : Fragment() {
 //        }
 
         binding.edittextSearchInput.setOnClickListener {
-            startActivity(Intent(activity, globalServices.activityProvider.getActivityClass(ActivityType.SEARCH)))
+            // The home screen opens search as a layer over its list; any other host gets the Activity.
+            if ((activity as? ListPaneLayerOpener)?.openSearchLayer() != true) {
+                startActivity(Intent(activity, globalServices.activityProvider.getActivityClass(ActivityType.SEARCH)))
+            }
         }
 
     }

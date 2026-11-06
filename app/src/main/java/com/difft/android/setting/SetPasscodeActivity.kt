@@ -1,5 +1,6 @@
 package com.difft.android.setting
 
+import com.difft.android.login.SecurityResultNonce
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -38,6 +39,7 @@ class SetPasscodeActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
 
         initView()
 

@@ -11,6 +11,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.AppStartup
 import com.difft.android.base.utils.EdgeToEdgeUtils.applySystemBarsPadding
 import com.difft.android.base.utils.EdgeToEdgeUtils.setupEdgeToEdge
+import com.difft.android.base.utils.FoldDiagnostics
 import com.difft.android.base.utils.FoldPostureWatcher
 import com.difft.android.base.utils.LanguageUtils
 import com.difft.android.base.utils.OrientationDisplayWatcher
@@ -18,18 +19,8 @@ import com.difft.android.base.utils.OrientationPolicy
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-abstract class BaseActivity : AppCompatActivity() {
+abstract class BaseActivity : AppCompatActivity(), FoldDiagnostics.Host {
     private val activityStartTimestamp: Long = System.currentTimeMillis()
-
-    // Time when this window last lost focus (0 if currently focused).
-    // Used by screenshot detector to skip screenshots taken in notification panel.
-    var windowFocusLostAt: Long = 0L
-        private set
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        windowFocusLostAt = if (hasFocus) 0L else System.currentTimeMillis()
-    }
 
     // The orientation value THIS policy last wrote, or null when it never applied. Later
     // re-applies happen only while requestedOrientation still equals it — a screen that set
@@ -43,6 +34,7 @@ abstract class BaseActivity : AppCompatActivity() {
     // in the watcher so the call activity, which is not a BaseActivity, applies the same rules.
     private val orientationDisplayWatcher = OrientationDisplayWatcher(this) { display ->
         reapplyOrientationPolicyIfOwned(display)
+        onHostDisplayChanged(display)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +56,8 @@ abstract class BaseActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         AppStartup.onCriticalRenderEventEnd()
         L.i { "[BaseActivity]${javaClass.name} Activity onCreate cost: ${System.currentTimeMillis() - activityStartTimestamp}" }
+        // #1454: a relaunch inside a fold diagnostics session.
+        FoldDiagnostics.onConfigurationArrived(this, via = "create", restored = savedInstanceState != null)
         if (applyPolicy) {
             FoldPostureWatcher.attach(this, ::onFoldPosture)
             if (heldForUnfold) OrientationPolicy.scheduleUnfoldRelock(this) { reapplyOrientationPolicyIfOwned() }
@@ -215,6 +209,7 @@ abstract class BaseActivity : AppCompatActivity() {
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        FoldDiagnostics.onConfigurationArrived(this, via = "onConfigurationChanged")
         // A pinned (PiP) window reports phone-bucket sizes; requesting portrait there would
         // only queue churn for PiP exit, which delivers its own mode-change callback below.
         if (isInPictureInPictureMode) return
@@ -258,4 +253,21 @@ abstract class BaseActivity : AppCompatActivity() {
      * pre-super call.
      */
     protected open fun shouldApplyOrientationPolicy(): Boolean = true
+
+    /**
+     * The host display changed, or was replayed at `onStart`, after the orientation policy ran
+     * for it. Called for every change the watcher delivers (refresh-rate and mode switches
+     * included), so overrides must filter by panel themselves. Runs inside `super.onStart()` for
+     * the replay, before a subclass's own `onStart` code.
+     */
+    protected open fun onHostDisplayChanged(display: Display) = Unit
+
+    /** #1454 snapshot extras: whether the policy still owns the requested orientation, plus [extraFoldDiag]. */
+    override fun foldDiagExtras(): String {
+        val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
+        return "owned=$owned" + extraFoldDiag()
+    }
+
+    /** Screen-specific #1454 snapshot extras, each starting with a space; side-effect-free reads only. */
+    protected open fun extraFoldDiag(): String = ""
 }

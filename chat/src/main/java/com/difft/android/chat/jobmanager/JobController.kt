@@ -26,8 +26,10 @@ internal class JobController(
     private val scheduler: Scheduler,
     private val persistentScheduler: Scheduler,
     private val debouncer: Debouncer,
-    private val callback: Callback
-) {
+    private val callback: Callback,
+    private val executionHold: JobExecutionHold = JobExecutionHold.NONE,
+    private val loginTag: JobLoginTag = JobLoginTag.NONE,
+) : StoredJobs {
 
     private val runningJobs: MutableMap<String, Job> = mutableMapOf()
 
@@ -137,6 +139,36 @@ internal class JobController(
         scheduleJob(job)
     }
 
+    /** Serialized with legacy submissions on the management dispatcher. Reuses the caller's ID. */
+    @WorkerThread
+    fun submitJobPersisted(job: Job): QueueAdmission {
+        val result = admitPersistedJob(job, jobStorage, { exceedsMaximumInstances(job) },
+            { buildFullSpec(job) }, { matchesCreator(it, job) })
+        if (result.newlyCommitted) {
+            try {
+                jobTracker.onStateChange(job, JobTracker.JobState.PENDING)
+            } catch (e: Exception) {
+                L.w { "[JobManager] event=admitted_tracker_failed ${e.stackTraceToString()}" }
+            }
+            // The durable row remains accepted even when an optional hook or scheduler degrades.
+            try {
+                job.context = application
+                job.onSubmit()
+            } catch (e: Exception) {
+                L.w { "[JobManager] event=admitted_hook_failed ${e.stackTraceToString()}" }
+            }
+        }
+        if (result.needsScheduling) {
+            signalJobAvailable()
+            try {
+                scheduleJob(job)
+            } catch (e: Exception) {
+                L.w { "[JobManager] event=admitted_schedule_failed ${e.stackTraceToString()}" }
+            }
+        }
+        return result.admission
+    }
+
     @WorkerThread
     fun cancelJob(id: String) {
         val runningJob = runningJobs[id]
@@ -168,6 +200,33 @@ internal class JobController(
         jobStorage.getJobsInQueue(queue).forEach { cancelJob(it.id) }
     }
 
+    /** Cancels every job [predicate] matches, as [cancelJob] does; returns how many matched. */
+    @WorkerThread
+    fun cancelMatching(predicate: (JobSpec) -> Boolean): Int {
+        val ids = jobStorage.getAllJobSpecs().filter(predicate).map { it.id }
+        ids.forEach(::cancelJob)
+        return ids.size
+    }
+
+    @WorkerThread
+    override fun failMatching(predicate: (spec: JobSpec, creatorLogin: String?) -> Boolean): Int =
+        cancelMatching { spec -> predicate(spec, creatorLoginOf(spec)) }
+
+    /** The stored [Job.creatorLogin]; null when untagged or unreadable (such a job never sends). */
+    private fun creatorLoginOf(spec: JobSpec): String? = runCatching {
+        dataSerializer.deserialize(spec.serializedData).getStringOrDefault(KEY_CREATOR_LOGIN, null)
+    }.getOrNull()
+
+    private fun matchesCreator(spec: JobSpec, job: Job): Boolean = try {
+        dataSerializer.deserialize(spec.serializedData).getStringOrDefault(KEY_CREATOR_LOGIN, null) == job.creatorLogin
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
+    } catch (_: AssertionError) {
+        false
+    }
+
     /**
      * Snapshot of pending+running jobs in [queue], sorted by createTime ascending.
      * Must be invoked on managementDispatcher; public entry is [JobManager.findJobsInQueue].
@@ -181,7 +240,7 @@ internal class JobController(
 
         val nextRunAttempt = job.runAttempt + 1
         val nextRunAttemptTime = System.currentTimeMillis() + backoffInterval
-        val serializedData = dataSerializer.serialize(job.serialize())
+        val serializedData = serialize(job)
 
         jobStorage.updateJobAfterRetry(job.id, false, nextRunAttempt, nextRunAttemptTime, serializedData)
         jobTracker.onStateChange(job, JobTracker.JobState.PENDING)
@@ -193,6 +252,29 @@ internal class JobController(
 
         L.i { JobLogger.format(job, "Scheduling a retry in $delay ms.") }
         scheduler.schedule(delay, constraints)
+
+        signalJobAvailable()
+    }
+
+    /**
+     * Puts a job that was not admitted back in the queue without consuming an attempt (#1382):
+     * [Job.runAttempt] is kept and neither [Job.onRetry] nor [Job.onFailure] runs. The job's data
+     * is re-serialized, so work it already finished (an uploaded attachment's pointer) is reused.
+     * The next run time is a positive delay, as [onRetry] requires; the [executionHold] keeps a
+     * send parked until messaging opens.
+     */
+    @WorkerThread
+    fun onDeferred(job: Job) {
+        val nextRunAttemptTime = System.currentTimeMillis() + DEFERRED_RUN_DELAY_MS
+        val serializedData = serialize(job)
+
+        jobStorage.updateJobAfterRetry(job.id, false, job.runAttempt, nextRunAttemptTime, serializedData)
+        jobTracker.onStateChange(job, JobTracker.JobState.PENDING)
+
+        val constraints = jobStorage.getConstraintSpecs(job.id)
+            .map { constraintInstantiator.instantiate(it.factoryKey) }
+        // The timer covers a hold released between the job's admission check and this write.
+        scheduler.schedule(DEFERRED_RUN_DELAY_MS, constraints)
 
         signalJobAvailable()
     }
@@ -218,6 +300,7 @@ internal class JobController(
     /**
      * Retrieves the next job that is eligible for execution. To be 'eligible' means that the job:
      * - Has no unmet constraints
+     * - Is not held by the [executionHold]
      *
      * This method will suspend until a job is available.
      * When the job returned from this method has been run, you must call [onJobFinished].
@@ -313,7 +396,7 @@ internal class JobController(
             runAttempt = job.runAttempt,
             maxAttempts = job.parameters.maxAttempts,
             lifespan = job.parameters.lifespan,
-            serializedData = dataSerializer.serialize(job.serialize()),
+            serializedData = serialize(job),
             isRunning = false,
             isMemoryOnly = job.parameters.isMemoryOnly
         )
@@ -333,7 +416,7 @@ internal class JobController(
     @WorkerThread
     private fun getNextEligibleJobForExecution(predicate: JobPredicate): Job? {
         val jobSpecs = jobStorage.getPendingJobsWithNoDependenciesInCreatedOrder(System.currentTimeMillis())
-            .filter { predicate.shouldRun(it) }
+            .filter { predicate.shouldRun(it) && !executionHold.holds(it) }
 
         for (jobSpec in jobSpecs) {
             val constraintSpecs = jobStorage.getConstraintSpecs(jobSpec.id)
@@ -353,6 +436,8 @@ internal class JobController(
             val data = dataSerializer.deserialize(jobSpec.serializedData)
             val job = jobInstantiator.instantiate(jobSpec.factoryKey, parameters, data)
 
+            job.creatorLogin = data.getStringOrDefault(KEY_CREATOR_LOGIN, null)
+            job.loginTag = loginTag
             job.runAttempt = jobSpec.runAttempt
             job.nextRunAttemptTime = jobSpec.nextRunAttemptTime
             job.context = application
@@ -363,6 +448,13 @@ internal class JobController(
             jobStorage.deleteJob(jobSpec.id)
         }
         return null
+    }
+
+    /** The job's own data plus its [Job.creatorLogin], so the tag survives every re-serialization. */
+    private fun serialize(job: Job): String {
+        val data = job.serialize()
+        val tagged = job.creatorLogin?.let { data.buildUpon().putString(KEY_CREATOR_LOGIN, it).build() } ?: data
+        return dataSerializer.serialize(tagged)
     }
 
     private fun buildJobParameters(jobSpec: JobSpec, constraintSpecs: List<ConstraintSpec>): Job.Parameters {
@@ -377,5 +469,13 @@ internal class JobController(
 
     internal fun interface Callback {
         fun onEmpty()
+    }
+
+    internal companion object {
+        /** Smallest positive delay; a deferred job is runnable again as soon as its hold lifts. */
+        const val DEFERRED_RUN_DELAY_MS = 1L
+
+        /** Reserved data key of [Job.creatorLogin]; no job uses it for its own data. */
+        const val KEY_CREATOR_LOGIN = "__creator_login"
     }
 }

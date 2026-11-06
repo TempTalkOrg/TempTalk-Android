@@ -36,12 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.call.R
+import com.difft.android.call.core.callMemberId
+import com.difft.android.call.ui.layout.LocalCallFrameSizeSink
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.CameraPosition
@@ -124,7 +127,28 @@ fun VideoItemTrackSelector(
     viewType: ViewType,
     draggable: Boolean = true,
     reconnectCount: Int = 0,
+    onFrameAspect: ((Float) -> Unit)? = null,
+    onFrameSize: FrameSizeListener? = null,
+    zoomResetKey: Any? = null,
+    firstFrameGate: FirstFrameGate? = null,
+    hidden: Boolean = false,
+    panSlack: Offset = Offset.Zero,
+    onEdgeColors: ((EdgeColors) -> Unit)? = null,
 ) {
+    // Every camera tile feeds the call layout's frame sizes, besides any size callback of its own.
+    val layoutFrameSizes = LocalCallFrameSizeSink.current
+    val memberId = callMemberId(participant)
+    val reportFrameSize: FrameSizeListener? = remember(onFrameSize, layoutFrameSizes, memberId, sourceType) {
+        val sink = layoutFrameSizes?.takeIf { sourceType == Track.Source.CAMERA }
+        when {
+            sink == null -> onFrameSize
+            onFrameSize == null -> { width, height, seenAt -> sink.onFrameSize(memberId, width, height, seenAt) }
+            else -> { width, height, seenAt ->
+                onFrameSize(width, height, seenAt)
+                sink.onFrameSize(memberId, width, height, seenAt)
+            }
+        }
+    }
     val videoTrackMap by participant::videoTrackPublications.flow.collectAsState(initial = emptyList())
     val videoPubs by remember { derivedStateOf { videoTrackMap.filter { (pub) -> pub.subscribed }.map { (pub) -> pub } } }
 
@@ -183,6 +207,13 @@ fun VideoItemTrackSelector(
                 viewType = viewType,
                 draggable = draggable,
                 reconnectGeneration = reconnectCount,
+                onFrameAspect = onFrameAspect,
+                onFrameSize = reportFrameSize,
+                zoomResetKey = zoomResetKey,
+                firstFrameGate = firstFrameGate,
+                hidden = hidden,
+                panSlack = panSlack,
+                onEdgeColors = onEdgeColors,
             )
         }
     } else if (sourceType == Track.Source.SCREEN_SHARE) {

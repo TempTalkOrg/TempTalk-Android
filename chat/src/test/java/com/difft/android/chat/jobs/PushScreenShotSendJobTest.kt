@@ -6,6 +6,7 @@ import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobmanager.impl.NetworkConstraint
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.util.DataMessageCreator
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.messages.SendMessageResult
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
@@ -13,8 +14,6 @@ import com.difft.android.websocket.api.push.exceptions.RateLimitException
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import difft.android.messageserialization.For
-import difft.android.messageserialization.MessageStore
-import difft.android.messageserialization.model.Message
 import difft.android.messageserialization.model.RealSource
 import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.TextMessage
@@ -42,20 +41,20 @@ import java.io.IOException
 import kotlin.test.assertFailsWith
 
 /**
- * Unit tests for [PushScreenShotSendJob.onPushSend] — the send-first, persist-on-success contract
- * that keeps an offline screenshot notice from leaving an unclearable "Send failed" tag (#1265).
+ * Unit tests for [PushScreenShotSendJob] — the optimistic shown → sent / withdrawn lifecycle of the
+ * screenshot notice (#1435), on top of the retry contract that keeps an offline notice from leaving
+ * an unclearable "Send failed" tag (#1265).
  *
  * Coverage:
- *  1. Server accepted → exactly one row persisted: the job's own TextMessage, Sent, carrying the
- *     server's ordering keys and still holding its `screenShot` (the unified representation every
- *     device stores for this event).
- *  2. Server rejected (`result.success == null`) → nothing persisted, no throw (the job simply ends).
- *  3. Sender throws IOException → propagated (PushSendJob retries), nothing persisted.
- *  4. Sender throws a permanent-code `NonSuccessfulResponseCodeException` (404/430/432, the same
- *     set PushTextSendJob gives up on) → swallowed, nothing persisted, job leaves the queue.
- *     Retryable 4xx (429 rate limit, 428 proof required) and 5xx still propagate so the retry
- *     and Retry-After backoff policy applies.
- *  5. `putWhenNonExist` throws → swallowed; the sender is NOT called again (a retry would duplicate
+ *  1. `onAdded` shows the pending row at once; an insert failure there is swallowed.
+ *  2. Server accepted → the row is marked Sent with the server's ordering keys and keeps its
+ *     `screenShot` (the unified representation every device stores for this event).
+ *  3. Final failures withdraw the row: `result.success == null`, a permanent-code
+ *     `NonSuccessfulResponseCodeException` (404/430/432, the set PushTextSendJob gives up on) and
+ *     `onFailure` once the job dies. A withdraw failure is swallowed.
+ *  4. Retryable failures (IOException, 429 rate limit, 428 proof required, 5xx) propagate so
+ *     PushSendJob retries, and leave the pending row in place.
+ *  5. A `markSent` failure is swallowed; the sender is NOT called again (a retry would duplicate
  *     the envelope for peers that already have it).
  *  6. `serialize()` round-trips the TextMessage (timestamp / target / screenShot).
  *  7. Job parameters: unbounded attempts inside a one-day lifespan, gated on network.
@@ -70,10 +69,10 @@ class PushScreenShotSendJobTest {
 
     private lateinit var messageSender: NewSignalServiceMessageSender
     private lateinit var dataMessageCreator: DataMessageCreator
-    private lateinit var messageStore: MessageStore
+    private lateinit var rowWriter: ScreenShotRowWriter
 
-    /** Everything the job handed to [MessageStore.putWhenNonExist], in call order. */
-    private val persisted = mutableListOf<Message>()
+    /** Everything the job handed to [ScreenShotRowWriter.markSent], in call order. */
+    private val markedSent = mutableListOf<TextMessage>()
 
     // Production Gson wiring — For.Account/For.Group must round-trip through serialize().
     private val gson: Gson = run {
@@ -96,19 +95,19 @@ class PushScreenShotSendJobTest {
 
     @Before
     fun setUp() {
-        persisted.clear()
+        markedSent.clear()
         messageSender = mockk()
         dataMessageCreator = mockk()
-        messageStore = mockk(relaxed = true)
+        rowWriter = mockk(relaxed = true)
 
-        // Record what actually reached the store, so the assertions read the row's real field
+        // Record what actually reached the writer, so the assertions read the row's real field
         // values rather than a matcher's view of them.
-        every { messageStore.putWhenNonExist(capture(persisted)) } returns 1
+        every { rowWriter.markSent(capture(markedSent)) } just Runs
 
         every { dataMessageCreator.createFrom(any()) } returns
             SignalServiceProtos.DataMessage.newBuilder().setTimestamp(timeStamp).build()
         coEvery {
-            messageSender.sendDataMessage(any(), any(), any(), any())
+            messageSender.sendDataMessage(any(), any(), any(), any(), any())
         } returns successResult()
     }
 
@@ -118,19 +117,37 @@ class PushScreenShotSendJobTest {
     }
 
     @Test
-    fun `server accepted — persists the same screenshot row every device stores`() = runTest {
+    fun `onAdded shows the pending row immediately`() {
+        val original = screenshotMessage(For.Account(peerId))
+
+        job(original).onAdded()
+
+        verify(exactly = 1) {
+            rowWriter.insertPending(match { it.id == original.id && it.sendType == SendType.Sending.rawValue })
+        }
+    }
+
+    @Test
+    fun `onAdded insert failure is swallowed — the send still goes out`() {
+        every { rowWriter.insertPending(any()) } throws RuntimeException("simulated DB write failure")
+
+        // Must not throw: markSent inserts the row once the send succeeds.
+        job(screenshotMessage(For.Account(peerId))).onAdded()
+    }
+
+    @Test
+    fun `server accepted — marks the row Sent with the server ordering keys`() = runTest {
         val original = screenshotMessage(For.Account(peerId))
         val job = job(original)
 
         job.onPushSend()
 
-        val stored = persisted.single() as TextMessage
+        val stored = markedSent.single()
         // Same row identity the send went out with — and the same id this device's own sync echo
         // carries, which is what makes putWhenNonExist keep exactly one row.
         assertEquals(original.id, stored.id)
         assertEquals(timeStamp, stored.timeStamp)
         assertEquals(For.Account(peerId), stored.forWhat)
-        // The row is only ever written as Sent, which is why neither room aggregate needs a write.
         assertEquals(SendType.Sent.rawValue, stored.sendType)
         // The server's own ordering keys, exactly as PushTextSendJob.updateMessage(Sent) recorded.
         assertEquals(serverSystemShowTimestamp, stored.systemShowTimestamp)
@@ -140,53 +157,53 @@ class PushScreenShotSendJobTest {
         // VIEW_TYPE_SCREENSHOT — the peer and my other devices hold the same shape.
         assertNotNull(stored.screenShot)
         assertEquals(screenshotText, stored.text)
+        verify(exactly = 0) { rowWriter.withdraw(any()) }
     }
 
     @Test
-    fun `group target also persists the row`() = runTest {
+    fun `group target also marks the row Sent`() = runTest {
         val job = job(screenshotMessage(For.Group(groupId)))
 
         job.onPushSend()
 
-        val stored = persisted.single() as TextMessage
+        val stored = markedSent.single()
         assertEquals(For.Group(groupId), stored.forWhat)
         assertEquals(SendType.Sent.rawValue, stored.sendType)
     }
 
     @Test
-    fun `server rejected — nothing persisted and no throw`() = runTest {
+    fun `server rejected — row withdrawn and no throw`() = runTest {
         val rejected = mockk<SendMessageResult>()
         every { rejected.success } returns null
-        coEvery { messageSender.sendDataMessage(any(), any(), any(), any()) } returns rejected
+        coEvery { messageSender.sendDataMessage(any(), any(), any(), any(), any()) } returns rejected
 
-        val job = job(screenshotMessage(For.Account(peerId)))
+        val original = screenshotMessage(For.Account(peerId))
 
-        // Must not throw: there is no row to mark failed and nothing a retry could fix.
-        job.onPushSend()
+        // Must not throw: nothing a retry could fix.
+        job(original).onPushSend()
 
-        verify(exactly = 0) { messageStore.putWhenNonExist(any()) }
-        assertTrue(persisted.isEmpty())
+        verify(exactly = 1) { rowWriter.withdraw(match { it.id == original.id }) }
+        assertTrue(markedSent.isEmpty())
     }
 
     @Test
-    fun `sender IOException propagates and nothing is persisted`() = runTest {
+    fun `sender IOException propagates and the pending row stays`() = runTest {
         coEvery {
-            messageSender.sendDataMessage(any(), any(), any(), any())
+            messageSender.sendDataMessage(any(), any(), any(), any(), any())
         } throws IOException("simulated network failure")
 
         val job = job(screenshotMessage(For.Account(peerId)))
 
         assertFailsWith<IOException> { job.onPushSend() }
 
-        // The peer never got the message, so this device must not render a row for it either.
-        verify(exactly = 0) { messageStore.putWhenNonExist(any()) }
-        assertTrue(persisted.isEmpty())
+        verify(exactly = 0) { rowWriter.withdraw(any()) }
+        assertTrue(markedSent.isEmpty())
     }
 
     @Test
-    fun `432 rejection is permanent — no throw and nothing persisted`() = runTest {
+    fun `432 rejection is permanent — no throw and row withdrawn`() = runTest {
         coEvery {
-            messageSender.sendDataMessage(any(), any(), any(), any())
+            messageSender.sendDataMessage(any(), any(), any(), any(), any())
         } throws NonSuccessfulResponseCodeException(432, "non-friend daily limit")
 
         val job = job(screenshotMessage(For.Account(peerId)))
@@ -195,14 +212,14 @@ class PushScreenShotSendJobTest {
         // onShouldRetry would retry this final answer for the whole one-day lifespan.
         job.onPushSend()
 
-        verify(exactly = 0) { messageStore.putWhenNonExist(any()) }
-        assertTrue(persisted.isEmpty())
+        verify(exactly = 1) { rowWriter.withdraw(any()) }
+        assertTrue(markedSent.isEmpty())
     }
 
     @Test
     fun `rate limit 429 still propagates so the job retries`() = runTest {
         coEvery {
-            messageSender.sendDataMessage(any(), any(), any(), any())
+            messageSender.sendDataMessage(any(), any(), any(), any(), any())
         } throws RateLimitException(429, "rate limit exceeded")
 
         val job = job(screenshotMessage(For.Account(peerId)))
@@ -210,46 +227,61 @@ class PushScreenShotSendJobTest {
         // A retryable 4xx must reach PushSendJob's retry/backoff policy, not the permanent branch.
         assertFailsWith<RateLimitException> { job.onPushSend() }
 
-        verify(exactly = 0) { messageStore.putWhenNonExist(any()) }
+        verify(exactly = 0) { rowWriter.withdraw(any()) }
     }
 
     @Test
     fun `proof required 428 still propagates so the Retry-After backoff applies`() = runTest {
         coEvery {
-            messageSender.sendDataMessage(any(), any(), any(), any())
+            messageSender.sendDataMessage(any(), any(), any(), any(), any())
         } throws NonSuccessfulResponseCodeException(428, "proof required")
 
         val job = job(screenshotMessage(For.Account(peerId)))
 
         assertFailsWith<NonSuccessfulResponseCodeException> { job.onPushSend() }
 
-        verify(exactly = 0) { messageStore.putWhenNonExist(any()) }
+        verify(exactly = 0) { rowWriter.withdraw(any()) }
     }
 
     @Test
     fun `5xx rejection still propagates so the job retries`() = runTest {
         coEvery {
-            messageSender.sendDataMessage(any(), any(), any(), any())
+            messageSender.sendDataMessage(any(), any(), any(), any(), any())
         } throws NonSuccessfulResponseCodeException(503, "service unavailable")
 
         val job = job(screenshotMessage(For.Account(peerId)))
 
         assertFailsWith<NonSuccessfulResponseCodeException> { job.onPushSend() }
 
-        verify(exactly = 0) { messageStore.putWhenNonExist(any()) }
+        verify(exactly = 0) { rowWriter.withdraw(any()) }
     }
 
     @Test
-    fun `persist failure is swallowed — the message was already sent`() = runTest {
-        every { messageStore.putWhenNonExist(any()) } throws
-            RuntimeException("simulated DB write failure")
+    fun `markSent failure is swallowed — the message was already sent`() = runTest {
+        every { rowWriter.markSent(any()) } throws RuntimeException("simulated DB write failure")
 
         val job = job(screenshotMessage(For.Account(peerId)))
 
         // A throw here would reach PushSendJob.onRun() → retry → duplicate envelope for the peer.
         job.onPushSend()
 
-        coVerify(exactly = 1) { messageSender.sendDataMessage(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { messageSender.sendDataMessage(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `onFailure withdraws the row`() {
+        val original = screenshotMessage(For.Account(peerId))
+
+        job(original).onFailure()
+
+        verify(exactly = 1) { rowWriter.withdraw(match { it.id == original.id }) }
+    }
+
+    @Test
+    fun `onFailure withdraw failure is swallowed`() {
+        every { rowWriter.withdraw(any()) } throws RuntimeException("simulated DB delete failure")
+
+        job(screenshotMessage(For.Account(peerId))).onFailure()
     }
 
     @Test
@@ -272,7 +304,7 @@ class PushScreenShotSendJobTest {
     fun `parameters retry unbounded within a one-day lifespan and require network`() {
         val parameters = job(screenshotMessage(For.Account(peerId))).parameters
 
-        // The notice has no resend UI, so a spent attempt budget would drop it silently. The
+        // The notice has no resend UI, so a spent attempt budget would withdraw it needlessly. The
         // network constraint is what keeps attempts from being burned while simply offline.
         assertEquals(Job.Parameters.UNLIMITED, parameters.maxAttempts)
         assertEquals(24 * 60 * 60 * 1000L, parameters.lifespan)
@@ -286,9 +318,10 @@ class PushScreenShotSendJobTest {
         textMessage = textMessage,
         messageSender = messageSender,
         dataMessageCreator = dataMessageCreator,
-        messageStore = messageStore,
+        rowWriter = rowWriter,
         gson = gson,
-    )
+        messagingGate = TestMessagingPause().open().gate,
+    ).bindLogin()
 
     private fun screenshotMessage(forWhat: For) = TextMessage(
         LocalMessageCreator.generateMessageId(timeStamp, myId, DEFAULT_DEVICE_ID),

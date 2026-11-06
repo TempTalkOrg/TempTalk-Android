@@ -1,5 +1,7 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.test.fakes.TestMessagingPause
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.GlobalHiltEntryPoint
@@ -50,6 +52,9 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMe
 @Config(sdk = [28])
 class MessageContentProcessorForwardNoticeSyncTest {
 
+    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
+
     private val testDispatcher = UnconfinedTestDispatcher()
 
     private lateinit var context: Application
@@ -95,6 +100,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = mockk(relaxed = true),
+            groupFocusRepository = mockk(relaxed = true),
         )
     }
 
@@ -122,7 +128,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
             .setSyncMessage(SyncMessage.newBuilder().setForwardNoticeSync(forwardNotice).build())
             .build()
 
-        processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         val operatorSlot = slot<String>()
         val forWhatSlot = slot<For>()
@@ -159,7 +165,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
             .setSyncMessage(SyncMessage.newBuilder().setForwardNoticeSync(forwardNotice).build())
             .build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
         assertNull(result)
         coVerify(exactly = 0) {
             localMessageCreator.createForwardNoticeMessage(any(), any(), any(), any(), any(), any())
@@ -180,7 +186,7 @@ class MessageContentProcessorForwardNoticeSyncTest {
             .setSyncMessage(SyncMessage.newBuilder().setForwardNoticeSync(forwardNotice).build())
             .build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
         assertNull(result)
         coVerify(exactly = 0) {
             localMessageCreator.createForwardNoticeMessage(any(), any(), any(), any(), any(), any())

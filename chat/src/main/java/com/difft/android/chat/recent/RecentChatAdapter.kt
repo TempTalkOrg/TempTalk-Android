@@ -14,13 +14,7 @@ import com.difft.android.chat.R
 
 abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolean = false) : ListAdapter<ListItem, RecyclerView.ViewHolder>(
     object : DiffUtil.ItemCallback<ListItem>() {
-        override fun areItemsTheSame(oldItem: ListItem, newItem: ListItem): Boolean {
-            return if (oldItem is ListItem.ChatItem && newItem is ListItem.ChatItem) {
-                oldItem.data.roomId == newItem.data.roomId
-            } else {
-                oldItem == newItem
-            }
-        }
+        override fun areItemsTheSame(oldItem: ListItem, newItem: ListItem): Boolean = oldItem.isSameRow(newItem)
 
         override fun areContentsTheSame(oldItem: ListItem, newItem: ListItem): Boolean {
             return oldItem == newItem
@@ -30,6 +24,8 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         const val VIEW_TYPE_SEARCH_INPUT = 0
         const val VIEW_TYPE_E2EE_FOOTER = 1
         const val VIEW_TYPE_CHAT_ITEM = 2
+        const val VIEW_TYPE_FOCUS_CHAT = 3
+        const val VIEW_TYPE_FOLDED_GROUPS = 4
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -43,6 +39,10 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
             VIEW_TYPE_CHAT_ITEM -> {
                 RecentChatViewHolder(activity, parent, globalServices.myId, isForSearch)
             }
+
+            VIEW_TYPE_FOCUS_CHAT -> RecentChatViewHolder(activity, parent, globalServices.myId, isForSearch, isFocusCard = true)
+
+            VIEW_TYPE_FOLDED_GROUPS -> FoldedGroupsViewHolder(parent)
 
             VIEW_TYPE_E2EE_FOOTER -> {
                 val inflater = LayoutInflater.from(parent.context)
@@ -60,7 +60,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
 
     /**
      * Whole-row tap target for the list-footer E2EE hint. Deliberately NOT abstract:
-     * [com.difft.android.search.SearchActivity]'s `RecentChatAdapter` subclass never submits
+     * the global search page's `RecentChatAdapter` subclass never submits
      * [ListItem.E2eeFooter] and must not be forced to implement a callback it can never trigger.
      */
     open fun onFooterClicked() = Unit
@@ -74,6 +74,16 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
     open fun onPinToggle(roomViewData: RoomViewData) = Unit
 
     open fun onDeleteRequested(roomViewData: RoomViewData) = Unit
+
+    /** "Focus" / "End Focus" from a group's swipe actions (group focus, PRD 7.4.4). */
+    open fun onFocusToggle(roomViewData: RoomViewData) = Unit
+
+    /** The folded-groups row: a tap opens the folded list; long-press and swipe offer only "End Focus". */
+    open fun onFoldedGroupsClicked() = Unit
+
+    open fun onFoldedGroupsLongClicked(view: View, touchX: Int, touchY: Int) = Unit
+
+    open fun onFoldedGroupsEndFocus() = Unit
 
     /** At most one row is open at a time; scrolling or opening another row closes it. */
     private var openSwipe: ChatListSwipeLayout? = null
@@ -104,7 +114,6 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         openSwipe?.close()
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is ListItem.SearchInput -> {
@@ -112,35 +121,21 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
                 searchHolder.bind()
             }
 
-            is ListItem.ChatItem -> {
-                val chatHolder = holder as RecentChatViewHolder
-                val data = item.data
+            is ListItem.ChatItem -> bindChat(holder as RecentChatViewHolder, item.data, position)
 
-                // The foreground owns the row's clicks, so the press position must be read there
-                // (the swipe root never sees DOWN on a closed row).
-                chatHolder.touchTarget.setOnTouchListener { _, event ->
-                    if (event.action == MotionEvent.ACTION_DOWN) {
-                        lastTouchX = event.rawX.toInt()
-                        lastTouchY = event.rawY.toInt()
-                    }
-                    false
-                }
+            is ListItem.FocusChat -> bindChat(holder as RecentChatViewHolder, item.data, position)
 
-                chatHolder.bind(
-                    searchKey,
-                    data,
-                    isSelected = selectedId != null && data.roomId == selectedId,
-                    onItemClick = { onItemClicked(data, position - 2) }, // Adjust position
-                    onItemLongClick = {
+            is ListItem.FoldedGroups -> {
+                val foldedHolder = holder as FoldedGroupsViewHolder
+                foldedHolder.bind(
+                    summary = item.summary,
+                    swipeCallback = if (isForSearch) null else swipeCallback,
+                    onClick = { onFoldedGroupsClicked() },
+                    onLongClick = {
                         closeOpenSwipe()
-                        onItemLongClicked(holder.itemView, data, position - 2, lastTouchX, lastTouchY)
+                        onFoldedGroupsLongClicked(holder.itemView, foldedHolder.lastTouchX, foldedHolder.lastTouchY)
                     },
-                    swipe = if (isForSearch) null else RecentChatViewHolder.SwipeActions(
-                        callback = swipeCallback,
-                        onReadToggle = { onReadToggle(data) },
-                        onPinToggle = { onPinToggle(data) },
-                        onDelete = { onDeleteRequested(data) },
-                    ),
+                    onEndFocus = { onFoldedGroupsEndFocus() },
                 )
             }
 
@@ -151,6 +146,37 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
+    private fun bindChat(chatHolder: RecentChatViewHolder, data: RoomViewData, position: Int) {
+        // The foreground owns the row's clicks, so the press position must be read there
+        // (the swipe root never sees DOWN on a closed row).
+        chatHolder.touchTarget.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                lastTouchX = event.rawX.toInt()
+                lastTouchY = event.rawY.toInt()
+            }
+            false
+        }
+
+        chatHolder.bind(
+            searchKey,
+            data,
+            isSelected = selectedId != null && data.roomId == selectedId,
+            onItemClick = { onItemClicked(data, position - 2) }, // Adjust position
+            onItemLongClick = {
+                closeOpenSwipe()
+                onItemLongClicked(chatHolder.itemView, data, position - 2, lastTouchX, lastTouchY)
+            },
+            swipe = if (isForSearch) null else RecentChatViewHolder.SwipeActions(
+                callback = swipeCallback,
+                onReadToggle = { onReadToggle(data) },
+                onPinToggle = { onPinToggle(data) },
+                onDelete = { onDeleteRequested(data) },
+                onFocusToggle = { onFocusToggle(data) },
+            ),
+        )
+    }
+
     private var lastTouchX: Int = 0
     private var lastTouchY: Int = 0
 
@@ -158,6 +184,8 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         return when (getItem(position)) {
             is ListItem.SearchInput -> VIEW_TYPE_SEARCH_INPUT
             is ListItem.ChatItem -> VIEW_TYPE_CHAT_ITEM
+            is ListItem.FocusChat -> VIEW_TYPE_FOCUS_CHAT
+            is ListItem.FoldedGroups -> VIEW_TYPE_FOLDED_GROUPS
             is ListItem.E2eeFooter -> VIEW_TYPE_E2EE_FOOTER
         }
         // No `else` branch: ListItem is sealed and this `when` is an EXPRESSION, so the compiler
@@ -184,7 +212,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
         for (i in first..last) {
             (rv.findViewHolderForAdapterPosition(i) as? RecentChatViewHolder)?.let { holder ->
                 getItem(i)?.also { data ->
-                    val recentChatViewData = (data as? ListItem.ChatItem)?.data ?: return@also
+                    val recentChatViewData = data.chatItemData() ?: return@also
                     holder.updateCallBarDuration(recentChatViewData)
                 }
             }
@@ -210,7 +238,7 @@ abstract class RecentChatAdapter(val activity: Activity, val isForSearch: Boolea
             val oldId = field
             field = value
             currentList.forEachIndexed { index, item ->
-                val itemId = (item as? ListItem.ChatItem)?.data?.roomId
+                val itemId = item.chatItemData()?.roomId
                 if (itemId != null && (itemId == oldId || itemId == value)) {
                     notifyItemChanged(index)
                 }
@@ -230,19 +258,5 @@ class SearchInputViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) 
     fun bind() {
         // Initialize your search input view here
         // For example, set up listeners or bind data if needed
-    }
-}
-
-sealed class ListItem {
-    object SearchInput : ListItem()
-    data class ChatItem(val data: RoomViewData) : ListItem()
-
-    /** Stateless list-footer singleton — the same instance is referentially equal across every
-     * `submitList` call, so [DiffUtil.ItemCallback.areItemsTheSame]'s `oldItem == newItem`
-     * fallthrough is unconditionally true for it, giving "no change" for free. */
-    object E2eeFooter : ListItem()
-
-    fun chatItemData(): RoomViewData? {
-        return (this as? ChatItem)?.data
     }
 }

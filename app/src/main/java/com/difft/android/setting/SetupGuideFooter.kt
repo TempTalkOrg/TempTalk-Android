@@ -30,14 +30,14 @@ internal fun SetupGuideFooter(
     modifier: Modifier = Modifier,
     onTest: (() -> Unit)? = null,
     @StringRes prompt: Int = ChatR.string.background_connection_guide_prompt,
+    @StringRes link: Int = ChatR.string.background_connection_guide_link,
 ) {
     val linkColor = DifftTheme.colors.textInfo
     val linkStyles = TextLinkStyles(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
     val text = buildAnnotatedString {
         append(stringResource(prompt))
-        append(" ")
         withLink(LinkAnnotation.Clickable(tag = "setup_guide", styles = linkStyles) { onClick() }) {
-            append(stringResource(ChatR.string.background_connection_guide_link))
+            append(stringResource(link))
         }
         if (onTest != null) {
             append(stringResource(ChatR.string.notification_test_link_separator))

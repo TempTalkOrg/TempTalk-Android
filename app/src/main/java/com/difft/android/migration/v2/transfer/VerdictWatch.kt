@@ -44,6 +44,9 @@ sealed interface Verdict {
 
             /** The receiver could not be reached at all. */
             UNREACHABLE,
+
+            /** The receiver named a terminal outside the agreed vocabulary (#1382). */
+            UNRECOGNIZED_TERMINAL,
         }
     }
 }
@@ -135,7 +138,18 @@ class VerdictWatch(
         /** Steady-state polling interval. */
         const val POLL_MS = 10_000L
 
-        fun verdictOf(terminal: String): Verdict =
-            if (terminal == TransferTerminal.SUCCEEDED) Verdict.Succeeded else Verdict.Ended(terminal)
+        /**
+         * The agreed `/status` vocabulary (#1382): `succeeded` is success, only `failed` and
+         * `cancelled` are a definite end, and any other value — a future or misspelt terminal — is
+         * unknown, so it never releases a pause.
+         */
+        fun verdictOf(terminal: String): Verdict = when (terminal) {
+            TransferTerminal.SUCCEEDED -> Verdict.Succeeded
+            TransferTerminal.FAILED, TransferTerminal.CANCELLED -> Verdict.Ended(terminal)
+            else -> {
+                L.w { "[MigrationV2][P2P][Tx] event=verdict_terminal_unrecognized" }
+                Verdict.Unknown(Verdict.Unknown.Reason.UNRECOGNIZED_TERMINAL)
+            }
+        }
     }
 }

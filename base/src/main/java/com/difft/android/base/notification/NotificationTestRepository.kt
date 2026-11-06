@@ -1,6 +1,10 @@
 package com.difft.android.base.notification
 
 import android.os.Build
+import com.difft.android.base.log.lumberjack.L
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -8,8 +12,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Joins the readable notification state with the stored notification test results (#1350). Every
@@ -19,22 +21,25 @@ import javax.inject.Singleton
 class NotificationTestRepository @Inject constructor(
     private val readinessProvider: NotificationReadinessProvider,
     private val store: NotificationTestStore,
+    private val clock: NotificationTestClock,
 ) {
-
-    private val callShownAt = MutableStateFlow(0L)
-
-    /** Epoch ms of the last time the test call screen opened in this process; 0 when never. */
-    val callShown: StateFlow<Long> = callShownAt.asStateFlow()
 
     /** The readiness model including the still-valid test results. */
     suspend fun readReadiness(): NotificationReadiness = withContext(Dispatchers.IO) {
         val input = readinessProvider.readInput()
-        NotificationReadinessEvaluator.evaluate(input.copy(testResults = validResults(input)))
+        NotificationReadinessEvaluator.evaluate(
+            input.copy(testResults = validResults(input), seenCategories = store.readSeenCategories()),
+        )
     }
 
     /** The fingerprint of the settings [kind] depends on, read now. */
     suspend fun fingerprint(kind: NotificationTestKind): String = withContext(Dispatchers.IO) {
         NotificationTestFingerprint.of(kind, readinessProvider.readInput(), Build.FINGERPRINT.orEmpty())
+    }
+
+    /** Records that the user opened [channelId]'s system settings page; see [ReadinessInput.seenCategories]. */
+    suspend fun markCategorySeen(channelId: String) = withContext(Dispatchers.IO) {
+        store.markCategorySeen(channelId)
     }
 
     /**
@@ -50,47 +55,45 @@ class NotificationTestRepository @Inject constructor(
         store.write(kind, NotificationTestResult(outcome, nowMs, fingerprint))
     }
 
-    /** Fingerprint of the test call just posted; the call screen records its success under it. */
-    @Volatile
-    private var postedCallFingerprint: String? = null
-
-    fun notePostedCall(fingerprint: String) {
-        postedCallFingerprint = fingerprint
-    }
-
-    /** Orders the call test's OK and FAIL writes, so a screen that opens at the timeout keeps its OK. */
     private val callWrite = Mutex()
+    private val shownRun = MutableStateFlow<String?>(null)
+    val callShownRun: StateFlow<String?> = shownRun.asStateFlow()
 
-    /**
-     * The test call screen opened: raises the in-process signal synchronously, before any disk
-     * write, so a test page waiting on [callShown] sees it even at the timeout boundary.
-     */
-    fun markCallShown(nowMs: Long = System.currentTimeMillis()) {
-        callShownAt.value = nowMs
-    }
-
-    /** Stores the call test's objective success; call after [markCallShown]. */
-    suspend fun recordCallShown(nowMs: Long = System.currentTimeMillis()) {
+    suspend fun prepareCall(runId: String, fingerprint: String, postedAt: Long) = withContext(Dispatchers.IO) {
         callWrite.withLock {
-            // A process restarted since the post has no snapshot; the settings read now are the best left.
-            val fingerprint = postedCallFingerprint ?: fingerprint(NotificationTestKind.CALL)
-            record(NotificationTestKind.CALL, NotificationTestOutcome.OK, fingerprint, nowMs)
+            store.prepareCall(NotificationTestCallTicket(runId, postedAt, fingerprint, postedAt + NotificationTestCallTicket.LIFETIME_MS))
         }
     }
 
-    /**
-     * Stores the call test's FAIL unless the call screen opened since [postedAt]; false when it did.
-     * The check and write share a lock with [recordCallShown], so an OK racing this always lands last.
-     */
-    suspend fun recordCallTimeout(
-        fingerprint: String,
-        postedAt: Long,
-        nowMs: Long = System.currentTimeMillis(),
-    ): Boolean = callWrite.withLock {
-        if (callShownAt.value >= postedAt) return@withLock false
-        record(NotificationTestKind.CALL, NotificationTestOutcome.FAIL, fingerprint, nowMs)
-        true
+    suspend fun recordCallShown(runId: String, nowMs: Long = clock.nowMs()): NotificationTestCallUpdate =
+        updateCall(runId, nowMs, shown = true)
+
+    suspend fun recordCallTimeout(runId: String, nowMs: Long = clock.nowMs()): NotificationTestCallUpdate =
+        updateCall(runId, nowMs, shown = false)
+
+    suspend fun cancelCall(runId: String) = withContext(Dispatchers.IO) {
+        callWrite.withLock { store.cancelCall(runId) }
     }
+
+    private suspend fun updateCall(runId: String, nowMs: Long, shown: Boolean): NotificationTestCallUpdate =
+        withContext(Dispatchers.IO) {
+            callWrite.withLock {
+                try {
+                    val result = store.updateCall(runId, nowMs, shown)
+                    if (shown && result in setOf(NotificationTestCallUpdate.RECORDED, NotificationTestCallUpdate.ALREADY_SHOWN)) {
+                        shownRun.value = runId
+                    }
+                    result
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w {
+                        "[NotificationTest] persistence_failed stage=call_result error=${e.javaClass.simpleName}"
+                    }
+                    NotificationTestCallUpdate.PERSISTENCE_FAILED
+                }
+            }
+        }
 
     private suspend fun validResults(input: ReadinessInput): NotificationTestResults =
         NotificationTestResults.validOf(store.read(), input, Build.FINGERPRINT.orEmpty(), System.currentTimeMillis())

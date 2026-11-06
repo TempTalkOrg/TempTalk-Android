@@ -2,11 +2,17 @@ package com.difft.android.chat.jobmanager
 
 import com.difft.android.chat.jobs.BaseJob
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import java.io.IOException
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class BaseJobTest {
@@ -55,20 +61,62 @@ class BaseJobTest {
         assertTrue(result.isFailure())
     }
 
-    // -- CancellationException is rethrown, not caught --
+    // -- Stray CancellationException (coroutine still active) is an ordinary job error --
 
     @Test
-    fun `run rethrows CancellationException instead of treating as failure`() = runTest {
+    fun `run treats stray TimeoutCancellationException as retry when onShouldRetry is true`() = runTest {
+        val job = TestJob(
+            shouldSucceed = false,
+            exception = strayTimeout(),
+            shouldRetry = true,
+            backoffOverride = 1234L
+        )
+
+        val result = job.run()
+
+        assertTrue(result.isRetry())
+        assertEquals(1234L, result.getBackoffInterval())
+    }
+
+    @Test
+    fun `run treats stray CancellationException as failure when onShouldRetry is false`() = runTest {
+        val job = TestJob(
+            shouldSucceed = false,
+            exception = CancellationException("stray"),
+            shouldRetry = false
+        )
+
+        val result = job.run()
+
+        assertTrue(result.isFailure())
+    }
+
+    // -- Real cancellation of the calling coroutine is rethrown --
+
+    @Test
+    fun `run rethrows CancellationException when the calling coroutine is cancelled`() = runTest {
         val job = TestJob(
             shouldSucceed = false,
             exception = CancellationException("coroutine cancelled"),
-            shouldRetry = true
+            shouldRetry = true,
+            onRunBlock = { currentCoroutineContext().cancel() }
         )
+        var outcome: kotlin.Result<Job.Result>? = null
 
-        assertFailsWith<CancellationException> {
-            job.run()
-        }
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            outcome = runCatching { job.run() }
+        }.join()
+
+        assertTrue(outcome?.exceptionOrNull() is CancellationException, "was $outcome")
     }
+
+    private suspend fun strayTimeout(): TimeoutCancellationException =
+        try {
+            withTimeout(1) { delay(100) }
+            error("unreachable")
+        } catch (e: TimeoutCancellationException) {
+            e
+        }
 
     // -- getNextRunAttemptBackoff delegates to BackoffUtil --
 
@@ -130,7 +178,8 @@ class BaseJobTest {
         private val exception: Exception = RuntimeException("test exception"),
         private val shouldRetry: Boolean = false,
         private val backoffOverride: Long? = null,
-        private val onBackoffCalled: ((Int, Exception) -> Unit)? = null
+        private val onBackoffCalled: ((Int, Exception) -> Unit)? = null,
+        private val onRunBlock: (suspend () -> Unit)? = null
     ) : BaseJob(
         Job.Parameters.Builder("test-job-id")
             .setMaxAttempts(3)
@@ -145,6 +194,7 @@ class BaseJobTest {
         }
 
         override suspend fun onRun() {
+            onRunBlock?.invoke()
             if (!shouldSucceed) {
                 throw exception
             }

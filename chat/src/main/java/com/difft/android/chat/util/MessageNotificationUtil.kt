@@ -27,7 +27,6 @@ import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.notification.NotificationChannelIds
 import com.difft.android.base.notification.NotificationFixJump
-import com.difft.android.base.user.GlobalNotificationType
 import com.difft.android.base.user.NotificationContentDisplayType
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.IMessageNotificationUtil
@@ -39,13 +38,13 @@ import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.time.ServerTimeProvider
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
-import com.difft.android.base.utils.globalServices
 import org.difft.app.database.wcdb
 import com.difft.android.call.CallIntent
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
 import com.difft.android.chat.common.SendMessageUtils
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.focus.GroupNotifyGate
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
 import com.difft.android.chat.ui.ChatActivity
@@ -53,20 +52,18 @@ import com.difft.android.base.utils.LinkDataEntity
 import com.difft.android.chat.message.getRecordMessageContentTwo
 import difft.android.messageserialization.For
 import com.difft.android.messageserialization.db.store.ConversationUtils
-import difft.android.messageserialization.model.MENTIONS_ALL_ID
 import difft.android.messageserialization.model.Message
-import difft.android.messageserialization.model.TextMessage
-import com.difft.android.network.responses.MuteStatus
+import com.difft.android.base.migration.pause.MessagingGate
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.GroupModel
 import org.difft.app.database.models.DBRoomModel
 import javax.inject.Inject
@@ -96,6 +93,8 @@ class MessageNotificationUtil @Inject constructor(
     private val channelManager: NotificationChannelManager,
     private val repostGuard: NotificationRepostGuard,
     private val criticalAlertCallGate: CriticalAlertCallGate,
+    private val groupNotifyGate: GroupNotifyGate,
+    private val messagingGate: MessagingGate,
 ) : IMessageNotificationUtil {
 
     companion object {
@@ -188,6 +187,7 @@ class MessageNotificationUtil @Inject constructor(
         message: Message,
         forWhat: For,
         isRecall: Boolean = false, // 是否是撤回消息
+        delivery: NotificationDelivery = NotificationDelivery.WEB_SOCKET,
     ) = runCatching {
         // ⚠️ 撤回消息：删除缓存，判断是否需要重建通知（无条件执行，跳过拦截）
         if (isRecall) {
@@ -213,8 +213,9 @@ class MessageNotificationUtil @Inject constructor(
             // 有剩余消息，继续往下执行重建通知（跳过拦截条件检查）
             L.i { "[MessageNotificationUtil] Recall: has ${messageList.size} remaining messages, rebuilding notification (skip interceptions)" }
         } else {
+            if (messagingPaused("entry")) return@runCatching
             // 正常新消息：检查拦截条件
-            if (shouldInterceptNotification(forWhat, message)) {
+            if (shouldInterceptNotification(forWhat, message, delivery)) {
                 return@runCatching
             }
         }
@@ -246,6 +247,8 @@ class MessageNotificationUtil @Inject constructor(
             // NO_NAME_OR_CONTENT 情况下，设置默认值
             title = PackageUtil.getAppName() ?: ""
         }
+        // The lookups above suspend; a pause may have begun meanwhile.
+        if (messagingPaused("after_lookup")) return@runCatching
 
         val content: String = if (needContent) {
             getRecordMessageContentTwo(message, false, "")
@@ -335,20 +338,22 @@ class MessageNotificationUtil @Inject constructor(
             .setOnlyAlertOnce(isRecall) // 撤回时不震动/响铃，新消息时震动/响铃
             .setSilent(isRecall) // 撤回时完全静默（Android 8.0+）
 
+        if (messagingPaused("post")) return@runCatching
         nm.notify(notificationID, builder.build())
     }.onFailure {
         L.e { "showNotification failed: ${it.stackTraceToString()}" }
     }
 
-    private fun isMentionMessage(message: Message): Boolean {
-        if (message !is TextMessage) return false
-
-        val mentions = message.mentions ?: return false
-        if (mentions.isEmpty()) return false
-
-        return mentions.any { mention ->
-            mention.uid == globalServices.myId || mention.uid == MENTIONS_ALL_ID
-        }
+    /**
+     * Ordinary message notifications are not posted while the migration message pause keeps
+     * messaging closed (#1382), including those scheduled by work admitted before the pause.
+     * Incoming-call notifications check it right before posting; critical alerts and the
+     * migration's own notifications do not.
+     */
+    private fun messagingPaused(stage: String): Boolean {
+        if (messagingGate.isOpen) return false
+        L.i { "[MigrationPause] event=notification_suppressed stage=$stage" }
+        return true
     }
 
     private fun createSummaryNotification(context: Context) {
@@ -360,6 +365,7 @@ class MessageNotificationUtil @Inject constructor(
             L.w { "[MessageNotificationUtil] summary skipped: channel missing id=$CHANNEL_CONFIG_NAME_MESSAGE" }
             return
         }
+        if (messagingPaused("summary")) return
         nm.notify(MESSAGE_SUMMARY_NOTIFICATION_ID, buildMessageSummaryNotification(context, NOTIFICATION_GROUP_KEY))
     }
 
@@ -371,9 +377,16 @@ class MessageNotificationUtil @Inject constructor(
      * 检查是否应该拦截通知（返回true表示应该拦截，不显示通知）
      * @param forWhat 会话信息
      * @param message 消息对象（可选，用于检查是否已读和@提及）
+     * @param delivery [NotificationDelivery.FCM] pushes already passed the server's mute / focus / level
+     * decision, so only the visibility and read checks run; [NotificationDelivery.WEB_SOCKET] also applies
+     * the local policy ([GroupNotifyGate]).
      * @return true表示应该拦截，false表示可以显示通知
      */
-    private fun shouldInterceptNotification(forWhat: For, message: Message? = null): Boolean {
+    private suspend fun shouldInterceptNotification(
+        forWhat: For,
+        message: Message? = null,
+        delivery: NotificationDelivery = NotificationDelivery.WEB_SOCKET,
+    ): Boolean {
         // 1. 检查聊天窗口/会话列表/屏幕共享状态
         if (SendMessageUtils.isExistChat(forWhat.id) ||
             ConversationUtils.isConversationListVisible ||
@@ -383,47 +396,21 @@ class MessageNotificationUtil @Inject constructor(
             return true
         }
 
-        // 2. 检查静音状态和已读位置
-        val room = wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id))
-        if (room != null) {
-            if (room.muteStatus == MuteStatus.MUTED.value) {
-                L.i { "[MessageNotificationUtil] ${forWhat.id} isMuted" }
-                return true
-            }
-            // 如果有消息对象，检查是否已读
-            if (message != null && message.systemShowTimestamp <= room.readPosition) {
-                L.i { "[MessageNotificationUtil] Message already read (timestamp: ${message.systemShowTimestamp} <= readPosition: ${room.readPosition})" }
+        val room = withContext(Dispatchers.IO) { wcdb.room.getFirstObject(DBRoomModel.roomId.eq(forWhat.id)) }
+
+        // 2. 静音 / 专注 / 群通知级别（仅 WebSocket 路径；FCM 路径信任服务端判定）
+        if (delivery == NotificationDelivery.WEB_SOCKET) {
+            val decision = groupNotifyGate.decideMessage(forWhat, message, room)
+            if (!decision.notify) {
+                L.i { "[MessageNotificationUtil] Intercepted by policy room=${forWhat.id} reason=${decision.reason}" }
                 return true
             }
         }
 
-        // 3. 检查群组通知设置
-        if (forWhat is For.Group) {
-            val mySelfGroupInfo = wcdb.groupMemberContactor.getFirstObject(
-                (DBGroupMemberContactorModel.gid.eq(forWhat.id))
-                    .and(DBGroupMemberContactorModel.id.eq(globalServices.myId))
-            )
-
-            val notificationType = if (mySelfGroupInfo == null || mySelfGroupInfo.useGlobal == true) {
-                userManager.getUserData()?.globalNotification
-            } else {
-                mySelfGroupInfo.notification
-            }
-
-            when (notificationType) {
-                GlobalNotificationType.OFF.value -> {
-                    L.i { "[MessageNotificationUtil] Global notification is OFF for ${forWhat.id}" }
-                    return true
-                }
-
-                GlobalNotificationType.MENTION.value -> {
-                    // 如果设置为仅@提及，且有消息对象，检查是否@了当前用户
-                    if (message != null && !isMentionMessage(message)) {
-                        L.i { "[MessageNotificationUtil] Global notification is MENTION, but not mentioned for ${forWhat.id}" }
-                        return true
-                    }
-                }
-            }
+        // 3. 已读位置
+        if (room != null && message != null && message.systemShowTimestamp <= room.readPosition) {
+            L.i { "[MessageNotificationUtil] Message already read (timestamp: ${message.systemShowTimestamp} <= readPosition: ${room.readPosition})" }
+            return true
         }
 
         return false
@@ -492,6 +479,7 @@ class MessageNotificationUtil @Inject constructor(
         forWhat: For
     ) = runCatching {
         // 检查是否已有通知正在显示，如果有则不显示兜底通知，避免覆盖正常的MessagingStyle通知
+        if (messagingPaused("push_entry")) return@runCatching
         val notificationID = forWhat.id.hashCode()
         if (isNotificationShowing(notificationID)) {
             L.i { "[MessageNotificationUtil] Normal notification is showing for ${forWhat.id}, skipping push fallback" }
@@ -499,7 +487,8 @@ class MessageNotificationUtil @Inject constructor(
         }
 
         // 使用统一的拦截检查（不传message参数，因为兜底通知没有message对象）
-        if (shouldInterceptNotification(forWhat, null)) {
+        // 兜底通知只来自 FCM：服务端已判定，本地不再做静音 / 专注 / 级别否决。
+        if (shouldInterceptNotification(forWhat, null, NotificationDelivery.FCM)) {
             return@runCatching
         }
 
@@ -530,6 +519,7 @@ class MessageNotificationUtil @Inject constructor(
             .setDeleteIntent(pendingDeleteIntent) // 监听通知删除，用于清理缓存
             .setOnlyAlertOnce(true) // 避免同一会话多次解密失败时重复提醒
 
+        if (messagingPaused("push_post")) return@runCatching
         nm.notify(notificationID, builder.build())
     }.onFailure {
         L.e { "showNotificationOfPush failed: ${it.stackTraceToString()}" }
@@ -577,6 +567,8 @@ class MessageNotificationUtil @Inject constructor(
         // until cancelNotificationsById can see it via pendingCallNotifyJobs.
         val job = appScope.launch(start = CoroutineStart.LAZY) {
             val (callerInfo, groupInfo) = loadCallDisplayInfo(roomId, callerId, conversationId, callType.isGroup())
+            // Nothing below suspends, so a pause that began during the lookup is caught here (#1382).
+            if (messagingPaused("call")) return@launch
 
             var title = ""
             var content = ""

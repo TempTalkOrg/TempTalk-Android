@@ -1,0 +1,47 @@
+// Synced from call-layout bf6b84ecbe, ports/kotlin/src/test/kotlin/org/difft/calllayout/ConfigEntries.kt (spec v25), by scripts/sync-apps.ts.
+// Do not edit here: change call-layout and sync again.
+
+package com.difft.android.call.layout
+
+// Every config value by its JSON key, to compare with the file's copy of DEFAULT_CONFIG.
+internal fun configEntries(c: LayoutConfig): Map<String, Any> = mapOf(
+    "wideMinWidth" to c.wideMinWidth,
+    "wideMinHeight" to c.wideMinHeight,
+    "fillThreshold" to c.fillThreshold,
+    "largeFillThreshold" to c.largeFillThreshold,
+    "cardAspectMin" to c.cardAspectMin,
+    "cardAspectMax" to c.cardAspectMax,
+    "minCardCompact" to c.minCardCompact,
+    "minCardWide" to c.minCardWide,
+    "minCardHalf" to c.minCardHalf,
+    "gap" to c.gap,
+    "adaptiveCards" to c.adaptiveCards,
+    "adaptiveMaxCount" to c.adaptiveMaxCount,
+    "cardMinWidth" to c.cardMinWidth,
+    "widenBarsMax" to c.widenBarsMax,
+    "adaptiveAspectMin" to c.adaptiveAspectMin,
+    "adaptiveAspectMax" to c.adaptiveAspectMax,
+    "rowsHeightRatioMax" to c.rowsHeightRatioMax,
+    "scrollAspectMax" to c.scrollAspectMax,
+    "scrollStretch" to c.scrollStretch,
+    "moreMaxTiles" to c.moreMaxTiles,
+    "firstScreenMin" to c.firstScreenMin,
+    "minCardFloor" to c.minCardFloor,
+    "pageMax" to c.pageMax,
+    "aspectSettleMs" to c.aspectSettleMs,
+    "pipLong" to c.pipLong,
+    "pipShort" to c.pipShort,
+    "pipMargin" to c.pipMargin,
+    "pipMinScale" to c.pipMinScale,
+    "promoteSpeakingMs" to c.promoteSpeakingMs,
+    "promoteVideoMs" to c.promoteVideoMs,
+    "holdMs" to c.holdMs,
+    "recentSpeakMs" to c.recentSpeakMs,
+    "tickMs" to c.tickMs,
+    "schedulerStepMs" to c.schedulerStepMs,
+    "pageTurnHoldMs" to c.pageTurnHoldMs,
+    "videoFadeMs" to c.videoFadeMs,
+    "firstFrameHintMs" to c.firstFrameHintMs,
+    "layoutMoveMs" to c.layoutMoveMs,
+    "shareEnterMs" to c.shareEnterMs,
+)

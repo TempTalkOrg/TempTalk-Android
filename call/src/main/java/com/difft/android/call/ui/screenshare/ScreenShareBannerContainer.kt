@@ -2,6 +2,7 @@ package com.difft.android.call.ui.screenshare
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -39,14 +40,19 @@ internal fun BannerContainer(
 
     var bannerHeightPx by remember { mutableIntStateOf(0) }
 
-    fun clampDragDelta(rawDX: Float, rawDY: Float): Pair<Float, Float> {
-        val baseX = latestParentMaxWPx - latestBannerWidthPx
-        val minDX = -(baseX - latestMarginEndPx).coerceAtLeast(0f)
-        val maxDX = latestMarginEndPx
-        val minDY = -latestMarginTopPx
-        val maxDY = (latestParentMaxHPx - bannerHeightPx - latestMarginTopPx)
-            .coerceAtLeast(0f)
-        return rawDX.coerceIn(minDX, maxDX) to rawDY.coerceIn(minDY, maxDY)
+    fun clampDragDelta(rawDX: Float, rawDY: Float): Pair<Float, Float> = clampBannerDragDelta(
+        rawDX,
+        rawDY,
+        BannerBounds(latestParentMaxWPx, latestParentMaxHPx, latestMarginEndPx, latestMarginTopPx, latestBannerWidthPx, bannerHeightPx.toFloat()),
+    )
+
+    // The parent region can shrink under a saved position (the tabletop stage ends above the fold),
+    // so the position is re-clamped whenever the region changes, not only on a drag or resize.
+    LaunchedEffect(parentMaxWPx, parentMaxHPx, marginEndPx, marginTopPx) {
+        val (clampedDX, clampedDY) = clampDragDelta(latestDragDX, latestDragDY)
+        if (clampedDX != latestDragDX || clampedDY != latestDragDY) {
+            latestOnDragDeltaChange(clampedDX, clampedDY)
+        }
     }
 
     Box(
@@ -122,4 +128,25 @@ internal fun BannerContainer(
     ) {
         content()
     }
+}
+
+/** The banner's parent region and its own size, in px. */
+internal data class BannerBounds(
+    val parentMaxWPx: Float,
+    val parentMaxHPx: Float,
+    val marginEndPx: Float,
+    val marginTopPx: Float,
+    val bannerWidthPx: Float,
+    val bannerHeightPx: Float,
+)
+
+/** The drag offset kept inside [bounds]: the banner never leaves its parent region. */
+internal fun clampBannerDragDelta(rawDX: Float, rawDY: Float, bounds: BannerBounds): Pair<Float, Float> {
+    val baseX = bounds.parentMaxWPx - bounds.bannerWidthPx
+    val minDX = -(baseX - bounds.marginEndPx).coerceAtLeast(0f)
+    val maxDX = bounds.marginEndPx
+    val minDY = -bounds.marginTopPx
+    val maxDY = (bounds.parentMaxHPx - bounds.bannerHeightPx - bounds.marginTopPx)
+        .coerceAtLeast(0f)
+    return rawDX.coerceIn(minDX, maxDX) to rawDY.coerceIn(minDY, maxDY)
 }

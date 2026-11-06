@@ -16,12 +16,14 @@ import dagger.hilt.android.EntryPointAccessors
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.google.gson.JsonObject
 import com.tencent.wcdb.base.Value
+import com.tencent.wcdb.winq.Expression
 import com.tencent.wcdb.winq.Order
 import difft.android.messageserialization.model.ROOM_SENDING_STATUS_NONE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_NONE
 import difft.android.messageserialization.model.needsSendStatusRecompute
 import difft.android.messageserialization.model.resolveRoomSendStatus
 import org.difft.app.database.models.MessageModel
+import org.difft.app.database.models.ROOM_FOCUS_PIN_NONE
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -137,8 +139,9 @@ object WCDBUpdateService :
             val expiredOtherCondition = expiredOtherNewData.or(expiredOtherOldData)
 
             // Pinned conversations are kept even when empty/expired — only their messages
-            // are auto-archived (by MessageArchiveManager); the room row itself stays.
-            val notPinnedCondition = DBRoomModel.pinnedTime.isNull()
+            // are auto-archived (by MessageArchiveManager); the room row itself stays. So is a room
+            // whose pin group focus tracks (focusPin != 0): dropping it would lose a manual unpin.
+            val notPinnedCondition = DBRoomModel.pinnedTime.isNull().and(DBRoomModel.focusPin.eq(ROOM_FOCUS_PIN_NONE))
 
             // Final condition: exclude self AND not pinned AND (invalid rooms OR expired empty rooms)
             val finalCondition = DBRoomModel.roomId.notEq(globalServices.myId)
@@ -349,16 +352,7 @@ object WCDBUpdateService :
                                     // pinned by LocalMessageCreatorForwardNoticeTest); isNull keeps
                                     // NULL-text notify rows included (NULL LIKE propagates NULL).
                                     val previewMessage = wcdb.message.getFirstObject(
-                                        DBMessageModel.roomId.eq(roomId)
-                                            .and(
-                                                DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY)
-                                                    .or(DBMessageModel.messageText.isNull())
-                                                    .or(
-                                                        DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_FORWARD_NOTICE,%")
-                                                            .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_COPY_NOTICE,%"))
-                                                            .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED,%"))
-                                                    )
-                                            ),
+                                        previewableMessageCondition(roomId),
                                         DBMessageModel.systemShowTimestamp.order(Order.Desc)
                                     )
 
@@ -502,6 +496,34 @@ object WCDBUpdateService :
     private const val NOTIFY_ACTION_TYPE_FORWARD_NOTICE = 10020
     private const val NOTIFY_ACTION_TYPE_COPY_NOTICE = 10021
     private const val NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED = 10022
+
+    /**
+     * Messages that may become a room's preview: everything except forward / copy / translate
+     * notices. notifyType is inside the messageText JSON (not a column), matched via LIKE with a
+     * trailing-comma anchor; isNull keeps NULL-text notify rows (NULL LIKE propagates NULL).
+     */
+    private fun previewableMessageCondition(roomId: String): Expression =
+        DBMessageModel.roomId.eq(roomId)
+            .and(
+                DBMessageModel.type.notEq(MessageModel.TYPE_NOTIFY)
+                    .or(DBMessageModel.messageText.isNull())
+                    .or(
+                        DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_FORWARD_NOTICE,%")
+                            .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_COPY_NOTICE,%"))
+                            .and(DBMessageModel.messageText.notLike("%\"notifyType\":$NOTIFY_ACTION_TYPE_TRANSLATE_SETTING_CHANGED,%"))
+                    )
+            )
+
+    /**
+     * The newest [limit] messages that the room preview would pick from, newest first, archive
+     * notices dropped (they clear the preview instead of filling it). Blocking; call on IO.
+     */
+    fun latestPreviewMessages(roomId: String, limit: Long): List<MessageModel> =
+        wcdb.message.getAllObjects(
+            previewableMessageCondition(roomId),
+            DBMessageModel.systemShowTimestamp.order(Order.Desc),
+            limit,
+        ).filterNot { isArchiveExpiredSystemMessage(it) }
 
     /**
      * 判断是否是归档系统消息（Earlier messages expired）

@@ -1,23 +1,13 @@
 package com.difft.android.call.manager
 
-import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.util.IdUtil
-import com.difft.android.call.util.sortParticipantsByPriority
-import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.RemoteParticipant
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
-class ParticipantManager(private val scope: CoroutineScope) {
+class ParticipantManager {
     private val _participants = MutableStateFlow<List<Participant>>(emptyList())
     val participants = _participants.asStateFlow()
 
@@ -29,9 +19,6 @@ class ParticipantManager(private val scope: CoroutineScope) {
 
     private val _screenSharingUser = MutableStateFlow<RemoteParticipant?>(null)
     val screenSharingUser = _screenSharingUser.asStateFlow()
-
-    @Volatile
-    private var resortJob: Job? = null
 
     /**
      * Updates the internal participants list with the provided value.
@@ -57,70 +44,6 @@ class ParticipantManager(private val scope: CoroutineScope) {
         }
     }
 
-    /**
-     * Re-sorts the participants list based on their priority.
-     * Debounced to consolidate rapid sort requests; skips update when order is unchanged.
-     */
-    fun resortParticipants() {
-        resortJob?.cancel()
-        resortJob = scope.launch {
-            delay(RESORT_DEBOUNCE_MS)
-            try {
-                withContext(Dispatchers.Default) {
-                    val currentList = participants.value
-                    val sortedList = sortParticipantsByPriority(currentList)
-                    if (!sortedList.hasSameOrder(currentList)) {
-                        setParticipants(sortedList)
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.e { "[Call] ParticipantManager resortParticipants error = ${e.message}" }
-            }
-        }
-    }
-
-    /**
-     * Sorts a list of participants by their speaking activity.
-     */
-    fun sortParticipantsBySpeaker(speakers: List<Participant>) {
-        val participantsList = participants.value
-        if(participantsList.isEmpty()){
-            return
-        }
-        // Check each speaker to see if it needs to be sorted
-        for (speaker in speakers) {
-            val speakerIndex = participantsList.indexOf(speaker)
-            if (speakerIndex == 0) continue // The first speaker does not need to be ranked
-            try {
-                if (speakerIndex > 0) {
-                    val previousParticipant = participantsList[speakerIndex - 1]
-                    if (isParticipantInactive(previousParticipant)){
-                        resortParticipants()
-                        return
-                    }
-                    // Check if there are any participants in front of you who have not turned on their microphones.
-                    val previousParticipants = participantsList.subList(0, speakerIndex)
-                    if (previousParticipants.isNotEmpty() && previousParticipants.any { isParticipantInactive(it) }) {
-                        resortParticipants()
-                        return
-                    }
-                }
-            } catch (e: Exception){
-                L.e { "[Call] ParticipantManager sortParticipantsBySpeaker error = ${e.message}." }
-                return
-            }
-        }
-    }
-
-    /**
-     * Checks whether the specified participant is currently inactive.
-     */
-    private fun isParticipantInactive(participant: Participant): Boolean {
-        return participant !is LocalParticipant && !participant.isScreenShareEnabled && !participant.isCameraEnabled && !participant.isMicrophoneEnabled
-    }
-
     fun updateAwaitingJoinInvitees() {
         val joinedUserIds = participants.value.mapNotNull { participant ->
             IdUtil.getUidByIdentity(participant.identity?.value)
@@ -136,17 +59,5 @@ class ParticipantManager(private val scope: CoroutineScope) {
         _awaitingJoinInvitees.update { current ->
             (current + inviteeIds).distinct()
         }
-    }
-
-    private fun List<Participant>.hasSameOrder(other: List<Participant>): Boolean {
-        if (size != other.size) return false
-        for (i in indices) {
-            if (this[i].sid != other[i].sid) return false
-        }
-        return true
-    }
-
-    companion object {
-        private const val RESORT_DEBOUNCE_MS = 300L
     }
 }

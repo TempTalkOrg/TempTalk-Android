@@ -1,18 +1,17 @@
 package com.difft.android.chat.group
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.fragment.app.activityViewModels
-import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
+import androidx.fragment.app.viewModels
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
+import com.difft.android.base.utils.DualPaneUtils.setupDynamicBackButton
+import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.databinding.ChatFragmentGroupHeaderBinding
@@ -24,7 +23,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.wcdb
@@ -123,7 +121,7 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
         binding.ibBack.setOnClickListener {
-            activity?.finish()
+            detailNavigation().pop(this)
         }
 
         // 统一订阅 conversationSet，处理配置相关的 UI 更新
@@ -136,38 +134,19 @@ class GroupChatHeaderFragment : CommonHeaderFragment() {
 
         // 观察选择状态来切换返回按钮行为
         chatViewModel.selectMessagesState.onEach {
-            if (isInDualPaneMode() && !it.editModel) {
-                // In dual-pane mode, hide back button when not in edit mode
-                binding.ibBack.visibility = View.GONE
-            } else if (it.editModel) {
-                binding.ibBack.visibility = View.VISIBLE
-                binding.ibBack.setImageResource(R.drawable.chat_icon_close)
-                binding.ibBack.setOnClickListener { chatViewModel.selectModel(false) }
-            } else {
-                binding.ibBack.visibility = View.VISIBLE
-                binding.ibBack.setImageResource(com.difft.android.base.R.drawable.chative_ic_back)
-                binding.ibBack.setOnClickListener { activity?.finish() }
-            }
+            setupDynamicBackButton(
+                backButton = binding.ibBack,
+                isEditMode = it.editModel,
+                backIconRes = com.difft.android.base.R.drawable.chative_ic_back,
+                closeIconRes = R.drawable.chat_icon_close,
+                onExitEditMode = { chatViewModel.selectModel(false) },
+            )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
     }
 
     private fun gotoMembersActivity(groupId: String) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val memberIds = wcdb.groupMemberContactor.getOneColumnString(
-                DBGroupMemberContactorModel.id,
-                DBGroupMemberContactorModel.gid.eq(groupId)
-            )
-
-            withContext(Dispatchers.Main) {
-                if (!isAdded || view == null) return@withContext
-                val intent = Intent(requireContext(), GroupSelectMemberActivity::class.java).apply {
-                    putExtra(GroupSelectMemberActivity.EXTRA_TYPE, GroupSelectMemberActivity.TYPE_ADD_MEMBER)
-                    putStringArrayListExtra(GroupSelectMemberActivity.EXTRA_SELECTED_MEMBER_IDS, ArrayList(memberIds))
-                    putExtra(GroupSelectMemberActivity.EXTRA_GID, groupId)
-                }
-                startActivity(intent)
-            }
-        }
+        detailNavigation().push(this, GroupSelectMemberDestination(groupId,
+            com.difft.android.chat.group.mvi.GroupPageContract.MemberAction.ADD))
     }
 
     /**

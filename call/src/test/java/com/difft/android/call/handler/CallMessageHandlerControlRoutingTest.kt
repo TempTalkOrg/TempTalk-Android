@@ -12,6 +12,7 @@ import com.difft.android.call.session.command.CallSessionCommands
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OgsmTestState
 import com.difft.android.call.state.OnGoingCallStateManager
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.test.rules.GlobalStaticMockRule
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import dagger.Lazy
@@ -70,6 +71,7 @@ class CallMessageHandlerControlRoutingTest {
             dbRoomStore = mockk(relaxed = true),
             criticalAlertManager = criticalAlertManager,
             callSessionCommands = Lazy { commands },
+            messagingGate = TestMessagingPause().open().gate,
         )
     }
 

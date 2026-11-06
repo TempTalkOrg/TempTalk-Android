@@ -30,8 +30,11 @@ enum class ActionBarLayout {
     COMPACT,
 }
 
-/** Controls that did not make it into the bar and therefore appear in the More sheet. */
-enum class ActionBarQuickAction { INVITE, PEOPLE }
+/**
+ * Controls that did not make it into the bar and therefore appear in the More sheet. [EMOJI] is
+ * only ever dropped by the side rail during a group screen share (#1451).
+ */
+enum class ActionBarQuickAction { INVITE, PEOPLE, EMOJI }
 
 /**
  * Resolved geometry for one bar. Everything a renderer or a neighbouring layout needs to
@@ -81,8 +84,8 @@ data class ActionBarPlan(
 
     /**
      * Vertical space from the screen bottom to the top of the whole chrome stack (bar plus
-     * outside Emoji, or the two-row video backplate). Grid and barrage layouts reserve at least
-     * this much.
+     * outside Emoji, or the two-row video backplate). While the bar is shown, grid and barrage
+     * layouts reserve at least this much; the side rail reserves its own end band instead (#1451).
      */
     val chromeBottomReserveDp: Int
         get() = if (layout == ActionBarLayout.TWO_ROW) {

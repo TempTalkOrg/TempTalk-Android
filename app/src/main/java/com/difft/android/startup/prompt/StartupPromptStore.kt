@@ -37,6 +37,10 @@ data class PromptRecord(
     @SerializedName("rationaleBefore") val rationaleBefore: Boolean = false,
     /** OPTIONAL_UPDATE only: the offer this record refers to. */
     @SerializedName("offerKey") val offerKey: String? = null,
+    /** BACKGROUND_CONNECTION only: no trigger prompts before this time (30 days after a decline or switch-off). */
+    @SerializedName("floorUntil") val floorUntil: Long = 0,
+    /** BACKGROUND_CONNECTION only: the user turned the switch off themselves. */
+    @SerializedName("switchedOff") val switchedOff: Boolean = false,
 )
 
 /**
@@ -60,6 +64,21 @@ class StartupPromptStore @Inject constructor(
             result = next
         }
         return result
+    }
+
+    /**
+     * The user changed the background-connection switch. Off silences the slot for the 30-day floor; on
+     * clears the switched-off flag (the floor keeps running).
+     */
+    suspend fun recordBackgroundConnectionSwitch(on: Boolean, now: Long) {
+        update { records ->
+            val current = records[PromptId.BACKGROUND_CONNECTION]
+            when {
+                !on -> records.edit(PromptId.BACKGROUND_CONNECTION) { PromptBackoffPolicy.switchedOff(it, now) }
+                current?.switchedOff == true -> records + (PromptId.BACKGROUND_CONNECTION to current.copy(switchedOff = false))
+                else -> records
+            }
+        }
     }
 
     private fun encode(records: Map<PromptId, PromptRecord>): String =

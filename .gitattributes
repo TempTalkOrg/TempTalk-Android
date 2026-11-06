@@ -1,0 +1,2 @@
+# The call layout replay script: one generated line of JSON, rewritten on every spec version.
+call/src/test/resources/generated/call-layout-controller.v*.json -diff linguist-generated

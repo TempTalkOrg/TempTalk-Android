@@ -3,6 +3,7 @@ package com.difft.android.chat.messages
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.application.ScopeApplication
+import com.difft.android.base.migration.pause.AdmissionKind
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.call.LCallManager
@@ -15,6 +16,7 @@ import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.websocket.api.messages.Data
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import com.difft.android.websocket.api.messages.TTNotifyMessage
+import com.difft.android.test.fakes.TestMessagingPause
 import com.google.gson.Gson
 import com.google.gson.JsonPrimitive
 import difft.android.messageserialization.For
@@ -46,6 +48,7 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.Envelo
 class MessageContentProcessorCriticalAlertTest {
 
     private lateinit var processor: MessageContentProcessor
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
     private lateinit var notificationUtil: MessageNotificationUtil
     private lateinit var dbRoomStore: DBRoomStore
     private lateinit var localMessageCreator: LocalMessageCreator
@@ -89,6 +92,7 @@ class MessageContentProcessorCriticalAlertTest {
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = CriticalAlertHighlightWriter(dbRoomStore, gate),
+            groupFocusRepository = mockk(relaxed = true),
         )
     }
 
@@ -142,7 +146,7 @@ class MessageContentProcessorCriticalAlertTest {
             notifyTime = 1L,
             notifyType = TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CRITICAL_ALERT_V2,
         )
-        processor.process(SignalServiceDataClass(envelope, null, notify), "test")
+        processor.process(SignalServiceDataClass(envelope, null, notify), "test", admission)
     }
 
     private companion object {

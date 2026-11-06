@@ -3,6 +3,7 @@ package com.difft.android.chat.jobs
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobmanager.impl.NetworkConstraint
 import com.difft.android.chat.util.DataMessageCreator
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.messages.SendMessageResult
 import com.difft.android.websocket.api.push.exceptions.NonSuccessfulResponseCodeException
@@ -91,7 +92,7 @@ class PushReactionSendJobTest {
         newSignalServiceMessageSender = newSignalServiceMessageSender,
         dataMessageCreator = dataMessageCreator,
         messageStore = messageStore,
-    )
+    ).bindLogin()
 
     // --- 1) buildParameters ---
 
@@ -118,7 +119,7 @@ class PushReactionSendJobTest {
         val dataMessage = SignalServiceProtos.DataMessage.getDefaultInstance()
         every { dataMessageCreator.createFrom(textMessage) } returns dataMessage
         coEvery {
-            newSignalServiceMessageSender.sendDataMessage(any(), any(), any(), any())
+            newSignalServiceMessageSender.sendDataMessage(any(), any(), any(), any(), any())
         } returns mockk<SendMessageResult>(relaxed = true)
 
         val job = newJob(textMessage)
@@ -130,6 +131,7 @@ class PushReactionSendJobTest {
                 room = textMessage.forWhat,
                 message = dataMessage,
                 notification = null,
+                admission = any(),
             )
         }
     }
@@ -338,6 +340,7 @@ class PushReactionSendJobTest {
         newSignalServiceMessageSender,
         dataMessageCreator,
         messageStore,
+        TestMessagingPause().open().gate,
     ) {
         fun invokeOnShouldRetry(e: Exception): Boolean = onShouldRetry(e)
         suspend fun invokeOnPushSend() = onPushSend()

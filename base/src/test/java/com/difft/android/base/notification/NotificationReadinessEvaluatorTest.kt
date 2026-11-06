@@ -1,5 +1,6 @@
 package com.difft.android.base.notification
 
+import android.app.Notification
 import android.app.NotificationManager.IMPORTANCE_DEFAULT
 import android.app.NotificationManager.IMPORTANCE_HIGH
 import android.app.NotificationManager.IMPORTANCE_LOW
@@ -280,7 +281,115 @@ class NotificationReadinessEvaluatorTest {
         assertEquals(ReadinessIssue.CRITICAL_CATEGORY_LOW_IMPORTANCE, low.item(ReadinessItemId.A1)?.issue)
         val off = evaluate(input(critical = ChannelReading(IMPORTANCE_NONE, hasSound = true)))
         assertEquals(ReadinessIssue.CRITICAL_CATEGORY_OFF, off.item(ReadinessItemId.A1)?.issue)
+        val hidden = evaluate(input(critical = ChannelReading(IMPORTANCE_HIGH, hasSound = true, lockscreenVisibility = Notification.VISIBILITY_SECRET)))
+        assertEquals(ReadinessIssue.CRITICAL_CATEGORY_LOCK_HIDDEN, hidden.item(ReadinessItemId.A1)?.issue)
         assertEquals(ReadinessStatus.UNKNOWN, evaluate(input(critical = null)).status(ReadinessItemId.A1))
         assertEquals(ReadinessStatus.OK, evaluate(input()).status(ReadinessItemId.A1))
+    }
+
+    // Design §7: a HyperOS category the user never set reads HIGH but is unreliable until set once.
+    private val untouched = ChannelReading(IMPORTANCE_HIGH, hasSound = true, userSetImportance = false)
+
+    @Test
+    fun `Xiaomi asks for a check on every never-set category`() {
+        val readiness = evaluate(input(message = untouched, call = untouched, critical = untouched, brand = OemBrand.XIAOMI))
+        assertEquals(ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.N2)?.issue)
+        assertEquals(ReadinessIssue.CALL_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.C1)?.issue)
+        assertEquals(ReadinessIssue.CRITICAL_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.A1)?.issue)
+        assertEquals(CategoryLevel.NEEDS_CHECK, readiness.messageLevel)
+        assertEquals(CategoryLevel.NEEDS_CHECK, readiness.callLevel)
+        // App notifications off still wins on the rows.
+        val appOff = evaluate(input(appEnabled = false, message = untouched, call = untouched, brand = OemBrand.XIAOMI))
+        assertEquals(CategoryLevel.OFF, appOff.messageLevel)
+        assertEquals(CategoryLevel.OFF, appOff.callLevel)
+    }
+
+    @Test
+    fun `a passed call test does not hide a never-set Xiaomi category`() {
+        val tested = NotificationTestResults(call = NotificationTestResult(NotificationTestOutcome.OK, 0L, "fp"))
+        val readiness = evaluate(input(call = untouched, brand = OemBrand.XIAOMI).copy(testResults = tested))
+        assertEquals(CategoryLevel.NEEDS_CHECK, readiness.callLevel)
+    }
+
+    @Test
+    fun `Xiaomi categories the user has set keep the standard readings`() {
+        val set = ChannelReading(IMPORTANCE_HIGH, hasSound = true, userSetImportance = true)
+        val readiness = evaluate(input(message = set, call = set, critical = set, brand = OemBrand.XIAOMI))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.N2))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.C1))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.A1))
+        // Xiaomi's vendor switches are unreadable, so an OK category still shows nothing.
+        assertEquals(CategoryLevel.UNKNOWN, readiness.messageLevel)
+        assertEquals(CategoryLevel.UNKNOWN, readiness.callLevel)
+        val low = ChannelReading(IMPORTANCE_DEFAULT, hasSound = true, userSetImportance = true)
+        val lowReading = evaluate(input(message = low, call = low, critical = low, brand = OemBrand.XIAOMI))
+        assertEquals(CategoryLevel.NO_BANNER, lowReading.messageLevel)
+        assertEquals(CategoryLevel.NO_BANNER, lowReading.callLevel)
+        assertEquals(ReadinessIssue.CRITICAL_CATEGORY_LOW_IMPORTANCE, lowReading.item(ReadinessItemId.A1)?.issue)
+        val hidden = ChannelReading(IMPORTANCE_HIGH, hasSound = true, lockscreenVisibility = secret, userSetImportance = true)
+        assertEquals(CategoryLevel.LOCK_HIDDEN, evaluate(input(call = hidden, brand = OemBrand.XIAOMI)).callLevel)
+    }
+
+    @Test
+    fun `other brands ignore whether the user set a category`() {
+        OemBrand.entries.filter { it != OemBrand.XIAOMI }.forEach { brand ->
+            val readiness = evaluate(input(message = untouched, call = untouched, critical = untouched, brand = brand))
+            assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.N2), "brand=$brand")
+            assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.C1), "brand=$brand")
+            assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.A1), "brand=$brand")
+        }
+    }
+
+    // Design §8: a category whose settings page the user opened from the app counts as set.
+    private val allSeen = setOf(NotificationChannelIds.MESSAGE, NotificationChannelIds.CALL, NotificationChannelIds.CRITICAL_ALERT)
+
+    @Test
+    fun `Xiaomi no longer asks for a check on a seen category`() {
+        val readiness = evaluate(
+            input(message = untouched, call = untouched, critical = untouched, brand = OemBrand.XIAOMI).copy(seenCategories = allSeen),
+        )
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.N2))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.C1))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.A1))
+        assertEquals(CategoryLevel.UNKNOWN, readiness.messageLevel)
+        assertEquals(CategoryLevel.UNKNOWN, readiness.callLevel)
+    }
+
+    @Test
+    fun `seeing one category leaves the others asking for a check`() {
+        val readiness = evaluate(
+            input(message = untouched, call = untouched, critical = untouched, brand = OemBrand.XIAOMI)
+                .copy(seenCategories = setOf(NotificationChannelIds.CALL)),
+        )
+        assertEquals(ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.N2)?.issue)
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.C1))
+        assertEquals(ReadinessIssue.CRITICAL_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.A1)?.issue)
+    }
+
+    @Test
+    fun `a seen Xiaomi category still shows its definite problems`() {
+        val low = ChannelReading(IMPORTANCE_DEFAULT, hasSound = true, userSetImportance = false)
+        val readiness = evaluate(input(message = low, call = low, critical = low, brand = OemBrand.XIAOMI).copy(seenCategories = allSeen))
+        assertEquals(CategoryLevel.NO_BANNER, readiness.messageLevel)
+        assertEquals(CategoryLevel.NO_BANNER, readiness.callLevel)
+        assertEquals(ReadinessIssue.CRITICAL_CATEGORY_LOW_IMPORTANCE, readiness.item(ReadinessItemId.A1)?.issue)
+    }
+
+    @Test
+    fun `seen categories change nothing on other brands`() {
+        OemBrand.entries.filter { it != OemBrand.XIAOMI }.forEach { brand ->
+            val low = ChannelReading(IMPORTANCE_DEFAULT, hasSound = true, userSetImportance = false)
+            val base = input(message = untouched, call = low, critical = untouched, brand = brand)
+            assertEquals(evaluate(base), evaluate(base.copy(seenCategories = allSeen)), "brand=$brand")
+        }
+    }
+
+    @Test
+    fun `a reading without the flag counts as set`() {
+        assertTrue(loud.userSetImportance)
+        val readiness = evaluate(input(brand = OemBrand.XIAOMI))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.N2))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.C1))
+        assertEquals(ReadinessStatus.OK, readiness.status(ReadinessItemId.A1))
     }
 }

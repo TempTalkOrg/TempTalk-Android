@@ -4,8 +4,10 @@ import android.app.Activity
 import android.content.res.Configuration
 import android.view.View
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.difft.android.dualpane.StaleLayoutDecision
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,10 +20,11 @@ import org.robolectric.annotation.Config
  * `activity_index.xml` inflates.
  *
  * The dual-pane gate is ENFORCED by the resource qualifier on
- * `app/src/main/res/layout-w673dp-h480dp/activity_index.xml`; runtime code derives
- * `isDualPaneMode` from the inflated tree (`findViewById(R.id.detail_pane) != null`) and any
- * code needing the EXPECTATION before/without a tree reads the bool from
- * `app/src/main/res/values-w673dp-h480dp/bools.xml`. That mirror is only sound while the two
+ * `app/src/main/res/layout-w673dp-h480dp/activity_index.xml`, whose two-pane tree is marked by
+ * `list_pane`. Both layouts carry `detail_pane` / `fragment_container_detail` (the per-tab detail
+ * stacks restore into either tree across a fold), so IndexActivity reads `isDualPaneMode` from the
+ * bool in `app/src/main/res/values-w673dp-h480dp/bools.xml`, as does any code needing the
+ * EXPECTATION before/without a tree. That mirror is only sound while the two
  * resources are selected by the SAME qualifier set. Rename or delete one without the other
  * and the two answers diverge permanently — dual-pane branches running against a view tree
  * that has no detail pane, or vice versa. Nothing else in the repo pins the two directories
@@ -103,6 +106,16 @@ class PaneGateResourceAgreementTest {
         )
     }
 
+    @Test
+    fun `the stale-layout detector's dual-pane floor is the qualifier's`() {
+        val width = StaleLayoutDecision.DUAL_PANE_MIN_WIDTH_DP
+        val height = StaleLayoutDecision.DUAL_PANE_MIN_HEIGHT_DP
+        val message = "StaleLayoutDecision's (b) bound must match layout-w673dp-h480dp; update both together"
+        assertTrue(message, gateIn(screenWidthDp = width, screenHeightDp = height))
+        assertFalse(message, gateIn(screenWidthDp = width - 1, screenHeightDp = height))
+        assertFalse(message, gateIn(screenWidthDp = width, screenHeightDp = height - 1))
+    }
+
     /**
      * Inflates `activity_index.xml` in the configuration the case declares and asserts the
      * resource gate equals what was actually inflated. Both sides are read from the SAME
@@ -115,12 +128,18 @@ class PaneGateResourceAgreementTest {
         activity.setContentView(R.layout.activity_index)
 
         val gate = activity.resources.getBoolean(R.bool.dual_pane_layout_active)
-        val treeHasDetailPane = activity.findViewById<View>(R.id.detail_pane) != null
+        val treeIsTwoPane = activity.findViewById<View>(R.id.list_pane) != null
         val configuration = activity.resources.configuration
 
+        assertNotNull(
+            "fragment_container_detail must exist in every activity_index.xml variant: the per-tab " +
+                "detail stacks restore into it after a fold/unfold recreation " +
+                "(${configuration.screenWidthDp}dp x ${configuration.screenHeightDp}dp).",
+            activity.findViewById<View>(R.id.fragment_container_detail),
+        )
         assertEquals(
             "R.bool.dual_pane_layout_active ($gate) MUST equal " +
-                "findViewById(detail_pane) != null ($treeHasDetailPane) at " +
+                "findViewById(list_pane) != null ($treeIsTwoPane) at " +
                 "${configuration.screenWidthDp}dp x ${configuration.screenHeightDp}dp. " +
                 "app/src/main/res/values-w673dp-h480dp/bools.xml and " +
                 "app/src/main/res/layout-w673dp-h480dp/activity_index.xml carry the same " +
@@ -128,7 +147,7 @@ class PaneGateResourceAgreementTest {
                 "activity_index.xml variant was added, a two-valued bool can no longer mirror " +
                 "the layout selection and the gate needs generalising, not re-qualifying.",
             gate,
-            treeHasDetailPane,
+            treeIsTwoPane,
         )
     }
 

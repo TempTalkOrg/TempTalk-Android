@@ -58,7 +58,11 @@ class AutoTranslateCoordinatorTest : AutoTranslateCoordinatorTestBase() {
         completeAuto("m2")
         completeAuto("m3")
 
-        awaitOverlay("all three translations") { it.keys == setOf("m1", "m2", "m3") }
+        // Waited for on the recording the assertion reads, not on `overlay.value`: the two are
+        // different observations of the same state, and the count must be taken after the record.
+        awaitCondition("all three translations recorded") {
+            overlayEmissions.drop(emissionsBefore).any { it.keys == setOf("m1", "m2", "m3") }
+        }
 
         // ONE update, not three: the 800 ms batch is what keeps a screenful of arrivals from
         // re-assembling the list per message.

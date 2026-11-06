@@ -56,26 +56,19 @@ class PictureSelectorTransparentActivity : BaseActivity() {
             return
         }
         val injected = selectorConfig.onInjectActivityPreviewListener?.onInjectPreviewFragment()
-        val fragmentTag: String
-        val previewFragment: PictureSelectorPreviewFragment
-        if (injected != null) {
-            previewFragment = injected
-            fragmentTag = previewFragment.getFragmentTag()
-        } else {
-            fragmentTag = PictureSelectorPreviewFragment.TAG
-            previewFragment = PictureSelectorPreviewFragment.newInstance()
-        }
+        val fragmentTag = injected?.getFragmentTag() ?: PictureSelectorPreviewFragment.TAG
+        // Recreated (fold, theme change): the FragmentManager has already restored the preview, which
+        // rebuilds itself from its saved state (position, shared preview list). Removing it and
+        // injecting a new one raced: the inject saw the tag still registered while the removal was
+        // pending, skipped the add, and the removal left the container empty (#1437).
+        if (supportFragmentManager.findFragmentByTag(fragmentTag) != null) return
+
+        val previewFragment = injected ?: PictureSelectorPreviewFragment.newInstance()
         val position = intent.getIntExtra(PictureConfig.EXTRA_PREVIEW_CURRENT_POSITION, 0)
         val previewData = ArrayList(selectorConfig.selectedPreviewResult)
         val isDisplayDelete = intent
             .getBooleanExtra(PictureConfig.EXTRA_EXTERNAL_PREVIEW_DISPLAY_DELETE, false)
         previewFragment.setExternalPreviewData(position, previewData.size, previewData, isDisplayDelete)
-
-        val supportFragmentManager = supportFragmentManager
-        val fragment = supportFragmentManager.findFragmentByTag(fragmentTag)
-        if (fragment != null) {
-            supportFragmentManager.beginTransaction().remove(fragment).commitAllowingStateLoss()
-        }
         FragmentInjectManager.injectFragment(this, fragmentTag, previewFragment)
     }
 

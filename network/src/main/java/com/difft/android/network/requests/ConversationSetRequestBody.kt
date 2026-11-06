@@ -7,6 +7,7 @@ package com.difft.android.network.requests
 "blockStatus":0, //optional
 "confidentialMode":0 // optional，0:普通消息, 1: 机密消息
 "saveToPhotos":null // optional, null:follow global setting, 0:disabled, 1:enabled
+"allowMentionMe"/"allowMentionAll"/"allowGroupCall": optional booleans, null: unchanged
  */
 data class ConversationSetRequestBody(
     val conversation: String,
@@ -15,7 +16,11 @@ data class ConversationSetRequestBody(
     val muteStatus: Int? = null,
     val blockStatus: Int? = null,
     val confidentialMode: Int? = null,
-    val saveToPhotos: Int? = null
+    val saveToPhotos: Int? = null,
+    /** Mute sub-options: what still notifies while muted. null = leave unchanged. */
+    val allowMentionMe: Boolean? = null,
+    val allowMentionAll: Boolean? = null,
+    val allowGroupCall: Boolean? = null
 ) {
     val isMuted: Boolean
         get() = muteStatus == MuteStatus.MUTED.value

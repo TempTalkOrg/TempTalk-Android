@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Xiaomi is the only skin the app opens directly; its two pages and the openable-page rule. */
+/** Xiaomi's two pages and the openable-page rule; vivo is covered by [VivoSettingsChainTest]. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class XiaomiSettingsChainTest {
@@ -61,9 +61,9 @@ class XiaomiSettingsChainTest {
     }
 
     @Test
-    fun `the auto-start row is Xiaomi only and so is the power policy row`() {
+    fun `neither row appears on an unrelated brand`() {
         // The test device is not a Xiaomi, so neither row appears.
-        assertFalse(AutoStartPermissionHelper.canOpenAutoStartSettings())
+        assertFalse(AutoStartPermissionHelper.canOpenAutoStartSettings(context))
         assertFalse(BackgroundActivityPermissionHelper.canOpenBackgroundActivitySettings(context))
     }
 }

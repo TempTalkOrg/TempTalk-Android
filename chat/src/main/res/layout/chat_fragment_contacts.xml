@@ -1,98 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- CoordinatorLayout + AppBarLayout so the title row can collapse with the pages' nested
+     scroll on a short window (HomeHeaderCollapser sets the scroll flag there); the
+     category row stays pinned. Elsewhere it behaves like a plain column. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/contacts_coordinator"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Dual-pane only (self-hides on phones): collapses / expands the navigation rail. -->
-    <com.difft.android.base.widget.DualPaneRailToggleView
-        android:id="@+id/rail_toggle"
-        android:layout_width="44dp"
-        android:layout_height="52dp"
-        android:layout_marginStart="6dp"
-        android:contentDescription="@string/dual_pane_rail_collapse_hint"
-        android:padding="10dp"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/chat_appcompattextview"
-        android:layout_width="wrap_content"
-        android:layout_height="52dp"
-        android:layout_marginStart="4dp"
-        android:gravity="center_vertical"
-        android:text="@string/chat_contacts"
-        android:textColor="@color/t.primary"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        app:layout_constraintStart_toEndOf="@id/rail_toggle"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_goneMarginStart="16dp" />
-
-    <androidx.appcompat.widget.AppCompatImageButton
-        android:id="@+id/ib_add_contact"
-        android:layout_width="44dp"
-        android:layout_height="52dp"
-        android:layout_marginEnd="6dp"
-        android:background="@null"
-        android:padding="10dp"
-        android:src="@drawable/chat_tabler_add_contact"
-        android:contentDescription="@string/contact_add_contacts"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:tint="@color/t.primary" />
-
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/fragment_container_view_search_input"
-        android:name="com.difft.android.chat.common.search.SearchInputFragment"
-        android:layout_width="0dp"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/home_app_bar"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/chat_appcompattextview"
-        tools:layout="@layout/chat_fragment_search_input" />
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
+        app:liftOnScroll="false">
 
-    <include
-        android:id="@+id/include_contactors"
-        layout="@layout/chat_fragment_contact_category_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="10dp"
-        android:padding="8dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/fragment_container_view_search_input" />
+        <!-- Title row: the only collapsible child (scroll flag set at runtime). -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/home_header"
+            android:layout_width="match_parent"
+            android:layout_height="52dp">
 
-    <include
-        android:id="@+id/include_groups"
-        layout="@layout/chat_fragment_contact_category_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="26dp"
-        android:padding="8dp"
-        app:layout_constraintBottom_toBottomOf="@+id/include_contactors"
-        app:layout_constraintStart_toEndOf="@+id/include_contactors"
-        app:layout_constraintTop_toTopOf="@+id/include_contactors" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/chat_appcompattextview"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginStart="16dp"
+                android:gravity="center_vertical"
+                android:text="@string/chat_contacts"
+                android:textColor="@color/t.primary"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
-    <View
-        android:id="@+id/view_separator"
-        android:layout_width="0dp"
-        android:layout_height="1dp"
-        android:background="@color/line"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/include_contactors" />
+            <androidx.appcompat.widget.AppCompatImageButton
+                android:id="@+id/ib_add_contact"
+                android:layout_width="44dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="6dp"
+                android:background="@null"
+                android:contentDescription="@string/contact_add_contacts"
+                android:padding="10dp"
+                android:src="@drawable/chat_tabler_add_contact"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Category row (all / groups) and its separator: pinned when the title collapses. -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <include
+                android:id="@+id/include_contactors"
+                layout="@layout/chat_fragment_contact_category_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginTop="10dp"
+                android:padding="8dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <include
+                android:id="@+id/include_groups"
+                layout="@layout/chat_fragment_contact_category_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="26dp"
+                android:padding="8dp"
+                app:layout_constraintBottom_toBottomOf="@+id/include_contactors"
+                app:layout_constraintStart_toEndOf="@+id/include_contactors"
+                app:layout_constraintTop_toTopOf="@+id/include_contactors" />
+
+            <View
+                android:id="@+id/view_separator"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:background="@color/line"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/include_contactors" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </com.google.android.material.appbar.AppBarLayout>
 
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/viewpager"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:nestedScrollingEnabled="true"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/view_separator" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

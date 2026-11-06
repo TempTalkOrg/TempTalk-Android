@@ -39,14 +39,16 @@ internal object NotificationTestRules {
                     appOff -> Precheck(PrecheckBlock.MESSAGE_OFF, NotificationFix.APP_NOTIFICATIONS)
                     kind == NotificationTestKind.LOCKSCREEN && message?.issue == ReadinessIssue.MESSAGE_CATEGORY_LOCK_HIDDEN ->
                         Precheck(PrecheckBlock.LOCK_HIDDEN, NotificationFix.MESSAGE_CATEGORY)
-                    message?.status == ReadinessStatus.PROBLEM -> Precheck(PrecheckBlock.MESSAGE_OFF, NotificationFix.MESSAGE_CATEGORY)
+                    // A never-set Xiaomi category is unreadable, not off: the test is how the user finds out.
+                    message?.status == ReadinessStatus.PROBLEM && message.issue != ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET ->
+                        Precheck(PrecheckBlock.MESSAGE_OFF, NotificationFix.MESSAGE_CATEGORY)
                     dndOn -> Precheck(PrecheckBlock.DND_ON, null)
                     else -> null
                 }
             }
             NotificationTestKind.CALL -> when {
                 appOff -> Precheck(PrecheckBlock.CALL_OFF, NotificationFix.APP_NOTIFICATIONS)
-                readiness.item(ReadinessItemId.C1)?.status == ReadinessStatus.PROBLEM ->
+                readiness.item(ReadinessItemId.C1)?.let { it.status == ReadinessStatus.PROBLEM && it.issue != ReadinessIssue.CALL_CATEGORY_NEVER_SET } == true ->
                     Precheck(PrecheckBlock.CALL_OFF, NotificationFix.CALL_CATEGORY)
                 readiness.item(ReadinessItemId.C2)?.status == ReadinessStatus.PROBLEM ->
                     Precheck(PrecheckBlock.FULL_SCREEN_OFF, NotificationFix.FULL_SCREEN_INTENT)

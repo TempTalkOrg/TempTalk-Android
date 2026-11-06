@@ -1,14 +1,18 @@
 package com.difft.android.chat.contacts.contactsdetail
 
+import com.difft.android.base.utils.pane.PageWait
+import com.difft.android.base.utils.pane.SettingsIdiomPage
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -17,6 +21,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.pane.dismissWithView
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager
@@ -24,12 +29,20 @@ import com.difft.android.chat.call.LChatToCallController
 import com.difft.android.call.manager.CallDataManager
 import com.difft.android.call.manager.ContactorCacheManager
 import com.difft.android.call.state.OnGoingCallStateManager
-import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
+import com.difft.android.base.utils.DualPaneUtils.showsDetailBackButton
+import com.difft.android.base.utils.pane.isInDetailStack
+import com.difft.android.base.utils.pane.DetailDestination
+import com.difft.android.base.utils.pane.containerPadsBottom
+import com.difft.android.base.utils.pane.detailPageInsets
+import com.difft.android.base.utils.pane.ownsWindow
+import com.difft.android.base.utils.pane.ConversationTarget
+import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarCacheCipher
 import com.difft.android.chat.common.AvatarUtil
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.difft.android.chat.common.AvatarPreviewFlight
 import com.difft.android.chat.common.AvatarPreviewLauncher
 import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditContract
 import com.difft.android.chat.contacts.contactsdetail.mvi.ContactRemarkEditViewModel
@@ -39,12 +52,11 @@ import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
 import com.difft.android.chat.contacts.data.isOfficialAccount
 import com.difft.android.chat.recent.ConversationNavigationCallback
-import com.difft.android.chat.ui.ChatActivity
 import com.difft.android.chat.ui.ChatInputFocusable
 import com.difft.android.chat.ui.ChatPopupActivity
-import com.difft.android.chat.ui.GroupInCommonActivity
+import com.difft.android.chat.ui.GroupInCommonDestination
 import com.difft.android.chat.ui.SelectChatsUtils
-import com.difft.android.chat.ui.SingleChatSettingActivity
+import com.difft.android.chat.ui.SingleChatSettingDestination
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
@@ -76,7 +88,11 @@ import javax.inject.Inject
 import dagger.Lazy
 
 @AndroidEntryPoint
-class ContactDetailFragment : Fragment() {
+class ContactDetailFragment : Fragment(), SettingsIdiomPage {
+    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    private val pageWait = PageWait(this)
+    private val previewFlight = AvatarPreviewFlight(this)
+
 
     @Inject
     lateinit var onGoingCallStateManager: OnGoingCallStateManager
@@ -101,6 +117,29 @@ class ContactDetailFragment : Fragment() {
     }
 
     companion object {
+        /**
+         * A sheet shown on the home screen with no conversation on screen behind it (the list, in
+         * either layout) has no chat to pop a chat over, so the conversation opens as a full page,
+         * like a list tap would. Over a conversation (home detail stack or a chat Activity) the
+         * sheet keeps the popup chat.
+         */
+        internal fun isSheetOverList(isPopupMode: Boolean, inHome: Boolean, conversationOnScreen: String?): Boolean =
+            isPopupMode && inHome && conversationOnScreen == null
+
+        /**
+         * Closes the card [card]: the bottom sheet it sits in, else the page through the detail
+         * navigation (pops it in the home detail stack, finishes ContactDetailActivity). A
+         * [contactGone] card is closed even as a two-pane root, where a plain pop has nowhere to go.
+         */
+        internal fun closeCard(card: Fragment, contactGone: Boolean = false) {
+            val sheet = card.parentFragment as? com.google.android.material.bottomsheet.BottomSheetDialogFragment
+            when {
+                sheet != null -> sheet.dismiss()
+                contactGone -> card.detailNavigation().closeConversation(card)
+                else -> card.detailNavigation().pop(card)
+            }
+        }
+
         // Public so IndexActivity can read it when reconstructing the dual-pane detail after recreation.
         const val ARG_CONTACT_ID = "ARG_CONTACT_ID"
         private const val ARG_CUSTOM_ID = "ARG_CUSTOM_ID"
@@ -195,11 +234,16 @@ class ContactDetailFragment : Fragment() {
         if (uiState.contactor == null) {
             uiState = uiState.copy(isSelf = contactId.isNotEmpty() && contactId == globalServices.myId)
         }
+        // The home screen's panes leave the navigation-bar strip to the page; a shell and a sheet
+        // pad it already.
+        val padsBottom = containerPadsBottom()
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                DifftTheme(applyWindowBackground = !isPopupMode) {
+                // A hosted card shares the home screen's window; only a shell card owns it.
+                DifftTheme(applyWindowBackground = !isPopupMode && ownsWindow()) {
                     val remarkEdit by remarkEditViewModel.state.collectAsStateWithLifecycle()
+                    Box(Modifier.detailPageInsets(padsBottom)) {
                     ContactDetailScreen(
                         uiState = uiState.copy(
                             commonGroupsCount = commonGroupsCount,
@@ -209,7 +253,7 @@ class ContactDetailFragment : Fragment() {
                             showQuickFill = remarkEdit.showQuickFill,
                         ),
                         isPopupMode = isPopupMode,
-                        showBackButton = !isInDualPaneMode(),
+                        showBackButton = showsDetailBackButton(),
                         onCloseClick = ::handleCloseClick,
                         onMoreClick = ::handleMoreClick,
                         onAvatarClick = ::handleAvatarClick,
@@ -228,6 +272,7 @@ class ContactDetailFragment : Fragment() {
                         onAvatarClickInEdit = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.AvatarClick) },
                         onQuickFillRemark = { remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.QuickFillName) }
                     )
+                    }
                 }
             }
         }
@@ -235,8 +280,11 @@ class ContactDetailFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        if (TextUtils.isEmpty(contactId)) return
+        if (TextUtils.isEmpty(contactId)) {
+            L.w { "[ContactDetail] card without a contact id" }
+            if (isInDetailStack()) detailNavigation().pop(this)
+            return
+        }
 
         initData()
         observeContactsUpdate()
@@ -425,16 +473,16 @@ class ContactDetailFragment : Fragment() {
         remarkEditViewModel.dispatch(ContactRemarkEditContract.Intent.RequestClose)
     }
 
-    private fun performClose() {
-        if (isPopupMode) {
-            (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
-        } else if (!isInDualPaneMode()) {
-            activity?.finish()
-        }
-    }
+    private fun performClose() = closeCard(this)
 
     private fun handleMoreClick() {
-        SingleChatSettingActivity.startActivity(requireActivity(), contactId)
+        pushFromCard(SingleChatSettingDestination(contactId))
+    }
+
+    private fun pushFromCard(destination: DetailDestination) {
+        val sheet = parentFragment as? com.google.android.material.bottomsheet.BottomSheetDialogFragment
+        val overConversation = (sheet as? ContactDetailBottomSheetDialogFragment)?.overConversation
+        ContactCardNavigation.push(this, destination, sheet, overConversation)
     }
 
     private fun handleEditClick() {
@@ -486,9 +534,11 @@ class ContactDetailFragment : Fragment() {
 
     private fun navigateToChat() {
         val navigationCallback = activity as? ConversationNavigationCallback
-        // A sheet over the single-pane conversation list (contacts tab) has no chat underneath to
-        // pop a chat over, so the conversation opens as a full page, like a list tap would.
-        val sheetOverList = isPopupMode && navigationCallback != null && !navigationCallback.isDualPaneMode
+        val sheetOverList = isSheetOverList(
+            isPopupMode = isPopupMode,
+            inHome = navigationCallback != null,
+            conversationOnScreen = navigationCallback?.currentConversationOnScreen(),
+        )
         if (isPopupMode) {
             (parentFragment as? androidx.fragment.app.DialogFragment)?.dismiss()
         }
@@ -504,19 +554,17 @@ class ContactDetailFragment : Fragment() {
                     )
                 }
             }
-            navigationCallback?.isDualPaneMode == true -> navigationCallback.onOneOnOneConversationSelected(contactId)
-            else -> ChatActivity.startActivity(
-                requireContext(),
-                contactId,
-                sourceType = sourceType,
-                source = source
+            // Home detail stack: that tab's stack; ContactDetailActivity or a sheet over the home
+            // list: the conversation router.
+            else -> detailNavigation().openConversation(
+                ConversationTarget(ConversationTarget.Kind.ONE_ON_ONE, contactId, sourceType = sourceType, source = source)
             )
         }
     }
 
     private fun handleCommonGroupsClick() {
         if (commonGroupsCount > 0) {
-            GroupInCommonActivity.startActivity(requireActivity(), contactId)
+            pushFromCard(GroupInCommonDestination(contactId))
         }
     }
 
@@ -605,7 +653,7 @@ class ContactDetailFragment : Fragment() {
     }
 
     private fun requestAddFriend() {
-        ComposeDialogManager.showWait(requireActivity(), "")
+        pageWait.show()
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = ContactorUtil.fetchAddFriendRequest(
@@ -622,10 +670,10 @@ class ContactDetailFragment : Fragment() {
                         getString(R.string.contact_friend_request),
                         For.Account(contactId)
                     )
-                    ComposeDialogManager.dismissWait()
+                    pageWait.dismiss()
                     navigateToChat()
                 } else {
-                    ComposeDialogManager.dismissWait()
+                    pageWait.dismiss()
                     when {
                         // 19009 = peer account logged out / deregistered. Weak-pending (still in the
                         // address book, removable) → alert offering a delete entry; otherwise a plain
@@ -640,7 +688,7 @@ class ContactDetailFragment : Fragment() {
                     }
                 }
             } catch (e: Exception) {
-                ComposeDialogManager.dismissWait()
+                pageWait.dismiss()
                 e.message?.let { ToastUtil.show(it) }
             }
         }
@@ -652,7 +700,7 @@ class ContactDetailFragment : Fragment() {
      * Not weak-pending → the caller shows a toast instead (no delete entry, per the product spec).
      */
     private fun showAccountUnavailableDialog() {
-        ComposeDialogManager.showMessageDialog(
+        dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireContext(),
             title = getString(R.string.weak_contact_account_unavailable_title),
             message = getString(R.string.weak_contact_account_unavailable_message),
@@ -660,7 +708,7 @@ class ContactDetailFragment : Fragment() {
             cancelText = getString(R.string.weak_contact_account_unavailable_ok),
             confirmButtonColor = ColorTokens.Error, // align with detail page "Remove Now" (DifftTheme.colors.error)
             onConfirm = { requestRemoveNow() }
-        )
+        ))
     }
 
     /**
@@ -672,9 +720,9 @@ class ContactDetailFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             requireContext().getEntryPoint().getWeakContactReconciler().removeNow(contactId)
                 .onSuccess {
-                    // Close the card via the popup-aware path (dismiss sheet in popup mode,
-                    // finish Activity otherwise) — a bare finish() would kill the host Activity.
-                    if (isAdded) handleCloseClick()
+                    // The contact is gone: close the card even at a two-pane root (sheet dismissed,
+                    // home stack cleared, ContactDetailActivity finished).
+                    if (isAdded) closeCard(this@ContactDetailFragment, contactGone = true)
                 }
                 .onFailure {
                     if (isAdded) ToastUtil.show(getString(R.string.weak_contact_remove_now_failed))
@@ -698,8 +746,8 @@ class ContactDetailFragment : Fragment() {
 
     private fun previewAvatar(url: String?, key: String?) {
         val host = activity ?: return
-        viewLifecycleOwner.lifecycleScope.launch {
-            AvatarPreviewLauncher.previewContact(host, url, key)
+        previewFlight.launch { previewWait ->
+            AvatarPreviewLauncher.previewContact(host, url, key, wait = previewWait)
         }
     }
 

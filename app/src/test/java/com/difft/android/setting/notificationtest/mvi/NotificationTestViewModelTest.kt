@@ -1,11 +1,17 @@
 package com.difft.android.setting.notificationtest.mvi
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.difft.android.base.notification.NotificationTestCallUpdate
+import com.difft.android.base.notification.NotificationTestClock
+import com.difft.android.base.notification.NotificationTestRuns
+import com.difft.android.base.notification.NotificationTestRun
 import com.difft.android.base.notification.NotificationFix
 import com.difft.android.base.notification.NotificationReadiness
 import com.difft.android.base.notification.NotificationTestKind
 import com.difft.android.base.notification.NotificationTestOutcome
 import com.difft.android.base.notification.NotificationTestRepository
+import com.difft.android.setting.notificationtest.NotificationTestLifetime
 import com.difft.android.setting.notificationtest.NotificationTestDevice
 import com.difft.android.setting.notificationtest.NotificationTestPoster
 import com.difft.android.setting.notificationtest.mvi.NotificationTestContract.Dialog
@@ -47,37 +53,40 @@ class NotificationTestViewModelTest {
     @get:Rule
     val dispatcherRule = TestDispatcherRule(StandardTestDispatcher())
 
-    private val shown = MutableStateFlow(0L)
+    private val shown = MutableStateFlow<String?>(null)
     private val events = mutableListOf<String>()
     private var wakeLockReleases = 0
     private lateinit var repository: NotificationTestRepository
     private lateinit var poster: NotificationTestPoster
     private lateinit var device: NotificationTestDevice
+    private val leases = NotificationTestRuns()
     private lateinit var vm: NotificationTestViewModel
 
     @Before
     fun setup() {
         repository = mockk {
-            every { callShown } returns shown
+            every { callShownRun } returns shown
             coEvery { readReadiness() } returns NotificationReadiness(items = emptyList())
             coEvery { fingerprint(any()) } returns "fp"
-            every { notePostedCall(any()) } just Runs
+            coEvery { prepareCall(any(), any(), any()) } just Runs
+            coEvery { cancelCall(any()) } just Runs
             coEvery { record(any(), any(), any(), any()) } just Runs
             // Mirrors the repository contract: no FAIL once the call screen has opened since the post.
-            coEvery { recordCallTimeout(any(), any(), any()) } answers { shown.value < secondArg<Long>() }
+            coEvery { recordCallTimeout(any(), any()) } returns NotificationTestCallUpdate.RECORDED
         }
         poster = mockk {
-            every { post(any()) } answers {
+            coEvery { post(any()) } answers {
                 events += "posted"
                 true
             }
-            every { cancel(any()) } answers { events += "cancel" }
+            coEvery { cancel(any(), any()) } answers { events += "cancel" }
         }
         device = mockk {
             every { isDndOn() } returns false
             every { isKeyguardLocked() } returns true
             every { isInteractive() } returns false
             every { isDeviceSecure() } returns true
+            every { opensVendorPopupDirectly() } returns false
             every { screenOffEvents() } returns flowOf(Unit)
             every { holdWakeLock(any()) } returns { wakeLockReleases++ }
         }
@@ -88,8 +97,10 @@ class NotificationTestViewModelTest {
         if (::vm.isInitialized) vm.viewModelScope.cancel()
     }
 
-    private fun TestScope.buildViewModel(): NotificationTestViewModel {
-        vm = NotificationTestViewModel(repository, poster, device, StandardTestDispatcher(testScheduler))
+    private fun TestScope.buildViewModel(savedState: SavedStateHandle = SavedStateHandle()): NotificationTestViewModel {
+        val clock = mockk<NotificationTestClock> { every { nowMs() } answers { 100_000L + testScheduler.currentTime } }
+        val lifetime = NotificationTestLifetime(repository, poster, leases, backgroundScope)
+        vm = NotificationTestViewModel(repository, poster, device, leases, lifetime, clock, savedState, StandardTestDispatcher(testScheduler))
         runCurrent()
         return vm
     }
@@ -114,14 +125,14 @@ class NotificationTestViewModelTest {
         assertEquals(Phase.COUNTDOWN, vm.state.value.phase)
 
         advance(4_999)
-        verify(exactly = 0) { poster.post(any()) }
+        coVerify(exactly = 0) { poster.post(any()) }
         advance(1)
-        verify(exactly = 1) { poster.post(NotificationTestKind.BANNER) }
+        coVerify(exactly = 1) { poster.post(match { it.kind == NotificationTestKind.BANNER }) }
         assertEquals(Phase.POSTED, vm.state.value.phase)
         assertNull(vm.state.value.dialog)
 
         advance(3_000)
-        assertEquals(Dialog.Question(NotificationTestKind.BANNER), vm.state.value.dialog)
+        assertEquals(Dialog.Question(NotificationTestKind.BANNER, vm.state.value.runId!!), vm.state.value.dialog)
     }
 
     @Test
@@ -131,7 +142,7 @@ class NotificationTestViewModelTest {
         start(NotificationTestKind.BANNER)
         advance(8_000)
 
-        vm.dispatch(Intent.Answer(seen = false))
+        vm.dispatch(Intent.Answer(seen = false, runId = vm.state.value.runId!!))
         runCurrent()
 
         coVerify(exactly = 1) { repository.record(NotificationTestKind.BANNER, NotificationTestOutcome.FAIL, "fp-posted", any()) }
@@ -149,7 +160,7 @@ class NotificationTestViewModelTest {
 
         advance(2_000)
 
-        verify(exactly = 0) { poster.post(any()) }
+        coVerify(exactly = 0) { poster.post(any()) }
         assertEquals(Dialog.Info(Notice.VOID_UNLOCKED), vm.state.value.dialog)
         assertNull(vm.state.value.running)
     }
@@ -163,7 +174,7 @@ class NotificationTestViewModelTest {
 
         advance(5_000)
 
-        verify(exactly = 0) { poster.post(any()) }
+        coVerify(exactly = 0) { poster.post(any()) }
         assertEquals(Dialog.Info(Notice.VOID_NOT_LOCKED), vm.state.value.dialog)
         assertNull(vm.state.value.running)
     }
@@ -176,10 +187,10 @@ class NotificationTestViewModelTest {
         start(NotificationTestKind.CALL)
 
         advance(4_999)
-        verify(exactly = 0) { poster.post(any()) }
+        coVerify(exactly = 0) { poster.post(any()) }
         advance(1)
 
-        verify(exactly = 1) { poster.post(NotificationTestKind.CALL) }
+        coVerify(exactly = 1) { poster.post(match { it.kind == NotificationTestKind.CALL }) }
         assertEquals(Phase.WAIT_CALL, vm.state.value.phase)
     }
 
@@ -190,10 +201,10 @@ class NotificationTestViewModelTest {
         start(NotificationTestKind.LOCKSCREEN)
 
         advance(2_999)
-        verify(exactly = 0) { poster.post(any()) }
+        coVerify(exactly = 0) { poster.post(any()) }
         advance(1)
 
-        verify(exactly = 1) { poster.post(NotificationTestKind.LOCKSCREEN) }
+        coVerify(exactly = 1) { poster.post(match { it.kind == NotificationTestKind.LOCKSCREEN }) }
     }
 
     @Test
@@ -202,18 +213,46 @@ class NotificationTestViewModelTest {
         start(NotificationTestKind.CALL)
         advance(2_000)
         assertEquals(Phase.WAIT_CALL, vm.state.value.phase)
-        val postedAt = vm.state.value.postedAt
-        verify { repository.notePostedCall("fp") }
+        val runId = vm.state.value.runId!!
+        coVerify { repository.prepareCall(runId, "fp", any()) }
 
         advance(15_000)
 
-        coVerify(exactly = 1) { repository.recordCallTimeout("fp", postedAt, any()) }
-        assertEquals(NotificationTestKind.CALL, assertIs<Dialog.Failed>(vm.state.value.dialog).kind)
+        coVerify(exactly = 1) { repository.recordCallTimeout(runId, any()) }
+        assertEquals(Dialog.Failed(NotificationTestKind.CALL, null), vm.state.value.dialog)
         assertNull(vm.state.value.running)
-        verify { poster.cancel(NotificationTestKind.CALL) }
+        coVerify { poster.cancel(runId, NotificationTestKind.CALL) }
         // The screen-off phase held a wake lock and let it go when the run ended.
         verify(exactly = 1) { device.holdWakeLock(any()) }
         assertEquals(1, wakeLockReleases)
+    }
+
+    @Test
+    fun `a call timeout offers the vendor pop-up page when the device opens it directly`() = runTest {
+        every { device.opensVendorPopupDirectly() } returns true
+        buildViewModel()
+        start(NotificationTestKind.CALL)
+        advance(2_000)
+
+        advance(15_000)
+
+        assertEquals(Dialog.Failed(NotificationTestKind.CALL, NotificationFix.OEM_POPUP), vm.state.value.dialog)
+    }
+
+    @Test
+    fun `a call screen opening during the vendor page probe records no failure`() = runTest {
+        every { device.opensVendorPopupDirectly() } answers {
+            shown.value = vm.state.value.runId
+            true
+        }
+        buildViewModel()
+        start(NotificationTestKind.CALL)
+
+        advance(2_000 + 15_000)
+
+        coVerify(exactly = 0) { repository.recordCallTimeout(any(), any()) }
+        assertNull(vm.state.value.dialog)
+        assertNull(vm.state.value.running)
     }
 
     @Test
@@ -222,26 +261,22 @@ class NotificationTestViewModelTest {
         start(NotificationTestKind.CALL)
         advance(2_000)
 
-        shown.value = System.currentTimeMillis()
+        shown.value = vm.state.value.runId
         runCurrent()
         assertNull(vm.state.value.running)
         advance(15_000)
 
-        coVerify(exactly = 0) { repository.recordCallTimeout(any(), any(), any()) }
+        coVerify(exactly = 0) { repository.recordCallTimeout(any(), any()) }
         assertNull(vm.state.value.dialog)
     }
 
     @Test
-    fun `a call screen opening right at the timeout records no failure`() = runTest {
-        // The timeout path cancels the notification first; the screen opens in that window.
-        every { poster.cancel(NotificationTestKind.CALL) } answers { shown.value = System.currentTimeMillis() }
+    fun `an atomic timeout rejected by an already shown ticket records no failure`() = runTest {
+        coEvery { repository.recordCallTimeout(any(), any()) } returns NotificationTestCallUpdate.ALREADY_SHOWN
         buildViewModel()
         start(NotificationTestKind.CALL)
-
         advance(2_000 + 15_000)
-
-        coVerify(exactly = 0) { repository.recordCallTimeout(any(), any(), any()) }
-        coVerify(exactly = 0) { repository.record(any(), any(), any(), any()) }
+        coVerify(exactly = 1) { repository.recordCallTimeout(any(), any()) }
         assertNull(vm.state.value.dialog)
         assertNull(vm.state.value.running)
     }
@@ -258,19 +293,19 @@ class NotificationTestViewModelTest {
         advance(5_000)
         assertEquals(Dialog.Info(Notice.POST_FAILED), vm.state.value.dialog)
         assertNull(vm.state.value.running)
-        verify(exactly = 0) { poster.post(any()) }
-        verify { poster.cancel(NotificationTestKind.BANNER) }
+        coVerify(exactly = 0) { poster.post(any()) }
+        coVerify { poster.cancel(any(), NotificationTestKind.BANNER) }
 
         vm.dispatch(Intent.DismissDialog)
         start(NotificationTestKind.BANNER)
         advance(8_000)
-        verify(exactly = 1) { poster.post(NotificationTestKind.BANNER) }
-        assertEquals(Dialog.Question(NotificationTestKind.BANNER), vm.state.value.dialog)
+        coVerify(exactly = 1) { poster.post(match { it.kind == NotificationTestKind.BANNER }) }
+        assertEquals(Dialog.Question(NotificationTestKind.BANNER, vm.state.value.runId!!), vm.state.value.dialog)
     }
 
     @Test
     fun `a cancel while the post is in flight takes the notification back after it lands`() = runTest {
-        every { poster.post(NotificationTestKind.BANNER) } answers {
+        coEvery { poster.post(match { it.kind == NotificationTestKind.BANNER }) } answers {
             vm.dispatch(Intent.Cancel)
             events += "posted"
             true
@@ -280,9 +315,140 @@ class NotificationTestViewModelTest {
 
         advance(5_000)
 
-        assertEquals(listOf("cancel", "posted", "cancel"), events)
+        assertEquals(listOf("posted", "cancel"), events)
         advance(3_000)
         assertNull(vm.state.value.running)
         assertNull(vm.state.value.dialog)
     }
+    @Test
+    fun `two actual VMs cannot claim concurrently and old cleanup cannot free the successor`() = runTest {
+        buildViewModel()
+        val first = vm
+        start(NotificationTestKind.BANNER)
+        val firstRun = vm.state.value.runId!!
+        buildViewModel()
+        val second = vm
+        start(NotificationTestKind.CALL)
+        assertEquals(Dialog.Info(Notice.BUSY), second.state.value.dialog)
+        assertNull(second.state.value.running)
+        first.dispatch(Intent.Cancel)
+        runCurrent()
+        start(NotificationTestKind.CALL)
+        val secondRun = second.state.value.runId!!
+        first.dispatch(Intent.Cancel)
+        first.dispatch(Intent.Answer(true, firstRun))
+        runCurrent()
+        assertEquals(secondRun, second.state.value.runId)
+        assertEquals(NotificationTestKind.CALL, second.state.value.running)
+        first.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `Finishing holds the lease through a suspended failed result write and then allows retry`() = runTest {
+        val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val finish = kotlinx.coroutines.CompletableDeferred<Unit>()
+        coEvery { repository.record(any(), any(), any(), any()) } coAnswers {
+            entered.complete(Unit)
+            finish.await()
+            throw java.io.IOException("disk")
+        }
+        buildViewModel()
+        start(NotificationTestKind.BANNER)
+        advance(8_000)
+        val runId = vm.state.value.runId!!
+        vm.dispatch(Intent.Answer(true, runId))
+        runCurrent()
+        assertEquals(Phase.FINISHING, vm.state.value.phase)
+        vm.dispatch(Intent.Start(NotificationTestKind.CALL))
+        vm.dispatch(Intent.ConfirmStart)
+        assertEquals(runId, vm.state.value.runId)
+        coVerify(exactly = 0) { poster.cancel(any(), any()) }
+        finish.complete(Unit)
+        runCurrent()
+        assertEquals(Dialog.Info(Notice.PERSISTENCE_FAILED), vm.state.value.dialog)
+        assertNull(vm.state.value.running)
+        assertEquals(com.difft.android.base.notification.NotificationTestResults.NONE, vm.state.value.results)
+        start(NotificationTestKind.CALL)
+        assertEquals(NotificationTestKind.CALL, vm.state.value.running)
+    }
+
+    @Test
+    fun `an old answer cannot write a newer question`() = runTest {
+        buildViewModel()
+        start(NotificationTestKind.BANNER)
+        advance(8_000)
+        val first = vm.state.value.runId!!
+        vm.dispatch(Intent.Cancel)
+        runCurrent()
+        start(NotificationTestKind.BANNER)
+        advance(8_000)
+        val next = vm.state.value.runId!!
+        vm.dispatch(Intent.Answer(true, first))
+        runCurrent()
+        coVerify(exactly = 0) { repository.record(any(), any(), any(), any()) }
+        assertEquals(Dialog.Question(NotificationTestKind.BANNER, next), vm.state.value.dialog)
+    }
+
+    @Test
+    fun `CALL ticket failure prevents notify and a failed conditional write is visible`() = runTest {
+        coEvery { repository.prepareCall(any(), any(), any()) } throws java.io.IOException("disk")
+        buildViewModel()
+        start(NotificationTestKind.CALL)
+        advance(2_000)
+        coVerify(exactly = 0) { poster.post(any()) }
+        assertEquals(Dialog.Info(Notice.PERSISTENCE_FAILED), vm.state.value.dialog)
+        assertNull(vm.state.value.running)
+        coEvery { repository.prepareCall(any(), any(), any()) } just Runs
+        coEvery { repository.recordCallTimeout(any(), any()) } returns NotificationTestCallUpdate.PERSISTENCE_FAILED
+        start(NotificationTestKind.CALL)
+        advance(17_000)
+        assertEquals(Dialog.Info(Notice.PERSISTENCE_FAILED), vm.state.value.dialog)
+        assertNull(vm.state.value.running)
+    }
+
+    @Test
+    fun `cleanup keeps a claim busy until its own token notification has been canceled`() = runTest {
+        val cleanup = kotlinx.coroutines.CompletableDeferred<Unit>()
+        coEvery { poster.cancel(any(), any()) } coAnswers { cleanup.await() }
+        buildViewModel()
+        val first = vm
+        start(NotificationTestKind.BANNER)
+        first.dispatch(Intent.Cancel)
+        runCurrent()
+        assertEquals(Phase.FINISHING, first.state.value.phase)
+        buildViewModel()
+        start(NotificationTestKind.CALL)
+        assertEquals(Dialog.Info(Notice.BUSY), vm.state.value.dialog)
+        cleanup.complete(Unit)
+        runCurrent()
+        assertNull(first.state.value.running)
+        start(NotificationTestKind.CALL)
+        assertEquals(NotificationTestKind.CALL, vm.state.value.running)
+        first.viewModelScope.cancel()
+    }
+
+    @Test
+    fun `clearing the actual ViewModel store cleans the run and restoring the owner never restarts timers`() = runTest {
+        val saved = SavedStateHandle()
+        buildViewModel(saved)
+        val first = vm
+        val owner = first.owner
+        val store = androidx.lifecycle.ViewModelStore()
+        val provider = androidx.lifecycle.ViewModelProvider(store, object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T = first as T
+        })
+        provider[NotificationTestViewModel::class.java]
+        start(NotificationTestKind.BANNER)
+        store.clear()
+        runCurrent()
+        assertNull(first.state.value.running)
+        coVerify(exactly = 1) { poster.cancel(any(), NotificationTestKind.BANNER) }
+        buildViewModel(saved)
+        assertEquals(owner, vm.owner)
+        assertNull(vm.state.value.running)
+        advance(8_000)
+        coVerify(exactly = 0) { poster.post(any()) }
+    }
+
 }

@@ -100,13 +100,26 @@ class SessionAuthGuardTest {
     // T1
     @Test
     fun `handshake rejection confirmed as 401 logs out exactly once`() = guardTest { guard ->
-        coEvery { deviceRepository.checkDeviceAuth() } throws AuthorizationFailedException(401, "nope")
+        coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws AuthorizationFailedException(401, "nope")
 
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
+    }
+
+    @Test
+    fun `a rejection of a credential replaced during the confirm does not log the new login out`() = guardTest { guard ->
+        coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } answers {
+            every { userManager.getUserData() } returns UserData(baseAuth = "Basic bmV3")
+            throw AuthorizationFailedException(401, "old login revoked")
+        }
+
+        stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
+        advanceUntilIdle()
+
+        verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
     // T2
@@ -115,7 +128,7 @@ class SessionAuthGuardTest {
         repeat(5) { stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED) }
         runCurrent()
 
-        coVerify(exactly = 1) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
     }
 
     // T3
@@ -126,11 +139,11 @@ class SessionAuthGuardTest {
         advanceTimeBy(4_999)
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         runCurrent()
-        coVerify(exactly = 1) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
 
         advanceTimeBy(2)
         runCurrent()
-        coVerify(exactly = 2) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 2) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
     }
 
     // T4
@@ -144,14 +157,14 @@ class SessionAuthGuardTest {
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         advanceUntilIdle()
 
-        coVerify(exactly = 2) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 2) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
     // T5
     @Test
     fun `a network error is inconclusive and leaves the guard armed`() = guardTest { guard ->
-        coEvery { deviceRepository.checkDeviceAuth() } throws PushNetworkException(IOException("offline"))
+        coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws PushNetworkException(IOException("offline"))
 
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         runCurrent()
@@ -161,14 +174,14 @@ class SessionAuthGuardTest {
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         advanceUntilIdle()
 
-        coVerify(exactly = 2) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 2) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
     // T6
     @Test
     fun `after a confirmed kick every later signal is dropped`() = guardTest { guard ->
-        coEvery { deviceRepository.checkDeviceAuth() } throws AuthorizationFailedException(401, "nope")
+        coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws AuthorizationFailedException(401, "nope")
 
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         advanceUntilIdle()
@@ -179,7 +192,7 @@ class SessionAuthGuardTest {
         advanceTimeBy(60_000)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
@@ -192,11 +205,11 @@ class SessionAuthGuardTest {
         guard.onAuthRejected(AuthFailureSource.DEVICE_API)
         stateFlow.emit(WebSocketConnectionState.CONNECTED)
         runCurrent()
-        coVerify(exactly = 1) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
 
         advanceTimeBy(10_000)
         advanceUntilIdle()
-        coVerify(exactly = 2) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 2) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
@@ -212,7 +225,7 @@ class SessionAuthGuardTest {
         advanceTimeBy(30_000)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 0) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
@@ -226,7 +239,7 @@ class SessionAuthGuardTest {
             cancelAndIgnoreRemainingEvents()
         }
 
-        coVerify(exactly = 0) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 0) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
@@ -250,19 +263,19 @@ class SessionAuthGuardTest {
         stateFlow.emit(WebSocketConnectionState.AUTHENTICATION_FAILED)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 0) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 0) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
     // T12
     @Test
     fun `a sink report confirmed as 403 logs out`() = guardTest { guard ->
-        coEvery { deviceRepository.checkDeviceAuth() } throws AuthorizationFailedException(403, "nope")
+        coEvery { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) } throws AuthorizationFailedException(403, "nope")
 
         guard.onAuthRejected(AuthFailureSource.MESSAGE_SEND)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 1) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
         verify(exactly = 1) { logoutManager.doLogoutWithoutRemoveData() }
     }
 
@@ -276,6 +289,6 @@ class SessionAuthGuardTest {
         advanceTimeBy(30_000)
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { deviceRepository.checkDeviceAuth() }
+        coVerify(exactly = 0) { deviceRepository.checkDeviceAuthAs("Basic dGVzdA==", true) }
     }
 }

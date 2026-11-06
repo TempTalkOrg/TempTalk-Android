@@ -73,7 +73,6 @@ data class UserData(
     var migrationHandoffCompletedId: String = "",
     // Sender side: when the receipt arrived and this install signed itself out (0 = never).
     var migrationHandoffDoneAt: Long = 0,
-    var dualPaneRailCollapsed: Boolean = false, // dual-pane navigation rail collapsed (list header toggle)
 
     // — App lifecycle —
     var lastUseTime: Long = 0,
@@ -82,6 +81,7 @@ data class UserData(
     // — App lock (passcode + pattern) —
     var passcodeTimeout: Int = 300, //默认值300s
     var passcodeAttempts: Int = 0, //密码已经尝试的次数
+    var passcodeAutoMisses: Int = 0, // wrong values tested by the as-you-type passcode check (#1412)
     var patternShowPath: Boolean = true, //是否显示手势路径
     var patternAttempts: Int = 0, //手势已经尝试的次数
 

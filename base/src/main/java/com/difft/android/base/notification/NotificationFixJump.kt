@@ -2,6 +2,7 @@ package com.difft.android.base.notification
 
 import android.app.NotificationManager
 import android.content.Context
+import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -43,13 +44,34 @@ object NotificationFixJump {
         ReadinessIssue.MESSAGE_CATEGORY_OFF,
         ReadinessIssue.MESSAGE_CATEGORY_SILENT,
         ReadinessIssue.MESSAGE_CATEGORY_NO_BANNER,
-        ReadinessIssue.MESSAGE_CATEGORY_LOCK_HIDDEN -> NotificationFix.MESSAGE_CATEGORY
+        ReadinessIssue.MESSAGE_CATEGORY_LOCK_HIDDEN,
+        ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET -> NotificationFix.MESSAGE_CATEGORY
         ReadinessIssue.CALL_CATEGORY_OFF,
         ReadinessIssue.CALL_CATEGORY_NO_BANNER,
-        ReadinessIssue.CALL_CATEGORY_LOCK_HIDDEN -> NotificationFix.CALL_CATEGORY
-        ReadinessIssue.CRITICAL_CATEGORY_OFF, ReadinessIssue.CRITICAL_CATEGORY_LOW_IMPORTANCE -> NotificationFix.CRITICAL_ALERT_CATEGORY
+        ReadinessIssue.CALL_CATEGORY_LOCK_HIDDEN,
+        ReadinessIssue.CALL_CATEGORY_NEVER_SET -> NotificationFix.CALL_CATEGORY
+        ReadinessIssue.CRITICAL_CATEGORY_OFF,
+        ReadinessIssue.CRITICAL_CATEGORY_LOW_IMPORTANCE,
+        ReadinessIssue.CRITICAL_CATEGORY_LOCK_HIDDEN,
+        ReadinessIssue.CRITICAL_CATEGORY_NEVER_SET -> NotificationFix.CRITICAL_ALERT_CATEGORY
         ReadinessIssue.FULL_SCREEN_DENIED -> NotificationFix.FULL_SCREEN_INTENT
         ReadinessIssue.OEM_POPUP_CHECK -> NotificationFix.OEM_POPUP
+    }
+
+    /**
+     * The category to record as seen after the jump to [fix]'s page: only that category's own page
+     * counts ([opened] is the intent that started, null when none did), never an app-level fallback;
+     * see [ReadinessInput.seenCategories].
+     */
+    fun seenCategory(fix: NotificationFix, opened: Intent?): String? {
+        if (opened?.action != Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS) return null
+        val channelId = when (fix) {
+            NotificationFix.MESSAGE_CATEGORY -> NotificationChannelIds.MESSAGE
+            NotificationFix.CALL_CATEGORY -> NotificationChannelIds.CALL
+            NotificationFix.CRITICAL_ALERT_CATEGORY -> NotificationChannelIds.CRITICAL_ALERT
+            else -> return null
+        }
+        return channelId.takeIf { opened.getStringExtra(Settings.EXTRA_CHANNEL_ID) == it }
     }
 
     /**
@@ -58,12 +80,22 @@ object NotificationFixJump {
      * [NotificationFix.MESSAGE_CATEGORY].
      */
     fun open(context: Context, fix: NotificationFix, messageGroupBlocked: Boolean = false): Boolean =
-        OemSettingsLauncher.openInOrder(
-            context,
+        openTracking(context, fix, messageGroupBlocked) != null
+
+    /** [open] that returns the intent which started (null when none did), so callers can tell a fallback page. */
+    fun openTracking(context: Context, fix: NotificationFix, messageGroupBlocked: Boolean = false): Intent? {
+        var started: Intent? = null
+        val opened = OemSettingsLauncher.startFirst(
             chain(context, fix, OemBrand.current(), messageGroupBlocked = messageGroupBlocked),
             TAG,
             fix = fix.name,
-        )
+        ) { intent ->
+            if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            started = intent
+        }
+        return if (opened) started else null
+    }
 
     /**
      * Same walk as [open] for a launcher that reports back: [start] is the caller's launch (for
@@ -114,6 +146,7 @@ object NotificationFixJump {
         brand: OemBrand,
         sdkInt: Int = Build.VERSION.SDK_INT,
         messageGroupBlocked: Boolean = false,
+        originOsMajor: Int? = if (brand == OemBrand.VIVO) VivoOs.currentOriginMajor() else null,
     ): List<Intent> {
         val pkg = context.packageName
         val details = OemSettingsLauncher.appDetailsIntent(context)
@@ -133,7 +166,7 @@ object NotificationFixJump {
                 appNotifications(pkg),
                 details,
             )
-            NotificationFix.OEM_POPUP -> oemPopup(pkg, brand) + details
+            NotificationFix.OEM_POPUP -> oemPopup(pkg, brand, originOsMajor) + details
             // Hidden but exported Settings action (API 31+); older releases and failures land on app details.
             NotificationFix.BACKGROUND_RESTRICTION -> buildList {
                 if (sdkInt >= Build.VERSION_CODES.S) add(Intent(BATTERY_USAGE_DETAIL_ACTION).setData("package:$pkg".toUri()))
@@ -151,17 +184,35 @@ object NotificationFixJump {
         }
     }
 
-    /** Xiaomi is the only skin with a direct jump; every other vendor is sent to the setup guide instead. */
-    private fun oemPopup(pkg: String, brand: OemBrand): List<Intent> =
-        if (brand == OemBrand.XIAOMI) {
-            listOf(
-                Intent("miui.intent.action.APP_PERM_EDITOR")
-                    .setPackage("com.miui.securitycenter")
-                    .putExtra("extra_pkgname", pkg)
-            )
-        } else {
-            emptyList()
-        }
+    /**
+     * Xiaomi and vivo OriginOS 6+ have a direct jump to the app's permission page; every other
+     * vendor is sent to the setup guide instead.
+     */
+    private fun oemPopup(pkg: String, brand: OemBrand, originOsMajor: Int?): List<Intent> = when {
+        brand == OemBrand.XIAOMI -> listOf(
+            Intent("miui.intent.action.APP_PERM_EDITOR")
+                .setPackage("com.miui.securitycenter")
+                .putExtra("extra_pkgname", pkg)
+        )
+        brand == OemBrand.VIVO && VivoOs.supportsDirectPermissionPage(originOsMajor) -> listOf(VivoOs.permissionDetailIntent(pkg))
+        else -> emptyList()
+    }
+
+    /**
+     * Whether the vendor pop-up row opens a vendor page directly rather than the setup guide: always
+     * on Xiaomi, on vivo only for a verified OriginOS version whose page resolves here. A binder call.
+     */
+    @WorkerThread
+    fun opensOemPopupDirectly(
+        context: Context,
+        brand: OemBrand = OemBrand.current(),
+        originOsMajor: Int? = if (brand == OemBrand.VIVO) VivoOs.currentOriginMajor() else null,
+    ): Boolean = when (brand) {
+        OemBrand.XIAOMI -> true
+        OemBrand.VIVO -> VivoOs.supportsDirectPermissionPage(originOsMajor) &&
+            OemSettingsLauncher.canResolveAny(context, oemPopup(context.packageName, brand, originOsMajor))
+        else -> false
+    }
 
     /** Whether the MESSAGE channel group is switched off. A binder call: never on the main thread. */
     @WorkerThread

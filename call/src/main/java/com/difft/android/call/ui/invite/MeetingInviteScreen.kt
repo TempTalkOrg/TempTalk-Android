@@ -10,6 +10,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.handler.InviteCallHandler
 import com.difft.android.call.LCallViewModel
+import com.difft.android.call.ui.screenshare.isCallImmersive
+import com.difft.android.call.ui.tabletop.LocalCallTabletop
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
@@ -54,6 +56,13 @@ fun MeetingInviteScreen(
     val showInviteViewEnable by callViewModel.callUiController.showInviteViewEnable.collectAsState(false)
     val latestInviteHandler = rememberUpdatedState(inviteCallHandler)
     val latestInviteAction = rememberUpdatedState(onInviteViewAction)
+    // In tabletop the sheet takes only the dock region below the fold, over the console.
+    val tabletop = LocalCallTabletop.current
+    val dockHeightPx = tabletop?.dockHeightPx
+    val latestDockHeightPx = rememberUpdatedState(dockHeightPx)
+    // The sheet is its own window: it hides the status bar whenever the page does.
+    val statusBarHidden = isCallImmersive()
+    val latestStatusBarHidden = rememberUpdatedState(statusBarHidden)
 
     // 使用 LaunchedEffect 监听状态变化，显示/隐藏 Fragment
     LaunchedEffect(context) {
@@ -69,6 +78,8 @@ fun MeetingInviteScreen(
 
                     if (existingFragment == null) {
                         val fragment = MeetingInviteBottomSheetFragment.newInstance()
+                        fragment.setDockHeight(latestDockHeightPx.value)
+                        fragment.setStatusBarHidden(latestStatusBarHidden.value)
                         latestInviteHandler.value?.let { handler ->
                             fragment.setInviteCallHandler(handler)
                         }
@@ -89,5 +100,17 @@ fun MeetingInviteScreen(
                     existingFragment?.dismiss()
                 }
             }
+    }
+
+    // An open sheet follows the posture: entering or leaving tabletop resizes it in place.
+    LaunchedEffect(context, dockHeightPx) {
+        val activity = context as? androidx.fragment.app.FragmentActivity ?: return@LaunchedEffect
+        (activity.supportFragmentManager.findFragmentByTag("MeetingInviteBottomSheet") as? MeetingInviteBottomSheetFragment)
+            ?.setDockHeight(dockHeightPx)
+    }
+    LaunchedEffect(context, statusBarHidden) {
+        val activity = context as? androidx.fragment.app.FragmentActivity ?: return@LaunchedEffect
+        (activity.supportFragmentManager.findFragmentByTag("MeetingInviteBottomSheet") as? MeetingInviteBottomSheetFragment)
+            ?.setStatusBarHidden(statusBarHidden)
     }
 }

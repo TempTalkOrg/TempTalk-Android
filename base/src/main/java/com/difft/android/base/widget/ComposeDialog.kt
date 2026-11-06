@@ -12,6 +12,12 @@ import com.difft.android.base.ui.theme.DifftTheme
  */
 interface ComposeDialog {
     fun dismiss()
+
+    /**
+     * False once the dialog has closed, through its own buttons or sheet or [dismiss]. An
+     * implementation that cannot tell reports true.
+     */
+    val isShowing: Boolean get() = true
 }
 
 /**

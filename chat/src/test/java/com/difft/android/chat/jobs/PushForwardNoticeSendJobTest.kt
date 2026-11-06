@@ -3,6 +3,7 @@ package com.difft.android.chat.jobs
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.GlobalHiltEntryPoint
 import com.difft.android.chat.message.LocalMessageCreator
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.messages.SendMessageResult
 import com.google.gson.Gson
@@ -51,6 +52,10 @@ import kotlin.test.assertFailsWith
 @OptIn(ExperimentalCoroutinesApi::class)
 class PushForwardNoticeSendJobTest {
 
+    /** An open messaging gate: send jobs take a send ticket before they send (#1382). */
+    private val messagingGate = TestMessagingPause().open().gate
+
+
     private lateinit var messageSender: NewSignalServiceMessageSender
     private lateinit var localMessageCreator: LocalMessageCreator
     private val gson = Gson()
@@ -79,7 +84,8 @@ class PushForwardNoticeSendJobTest {
                 room = any(),
                 message = any(),
                 sendSyncToSelf = any(),
-                sendTimestamp = any()
+                sendTimestamp = any(),
+                admission = any()
             )
         } returns successResult()
     }
@@ -106,8 +112,9 @@ class PushForwardNoticeSendJobTest {
             noticeData = notice,
             messageSender = messageSender,
             localMessageCreator = localMessageCreator,
-            gson = gson
-        )
+            gson = gson,
+            messagingGate = messagingGate
+        ).bindLogin()
 
         job.onPushSend()
 
@@ -117,7 +124,8 @@ class PushForwardNoticeSendJobTest {
                 room = target,
                 message = any(),
                 sendSyncToSelf = false,
-                sendTimestamp = any()
+                sendTimestamp = any(),
+                admission = any()
             )
         }
         // Local DB insert happened on primary success.
@@ -145,8 +153,8 @@ class PushForwardNoticeSendJobTest {
             1
         )
         val job = PushForwardNoticeSendJob(
-            null, target, notice, messageSender, localMessageCreator, gson
-        )
+            null, target, notice, messageSender, localMessageCreator, gson, messagingGate
+        ).bindLogin()
 
         job.onPushSend()
 
@@ -156,7 +164,8 @@ class PushForwardNoticeSendJobTest {
                 room = target,
                 message = any(),
                 sendSyncToSelf = true,       // KEY: other device sync leg required
-                sendTimestamp = any()
+                sendTimestamp = any(),
+                admission = any()
             )
         }
     }
@@ -174,8 +183,8 @@ class PushForwardNoticeSendJobTest {
             5
         )
         val job = PushForwardNoticeSendJob(
-            null, target, notice, messageSender, localMessageCreator, gson
-        )
+            null, target, notice, messageSender, localMessageCreator, gson, messagingGate
+        ).bindLogin()
 
         job.onPushSend()
 
@@ -185,7 +194,8 @@ class PushForwardNoticeSendJobTest {
                 room = target,
                 message = any(),
                 sendSyncToSelf = false,
-                sendTimestamp = any()
+                sendTimestamp = any(),
+                admission = any()
             )
         }
     }
@@ -202,12 +212,12 @@ class PushForwardNoticeSendJobTest {
             1
         )
         coEvery {
-            messageSender.sendForwardNoticeMessage(any(), any(), any(), any(), any())
+            messageSender.sendForwardNoticeMessage(any(), any(), any(), any(), any(), any())
         } throws IOException("simulated network failure")
 
         val job = PushForwardNoticeSendJob(
-            null, target, notice, messageSender, localMessageCreator, gson
-        )
+            null, target, notice, messageSender, localMessageCreator, gson, messagingGate
+        ).bindLogin()
 
         assertFailsWith<IOException> { job.onPushSend() }
 
@@ -239,8 +249,8 @@ class PushForwardNoticeSendJobTest {
         } throws RuntimeException("simulated DB write failure")
 
         val job = PushForwardNoticeSendJob(
-            null, target, notice, messageSender, localMessageCreator, gson
-        )
+            null, target, notice, messageSender, localMessageCreator, gson, messagingGate
+        ).bindLogin()
 
         // Must NOT throw — a throw here would propagate to PushSendJob.onRun() → JobManager
         // → retry → re-send to peer, producing duplicate envelopes.
@@ -248,7 +258,7 @@ class PushForwardNoticeSendJobTest {
 
         // Sender was called exactly once (no retry triggered by the Job layer).
         coVerify(exactly = 1) {
-            messageSender.sendForwardNoticeMessage(any(), any(), any(), any(), any())
+            messageSender.sendForwardNoticeMessage(any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -271,7 +281,7 @@ class PushForwardNoticeSendJobTest {
         val creatorTsCapture = slot<Long>()
         coEvery {
             messageSender.sendForwardNoticeMessage(
-                any(), any(), any(), any(), capture(senderTsCapture)
+                any(), any(), any(), any(), capture(senderTsCapture), any()
             )
         } returns successResult()
         coEvery {
@@ -281,8 +291,8 @@ class PushForwardNoticeSendJobTest {
         } returns mockk<NotifyMessage>(relaxed = true)
 
         val job = PushForwardNoticeSendJob(
-            null, target, notice, messageSender, localMessageCreator, gson
-        )
+            null, target, notice, messageSender, localMessageCreator, gson, messagingGate
+        ).bindLogin()
 
         job.onPushSend()
 
@@ -309,8 +319,8 @@ class PushForwardNoticeSendJobTest {
         )
 
         val job = PushForwardNoticeSendJob(
-            null, target, notice, messageSender, localMessageCreator, gson
-        )
+            null, target, notice, messageSender, localMessageCreator, gson, messagingGate
+        ).bindLogin()
 
         val data = job.serialize()
         assertEquals("g-1", data.getString("target_id"))

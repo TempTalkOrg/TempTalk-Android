@@ -10,6 +10,17 @@ interface JobStorage {
     @WorkerThread
     fun insertJobs(fullSpecs: List<FullSpec>)
 
+    /** Strict callers never infer persistence from the legacy cache or swallowed writes. */
+    @WorkerThread
+    fun insertJobsStrict(fullSpecs: List<FullSpec>): StrictWrite = StrictWrite.Failed("unsupported")
+
+    @WorkerThread
+    fun findDurableJob(id: String): DurableJob = DurableJob.ReadFailed("unsupported")
+
+    /** Restores a proven durable row and its constraints to the runnable cache, without hooks. */
+    @WorkerThread
+    fun restoreDurableJob(found: DurableJob.Found): DurableRestore = DurableRestore.Unsupported
+
     @WorkerThread
     fun getJobSpec(id: String): JobSpec?
 
@@ -58,3 +69,18 @@ interface JobStorage {
     @WorkerThread
     fun getAllConstraintSpecs(): List<ConstraintSpec>
 }
+
+sealed interface StrictWrite {
+    data object Committed : StrictWrite
+    data object RejectedMemoryOnly : StrictWrite
+    data class Failed(val reason: String) : StrictWrite
+    data class Unknown(val reason: String) : StrictWrite
+}
+
+sealed interface DurableJob {
+    data class Found(val spec: JobSpec, val constraints: List<ConstraintSpec> = emptyList()) : DurableJob
+    data object Absent : DurableJob
+    data class ReadFailed(val reason: String) : DurableJob
+}
+
+enum class DurableRestore { Restored, AlreadyCached, Unsupported }

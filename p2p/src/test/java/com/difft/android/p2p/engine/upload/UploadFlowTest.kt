@@ -51,6 +51,18 @@ class UploadFlowTest {
     }
 
     @Test
+    fun `prepare-upload advertises the caps its owner declares`() {
+        val pin = PinPolicy()
+        val code = pin.issue()
+        val caps = ReceiverCaps.BASE + ReceiverCaps.PENDING_ENVELOPE_V1
+        val handler = PrepareUploadHandler(SessionManager(), pin, requirePin = true, caps = caps)
+
+        val resp = handler.handle(PrepareUploadRequest(info, mapOf("f1" to fileMeta("f1", "x".toByteArray()))), "1.1.1.1", code)
+
+        assertEquals(listOf("status-v1", "beat-v1", "pending-envelope-v1"), resp.caps)
+    }
+
+    @Test
     fun `T-S2 prepare-upload with wrong PIN is Unauthorized`() {
         val sm = SessionManager()
         val pin = PinPolicy().also { it.issue() }

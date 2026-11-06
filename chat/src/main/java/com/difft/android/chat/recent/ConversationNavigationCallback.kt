@@ -2,6 +2,8 @@ package com.difft.android.chat.recent
 
 import androidx.fragment.app.Fragment
 import com.difft.android.base.utils.DualPaneHost
+import com.difft.android.base.utils.pane.ConversationTarget
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Interface for fragments that need to update their selection state
@@ -43,4 +45,19 @@ interface ConversationNavigationCallback : DualPaneHost {
      * @param contactId The contact/user ID
      */
     fun onContactDetailSelected(contactId: String)
+
+    /**
+     * Opens [target] in the current tab's detail stack (both layouts). The conversation router
+     * calls it for requests made with this Activity as the context.
+     */
+    fun openConversation(target: ConversationTarget)
+
+    /**
+     * Id of the conversation shown as the visible top of the current tab, or null (list only,
+     * another page on top). Not the layout mode: one-pane can show a conversation too.
+     */
+    fun currentConversationOnScreen(): String?
+
+    /** One-pane: the detail layer covers the conversation list. Always false in two-pane. */
+    val detailCoversList: StateFlow<Boolean>
 }

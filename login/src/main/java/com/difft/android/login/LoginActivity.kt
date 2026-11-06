@@ -24,6 +24,7 @@ class LoginActivity : BaseActivity() {
 
         mBinding.ibLoginMenu.visibility = View.VISIBLE
         mBinding.ibLoginMenu.setOnClickListener { showProxyMenu(it) }
+        mBinding.root.liftLoginFormAboveKeyboard(mBinding.fragmentLogIn)
     }
 
     private fun showProxyMenu(anchor: View) {

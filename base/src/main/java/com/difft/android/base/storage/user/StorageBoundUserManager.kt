@@ -34,6 +34,15 @@ import com.difft.android.base.user.UserManager
 interface StorageBoundUserManager : UserManager {
 
     /**
+     * Account-guarded accepted-write completion. Publishes memory immediately, then awaits an
+     * ordered full-snapshot write and propagates storage failures. Memory is not rolled back.
+     * Retrying the same change writes again even if memory already contains the candidate.
+     * The two DataStores commit independently; this is not a cross-store transaction.
+     */
+    suspend fun commitStrict(expectedAccount: String, change: com.difft.android.base.user.UserData.() -> Unit)
+
+
+    /**
      * Atomically read-modify-write the encrypted [UserAuthData] in
      * `secure_user.pb`.
      *

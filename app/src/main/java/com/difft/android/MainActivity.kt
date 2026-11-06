@@ -97,6 +97,13 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     }
 
     /**
+     * False while routing: the app lock check defers to the page this Activity starts next, which
+     * would otherwise stack above a lock started from here. True only on the in-place recovery screens.
+     */
+    var hostsLockScreen = false
+        private set
+
+    /**
      * Option Y (no splash library): onCreate does NOT call setContent. The window
      * shows the launch theme's background until the IO integrity probe decides what
      * to render — keeping the main thread free of any DB call during onCreate.
@@ -294,9 +301,16 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     )
 
     /**
-     * Navigate to IndexActivity, passing all deeplink/share data via Intent.
+     * Navigate to IndexActivity, passing all deeplink/share data via Intent, except on a Recents
+     * relaunch ([isLaunchedFromHistory]), whose payload was handled when the task started.
      */
     private fun navigateToIndexActivity() {
+        if (isLaunchedFromHistory()) {
+            L.i { "[MainActivity] relaunched from recents, deeplink and share extras dropped" }
+            startActivity(Intent(this@MainActivity, IndexActivity::class.java))
+            finish()
+            return
+        }
         val newIntent = Intent(this@MainActivity, IndexActivity::class.java)
         
         // Pass deeplink data
@@ -312,6 +326,8 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
         groupId?.let { newIntent.putExtra(GroupChatContentActivity.INTENT_EXTRA_GROUP_ID, it) }
         contactId?.let { newIntent.putExtra(ChatActivity.BUNDLE_KEY_CONTACT_ID, it) }
         
+        com.difft.android.setting.notificationtest.NotificationTestReturnRoute.forward(intent, newIntent)
+
         // Pass scheme URL
         intent.data?.let { newIntent.data = it }
         
@@ -374,6 +390,7 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                 DatabaseRecoveryScreen()
             }
         }
+        hostLockScreen()
     }
 
     override fun renderKeyUnavailableScreen() {
@@ -383,6 +400,13 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
                 KeyUnavailableScreen(onRetry = { restartApp() })
             }
         }
+        hostLockScreen()
+    }
+
+    /** These screens stay on this Activity until a process restart, so the app lock may cover them. */
+    private fun hostLockScreen() {
+        hostsLockScreen = true
+        (application as? TempTalkApplication)?.onLockHostReady(this)
     }
 
     override fun showToast(messageResId: Int) {
@@ -413,9 +437,17 @@ class MainActivity : BaseActivity(), RecoveryFlowCoordinator.Host {
     }
 
     /**
+     * Recents relaunches a task with the intent that created it, so a task started from a
+     * notification or a share would open that chat or share again; its payload was handled then.
+     */
+    private fun isLaunchedFromHistory(): Boolean =
+        intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+
+    /**
      * Check if should open popup chat (indicated by TrampolineActivity).
      */
     private fun shouldOpenPopupChat(): Boolean {
+        if (isLaunchedFromHistory()) return false
         val openPopup = intent.getBooleanExtra(NotificationTrampolineActivity.EXTRA_OPEN_POPUP, false)
         val linkCategory = intent.getIntExtra(LinkDataEntity.LINK_CATEGORY, -1)
         val isFromMessageNotification = linkCategory == LinkDataEntity.CATEGORY_MESSAGE

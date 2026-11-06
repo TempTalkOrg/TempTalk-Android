@@ -32,10 +32,12 @@ internal fun buildTextMessageNotification(
         if (textMessage.recall != null) {
             NotificationType.RECALL_MSG.code
         } else if (!textMessage.mentions.isNullOrEmpty()) {
+            // The full mention list goes with every mention type (as on iOS / Desktop), so the server
+            // can tell a directly mentioned member apart from an @all-only one.
+            mentionedPersons = textMessage.mentions?.mapNotNull { it.uid }?.toTypedArray()
             if (textMessage.mentions?.firstOrNull()?.uid == MENTIONS_ALL_ID) {
                 NotificationType.GROUP_MENTIONS_ALL.code
             } else {
-                mentionedPersons = textMessage.mentions?.mapNotNull { it.uid }?.toTypedArray()
                 NotificationType.GROUP_MENTIONS_DESTINATION.code
             }
         } else {

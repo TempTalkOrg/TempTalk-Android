@@ -3,13 +3,13 @@ package com.difft.android.login
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
+import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
+import com.difft.android.base.utils.pane.dismissWithView
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -20,8 +20,13 @@ import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelec
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.LogoutManager
-import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
-import com.difft.android.base.utils.globalServices
+import com.difft.android.base.utils.DualPaneUtils.setupBackButton
+import com.difft.android.base.utils.pane.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.difft.android.login.mvi.ProfileEditContract
+import com.difft.android.login.mvi.ProfileEditViewModel
+import kotlinx.coroutines.flow.map
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.widget.WaitDialogHandle
@@ -32,12 +37,10 @@ import com.difft.android.login.databinding.ActivityContactProfileSettingBinding
 import com.difft.android.login.viewmodel.ContactProfileSettingViewModel
 import com.difft.android.login.viewmodel.LoginViewModel
 import com.difft.android.login.viewmodel.LoginViewModel.Companion.DIFFERENT_ACCOUNT_LOGIN_ERROR_CODE
-import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.network.viewmodel.Status
 import com.difft.android.selector.basic.PictureSelector
 import com.difft.android.selector.config.SelectMimeType
 import com.difft.android.selector.config.SelectModeConfig
-import com.difft.android.selector.entity.LocalMedia
 import com.difft.android.selector.language.LanguageConfig
 import com.difft.android.selector.pictureselector.GlideEngine
 import com.difft.android.selector.pictureselector.ImageFileCompressEngine
@@ -49,14 +52,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.difft.app.database.models.ContactorModel
-import org.difft.app.database.models.DBContactorModel
-import org.difft.app.database.wcdb
 import util.ScreenLockUtil
 import java.io.File
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ContactProfileSettingFragment : Fragment() {
+class ContactProfileSettingFragment : Fragment(), SettingsIdiomPage {
 
     companion object {
         private const val ARG_FROM = "ARG_FROM"
@@ -74,6 +75,7 @@ class ContactProfileSettingFragment : Fragment() {
         }
     }
 
+    private var restoringContactDraft = true
     private var _binding: ActivityContactProfileSettingBinding? = null
     private val binding get() = _binding!!
 
@@ -83,6 +85,8 @@ class ContactProfileSettingFragment : Fragment() {
      * lifecycle, so it is released when this view goes away.
      */
     private lateinit var profileWait: WaitDialogHandle
+
+    private val editViewModel: ProfileEditViewModel by viewModels()
 
     private val mViewModel: ContactProfileSettingViewModel by viewModels()
     private val mLoginViewModel: LoginViewModel by viewModels()
@@ -108,18 +112,20 @@ class ContactProfileSettingFragment : Fragment() {
     private val pictureSelectorLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        if (from == FROM_CONTACT) editViewModel.dispatch(ProfileEditContract.Intent.SetPickerPending(false))
         // Re-engage the lock immediately on selector return (OK or cancel both land here).
         ScreenLockUtil.temporarilyDisabled = false
-        if (!isAdded || view == null) return@registerForActivityResult
-        if (result.resultCode == Activity.RESULT_OK) {
+                if (result.resultCode == Activity.RESULT_OK) {
             val selectedMedia = PictureSelector.obtainSelectorList(result.data)
             if (selectedMedia.isNotEmpty()) {
                 val localMedia = selectedMedia[0]
-                mAvatarFilePath = localMedia.compressPath ?: localMedia.realPath
+                val selectedPath = localMedia.compressPath ?: localMedia.realPath
+                if (from == FROM_CONTACT) editViewModel.dispatch(ProfileEditContract.Intent.SelectAvatar(selectedPath))
+                else mAvatarFilePath = selectedPath
                 // Remove the plaintext crop output (files/Pictures/CROP_*.jpg) right away —
                 // upload/preview use compressPath/realPath, never the crop file.
-                AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = mAvatarFilePath)
-                binding.ivAvatar.setAvatar(mAvatarFilePath ?: "")
+                AvatarPickTempCleaner.deleteCropTemp(localMedia, keepPath = selectedPath)
+                _binding?.ivAvatar?.setAvatar(selectedPath.orEmpty())
             }
         }
     }
@@ -132,25 +138,32 @@ class ContactProfileSettingFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        restoringContactDraft = true
         _binding = ActivityContactProfileSettingBinding.inflate(inflater, container, false)
+        // Hosted, the page does not open the keyboard on entry (detailKeyboard below).
+        if (isInDetailStack()) binding.etName.autoFocus = false
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         profileWait = waitDialogHandle()
+        // The name has one restoration owner, this page (its saved key or the editor's draft): the
+        // field must not replay a stale hierarchy value over it.
+        binding.etName.isSaveFromParentEnabled = false
+        applyDetailPageInsets(view, ime = true)
+        detailKeyboard(showOnFirstOpen = false, focus = {}, savedInstanceState = savedInstanceState)
+        if (from != FROM_CONTACT) {
+            mAvatarFilePath = savedInstanceState?.getString("profile-avatar")?.takeIf { File(it).canRead() }
+            savedInstanceState?.getString("profile-name")?.let { showName(it) }
+            mAvatarFilePath?.let { binding.ivAvatar.setAvatar(it) }
+        }
         initView()
         startObserve()
     }
 
     private fun initView() {
-        // Handle back button based on dual-pane mode
-        if (isInDualPaneMode()) {
-            binding.ibBack.visibility = View.GONE
-        } else {
-            binding.ibBack.visibility = View.VISIBLE
-            binding.ibBack.setOnClickListener { activity?.finish() }
-        }
+        setupBackButton(binding.ibBack)
 
         when (from) {
             FROM_REGISTER -> {
@@ -167,7 +180,7 @@ class ContactProfileSettingFragment : Fragment() {
                     generateRandomAvatarAndName()
                 }
 
-                generateRandomAvatarAndName()
+                if (mAvatarFilePath == null) generateRandomAvatarAndName()
             }
 
             FROM_SIGN_UP -> {
@@ -179,7 +192,7 @@ class ContactProfileSettingFragment : Fragment() {
                     generateRandomAvatarAndName()
                 }
 
-                generateRandomAvatarAndName()
+                if (mAvatarFilePath == null) generateRandomAvatarAndName()
             }
 
             FROM_CONTACT -> {
@@ -188,26 +201,24 @@ class ContactProfileSettingFragment : Fragment() {
                 binding.ivRefresh.visibility = View.GONE
                 binding.btnDone.text = getString(com.difft.android.chat.R.string.contact_profile_done)
 
-                initAvatarAndName()
+                observeProfileEditor()
             }
         }
-        binding.etName.addTextChangedListener {
-            refreshClearButton()
-        }
-
-        binding.btnClear.setOnClickListener {
-            binding.etName.text = null
-        }
-        refreshClearButton()
+        binding.etName.onQueryChanged = ::onNameEdited
+        binding.etName.onClear = { onNameEdited("") }
+        // Same eligibility as tapping Done: an empty name keeps the button, and the key, inert.
+        binding.etName.onImeAction = { if (binding.btnDone.isEnabled) binding.btnDone.performClick() }
+        refreshDoneButton()
 
         binding.btnDone.setOnClickListener {
             if (from == FROM_SIGN_UP) {
                 mLoginViewModel.signUpByNonceCode()
+            } else if (from == FROM_CONTACT) {
+                editViewModel.dispatch(ProfileEditContract.Intent.Save)
             } else {
                 mViewModel.setProfile(
-                    context = requireActivity(),
                     filePath = mAvatarFilePath,
-                    name = binding.etName.text.toString().trim(),
+                    name = binding.etName.query.trim(),
                     contactor = mContactor
                 )
             }
@@ -236,8 +247,7 @@ class ContactProfileSettingFragment : Fragment() {
                 if (File(path).exists()) {
                     binding.ivAvatar.setAvatar(path)
                 }
-                binding.etName.setText(name)
-                binding.etName.setSelection(binding.etName.text.toString().trim().length)
+                showName(name)
             } catch (e: Exception) {
                 L.e(e) { "[ContactProfileSettingFragment] generateRandomAvatarAndName error:" }
             }
@@ -251,6 +261,7 @@ class ContactProfileSettingFragment : Fragment() {
     }
 
     private fun createPictureSelector() {
+        if (from == FROM_CONTACT) editViewModel.dispatch(ProfileEditContract.Intent.SetPickerPending(true))
         ScreenLockUtil.temporarilyDisabled = true
         PictureSelector.create(this)
             .openGallery(SelectMimeType.ofImage())
@@ -265,33 +276,53 @@ class ContactProfileSettingFragment : Fragment() {
             .forResult(pictureSelectorLauncher)
     }
 
-    private fun refreshClearButton() {
-        val etContent = binding.etName.text
-        binding.btnDone.isEnabled = !TextUtils.isEmpty(etContent)
-        binding.btnClear.animate().apply {
-            cancel()
-            val toAlpha = if (!TextUtils.isEmpty(etContent)) 1.0f else 0f
-            alpha(toAlpha)
+    private fun onNameEdited(name: String) {
+        if (from == FROM_CONTACT && !restoringContactDraft && name != editViewModel.state.value.nameDraft) {
+            editViewModel.dispatch(ProfileEditContract.Intent.ChangeName(name))
         }
+        refreshDoneButton()
     }
 
-    private fun initAvatarAndName() {
+    /** Shows a name set from code; the field's setter is silent, so the button is refreshed here. */
+    private fun showName(name: String) {
+        binding.etName.query = name
+        refreshDoneButton()
+    }
+
+    private fun refreshDoneButton() {
+        binding.btnDone.isEnabled = binding.etName.query.isNotEmpty()
+    }
+
+    private fun observeProfileEditor() {
+        val wait = PageWait(this)
+        waitWhileVisibleTop(editViewModel.state.map { it.busy }, wait)
         viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val contact = withContext(Dispatchers.IO) {
-                    wcdb.contactor.getFirstObject(DBContactorModel.id.eq(globalServices.myId))
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                editViewModel.state.collect { state ->
+                    if (binding.etName.query != state.nameDraft) showName(state.nameDraft)
+                    state.avatarPath?.let { binding.ivAvatar.setAvatar(it) }
+                        ?: state.contact?.let { binding.ivAvatar.setAvatar(it, 36) }
+                    binding.btnDone.isEnabled = !state.busy && !state.completed && state.nameDraft.isNotBlank()
                 }
-                // 检查 Fragment 状态，避免在 View 销毁后更新 UI
-                if (!isAdded || view == null) return@launch
-                contact?.let {
-                    mContactor = it
-                    binding.etName.setText(it.getDisplayNameForUI())
-                    binding.etName.setSelection(binding.etName.text.toString().trim().length)
-                    refreshClearButton()
-                    binding.ivAvatar.setAvatar(it, 36)
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            detailBackOwner().repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { editViewModel.state.collect {
+                    if (it.completed && !isInDetailStack()) detailNavigation().pop(this@ContactProfileSettingFragment)
+                } }
+                editViewModel.effect.collect { effect ->
+                    when (effect) {
+                        ProfileEditContract.Effect.Saved -> {
+                            wait.dismiss()
+                            if (isInDetailStack()) ToastUtil.show(com.difft.android.chat.R.string.operation_successful)
+
+                        }
+                        ProfileEditContract.Effect.AcceptedLocalCommitFailed -> ToastUtil.show(com.difft.android.base.R.string.settings_accepted_local_commit_failed)
+                        ProfileEditContract.Effect.ReselectAvatar -> ToastUtil.show(R.string.profile_avatar_reselect)
+                        is ProfileEditContract.Effect.Failed -> ToastUtil.show(effect.message ?: getString(com.difft.android.chat.R.string.operation_failed))
+                    }
                 }
-            } catch (e: Exception) {
-                L.w(e) { "[ContactProfileSettingFragment] error:" }
             }
         }
     }
@@ -316,12 +347,10 @@ class ContactProfileSettingFragment : Fragment() {
                     if (from == FROM_REGISTER || from == FROM_SIGN_UP) {
                         gotoIndexActivity()
                     }
-                    // Only finish activity in single-pane mode (FROM_CONTACT scenario)
-                    // In dual-pane mode, the fragment is displayed in the detail pane, no need to finish
-                    if (isInDualPaneMode()) {
+                    else if (isInDetailStack()) {
                         ToastUtil.show(com.difft.android.chat.R.string.operation_successful)
                     } else {
-                        activity?.finish()
+                        detailNavigation().pop(this@ContactProfileSettingFragment)
                     }
                 }
 
@@ -333,7 +362,7 @@ class ContactProfileSettingFragment : Fragment() {
                     //如果是一键注册，即便是头像信息上传失败，也进入首页
                     if (from == FROM_SIGN_UP) {
                         gotoIndexActivity()
-                        activity?.finish()
+                        detailNavigation().pop(this@ContactProfileSettingFragment)
                     }
                 }
             }
@@ -347,9 +376,8 @@ class ContactProfileSettingFragment : Fragment() {
                     // No release here: setProfile is the next leg of the same flow and its loading
                     // state reaches the same handle, so the modal stays up instead of blinking.
                     mViewModel.setProfile(
-                        context = requireActivity(),
-                        filePath = mAvatarFilePath,
-                        name = binding.etName.text.toString().trim(),
+                            filePath = mAvatarFilePath,
+                        name = binding.etName.query.trim(),
                         null
                     )
                 }
@@ -374,7 +402,7 @@ class ContactProfileSettingFragment : Fragment() {
      * 显示不同账号登录提示框
      */
     private fun showDifferentAccountLoginDialog() {
-        ComposeDialogManager.showMessageDialog(
+        val pageDialog = dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireContext(),
             title = getString(R.string.login_different_dialog_title),
             message = getString(R.string.login_different_dialog_content),
@@ -388,9 +416,10 @@ class ContactProfileSettingFragment : Fragment() {
                 logoutManager.doLogout()
             },
             onCancel = {
-                activity?.finish()
+                detailNavigation().pop(this@ContactProfileSettingFragment)
             }
-        )
+        ))
+        dismissWhenLeavingVisibleTop { pageDialog?.dismiss() }
     }
 
     private fun gotoIndexActivity() {
@@ -401,24 +430,24 @@ class ContactProfileSettingFragment : Fragment() {
         )
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         startActivity(intent)
-        activity?.finish()
+        detailNavigation().pop(this@ContactProfileSettingFragment)
     }
 
     private fun onPicturePermissionForAvatarResult(permissionState: PermissionUtil.PermissionState) {
         when (permissionState) {
             PermissionUtil.PermissionState.Denied -> {
-                L.d { "onPicturePermissionForAvatarResult: Denied" }
+
                 ToastUtils.showToast(requireContext(), getString(com.difft.android.chat.R.string.not_granted_necessary_permissions))
             }
 
             PermissionUtil.PermissionState.Granted -> {
-                L.d { "onPicturePermissionForAvatarResult: Granted" }
+
                 createPictureSelector()
             }
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
-                L.d { "onPicturePermissionForAvatarResult: PermanentlyDenied" }
-                ComposeDialogManager.showMessageDialog(
+
+                val pageDialog = dismissWithView(ComposeDialogManager.showMessageDialog(
                     context = requireContext(),
                     title = getString(com.difft.android.chat.R.string.tip),
                     message = getString(com.difft.android.chat.R.string.no_permission_picture_tip),
@@ -433,8 +462,23 @@ class ContactProfileSettingFragment : Fragment() {
                             requireContext(), getString(com.difft.android.chat.R.string.not_granted_necessary_permissions)
                         )
                     }
-                )
+                ))
+                dismissWhenLeavingVisibleTop { pageDialog?.dismiss() }
             }
+        }
+    }
+
+    override fun onViewStateRestored(savedInstanceState: Bundle?) {
+        super.onViewStateRestored(savedInstanceState)
+        restoringContactDraft = false
+        if (from == FROM_CONTACT) showName(editViewModel.state.value.nameDraft)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (from != FROM_CONTACT) {
+            outState.putString("profile-avatar", mAvatarFilePath)
+            outState.putString("profile-name", _binding?.etName?.query)
         }
     }
 
@@ -444,7 +488,7 @@ class ContactProfileSettingFragment : Fragment() {
     }
 
     override fun onDestroy() {
-        deleteCurrentRandomAvatarFile()
+        if (from != FROM_CONTACT && activity?.isChangingConfigurations != true && mViewModel.setProfileResultData.value?.status != Status.LOADING) deleteCurrentRandomAvatarFile()
         super.onDestroy()
     }
 }

@@ -72,4 +72,5 @@
     <!-- I4 — 导入方式选择 (P2P / 文件) + 同设备仅文件 -->
     <!-- 折叠自旧前置弹窗的引导文案,合并进单一组合选择弹窗 -->
 
+    <string name="profile_avatar_reselect">所选图片已不可用，请重新选择。</string>
 </resources>

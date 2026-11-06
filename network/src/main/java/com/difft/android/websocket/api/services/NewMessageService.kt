@@ -23,6 +23,9 @@ import com.difft.android.websocket.internal.util.Util
 import com.difft.android.websocket.internal.websocket.DefaultResponseMapper
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
 import com.difft.android.websocket.internal.websocket.WebsocketResponse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.security.SecureRandom
 import java.util.Objects
 import java.util.function.Function
@@ -148,6 +151,8 @@ class NewMessagingService @Inject constructor(
             }
             mapped
         } catch (throwable: Throwable) {
+            // Real cancellation must propagate rather than become a send error.
+            if (throwable is CancellationException) currentCoroutineContext().ensureActive()
             ServiceResponse.forUnknownError(throwable)
         }
     }

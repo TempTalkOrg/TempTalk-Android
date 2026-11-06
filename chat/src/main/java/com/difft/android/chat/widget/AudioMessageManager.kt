@@ -10,6 +10,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.application
 import com.difft.android.chat.common.SendType
+import com.difft.android.chat.media.EncryptedAttachmentAccess
 import com.difft.android.chat.message.TextChatMessage
 import difft.android.messageserialization.model.isAudioMessage
 import kotlinx.coroutines.Dispatchers
@@ -412,17 +413,17 @@ object AudioMessageManager {
     fun deleteCurrentFile(message: TextChatMessage) {
         if (message.attachment?.isAudioMessage() != true) return
         currentFilePath?.let { path ->
-            deleteDecryptedFile(path)
+            deleteDecryptedFile(path, message.attachment?.key)
         }
     }
 
     /**
-     * 删除指定路径的临时解密文件。
-     * 仅当对应的 .encrypt 加密源文件存在时才删除，确保只清理临时解密副本，不影响加密主文件。
+     * Deletes a decrypted copy left beside the ciphertext (older builds wrote one for the waveform,
+     * #1438). Only with a usable [key]: a self-sent voice message still uploading has no key yet and
+     * its plaintext is the upload source.
      */
-    fun deleteDecryptedFile(filePath: String) {
-        val encryptFile = File("$filePath.encrypt")
-        if (!encryptFile.exists()) return
+    fun deleteDecryptedFile(filePath: String, key: ByteArray?) {
+        if (!EncryptedAttachmentAccess.isUsableKey(key) || !EncryptedAttachmentAccess.hasEncrypted(filePath)) return
         try {
             val file = File(filePath)
             if (file.exists()) {
@@ -459,19 +460,5 @@ object AudioMessageManager {
         playJob = null
         prepareTimeoutJob?.cancel()
         prepareTimeoutJob = null
-    }
-
-    fun decryptIfNeeded(attachmentPath: String, message: TextChatMessage) {
-        val encryptedFile = File("$attachmentPath.encrypt")
-        if (encryptedFile.exists() && !File(attachmentPath).exists()) {
-            val targetFile = File(attachmentPath)
-            try {
-                FileDecryptionUtil.decryptFile(encryptedFile, targetFile, message.attachment?.key)
-            } catch (e: Exception) {
-                L.e { "[AudioMessageManager] decryptIfNeeded failed messageId=${message.id}: ${e.stackTraceToString()}" }
-                targetFile.delete()
-                throw e
-            }
-        }
     }
 }

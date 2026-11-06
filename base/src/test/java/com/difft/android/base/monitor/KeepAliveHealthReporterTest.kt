@@ -22,6 +22,11 @@ import kotlin.test.assertNull
 
 class KeepAliveHealthReporterTest {
 
+    init {
+        // Day slots are tested in UTC regardless of the machine's zone.
+        KeepAliveHealthWindow.zoneOffsetMs = { 0L }
+    }
+
     @get:Rule
     val tmp = TemporaryFolder()
 
@@ -37,9 +42,9 @@ class KeepAliveHealthReporterTest {
         "lat_fcm_10s=0 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
         "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
         "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
-        "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+        "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 late_5m=0 " +
         "pv=na pv_why=none pv_days=0 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na " +
-        "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=unknown fcm_fail_h=0" + POWER_TAIL
+        "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 pv_late_n=0 fcm_state=unknown fcm_fail_h=0" + POWER_TAIL
 
     private val snapshot = HealthSnapshot(
         sdkInt = 34, keepAliveEnabled = true, ignoringBatteryOptimizations = true,
@@ -158,9 +163,9 @@ class KeepAliveHealthReporterTest {
                     "lat_fcm_10s=0 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
                     "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
                     "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
-                    "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+                    "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 late_5m=0 " +
                     "pv=na pv_why=none pv_days=2 pv_n=2 pv_fcm_n=0 pv_fcm_slow=na " +
-                    "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=unknown fcm_fail_h=0" + POWER_TAIL
+                    "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 pv_late_n=0 fcm_state=unknown fcm_fail_h=0" + POWER_TAIL
             )
         )
         assertNull(prefs()[AppStateKeys.BG_HEALTH_EVENT_COUNTS])
@@ -245,17 +250,17 @@ class KeepAliveHealthReporterTest {
     fun `T1 report drain lands in the daily slot before the verdict`() = runTest {
         val base = 100 * day
         run(true, emptyList(), now = base)
-        preload(base, mapOf("lat_ws_more" to 49))
-        counters.serverNow = { 100_000_000L }
-        counters.onEnvelopeDelivered(serverTimestamp = 1_000L, channel = DeliveryChannel.WS) // memory only
+        preload(base, mapOf("late_5m" to 2))
+        counters.onLateDelivery() // memory only
         run(true, emptyList(), now = base + 3 * day)
         assertEquals(1, sent.size)
-        assertEquals(true, sent[0].contains(" lat_ws_more=50 "), sent[0])
-        assertEquals(true, sent[0].contains(" pv=1 pv_why=L pv_days=2 pv_n=50 "), sent[0])
-        // The drained in-memory sample is merged into today's slot, next to the 49 already persisted.
+        assertEquals(true, sent[0].contains(" late_5m=3 "), sent[0])
+        assertEquals(true, sent[0].contains(" pv=1 pv_why=L pv_days=2 pv_n=0 "), sent[0])
+        assertEquals(true, sent[0].contains(" pv_late_n=3 "), sent[0])
+        // The drained in-memory count is merged into today's slot, next to the 2 already persisted.
         assertEquals(
-            listOf(49, 1),
-            KeepAliveHealthWindow.decode(prefs()[AppStateKeys.BG_HEALTH_DAILY]).map { it.counts.getValue("lat_ws_more") }
+            listOf(2, 1),
+            KeepAliveHealthWindow.decode(prefs()[AppStateKeys.BG_HEALTH_DAILY]).map { it.counts.getValue("late_5m") }
         )
     }
 
@@ -263,7 +268,7 @@ class KeepAliveHealthReporterTest {
     fun `T2 an idle gap prunes the window before the verdict`() = runTest {
         val base = 100 * day
         run(true, emptyList(), now = base)
-        preload(base, mapOf("lat_ws_more" to 50))
+        preload(base, mapOf("late_5m" to 5))
         run(true, emptyList(), now = base + 8 * day)
         assertEquals(1, sent.size)
         assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=0 pv_n=0 "), sent[0])
@@ -274,23 +279,26 @@ class KeepAliveHealthReporterTest {
     fun `T4 verdict waits 72h of real observation and pruning moves the start forward`() = runTest {
         val first = 101 * day - 60_000L // day 100, 23:59
         run(true, emptyList(), now = first)
-        preload(first, mapOf("lat_ws_more" to 50))
+        preload(first, mapOf("late_5m" to 3))
+        // L needs late deliveries on two days of the window, not a count.
+        preload(102 * day + 1, mapOf("late_5m" to 1))
         run(true, emptyList(), now = 103 * day) // 2 days 1 min later
-        assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=1 pv_n=50 "), sent[0])
+        assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=2 pv_n=0 "), sent[0])
 
         run(true, emptyList(), now = 104 * day + 1) // more than 72 h since the first write
-        assertEquals(true, sent[1].contains(" pv=1 pv_why=L pv_days=1 pv_n=50 "), sent[1])
+        assertEquals(true, sent[1].contains(" pv=1 pv_why=L pv_days=2 pv_n=0 "), sent[1])
     }
 
     @Test
     fun `T4 start is the oldest retained slot, not the pruned one`() = runTest {
         val first = 101 * day - 60_000L
         run(true, emptyList(), now = first)
-        preload(first, mapOf("lat_ws_more" to 50)) // day 100
+        preload(first, mapOf("late_5m" to 3)) // day 100
         val second = 105 * day - 60_000L
-        preload(second, mapOf("lat_ws_more" to 5)) // day 104
+        preload(second, mapOf("late_5m" to 1)) // day 104
         run(true, emptyList(), now = 107 * day) // day 100 pruned; start = day-104 t0, 2 days 1 min old
-        assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=1 pv_n=5 "), sent[0])
+        assertEquals(true, sent[0].contains(" pv=na pv_why=none pv_days=1 pv_n=0 "), sent[0])
+        assertEquals(true, sent[0].contains(" pv_late_n=1 "), sent[0])
     }
 
     @Test

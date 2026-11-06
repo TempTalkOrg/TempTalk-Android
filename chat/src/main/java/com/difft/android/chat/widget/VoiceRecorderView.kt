@@ -1,7 +1,6 @@
 package com.difft.android.chat.widget
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioFocusRequest
@@ -9,11 +8,12 @@ import android.media.AudioManager
 import android.os.Build
 import android.util.AttributeSet
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.difft.android.base.call.VoiceRecordingTracker
@@ -72,11 +72,34 @@ class VoiceRecorderView @JvmOverloads constructor(
     var recordingCallback: ((RecordingState) -> Unit)? = null
 
     /**
-     * Fired synchronously on the main thread the instant the user lifts
-     * their finger — before any async recording finalization.  Use this to
-     * hide the recording overlay / background immediately.
+     * Fired synchronously on the main thread the instant a recording stops (finger lifted,
+     * [cancelHold], focus loss, max duration, abort) — before any async recording finalization.
+     * Use this to hide the recording overlay / background immediately. Not fired on detach.
      */
     var onRecordingDismissed: (() -> Unit)? = null
+
+    /**
+     * Fired on every path that ends a hold session (release, cancel, focus loss, max duration,
+     * abort, detach). Owned by the input that drives the hold, separate from the host's
+     * [onRecordingDismissed].
+     */
+    var onHoldSessionEnded: (() -> Unit)? = null
+
+    private var holdAnchor: View? = null
+    private var recordBarPlaced = false
+    // Pre-draw (not global layout): the overlay turns visible in the same frame the hold starts,
+    // so the first correct position is only known after that layout. Only that first stale frame
+    // is skipped (returning false cancels the whole window's draw); later moves, e.g. a closing
+    // panel, are applied with a one-frame lag instead of freezing the window.
+    private val anchorPreDrawListener = ViewTreeObserver.OnPreDrawListener {
+        val changed = syncRecordBarToAnchor()
+        if (changed && !recordBarPlaced) {
+            recordBarPlaced = true
+            false
+        } else {
+            true
+        }
+    }
 
     @Volatile private var outputDir: File? = null
 
@@ -104,15 +127,15 @@ class VoiceRecorderView @JvmOverloads constructor(
         tvCancelHint = findViewById(R.id.tv_cancel_hint)
         tvEffectHint = findViewById(R.id.tv_effect_hint)
         tvEffectLabel = findViewById(R.id.tv_effect_label)
-
-        initListeners()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
 
+        val wasRecording = isRecording
         isRecording = false
         VoiceRecordingTracker.setRecording(false, "detach")
+        if (wasRecording) endHoldSession()
         amplitudeUpdateJob?.cancel()
         countdownJob?.cancel()
 
@@ -133,26 +156,78 @@ class VoiceRecorderView @JvmOverloads constructor(
         L.i { "[VoiceRecorder] View detached, cleanup dispatched to appScope" }
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private fun initListeners() {
-        recordView.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        recordingCallback?.invoke(RecordingState.RecordPermissionRequired)
-                    } else {
-                        startRecordingIfPermissionGranted()
-                    }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (isRecording) handleMove(event.rawX, event.rawY)
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (isRecording) stopRecording()
-                }
-            }
-            true
+    /**
+     * Starts a hold-to-record session driven by the unified input. Returns true only when the
+     * recording is actually running after the synchronous start path (permission granted, no
+     * previous session still finalizing, audio focus granted).
+     */
+    fun beginHold(anchor: View): Boolean {
+        if (isRecording) return false
+        if (stopJob?.isActive == true) {
+            L.i { "[VoiceRecorder] hold rejected, previous session finalizing" }
+            return false
         }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            recordingCallback?.invoke(RecordingState.RecordPermissionRequired)
+            return false
+        }
+        startRecordingIfPermissionGranted()
+        if (!isRecording) return false
+        holdAnchor = anchor
+        recordBarPlaced = false
+        viewTreeObserver.addOnPreDrawListener(anchorPreDrawListener)
+        return true
+    }
+
+    fun moveHold(rawX: Float, rawY: Float) {
+        if (isRecording) handleMove(rawX, rawY)
+    }
+
+    fun endHold() {
+        if (isRecording) stopRecording()
+    }
+
+    fun cancelHold() {
+        if (!isRecording) return
+        gestureTarget = GestureTarget.CANCEL
+        stopRecording()
+    }
+
+    /**
+     * Lays the record bar exactly over the anchor (the input field) wherever it currently is, so
+     * it follows multi-line input and a closing panel. Returns true when the layout changed.
+     */
+    private fun syncRecordBarToAnchor(): Boolean {
+        val anchor = holdAnchor ?: return false
+        if (!anchor.isAttachedToWindow || !isAttachedToWindow || anchor.height == 0) return false
+        val anchorLoc = IntArray(2).also { anchor.getLocationOnScreen(it) }
+        val selfLoc = IntArray(2).also { getLocationOnScreen(it) }
+        val params = recordView.layoutParams as ConstraintLayout.LayoutParams
+        val left = anchorLoc[0] - selfLoc[0]
+        val right = (selfLoc[0] + width) - (anchorLoc[0] + anchor.width)
+        val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
+        val start = if (rtl) right else left
+        val end = if (rtl) left else right
+        val bottom = (selfLoc[1] + height) - (anchorLoc[1] + anchor.height)
+        if (params.marginStart == start && params.marginEnd == end && params.bottomMargin == bottom && params.height == anchor.height) return false
+        params.marginStart = start
+        params.marginEnd = end
+        params.bottomMargin = bottom
+        params.height = anchor.height
+        recordView.layoutParams = params
+        return true
+    }
+
+    private fun endHoldSession() {
+        viewTreeObserver.removeOnPreDrawListener(anchorPreDrawListener)
+        holdAnchor = null
+        val params = recordView.layoutParams as ConstraintLayout.LayoutParams
+        params.marginStart = 0
+        params.marginEnd = 0
+        params.bottomMargin = 0
+        params.height = resources.getDimensionPixelSize(R.dimen.chat_voice_record_bar_height)
+        recordView.layoutParams = params
+        onHoldSessionEnded?.invoke()
     }
 
     private fun startRecordingIfPermissionGranted() {
@@ -382,6 +457,7 @@ class VoiceRecorderView @JvmOverloads constructor(
         // release) can take 1-3 s and must not block the UI.
         resetButton()
         onRecordingDismissed?.invoke()
+        endHoldSession()
 
         stopJob = viewScope.launch(Dispatchers.IO) {
             startJob?.join()
@@ -481,8 +557,9 @@ class VoiceRecorderView @JvmOverloads constructor(
                 }
                 // Defensive: ensure dismiss even if onRecordingDismissed was not
                 // set by the host (the synchronous call already fired, so this
-                // is a no-op for well-behaved callers).
-                onRecordingDismissed?.invoke()
+                // is a no-op for well-behaved callers). Skipped once a newer
+                // session is recording so its overlay is not hidden.
+                if (!isRecording) onRecordingDismissed?.invoke()
                 recordingCallback?.invoke(terminalState)
             }
         }
@@ -543,12 +620,13 @@ class VoiceRecorderView @JvmOverloads constructor(
         releaseAudioFocus()
         resetButton()
         onRecordingDismissed?.invoke()
+        endHoldSession()
         recordingCallback?.invoke(RecordingState.RecordFailed(reason))
     }
 
     private fun resetButton() {
-        recordButton.text = context.getString(R.string.chat_voice_hold_to_talk)
-        recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary))
+        recordButton.text = context.getString(R.string.chat_voice_release_to_send)
+        recordButton.setTextColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
         waveformView.setBarColor(ContextCompat.getColor(context, com.difft.android.base.R.color.t_primary_night))
         recordView.setBackgroundResource(R.drawable.chat_msg_input_bg)
 

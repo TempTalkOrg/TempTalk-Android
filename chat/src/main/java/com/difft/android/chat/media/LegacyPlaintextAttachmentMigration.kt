@@ -1,6 +1,7 @@
 package com.difft.android.chat.media
 
 import android.content.Context
+import android.os.Environment
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.application
@@ -55,6 +56,8 @@ object LegacyPlaintextAttachmentMigration {
     //     documents / audio files / archives / apk / octet-stream are purged too.
     private const val CURRENT_VERSION = 4
     private const val TMP_SUFFIX = ".encrypt.tmp"
+    private const val KEY_REDUNDANT_PURGE_VERSION = "redundant_plaintext_purge_version"
+    private const val REDUNDANT_PURGE_VERSION = 1
 
     @Volatile
     private var running = false
@@ -88,6 +91,71 @@ object LegacyPlaintextAttachmentMigration {
         } finally {
             running = false
         }
+    }
+
+    /**
+     * One-time removal of decrypted copies left beside a usable ciphertext (#1438): voice waveform
+     * extraction used to decrypt next to the `.encrypt` and kept the copy whenever it failed, in a
+     * directory other apps can read on Android 8–10. Stricter than [runIfNeeded]'s drop rule: only a
+     * plaintext whose row has a usable key is removed, so a self-sent attachment still uploading
+     * (key stored only after the upload) keeps its source. Not stamped unless the whole root was listed
+     * and it is the external root (see [mayStampRedundantPurge]).
+     */
+    suspend fun purgeRedundantPlaintextIfNeeded() = withContext(Dispatchers.IO) {
+        val prefs = application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(KEY_REDUNDANT_PURGE_VERSION, 0) >= REDUNDANT_PURGE_VERSION) return@withContext
+        try {
+            val root = File(FileUtil.getFilePath(FileUtil.FILE_DIR_ATTACHMENT))
+            val storageState = Environment.getExternalStorageState(root)
+            if (storageState != Environment.MEDIA_UNKNOWN && storageState != Environment.MEDIA_MOUNTED) {
+                L.w { "$TAG redundant purge skipped storageState=$storageState" }
+                return@withContext
+            }
+            val result = purgeRedundantPlaintext(root) { dirKey, fileName -> findAttachment(dirKey, fileName)?.key }
+            val stamped = mayStampRedundantPurge(result.complete, storageState)
+            if (stamped) prefs.edit().putInt(KEY_REDUNDANT_PURGE_VERSION, REDUNDANT_PURGE_VERSION).apply()
+            L.i { "$TAG redundant purge deleted=${result.deleted} complete=${result.complete} stamped=$stamped" }
+        } catch (e: Exception) {
+            // DB read failure or IO: not stamped, retried next launch.
+            L.w { "$TAG redundant purge failed type=${e.javaClass.simpleName}" }
+        }
+    }
+
+    /**
+     * The pass is recorded only for a root on mounted external storage. A root reported as
+     * [Environment.MEDIA_UNKNOWN] is internal storage that `FilePathManager` fell back to because
+     * external storage was not mounted when the base dir was resolved: the external tree, where the
+     * leftovers live, was not scanned, so the pass must run again on a later launch.
+     */
+    internal fun mayStampRedundantPurge(complete: Boolean, rootStorageState: String): Boolean =
+        complete && rootStorageState == Environment.MEDIA_MOUNTED
+
+    internal class PurgeResult(val deleted: Int, val complete: Boolean)
+
+    /** [keyOf] resolves a copy's row key by `(directory name, file name)`; it may throw (aborts, not stamped). */
+    internal fun purgeRedundantPlaintext(root: File, keyOf: (String, String) -> ByteArray?): PurgeResult {
+        if (!root.exists()) return PurgeResult(0, complete = true)
+        val copyDirs = root.listFiles() ?: return PurgeResult(0, complete = false)
+        var deleted = 0
+        var complete = true
+        for (copyDir in copyDirs) {
+            if (!copyDir.isDirectory) continue
+            val files = copyDir.listFiles()
+            if (files == null) {
+                complete = false
+                continue
+            }
+            for (file in files) {
+                if (!file.isFile || file.name.endsWith(".encrypt") || file.name.endsWith(TMP_SUFFIX)) continue
+                if (!EncryptedAttachmentAccess.hasEncrypted(file.absolutePath)) continue
+                val key = keyOf(copyDir.name, file.name)?.takeIf(EncryptedAttachmentAccess::isUsableKey) ?: continue
+                // Only when the ciphertext verifies with this row's key: a damaged ciphertext, or a key the
+                // lookup took from a sibling row, leaves the plaintext as the only good copy.
+                if (!FileDecryptionUtil.verifyMac(EncryptedAttachmentAccess.encryptedFile(file.absolutePath), key)) continue
+                if (file.delete()) deleted++ else complete = false
+            }
+        }
+        return PurgeResult(deleted, complete)
     }
 
     private data class Stats(

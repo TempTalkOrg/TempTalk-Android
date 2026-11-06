@@ -1,6 +1,5 @@
 package com.difft.android.linkeddevices
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,20 +39,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.difft.android.R
 import com.difft.android.base.ui.TitleBar
 import com.difft.android.base.ui.compose.DifftScreen
 import com.difft.android.base.ui.compose.settings.DifftSettingsDefaults
 import com.difft.android.base.ui.compose.settings.DifftSettingsGroup
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.base.widget.getSafeActivity
 import com.difft.android.chat.invite.ScanActivity
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.graphics.Color
 import java.text.DateFormat
 import java.util.Date
 
@@ -71,6 +68,8 @@ fun LinkedDevicesScreen(
     viewModel: LinkedDevicesViewModel,
     showBackButton: Boolean,
     onBack: () -> Unit,
+    onUnlinkConfirm: (DeviceUiState) -> Unit,
+    visibleOwner: androidx.lifecycle.LifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current,
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -78,7 +77,15 @@ fun LinkedDevicesScreen(
     var rootSize by remember { mutableStateOf(IntSize.Zero) }
     var rootCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    LaunchedEffect(Unit) {
+    androidx.compose.runtime.DisposableEffect(visibleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) menu = null
+        }
+        visibleOwner.lifecycle.addObserver(observer)
+        onDispose { visibleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(visibleOwner) {
+        visibleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
         viewModel.events.collect { event ->
             when (event) {
                 LinkedDevicesViewModel.UiEvent.UnlinkFailed ->
@@ -86,6 +93,7 @@ fun LinkedDevicesScreen(
                 LinkedDevicesViewModel.UiEvent.FetchFailed ->
                     ToastUtil.show(R.string.linked_devices_list_update_failed)
             }
+        }
         }
     }
 
@@ -140,7 +148,7 @@ fun LinkedDevicesScreen(
                 onDismiss = { menu = null },
                 onUnlink = {
                     menu = null
-                    showUnlinkConfirm(context, m.device, viewModel)
+                    onUnlinkConfirm(m.device)
                 },
             )
         }
@@ -278,21 +286,4 @@ private fun LinkNewDeviceRow(onClick: () -> Unit) {
             modifier = Modifier.size(DifftTheme.spacing.iconXSmall),
         )
     }
-}
-
-/**
- * Confirm dialog. Resolves the display name + destructive button colour via resources and delegates
- * to the app-wide [ComposeDialogManager]. Colour token is base R.color.error.
- */
-private fun showUnlinkConfirm(context: Context, device: DeviceUiState, viewModel: LinkedDevicesViewModel) {
-    val name = device.displayName ?: context.getString(R.string.linked_devices_unnamed)
-    ComposeDialogManager.showMessageDialog(
-        context = context,
-        title = context.getString(R.string.linked_devices_unlink_confirm_title, name),
-        message = context.getString(R.string.linked_devices_unlink_confirm_body),
-        confirmText = context.getString(R.string.linked_devices_unlink_action),
-        cancelText = context.getString(R.string.linked_devices_unlink_cancel),
-        confirmButtonColor = Color(ContextCompat.getColor(context, com.difft.android.base.R.color.error)),
-        onConfirm = { viewModel.unlink(device.id) },
-    )
 }

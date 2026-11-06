@@ -1,5 +1,7 @@
 package com.difft.android.setting
 
+import com.difft.android.base.migration.pause.HeldSendJobs
+import com.difft.android.base.migration.pause.MigrationMessagePause
 import com.difft.android.base.storage.user.StorageBoundUserManager
 import com.difft.android.base.user.UserManager
 import com.difft.android.chat.attachment.migration.ForwardAttachmentMigration
@@ -62,6 +64,8 @@ class LogoutManagerImplTranslateClearTest {
     private lateinit var appExiter: AppExiter
     private lateinit var translateModelStore: TranslateModelStore
     private lateinit var translateQueue: TranslateQueue
+    private val migrationMessagePause: MigrationMessagePause = mockk(relaxed = true)
+    private val heldSendJobs: HeldSendJobs = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -108,6 +112,8 @@ class LogoutManagerImplTranslateClearTest {
         appExiter = appExiter,
         translateModelStore = { translateModelStore },
         translateQueue = { translateQueue },
+        migrationMessagePause = migrationMessagePause,
+        heldSendJobs = heldSendJobs,
     )
 
     // --- T62 ----------------------------------------------------------------

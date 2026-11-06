@@ -297,4 +297,16 @@ class DifftClearableTextFieldTest {
         assertTrue(received.isNotEmpty(), "onValueChange was never called — reject semantics detected")
         assertEquals("abcde", received.last())
     }
+
+    // The cut never splits a surrogate pair: with one unit left, the whole emoji is dropped.
+    @Test
+    fun maxLength_dropsWholeSurrogatePairAtTheLimit() {
+        val received = mutableListOf<String>()
+        rule.setContent { Host(value = "abcd", maxLength = 5, onValueChange = { received.add(it) }) }
+        fieldNode().performTextInput("😀")
+        rule.waitForIdle()
+        val last = received.lastOrNull() ?: "abcd"
+        assertEquals("abcd", last)
+        assertTrue(last.none { it.isSurrogate() }, "an unpaired surrogate reached the host: $last")
+    }
 }

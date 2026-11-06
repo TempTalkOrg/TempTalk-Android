@@ -1,5 +1,6 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.test.fakes.TestMessagingPause
 import io.mockk.mockk
 import org.difft.app.database.WCDB
 import org.junit.Assert.assertEquals
@@ -27,6 +28,7 @@ class FailedMessageProcessorTest {
         processor = FailedMessageProcessor(
             envelopToMessageProcessor = mockk(relaxed = true),
             wcdb = mockk<WCDB>(relaxed = true),
+            messagingGate = TestMessagingPause().open().gate,
         )
     }
 

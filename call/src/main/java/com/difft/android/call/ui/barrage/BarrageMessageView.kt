@@ -56,7 +56,7 @@ import com.difft.android.call.data.RTM_MESSAGE_TYPE_BUBBLE
 import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.data.TextBubbleMessage
 import com.difft.android.call.ui.actionbar.EmojiReactionSheet
-import com.difft.android.call.ui.actionbar.rememberCallActionBarPlan
+import com.difft.android.call.ui.actionbar.rememberCallChromeLayout
 import com.difft.android.call.util.StringUtil
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Job
@@ -86,8 +86,18 @@ fun BarrageMessageView(
 
     // The stack floats just above whatever the bar plan occupies (bar, outside Emoji pill, or
     // the two-row backplate). Pure window-size geometry: no posture or device special cases.
-    val plan = rememberCallActionBarPlan(isGroup = !config.isOneVOneCall)
-    val bottomPadding = (plan.chromeBottomReserveDp + LCallUiConstants.CHROME_CONTENT_GAP_DP).dp
+    // With the side rail (#1451) it sits at the rail's bottom inset and stops short of the rail's band.
+    // With the tabletop dock it sits at the bottom of the stage, above the fold.
+    val chrome = rememberCallChromeLayout(isGroup = !config.isOneVOneCall)
+    val plan = chrome.barPlan
+    val rail = chrome.rail
+    val dock = chrome.dock
+    val bottomPadding = when {
+        dock != null -> (dock.heightDp - dock.bandTopDp + LCallUiConstants.CHROME_CONTENT_GAP_DP).dp
+        rail != null -> rail.bottomInsetDp.dp
+        else -> (plan.chromeBottomReserveDp + LCallUiConstants.CHROME_CONTENT_GAP_DP).dp
+    }
+    val endPadding = rail?.let { (it.widthDp + LCallUiConstants.CHROME_CONTENT_GAP_DP).dp } ?: 16.dp
 
     val maxInputChars = config.textMaxLength
 
@@ -193,7 +203,7 @@ fun BarrageMessageView(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = bottomPadding, start = 16.dp, end = 16.dp)
+                .padding(bottom = bottomPadding, start = 16.dp, end = endPadding)
                 .align(Alignment.BottomStart),
             horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.Bottom

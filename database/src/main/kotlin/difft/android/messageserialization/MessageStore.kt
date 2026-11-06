@@ -16,7 +16,8 @@ interface MessageStore {
 
     fun deleteMessage(messageIds: List<String>)
 
-    fun removeRoomAndMessages(roomId: String)
+    /** Optional authorization is rechecked by deferred deletion immediately before local work. */
+    fun removeRoomAndMessages(roomId: String, commitAllowed: (() -> Boolean)? = null)
 
     fun updateMessageReaction(
         conversationId: String,

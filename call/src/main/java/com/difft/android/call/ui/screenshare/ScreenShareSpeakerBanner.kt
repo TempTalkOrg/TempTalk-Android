@@ -27,18 +27,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.call.LCallManager
+import com.difft.android.call.LCallUiConstants
 import com.difft.android.call.data.AvatarData
 import com.difft.android.call.data.CallUserDisplayInfo
 import com.difft.android.call.LCallViewModel
+import com.difft.android.call.ui.actionbar.cutoutClearedTopDp
+import com.difft.android.call.ui.actionbar.rememberCallWindowSizeDp
+import com.difft.android.call.ui.actionbar.rememberDisplayCutoutRectsDp
 import dagger.hilt.android.EntryPointAccessors
 import io.livekit.android.room.participant.LocalParticipant
 import io.livekit.android.room.participant.Participant
@@ -174,7 +181,15 @@ fun ScreenShareSpeakerBanner(
         val parentMaxWPx = constraints.maxWidth.toFloat()
         val parentMaxHPx = constraints.maxHeight.toFloat()
         val marginEndPx = with(density) { BANNER_MARGIN_END.toPx() }
-        val marginTopPx = with(density) { BANNER_MARGIN_TOP.toPx() }
+        val window = rememberCallWindowSizeDp()
+        val cutouts = rememberDisplayCutoutRectsDp()
+        val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        // The parent is the window less the rail band at the end edge.
+        val endGapDp = window.width - with(density) { constraints.maxWidth.toDp().value }
+        val topDp = remember(cutouts, window, endGapDp, isRtl) {
+            speakerBannerTopDp(cutouts, window.width, window.height, endGapDp, isRtl)
+        }
+        val marginTopPx = with(density) { topDp.dp.toPx() }
         val bannerWidthPx = with(density) { BANNER_WIDTH.toPx() }
 
         BannerContainer(
@@ -262,6 +277,25 @@ internal fun ScreenShareSpeakerBannerContent(
             MicQueueList(waitingSpeakers)
         }
     }
+}
+
+/**
+ * The banner's resting top in window dp: [BANNER_MARGIN_TOP], or below a cutout rect that meets its
+ * column within the title row's band, as the title row itself clears it. [endGapDp] is the rail
+ * band the banner keeps clear of at the end edge (#1451).
+ */
+internal fun speakerBannerTopDp(
+    cutouts: List<Rect>,
+    windowWidthDp: Float,
+    windowHeightDp: Float,
+    endGapDp: Float,
+    isRtl: Boolean,
+): Float {
+    val fromEnd = endGapDp + BANNER_MARGIN_END.value
+    val left = if (isRtl) fromEnd else windowWidthDp - fromEnd - BANNER_WIDTH.value
+    return cutoutClearedTopDp(
+        cutouts, left, left + BANNER_WIDTH.value, windowHeightDp, BANNER_MARGIN_TOP.value, LCallUiConstants.TOP_BAR_HEIGHT_DP.toFloat(),
+    )
 }
 
 internal fun resolveExpanded(hasWaiting: Boolean, userChoice: Boolean?): Boolean {

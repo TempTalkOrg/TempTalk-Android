@@ -34,6 +34,9 @@ sealed class FcmInitResult {
  * FCM 在此构建中不可用，消息通知依赖 WebSocket 后台长连接实现。
  */
 @Singleton
+/** Mirrors the upstream resync outcome; this build has no FCM token to rebind. */
+enum class ResyncResult { OK, SKIP, FAIL }
+
 class PushUtil @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
@@ -53,6 +56,9 @@ class PushUtil @Inject constructor(
         // 触发现有的 handleFcmUnavailable() 流程，引导用户开启后台连接
         _fcmInitResult.value = FcmInitResult.PlayServicesUnavailable(0)
     }
+
+    /** No FCM in this build: nothing to rebind on a warm-process resync. */
+    suspend fun resyncBind(): ResyncResult = ResyncResult.SKIP
 
     suspend fun sendRegistrationToServer(fcmID: String) {
         L.d { "[Push] FCM not available in this build" }

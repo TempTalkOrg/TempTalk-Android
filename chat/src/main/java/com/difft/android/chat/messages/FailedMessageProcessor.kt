@@ -1,6 +1,9 @@
 package com.difft.android.chat.messages
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingGate
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.sampleAfterFirst
 import com.tencent.wcdb.base.Value
@@ -36,6 +39,7 @@ import kotlin.random.Random
 class FailedMessageProcessor @Inject constructor(
     private val envelopToMessageProcessor: EnvelopToMessageProcessor,
     private val wcdb: WCDB,
+    private val messagingGate: MessagingGate,
 ) {
     companion object {
         const val MAX_RETRIES = 5
@@ -89,7 +93,7 @@ class FailedMessageProcessor @Inject constructor(
     @Inject
     fun initWhenInject() {
         processEvents.sampleAfterFirst(3000).onEach {
-            processFailedMessagesInternal()
+            processAdmittedTick()
         }.launchIn(appScope)
     }
 
@@ -135,7 +139,32 @@ class FailedMessageProcessor @Inject constructor(
         }
     }
 
-    private suspend fun processFailedMessagesInternal() {
+    /** One tick under one receive ticket (#1382); skipped while messaging is closed. */
+    internal suspend fun processAdmittedTick() {
+        val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "failed-drain")
+        if (admission == null) {
+            L.i { "[MigrationPause] event=receive_dropped source=failed-drain count=0" }
+            return
+        }
+        admission.use { processFailedMessagesInternal(it) }
+    }
+
+    /**
+     * The migration export's pre-snapshot drain (#1382): every retryable row once, ignoring
+     * backoff, under [owner]'s pause, so envelopes consumed from the server before the pause land
+     * in the snapshot.
+     *
+     * @return the rows left in the table, or null when [owner]'s export is not the one exporting.
+     */
+    suspend fun drainAsOwner(owner: String): Int? {
+        val admission = messagingGate.tryAdmitAsOwner(owner, AdmissionKind.RECEIVE, "failed-drain-owner") ?: return null
+        return admission.use {
+            processFailedMessagesInternal(it, ignoreBackoff = true)
+            wcdb.failedMessage.allObjects.size
+        }
+    }
+
+    private suspend fun processFailedMessagesInternal(admission: MessagingTicket, ignoreBackoff: Boolean = false) {
         try {
             // (CancellationException is rethrown below — must propagate so
             // scope shutdown / logout actually cancels this tick.)
@@ -158,12 +187,12 @@ class FailedMessageProcessor @Inject constructor(
                 hasCleanedUp = true
             }
 
-            val due = loadDueMessages()
+            val due = loadDueMessages(ignoreBackoff)
             if (due.isEmpty()) return
 
             L.i { "[FailedMessageProcessor] Processing ${due.size} due failed messages." }
             due.forEach { failed ->
-                processOne(failed)
+                processOne(failed, admission)
             }
         } catch (e: CancellationException) {
             // Must propagate so scope shutdown actually cancels (parity with
@@ -183,7 +212,7 @@ class FailedMessageProcessor @Inject constructor(
      * - Transient → bump retryCount + lastAttemptTime; at MAX_RETRIES, give-up
      *   report + delete the failed_message row.
      */
-    private suspend fun processOne(failed: FailedMessageModel) {
+    private suspend fun processOne(failed: FailedMessageModel, admission: MessagingTicket) {
         val envelope = try {
             Envelope.parseFrom(failed.messageEnvelopBytes)
         } catch (e: Exception) {
@@ -198,7 +227,7 @@ class FailedMessageProcessor @Inject constructor(
             return
         }
 
-        when (val res = envelopToMessageProcessor.process(envelope, "FailedMessageProcessor")) {
+        when (val res = envelopToMessageProcessor.process(envelope, "FailedMessageProcessor", admission)) {
             is EnvelopeProcessResult.Success -> {
                 deleteFailedRow(failed.timestamp)
             }
@@ -215,6 +244,8 @@ class FailedMessageProcessor @Inject constructor(
             is EnvelopeProcessResult.TransientFailure -> {
                 bumpRetryOrGiveUp(failed, res.cause)
             }
+            // Nothing was stored; keep the row and its retry count.
+            EnvelopeProcessResult.Paused -> Unit
         }
     }
 
@@ -288,17 +319,25 @@ class FailedMessageProcessor @Inject constructor(
      * ordered by oldest attempt first. Over-read a 2x window and filter by
      * backoff to keep query cost bounded while still finding old-enough rows.
      */
-    private fun loadDueMessages(): List<FailedMessageModel> {
+    private fun loadDueMessages(ignoreBackoff: Boolean = false): List<FailedMessageModel> {
         val candidates = runCatching {
-            wcdb.failedMessage.getAllObjects(
-                DBFailedMessageModel.retryCount.lt(MAX_RETRIES),
-                DBFailedMessageModel.lastAttemptTime.order(Order.Asc),
-                (MAX_PER_TICK * 2).toLong()
-            )
+            if (ignoreBackoff) {
+                wcdb.failedMessage.getAllObjects(
+                    DBFailedMessageModel.retryCount.lt(MAX_RETRIES),
+                    DBFailedMessageModel.lastAttemptTime.order(Order.Asc),
+                )
+            } else {
+                wcdb.failedMessage.getAllObjects(
+                    DBFailedMessageModel.retryCount.lt(MAX_RETRIES),
+                    DBFailedMessageModel.lastAttemptTime.order(Order.Asc),
+                    (MAX_PER_TICK * 2).toLong()
+                )
+            }
         }.getOrElse { e ->
             L.e { "[FailedMessageProcessor] loadDueMessages query failed: ${e.stackTraceToString()}" }
             return emptyList()
         }
+        if (ignoreBackoff) return candidates
         val now = System.currentTimeMillis()
         return candidates
             .filter { now - it.lastAttemptTime >= backoffMillis(it.retryCount) }

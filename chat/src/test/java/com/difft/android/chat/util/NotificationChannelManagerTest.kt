@@ -126,7 +126,7 @@ class NotificationChannelManagerTest {
         assertEquals(NotificationManager.IMPORTANCE_LOW, message.importance)
         assertEquals(NotificationChannelIds.MESSAGE_GROUP, message.group)
         val critical = submitted.single { it.id == "CRITICAL_ALERT_V2" }
-        assertEquals("Critical alerts", critical.name.toString())
+        assertEquals("Critical Alerts", critical.name.toString())
         assertTrue(critical.canBypassDnd())
         verify(exactly = 0) { nm.deleteNotificationChannel(any()) }
     }

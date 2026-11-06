@@ -1,8 +1,11 @@
 package com.difft.android.base.utils
 
 import android.content.Context
+import android.app.Application
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.content.res.Resources
+import android.os.LocaleList
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Before
@@ -34,6 +37,10 @@ import kotlin.test.assertTrue
  *      the system locale.
  *   6. **Configured context pins only locale and font scale** — density, screen size and
  *      night mode keep following the system, and the caller's configuration is not mutated.
+ *   7. **Following the system is live (#1395)** — with no explicit choice, [LanguageUtils.getLanguage]
+ *      reads the system language list on every call and picks its first match for the APK's
+ *      `en` / `zh-CN` resources (the platform's own pick), and nothing pins that locale onto a
+ *      Context, the Application resources or [Locale.getDefault].
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -44,6 +51,8 @@ class LanguageUtilsTest {
     private lateinit var legacyPrefs: SharedPreferences
 
     private val originalLegacyProvider = LanguageUtils.legacyPrefsProvider
+    private val originalSystemLocalesProvider = LanguageUtils.systemLocalesProvider
+    private var systemLocales = LocaleList.forLanguageTags("en-US")
 
     @Before
     fun setup() {
@@ -66,6 +75,134 @@ class LanguageUtilsTest {
         legacyPrefs.edit().clear().commit()
         LanguageUtils.resetForTest()
         LanguageUtils.legacyPrefsProvider = originalLegacyProvider
+        LanguageUtils.systemLocalesProvider = originalSystemLocalesProvider
+    }
+
+    private fun followFakeSystem(tags: String) {
+        systemLocales = LocaleList.forLanguageTags(tags)
+        LanguageUtils.systemLocalesProvider = { systemLocales }
+    }
+
+    // ---- 7. live system-language following (#1395) ----
+
+    @Test
+    fun `following the system picks up a system language change without a cache reset`() {
+        followFakeSystem("en-US")
+        assertEquals(Locale.forLanguageTag("en-US"), LanguageUtils.getLanguage(context))
+
+        systemLocales = LocaleList.forLanguageTags("zh-CN")
+
+        assertEquals(Locale.forLanguageTag("zh-CN"), LanguageUtils.getLanguage(context))
+        assertEquals(Locale.forLanguageTag("zh-CN"), LanguageUtils.getLanguageNonBlocking())
+    }
+
+    @Test
+    fun `an explicit choice ignores later system language changes`() {
+        followFakeSystem("zh-CN")
+        LanguageUtils.saveLanguage(context, Locale.US)
+
+        systemLocales = LocaleList.forLanguageTags("zh-CN,en-US")
+
+        assertEquals(Locale.US, LanguageUtils.getLanguage(context))
+    }
+
+    @Test
+    fun `a failed migration follows the live system language`() {
+        followFakeSystem("en-US")
+        LanguageUtils.legacyPrefsProvider = { throw IllegalStateException("legacy SP unreadable") }
+
+        assertEquals(Locale.forLanguageTag("en-US"), LanguageUtils.getLanguage(context))
+        systemLocales = LocaleList.forLanguageTags("zh-CN")
+        assertEquals(Locale.forLanguageTag("zh-CN"), LanguageUtils.getLanguage(context))
+        assertFalse(newPrefs.contains("language"), "a failed migration writes nothing")
+    }
+
+    @Test
+    fun `a multi-language system list resolves to its first supported entry`() {
+        followFakeSystem("fr-FR,zh-CN")
+        assertEquals(Locale.forLanguageTag("zh-CN"), LanguageUtils.getLanguage(context))
+
+        systemLocales = LocaleList.forLanguageTags("de-DE,en-GB")
+        assertEquals(Locale.forLanguageTag("en-GB"), LanguageUtils.getLanguage(context))
+    }
+
+    @Test
+    fun `an unsupported list resolves like the platform does`() {
+        followFakeSystem("fr-FR")
+        assertEquals(Locale.forLanguageTag("fr-FR"), LanguageUtils.getLanguage(context), "single entry: that entry")
+
+        systemLocales = LocaleList.forLanguageTags("de-DE,fr-FR")
+        assertEquals(Locale.forLanguageTag("de-DE"), LanguageUtils.getLanguage(context), "no match: the first entry")
+    }
+
+    @Test
+    fun `Traditional Chinese does not map to Simplified Chinese`() {
+        followFakeSystem("zh-TW")
+        val tw = LanguageUtils.getLanguage(context)
+        assertEquals(Locale.forLanguageTag("zh-TW"), tw)
+        assertEquals("zh", tw.language)
+
+        systemLocales = LocaleList.forLanguageTags("zh-HK,en-US")
+        assertEquals(Locale.forLanguageTag("en-US"), LanguageUtils.getLanguage(context))
+    }
+
+    @Test
+    fun `an empty or unreadable system list falls back to the JVM default`() {
+        followFakeSystem("")
+        assertEquals(Locale.getDefault(), LanguageUtils.getLanguage(context))
+
+        LanguageUtils.systemLocalesProvider = { throw IllegalStateException("no system resources") }
+        assertEquals(Locale.getDefault(), LanguageUtils.getLanguage(context))
+    }
+
+    @Test
+    fun `the default provider reads the system resources`() {
+        assertEquals(
+            Resources.getSystem().configuration.locales.getFirstMatch(arrayOf("en", "zh-CN")),
+            LanguageUtils.getLanguage(context),
+        )
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "en-rUS")
+    fun `a configured context following the system does not pin the locale`() {
+        val configured = LanguageUtils.createConfiguredContext(context)
+        assertEquals(Locale.US, configured.resources.configuration.locales[0])
+
+        RuntimeEnvironment.setQualifiers("zh-rCN")
+
+        assertEquals(Locale.CHINA, configured.resources.configuration.locales[0])
+        assertEquals(1.0f, configured.resources.configuration.fontScale)
+    }
+
+    @Test
+    fun `reapplying the locale while following the system changes nothing`() {
+        followFakeSystem("zh-CN")
+        val app = context as Application
+        val before = Configuration(app.resources.configuration)
+        val defaultBefore = Locale.getDefault()
+        LanguageUtils.getLanguage(app)
+
+        LanguageUtils.reapplyLocaleToAppResources(app)
+
+        assertEquals(before.locales, app.resources.configuration.locales)
+        assertEquals(defaultBefore, Locale.getDefault())
+    }
+
+    @Test
+    fun `reapplying an explicit choice pins it as before`() {
+        val defaultBefore = Locale.getDefault()
+        try {
+            LanguageUtils.saveLanguage(context, Locale.CHINA)
+            val app = context as Application
+
+            LanguageUtils.reapplyLocaleToAppResources(app)
+
+            assertEquals(Locale.CHINA, app.resources.configuration.locales[0])
+            assertEquals(Locale.CHINA, Locale.getDefault())
+        } finally {
+            Locale.setDefault(defaultBefore)
+        }
     }
 
     @Test

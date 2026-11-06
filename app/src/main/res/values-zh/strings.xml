@@ -341,5 +341,7 @@
     <string name="migration_m3_body">请在这台设备上更新 Quicall，然后重新开始迁移。</string>
     <string name="migration_m3_body_peer">「%1$s」当前版本不支持迁移，请先更新到最新版本。</string>
     <string name="migration_m3_go">更新 Quicall</string>
+    <string name="migration_m3_body_new_device">请将新设备上的 App 更新到最新版本后重试。</string>
+    <string name="migration_m3_got_it">知道了</string>
     <string name="share_file_access_error">无法访问共享的文件，请重新尝试分享。</string>
 </resources>

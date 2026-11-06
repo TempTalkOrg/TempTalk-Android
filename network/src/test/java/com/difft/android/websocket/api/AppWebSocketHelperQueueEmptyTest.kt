@@ -1,5 +1,6 @@
 package com.difft.android.websocket.api
 
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.messages.ChatDataMessageFlag
 import com.difft.android.websocket.internal.websocket.WebSocketConnection
 import io.mockk.every
@@ -24,7 +25,7 @@ class AppWebSocketHelperQueueEmptyTest {
     }
 
     private val connection: WebSocketConnection = mockk(relaxed = true)
-    private val helper = AppWebSocketHelper(connection)
+    private val helper = AppWebSocketHelper(connection, TestMessagingPause().open().gate)
 
     private fun request(path: String, verb: String = "PUT"): WebSocketRequestMessage =
         WebSocketRequestMessage.newBuilder().setVerb(verb).setPath(path).setRequestId(REQUEST_ID).build()

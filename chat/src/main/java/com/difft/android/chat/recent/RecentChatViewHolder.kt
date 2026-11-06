@@ -17,13 +17,13 @@ import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.call.LCallManager
 import com.difft.android.chat.R
+import com.difft.android.chat.common.AvatarView
 import com.difft.android.chat.databinding.ChatFragmentRecentChatListItemBinding
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.call.LCallManager.EntryPoint
 import com.difft.android.call.state.OnGoingCallStateManager
 import dagger.hilt.android.EntryPointAccessors
 import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
 import kotlinx.coroutines.launch
 import com.difft.android.chat.contacts.data.getContactAvatarData
 import com.difft.android.chat.contacts.data.getContactAvatarUrl
@@ -33,7 +33,18 @@ import com.difft.android.chat.search.setHighLightText
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 
 
-class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myID: String, private val isForSearch: Boolean) : RecyclerView.ViewHolder(run {
+/**
+ * A conversation row. [isFocusCard] holders render the focus group ([ListItem.FocusChat]): a
+ * focus icon in the trailing slot and up to three preview lines; they are a separate view type, so
+ * the extra views never leak into a plain row.
+ */
+class RecentChatViewHolder(
+    val activity: Activity,
+    container: ViewGroup,
+    val myID: String,
+    private val isForSearch: Boolean,
+    private val isFocusCard: Boolean = false,
+) : RecyclerView.ViewHolder(run {
     val inflater = LayoutInflater.from(container.context)
     ChatFragmentRecentChatListItemBinding.inflate(inflater, container, false).root
 }) {
@@ -55,6 +66,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         val onReadToggle: () -> Unit,
         val onPinToggle: () -> Unit,
         val onDelete: () -> Unit,
+        /** Shown only for rows whose [RoomViewData.focusAction] is not NONE. */
+        val onFocusToggle: () -> Unit = {},
     )
 
     @SuppressLint("ClickableViewAccessibility")
@@ -111,7 +124,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                         contactAvatar?.getContactAvatarUrl(),
                         contactAvatar?.encKey,
                         data.roomName?.firstOrNull()?.toString() ?: "#",
-                        data.roomId
+                        data.roomId,
+                        letterTextSizeDp = ROW_AVATAR_LETTER_SIZE_DP,
                     )
                 }
             }
@@ -135,7 +149,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             if (data.unreadMessageNum > 99) "99+" else data.unreadMessageNum.toString()
         applyTagRow(data)
 
-        showMissingNumber(data.displayUnreadNum, data.isMuted, isDot = data.unreadMessageNum == 0 && data.isManualUnread)
+        applyUnreadBadge(binding.textviewMissedNumber, data.displayUnreadNum, data.isMuted, isDot = data.unreadMessageNum == 0 && data.isManualUnread)
 
         binding.swipeForeground.setOnClickListener {
             onItemClick()
@@ -173,6 +187,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         binding.actionPinIcon.setImageResource(if (data.isPinned) R.drawable.chat_icon_unstick else R.drawable.chat_icon_stick)
         binding.actionPinLabel.text = context.getString(if (data.isPinned) R.string.chat_unstick else R.string.chat_stick)
         binding.actionDelete.isVisible = data.roomId != myID
+        bindFocusSwipeAction(binding.actionFocus, binding.actionFocusIcon, binding.actionFocusLabel, data.focusAction)
 
         val runAndClose: (() -> Unit) -> Unit = { action ->
             root.close()
@@ -182,6 +197,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         binding.swipeStartActions.setOnClickListener { runAndClose(swipe.onReadToggle) }
         binding.actionPin.setOnClickListener { runAndClose(swipe.onPinToggle) }
         binding.actionDelete.setOnClickListener { runAndClose(swipe.onDelete) }
+        binding.actionFocus.setOnClickListener { runAndClose(swipe.onFocusToggle) }
     }
 
     private fun updateTextSizes(isLarger: Boolean) {
@@ -191,6 +207,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             binding.textviewDate.textSize = 21f
             binding.textviewAt.textSize = 21f
             binding.textviewDetail.textSize = 21f
+            binding.textviewFocusLine2.textSize = 21f
+            binding.textviewFocusLine3.textSize = 21f
             binding.textviewMissedNumber.textSize = 12f
         } else {
             binding.textviewLabel.textSize = 16f
@@ -198,6 +216,8 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
             binding.textviewDate.textSize = 14f
             binding.textviewAt.textSize = 14f
             binding.textviewDetail.textSize = 14f
+            binding.textviewFocusLine2.textSize = 14f
+            binding.textviewFocusLine3.textSize = 14f
             binding.textviewMissedNumber.textSize = 10f
         }
     }
@@ -214,11 +234,23 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
      */
     private fun applyDetailRow(data: RoomViewData) {
         val context = binding.root.context
-        binding.textviewDetail.text =
-            data.draftPreview?.takeIf { it.isNotEmpty() } ?: data.lastDisplayContent
-        binding.textviewDetail.setTextColor(
-            ContextCompat.getColor(context, detailColorRes(data.displayUnreadNum, data.isMuted))
-        )
+        val draft = data.draftPreview?.takeIf { it.isNotEmpty() }
+        val lines: List<CharSequence?> = if (isFocusCard) {
+            focusCardLines(draft, data.focusPreviewLines, data.lastDisplayContent)
+        } else {
+            listOf(draft ?: data.lastDisplayContent)
+        }
+        binding.textviewDetail.text = lines.firstOrNull()
+        // A focus card's lines share one colour: emphasising only the first would single out its
+        // oldest message.
+        val detailColor = ContextCompat.getColor(context, detailColorRes(data.displayUnreadNum, data.isMuted))
+        binding.textviewDetail.setTextColor(detailColor)
+        binding.textviewFocusLine2.setTextColor(detailColor)
+        binding.textviewFocusLine3.setTextColor(detailColor)
+        binding.textviewFocusLine2.isVisible = lines.size > 1
+        binding.textviewFocusLine2.text = lines.getOrNull(1)
+        binding.textviewFocusLine3.isVisible = lines.size > 2
+        binding.textviewFocusLine3.text = lines.getOrNull(2)
     }
 
     /**
@@ -264,7 +296,7 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 hasUnreadBadge = data.displayUnreadNum != 0,
                 isLargerText = TextSizeUtil.isLarger,
                 hasSendingIcon = showSendingIcon,
-                hasPinnedIcon = shouldShowPinnedIcon(data),
+                hasPinnedIcon = trailingIndicator(data).let { it == TrailingIndicator.PIN || it == TrailingIndicator.FOCUS },
             ),
             measureText = binding.textviewAt.paint::measureText,
         )
@@ -272,34 +304,6 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
         // nothing, and an empty-but-VISIBLE TextView would still consume its marginEnd.
         binding.textviewAt.isVisible = visible.isNotEmpty()
         binding.textviewAt.text = joinTags(visible)
-    }
-
-    /**
-     * [isDot]: a manual "mark as unread" with no real unread renders as a plain dot (no number),
-     * per the chat-list gesture design; the same view shrinks to [UNREAD_DOT_SIZE_DP] and grows
-     * back to the XML badge size for a count, since holders are recycled between the two.
-     */
-    private fun showMissingNumber(missedNumber: Int, isMuted: Boolean, isDot: Boolean) {
-        val badge = binding.textviewMissedNumber
-        if (missedNumber == 0) {
-            badge.visibility = View.GONE
-            return
-        }
-        badge.visibility = View.VISIBLE
-        badge.setBackgroundResource(
-            if (isMuted) R.drawable.chat_missing_number_bg_muted else R.drawable.chat_missing_number_bg
-        )
-        val density = badge.resources.displayMetrics.density
-        val sizePx = ((if (isDot) UNREAD_DOT_SIZE_DP else UNREAD_BADGE_SIZE_DP) * density).toInt()
-        val paddingPx = if (isDot) 0 else (UNREAD_BADGE_PADDING_DP * density).toInt()
-        badge.updateLayoutParams {
-            height = sizePx
-            width = if (isDot) sizePx else ViewGroup.LayoutParams.WRAP_CONTENT
-        }
-        badge.minWidth = if (isDot) 0 else sizePx
-        badge.minHeight = if (isDot) 0 else sizePx
-        badge.setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
-        if (isDot) badge.text = ""
     }
 
     private fun setupCallingJoinButton(
@@ -310,15 +314,16 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
     }
 
 
-    private fun shouldShowPinnedIcon(data: RoomViewData): Boolean = shouldShowPinnedIcon(
+    private fun trailingIndicator(data: RoomViewData): TrailingIndicator = trailingIndicator(
         isForSearch = isForSearch,
+        isFocusCard = isFocusCard,
         isPinned = data.isPinned,
         displayUnreadNum = data.displayUnreadNum,
     )
 
     /**
-     * Also runs on every call-bar tick, so it owns the row background, the pinned icon and the
-     * capsule/date swap on the first row.
+     * Also runs on every call-bar tick, so it owns the row background, the trailing slot's pin or
+     * focus icon, and the capsule/date swap on the first row.
      */
     fun updateCallBarDuration(data: RoomViewData) {
         val hasCallBar = data.hasOngoingCall
@@ -329,7 +334,9 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
                 hasCallBar = hasCallBar,
             ))
         )
-        binding.imageviewPinned.isVisible = shouldShowPinnedIcon(data)
+        val indicator = trailingIndicator(data)
+        binding.imageviewPinned.isVisible = indicator == TrailingIndicator.PIN
+        binding.imageviewFocus.isVisible = indicator == TrailingIndicator.FOCUS
         // The meeting capsule takes the date's place on the first row.
         binding.callBarDuration.isVisible = hasCallBar
         binding.textviewDate.isVisible = !hasCallBar
@@ -372,13 +379,6 @@ class RecentChatViewHolder(val activity: Activity, container: ViewGroup, val myI
 
 }
 
-/** XML size of textview_missed_number (18dp, padding 3dp); restored after a dot render. */
-private const val UNREAD_BADGE_SIZE_DP = 18
-private const val UNREAD_BADGE_PADDING_DP = 3
-
-/** Manual-unread indicator: a dot with no number. */
-private const val UNREAD_DOT_SIZE_DP = 10
-
 /**
  * A row with an ongoing call (instant calls included) shows the meeting capsule and offers no row
  * actions, neither swipe nor long-press, matching iOS.
@@ -397,12 +397,26 @@ internal fun rowBackgroundColorRes(isSelected: Boolean, isPinned: Boolean, hasCa
     else -> com.difft.android.base.R.color.bg1
 }
 
+/** Letter size for the row's 52dp avatar (`frame_layout_avatar`), keeping the designed letter/diameter ratio. */
+private val ROW_AVATAR_LETTER_SIZE_DP = AvatarView.letterTextSizeDpFor(52)
+
+/** What the row's trailing slot (end of the preview line) shows; at most one of them. */
+internal enum class TrailingIndicator { NONE, UNREAD, FOCUS, PIN }
+
 /**
- * The pin icon takes the trailing slot only when it is free: an unread count or a manual-unread
- * dot wins. An active-call row still shows it beside the join button. Search results never show it.
+ * The trailing slot: an unread count or manual-unread dot first; otherwise the focus row shows the
+ * focus icon (never the pin icon, whatever its pin), a pinned row its pin icon; both icons are 18dp.
+ * An active-call row still shows it beside the join button. Search results show only the unread badge.
  */
-internal fun shouldShowPinnedIcon(
+internal fun trailingIndicator(
     isForSearch: Boolean,
+    isFocusCard: Boolean,
     isPinned: Boolean,
     displayUnreadNum: Int,
-): Boolean = !isForSearch && isPinned && displayUnreadNum == 0
+): TrailingIndicator = when {
+    displayUnreadNum > 0 -> TrailingIndicator.UNREAD
+    isForSearch -> TrailingIndicator.NONE
+    isFocusCard -> TrailingIndicator.FOCUS
+    isPinned -> TrailingIndicator.PIN
+    else -> TrailingIndicator.NONE
+}

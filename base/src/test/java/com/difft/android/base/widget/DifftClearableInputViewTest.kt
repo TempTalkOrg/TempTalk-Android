@@ -7,6 +7,7 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.core.view.drawToBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -19,11 +20,13 @@ import com.difft.android.base.ui.compose.input.DifftTextFieldStyle
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Setter-semantics pins for [DifftClearableInputView] — the AbstractComposeView shell.
@@ -56,6 +59,22 @@ class DifftClearableInputViewTest {
                 configure()
             }
             activity.setContentView(view)
+        }
+        rule.waitForIdle()
+        return view
+    }
+
+    /** Mounted at its own height (wrap_content), so the view's bounds are the field's box. */
+    private fun mountWrapped(configure: DifftClearableInputView.() -> Unit = {}): DifftClearableInputView {
+        lateinit var view: DifftClearableInputView
+        rule.activityRule.scenario.onActivity { activity ->
+            view = DifftClearableInputView(activity).apply {
+                id = VIEW_ID
+                configure()
+            }
+            activity.setContentView(FrameLayout(activity).apply {
+                addView(view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
+            })
         }
         rule.waitForIdle()
         return view
@@ -227,6 +246,62 @@ class DifftClearableInputViewTest {
         rule.runOnUiThread { view.saveHierarchyState(container) }
         val bundle = container.get(VIEW_ID) as Bundle
         assertEquals("xyz", bundle.getString("difft_input_query"))
+    }
+
+    // Text area: more than one line turns the clear icon off (the component's rule).
+    @Test
+    fun maxLinesAboveOne_hasNoClearIcon() {
+        val view = mountView { maxLines = 5 }
+        rule.runOnUiThread { view.query = "abc" }
+        rule.waitForIdle()
+        assertEquals(ClearMode.Never, view.clearMode)
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.base_clear_text))
+            .assertDoesNotExist()
+    }
+
+    // Text area: the box grows with its lines instead of keeping the single-line height.
+    @Test
+    fun maxLinesAboveOne_boxGrowsWithText() {
+        val view = mountWrapped { maxLines = 5 }
+        rule.runOnUiThread { view.query = "one" }
+        rule.waitForIdle()
+        val oneLine = view.height
+        // No newline: only a field that wraps can grow (a single-line one scrolls sideways).
+        rule.runOnUiThread { view.query = "word ".repeat(60).trim() }
+        rule.waitForIdle()
+        assertTrue(view.height > oneLine, "height ${view.height} did not grow past $oneLine")
+    }
+
+    @Test
+    fun maxLinesAttr_roundTrips() {
+        lateinit var view: DifftClearableInputView
+        rule.activityRule.scenario.onActivity { activity ->
+            val attrs = Robolectric.buildAttributeSet()
+                .addAttribute(R.attr.dsi_maxLines, "5")
+                .build()
+            view = DifftClearableInputView(activity, attrs)
+        }
+        assertEquals(5, view.maxLines)
+        assertEquals(ClearMode.Never, view.clearMode)
+    }
+
+    // Runtime fill: the setter repaints the box (a host switching styles after inflation).
+    @Test
+    fun containerColorSetter_repaintsBox() {
+        val view = mountWrapped { containerColor = android.graphics.Color.RED }
+        assertEquals(android.graphics.Color.RED, centrePixel(view))
+        rule.runOnUiThread { view.containerColor = android.graphics.Color.BLUE }
+        rule.waitForIdle()
+        assertEquals(android.graphics.Color.BLUE, centrePixel(view))
+    }
+
+    private fun centrePixel(view: DifftClearableInputView): Int {
+        var pixel = 0
+        rule.runOnUiThread {
+            val image = view.drawToBitmap()
+            pixel = image.getPixel(image.width / 2, image.height / 2)
+        }
+        return pixel
     }
 
     private companion object {

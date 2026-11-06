@@ -6,6 +6,11 @@ import kotlin.test.assertTrue
 
 class KeepAliveHealthWindowTest {
 
+    init {
+        // Day slots are tested in UTC regardless of the machine's zone.
+        KeepAliveHealthWindow.zoneOffsetMs = { 0L }
+    }
+
     private val day = KeepAliveHealthWindow.DAY_MS
     private val t0 = 100 * day + 5_000L // a UTC day start plus a few seconds
 
@@ -58,18 +63,24 @@ class KeepAliveHealthWindowTest {
         KeepAliveHealthWindow.verdict(listOf(DailySlot(199, now - ageMs, counts)), now)
 
     @Test
-    fun `latency rule needs 50 samples and 50 percent over 30m or 10 percent over 2h`() {
-        // 49 slow samples: not enough data.
-        assertEquals("0", verdict(mapOf("lat_ws_2h" to 49)).value)
-        // 50 samples, exactly 50% slow (25 in 2h, 25 fast): trigger.
-        assertEquals(listOf("L"), verdict(mapOf("lat_ws_2h" to 25, "lat_fcm_10s" to 25)).why)
-        // 50 samples, 24 slow: below 50%.
-        assertEquals("0", verdict(mapOf("lat_ws_2h" to 24, "lat_fcm_10s" to 26)).value)
-        // Exactly 10% over 2h (5 of 50), rest fast: trigger; 4 of 50: not.
-        assertEquals(listOf("L"), verdict(mapOf("lat_pull_more" to 5, "lat_ws_10s" to 45)).why)
-        assertEquals("0", verdict(mapOf("lat_pull_more" to 4, "lat_ws_10s" to 46)).value)
-        // Slow samples in any channel count together.
-        assertEquals(listOf("L"), verdict(mapOf("lat_ws_2h" to 10, "lat_fcm_more" to 10, "lat_pull_2h" to 5, "lat_ws_5m" to 25)).why)
+    fun `latency rule is late deliveries on two days of the window, whatever the count or share`() {
+        // One day, however many late deliveries it holds, is a single released backlog.
+        assertEquals("0", verdict(mapOf("late_5m" to 30)).value)
+        assertEquals("0", verdict(mapOf("late_5m" to 30, "lat_ws_2h" to 60)).value)
+        // Many slow bucket samples without the late count (not background or catch-up) do not trigger.
+        assertEquals("0", verdict(mapOf("lat_ws_2h" to 60, "lat_fcm_more" to 60)).value)
+    }
+
+    @Test
+    fun `late deliveries on two days of the window trigger L, the share of slow samples aside`() {
+        val now = 200 * day
+        val slots = listOf(
+            DailySlot(197, now - 3 * day, mapOf("late_5m" to 1, "lat_ws_10s" to 500)),
+            DailySlot(199, now - day, mapOf("late_5m" to 1)),
+        )
+        val v = KeepAliveHealthWindow.verdict(slots, now)
+        assertEquals(listOf("L"), v.why)
+        assertEquals(2, v.lateDeliveries)
     }
 
     @Test
@@ -87,8 +98,8 @@ class KeepAliveHealthWindowTest {
 
     @Test
     fun `rules combine and the verdict stays na until 3 days of observation`() {
-        val all = mapOf("pull_fail" to 5, "fgs_fail" to 10, "lat_fcm_more" to 50)
-        assertEquals(listOf("L", "F", "P"), verdict(all).why)
+        val all = mapOf("pull_fail" to 5, "fgs_fail" to 10, "late_5m" to 3, "lat_fcm_more" to 50)
+        assertEquals(listOf("F", "P"), verdict(all).why)
         assertEquals("1", verdict(all).value)
 
         val young = verdict(all, ageMs = 3 * day - 1)
@@ -127,11 +138,20 @@ class KeepAliveHealthWindowTest {
     }
 
     @Test
-    fun `daily keys cover latency, transit and stall buckets plus six counters`() {
-        assertEquals(34, KeepAliveHealthWindow.DAILY_KEYS.size)
+    fun `daily keys cover latency, transit and stall buckets plus seven counters`() {
+        assertEquals(35, KeepAliveHealthWindow.DAILY_KEYS.size)
+        assertTrue("late_5m" in KeepAliveHealthWindow.DAILY_KEYS)
         assertTrue("fcmt_more" in KeepAliveHealthWindow.DAILY_KEYS)
         assertTrue("stall_min" in KeepAliveHealthWindow.DAILY_KEYS)
         assertTrue("fgs_fail" in KeepAliveHealthWindow.DAILY_KEYS)
         assertTrue("fgs_alive_s" !in KeepAliveHealthWindow.DAILY_KEYS)
+    }
+
+    @Test
+    fun `a slot one day ahead is kept and a later one empties the window`() {
+        val today = 107L
+        val kept = KeepAliveHealthWindow.normalize(listOf(slot(107, 107 * day, "pull_ok" to 1), slot(108, 108 * day, "pull_ok" to 1)), today * day + 1)
+        assertEquals(listOf(107L, 108L), kept.map { it.day })
+        assertEquals(emptyList(), KeepAliveHealthWindow.normalize(listOf(slot(109, 109 * day, "pull_ok" to 1)), today * day + 1))
     }
 }

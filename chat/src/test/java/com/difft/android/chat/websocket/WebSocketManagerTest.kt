@@ -13,6 +13,7 @@ import io.mockk.verifyOrder
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -67,7 +68,9 @@ class WebSocketManagerTest {
         incomingMessageObserver = mockk(relaxed = true)
         sessionAuthGuard = mockk(relaxed = true)
 
-        manager = WebSocketManager(appWebSocketHelper, incomingMessageObserver, sessionAuthGuard)
+        manager = WebSocketManager(appWebSocketHelper, incomingMessageObserver, sessionAuthGuard, mockk(relaxed = true))
+        // The socket starts paused until messaging opens (#1382); these cases run with it open.
+        manager.resume()
     }
 
     @After
@@ -90,6 +93,69 @@ class WebSocketManagerTest {
         manager.start()
         manager.stop()
 
+        verify(exactly = 1) { sessionAuthGuard.stop() }
+    }
+
+    // --- Migration message pause, G-R1 (#1382) ---
+
+    @Test
+    fun `a manager started while messaging is closed starts the observer and guard but never monitors`() {
+        val closed = WebSocketManager(appWebSocketHelper, incomingMessageObserver, sessionAuthGuard, mockk(relaxed = true))
+
+        closed.start()
+
+        verify(exactly = 1) { incomingMessageObserver.start() }
+        verify(exactly = 1) { sessionAuthGuard.start() }
+        verify(exactly = 0) { conn.startMonitoring() }
+        assertTrue(closed.isSocketPaused())
+    }
+
+    @Test
+    fun `pause closes the socket, drops unread frames and keeps the observer and guard`() {
+        manager.start()
+
+        manager.pause()
+
+        verifyOrder {
+            conn.stopMonitoring()
+            conn.cancelConnection(LocalDisconnectReason.STOP)
+            conn.clearIncomingRequests()
+        }
+        verify(exactly = 0) { incomingMessageObserver.stop() }
+        verify(exactly = 0) { sessionAuthGuard.stop() }
+    }
+
+    @Test
+    fun `T3 resume restarts monitoring only, never the observer`() {
+        manager.start()
+        manager.pause()
+
+        manager.resume()
+
+        verify(exactly = 2) { conn.startMonitoring() }
+        verify(exactly = 1) { incomingMessageObserver.start() }
+        verify(exactly = 0) { incomingMessageObserver.stop() }
+    }
+
+    @Test
+    fun `no proxy reconnect while paused`() {
+        manager.start()
+        manager.pause()
+        stateFlow.tryEmit(WebSocketConnectionState.CONNECTING)
+
+        manager.reconnectAfterProxyChange()
+
+        verify(exactly = 0) { conn.evictConnectionPool() }
+    }
+
+    @Test
+    fun `stop while paused does not touch the stopped monitor`() {
+        manager.start()
+        manager.pause()
+
+        manager.stop()
+
+        verify(exactly = 1) { conn.stopMonitoring() }
         verify(exactly = 1) { sessionAuthGuard.stop() }
     }
 

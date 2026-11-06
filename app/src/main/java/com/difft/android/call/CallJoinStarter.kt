@@ -98,6 +98,7 @@ class CallJoinStarter @Inject constructor(
                 val intent = CallIntent.Builder(application, LCallActivity::class.java)
                     .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     .withAction(CallIntent.Action.JOIN_CALL)
+                    .withRoomId(roomId)
                     .withRoomName(roomName)
                     .withCallType(callType.type)
                     .withCallRole(callRole.type)

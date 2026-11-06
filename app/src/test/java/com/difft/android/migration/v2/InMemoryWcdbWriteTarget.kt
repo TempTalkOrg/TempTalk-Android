@@ -10,6 +10,7 @@ import org.difft.app.database.models.ForwardModel
 import org.difft.app.database.models.GroupCryptoKeysModel
 import org.difft.app.database.models.MentionModel
 import org.difft.app.database.models.MessageModel
+import org.difft.app.database.models.PendingMessageModelNew
 import org.difft.app.database.models.QuoteModel
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.ReadInfoModel
@@ -47,6 +48,7 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
     val sharedContacts = ArrayList<SharedContactModel>()
     val sharedContactPhones = ArrayList<SharedContactPhoneModel>()
     val readInfos = ArrayList<ReadInfoModel>()
+    val pendingEnvelopes = ArrayList<PendingMessageModelNew>()
 
     var transactionCount = 0
         private set
@@ -122,6 +124,15 @@ class InMemoryWcdbWriteTarget : WcdbWriteTarget {
     override fun insertGroupKey(model: GroupCryptoKeysModel) {
         groupKeys.removeAll { it.gid == model.gid }
         groupKeys.add(model)
+    }
+
+    /** Set to make the next pending-envelope write throw, as an unsaveable row would. */
+    var failPendingEnvelopeWrites = false
+
+    override fun insertPendingEnvelope(model: PendingMessageModelNew) {
+        check(!failPendingEnvelopeWrites) { "pending_message_new write failed" }
+        pendingEnvelopes.removeAll { it.messageId == model.messageId }
+        pendingEnvelopes.add(model)
     }
 
     override fun markReadUpTo(roomId: String, maxServerTime: Long, readAt: Long, selfUid: String) {

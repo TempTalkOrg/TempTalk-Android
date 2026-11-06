@@ -82,6 +82,12 @@ class MigrationP2pSendViewModel(
     private val clearPendingVerdict: (suspend () -> Unit)? = null,
     // One `/status` question to the receiver of a pending send.
     private val probeVerdict: (suspend (SenderSessionRef) -> Verdict)? = null,
+    // Settles a re-checked verdict: the message pause and the pending record in one write (#1382);
+    // false when the pause did not take it, so the page shows no final result. Null (tests) falls
+    // back to clearing the pending record on a definite verdict.
+    private val settleVerdict: (suspend (SenderSessionRef, Verdict) -> Boolean)? = null,
+    // Phone-to-phone replacement (not a Desktop link): the send pauses messaging (#1382).
+    private val deviceReplacement: Boolean = false,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<MigrationP2pSendState>(MigrationP2pSendState.Idle)
@@ -220,15 +226,19 @@ class MigrationP2pSendViewModel(
         if (recheckJob?.isActive == true) return
         _state.update { MigrationP2pSendState.Unconfirmed(MigrationP2pSendState.Unconfirmed.Phase.CHECKING) }
         recheckJob = viewModelScope.launch {
-            when (val verdict = runCatching { probe(session) }.getOrElse { Verdict.Unknown(Verdict.Unknown.Reason.UNREACHABLE) }) {
+            val verdict = runCatching { probe(session) }.getOrElse { Verdict.Unknown(Verdict.Unknown.Reason.UNREACHABLE) }
+            if (!settle(session, verdict)) {
+                L.w { "[MigrationV2][P2P][Tx] event=recheck_verdict_not_applied" }
+                _state.update { MigrationP2pSendState.Unconfirmed(MigrationP2pSendState.Unconfirmed.Phase.UNREACHABLE) }
+                return@launch
+            }
+            when (verdict) {
                 Verdict.Succeeded -> {
                     L.i { "[MigrationV2][P2P][Tx] re-check: the receiver finished — done" }
-                    clearPendingVerdict?.invoke()
                     _state.update { MigrationP2pSendState.Done }
                 }
                 is Verdict.Ended -> {
                     L.i { "[MigrationV2][P2P][Tx] re-check: the receiver ended with ${verdict.terminal}" }
-                    clearPendingVerdict?.invoke()
                     _state.update { MigrationP2pSendState.Failed(SenderVerdictTracker.reasonFor(verdict)) }
                 }
                 is Verdict.Unknown -> {
@@ -237,6 +247,17 @@ class MigrationP2pSendViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * A definite verdict ends the pending record; any verdict may move the message pause. False
+     * when the pause did not take it (#1382 A11).
+     */
+    private suspend fun settle(session: SenderSessionRef, verdict: Verdict): Boolean {
+        val settlement = settleVerdict
+        if (settlement != null) return settlement(session, verdict)
+        if (verdict !is Verdict.Unknown) clearPendingVerdict?.invoke()
+        return true
     }
 
     /** Fill in the pairing page's size figures once they are known; a stale result never overwrites a later state. */
@@ -265,8 +286,9 @@ class MigrationP2pSendViewModel(
     private fun onScanned(raw: String) {
         // A transfer is still running: this screen is showing it (the holder collector re-attached on
         // open), and a scan must not replace that with a pairing page whose start button the service
-        // would refuse. The migration deliberately does not block the app, so being interrupted by a
-        // message or a call and coming back through the scanner is an ordinary path, not an edge case.
+        // would refuse. While a phone-to-phone send runs, messaging is paused (#1382): no message
+        // notification or call rings, so only a system or user-initiated interruption (a Home press,
+        // another app) leaves this page; coming back through the scanner is still an ordinary path.
         inFlightOrNull()?.let { live ->
             L.w { "[MigrationV2][P2P][Tx] scan ignored: transfer in flight (${live::class.simpleName})" }
             emit(MigrationP2pSendEffect.Toast(appContext.getString(R.string.migration_p2p_send_transfer_in_flight)))
@@ -480,7 +502,7 @@ class MigrationP2pSendViewModel(
             if (includeAttachments || !e.offersAttachmentChoice) e.totalBytes else e.withoutAttachmentsBytes
         } ?: 0L
         L.i { "[MigrationV2][P2P][Tx] send start includeAttachments=$includeAttachments handoff=$credentialHandoff estimate=$estimatedTotalBytes" }
-        MigrationTransferService.startSender(appContext, raw, includeAttachments, credentialHandoff, awaitPeerConfirm)
+        MigrationTransferService.startSender(appContext, raw, includeAttachments, credentialHandoff, awaitPeerConfirm, deviceReplacement)
         sendStarted = true
         // Same device: the user follows progress on the new app; the sender keeps running in its FGS.
         if (_sameDevice.value) emit(MigrationP2pSendEffect.BringPeerToFront)

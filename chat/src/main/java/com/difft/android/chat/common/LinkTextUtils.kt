@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
+import com.difft.android.chat.recent.ConversationNavigationCallback
 import com.difft.android.base.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.security.SafeLinkOpener
@@ -281,7 +282,9 @@ object LinkTextUtils {
     private fun showContactDetailPopup(context: Context, contactId: String) {
         val fragmentActivity = getFragmentActivity(context)
         if (fragmentActivity != null) {
-            ContactDetailBottomSheetDialogFragment.show(fragmentActivity, contactId)
+            // Recorded so the card's More / common groups land on that conversation's stack.
+            val overConversation = (fragmentActivity as? ConversationNavigationCallback)?.currentConversationOnScreen()
+            ContactDetailBottomSheetDialogFragment.show(fragmentActivity, contactId, overConversation = overConversation)
         } else {
             // Fallback to Activity mode if FragmentActivity is not available
             ContactDetailActivity.startActivity(context, contactId)

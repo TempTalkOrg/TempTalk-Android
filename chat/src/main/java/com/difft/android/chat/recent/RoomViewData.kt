@@ -50,6 +50,17 @@ data class RoomViewData(
      * when no real unread exists).
      */
     val isManualUnread: Boolean = false,
+    /**
+     * Focus-aware mute set by RecentChatViewModel while group focus is on (focus group: not muted,
+     * every other group: muted). Null leaves [muteStatus] in charge (focus off, private chats, search).
+     */
+    val effectiveMuted: Boolean? = null,
+    /** Focus entry of this row's long-press menu and swipe actions; set by [ChatListAssembler]. */
+    val focusAction: FocusRowAction = FocusRowAction.NONE,
+    /** The focus group's latest previews (`sender: content`), oldest first; prefetched on IO. */
+    val focusPreviewLines: List<String> = emptyList(),
+    /** Built from the group row: the focus group has no visible room row yet (never written). */
+    val isSynthesized: Boolean = false,
 ) {
     sealed class Type {
         data object OneOnOne : Type()
@@ -65,13 +76,24 @@ data class RoomViewData(
         get() = if (unreadMessageNum > 0) unreadMessageNum else if (isManualUnread) 1 else 0
 
     val isMuted: Boolean
-        get() = muteStatus == MuteStatus.MUTED.value
+        get() = effectiveMuted ?: (muteStatus == MuteStatus.MUTED.value)
 
-    val isPinned: Boolean
+    /** The stored pin; [isPinned] is what the list shows. */
+    val isRealPinned: Boolean
         get() = pinnedTime != null && pinnedTime > 0
+
+    /**
+     * The stored pin, plus the focus group's stand-in row ([isSynthesized]): it sits in the pinned
+     * area until its real, pinned room row is written (`FocusPinCoordinator`).
+     */
+    val isPinned: Boolean
+        get() = isRealPinned || isSynthesized
 
 }
 
+
+/** The focus entry a row offers: none (private chats, feature off), "focus this group", or "end focus". */
+enum class FocusRowAction { NONE, START, END }
 
 enum class MuteStatus(val value: Int) {
     MUTED(1),

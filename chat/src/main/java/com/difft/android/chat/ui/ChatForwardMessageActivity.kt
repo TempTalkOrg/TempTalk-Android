@@ -5,8 +5,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.viewModels
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.BaseActivity
@@ -19,7 +21,8 @@ import com.difft.android.chat.widget.AudioMessageManager
 import com.difft.android.base.widget.applySharedMaxWidth
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.hi.dhl.binding.viewbind
-import com.difft.android.chat.MessageContactsCacheUtil
+import com.difft.android.chat.ui.mvi.ChatForwardMessageContract
+import com.difft.android.chat.ui.mvi.ChatForwardMessageViewModel
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,11 +38,6 @@ import com.difft.android.chat.dependencies.ApplicationDependencies
 
 @AndroidEntryPoint
 class ChatForwardMessageActivity : BaseActivity() {
-
-    /**
-     * Contact cache for author name lookup in title
-     */
-    private val contactorCache = MessageContactsCacheUtil()
 
     companion object {
         private const val EXTRA_MESSAGE_ID = "messageId"
@@ -64,16 +62,14 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
     }
 
-    // Store ForwardContext objects for Fragment access (avoids serialization)
-    private val forwardContextStack = mutableListOf<ForwardContext>()
+    // ForwardContext stack for Fragment access (avoids serialization); retained across
+    // configuration changes together with the fragment back stack.
+    private val viewModel: ChatForwardMessageViewModel by viewModels()
 
     // Outer combined-forward message context — used by Fragment to emit
     // copy/forward notices attributing to the OUTER sender, not nested authors.
-    private var outerSourceConversation: For? = null
-    private var outerSourceAuthorId: String? = null
-
-    fun getOuterSourceConversation(): For? = outerSourceConversation
-    fun getOuterSourceAuthorId(): String? = outerSourceAuthorId
+    fun getOuterSourceConversation(): For? = viewModel.state.value.outerSourceConversation
+    fun getOuterSourceAuthorId(): String? = viewModel.state.value.outerSourceAuthorId
 
     private val mBinding: ChatActivityForwardMessageBinding by viewbind()
 
@@ -95,6 +91,10 @@ class ChatForwardMessageActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Store confidential message ID for deletion when Activity is finally destroyed. Read on
+        // every create: restored fragments query it in onViewCreated, after this body returns.
+        confidentialMessageId = intent.getStringExtra(EXTRA_CONFIDENTIAL_MESSAGE_ID)
+
         entryPlayingMessageId = AudioMessageManager.currentPlayingMessage?.id
 
         setupBottomSheet()
@@ -109,8 +109,19 @@ class ChatForwardMessageActivity : BaseActivity() {
             onBackPressedDispatcher.onBackPressed()
         }
 
-        if (savedInstanceState == null) {
-            loadInitialFragment()
+        val stack = viewModel.state.value.stack
+        when {
+            savedInstanceState == null -> loadInitialFragment()
+            // Configuration change: the stack and the fragment back stack survived together.
+            stack.isNotEmpty() -> mBinding.tvTitle.text = getForwardTitle(stack.last())
+            // Process death or relaunch during the initial load: restored fragments have no
+            // context, so reload the root from the database (#1440).
+            else -> {
+                val backStackCount = supportFragmentManager.backStackEntryCount
+                L.i { "[ForwardViewer] restore without context backStack=$backStackCount" }
+                supportFragmentManager.popBackStackImmediate(null, FragmentManager.POP_BACK_STACK_INCLUSIVE)
+                loadInitialFragment(finishIfMissing = true)
+            }
         }
     }
 
@@ -259,10 +270,13 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
         // Backstop for paths that bypass STATE_HIDDEN (system finish, task removed).
         stopPreviewOwnedAudio()
-        // Delete confidential message when Activity is destroyed (not when Fragment is replaced)
-        confidentialMessageId?.let {
-            L.i { "[Confidential] Delete forward message, messageId: $it" }
-            ApplicationDependencies.getMessageStore().deleteMessage(listOf(it))
+        // Delete confidential message when Activity is destroyed (not when Fragment is replaced);
+        // a configuration change keeps the viewer open, so the message stays (#1440).
+        if (!isChangingConfigurations) {
+            confidentialMessageId?.let {
+                L.i { "[Confidential] Delete forward message, messageId: $it" }
+                ApplicationDependencies.getMessageStore().deleteMessage(listOf(it))
+            }
         }
         super.onDestroy()
     }
@@ -305,8 +319,9 @@ class ChatForwardMessageActivity : BaseActivity() {
     private fun setupBackStackListener() {
         supportFragmentManager.addOnBackStackChangedListener {
             // Pop ForwardContext from stack when going back
-            if (forwardContextStack.size > supportFragmentManager.backStackEntryCount + 1) {
-                forwardContextStack.removeLastOrNull()
+            val expectedSize = supportFragmentManager.backStackEntryCount + 1
+            if (viewModel.state.value.stack.size > expectedSize) {
+                viewModel.dispatch(ChatForwardMessageContract.Intent.TrimTo(expectedSize))
             }
             // Update title from current ForwardContext
             getCurrentForwardContext()?.let { forwardContext ->
@@ -315,28 +330,37 @@ class ChatForwardMessageActivity : BaseActivity() {
         }
     }
 
-    private fun loadInitialFragment() {
+    /**
+     * @param finishIfMissing close the viewer when the message is gone (e.g. burned before a
+     * restore) instead of leaving an empty sheet.
+     */
+    private fun loadInitialFragment(finishIfMissing: Boolean = false) {
         val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return
-
-        // Store confidential message ID for deletion when Activity is destroyed
-        confidentialMessageId = intent.getStringExtra(EXTRA_CONFIDENTIAL_MESSAGE_ID)
 
         // Query message asynchronously
         lifecycleScope.launch(Dispatchers.IO) {
             val message = wcdb.message.getFirstObject(DBMessageModel.id.eq(messageId))
-            val forwardContext = message?.convertToTextMessage()?.forwardContext ?: return@launch
+            val forwardContext = message?.convertToTextMessage()?.forwardContext
+            if (message == null || forwardContext == null) {
+                if (finishIfMissing) {
+                    withContext(Dispatchers.Main) { finish() }
+                }
+                return@launch
+            }
 
             // Outer message context for copy/forward notice attribution
-            outerSourceAuthorId = message.fromWho
-            outerSourceConversation = if (message.roomType == 1) For.Group(message.roomId ?: "") else For.Account(message.roomId ?: "")
+            val outerAuthorId = message.fromWho
+            val outerConversation = if (message.roomType == 1) For.Group(message.roomId ?: "") else For.Account(message.roomId ?: "")
 
             // Load contactors for author name lookup in title (recursively collect all author IDs)
             val authorIds = collectAllAuthorIds(forwardContext)
-            contactorCache.loadContactors(authorIds)
+            viewModel.contactorCache.loadContactors(authorIds)
 
             withContext(Dispatchers.Main) {
                 // Store ForwardContext and update title
-                forwardContextStack.add(forwardContext)
+                viewModel.dispatch(
+                    ChatForwardMessageContract.Intent.SetRoot(forwardContext, outerConversation, outerAuthorId)
+                )
                 mBinding.tvTitle.text = getForwardTitle(forwardContext)
 
                 // Load fragment
@@ -355,14 +379,14 @@ class ChatForwardMessageActivity : BaseActivity() {
      * Get ForwardContext at specified stack index (for Fragment to access)
      */
     fun getForwardContext(stackIndex: Int): ForwardContext? {
-        return forwardContextStack.getOrNull(stackIndex)
+        return viewModel.state.value.stack.getOrNull(stackIndex)
     }
 
     /**
      * Get current (top) ForwardContext
      */
     fun getCurrentForwardContext(): ForwardContext? {
-        return forwardContextStack.lastOrNull()
+        return viewModel.state.value.stack.lastOrNull()
     }
 
     /**
@@ -407,7 +431,7 @@ class ChatForwardMessageActivity : BaseActivity() {
             getString(R.string.group_chat_history)
         } else {
             val authorId = forwards?.firstOrNull()?.author ?: ""
-            val author = contactorCache.getContactor(authorId)
+            val author = viewModel.contactorCache.getContactor(authorId)
             if (author != null) {
                 getString(R.string.chat_history_for, author.getDisplayNameWithoutRemarkForUI())
             } else {
@@ -422,12 +446,12 @@ class ChatForwardMessageActivity : BaseActivity() {
      */
     fun navigateToNestedForward(title: String, forwardContext: ForwardContext) {
         // Add to stack and update title
-        forwardContextStack.add(forwardContext)
+        viewModel.dispatch(ChatForwardMessageContract.Intent.PushNested(forwardContext))
         mBinding.tvTitle.text = title
 
         val fragment = ChatForwardMessageFragment.newInstance(
             title = title,
-            stackIndex = forwardContextStack.size - 1
+            stackIndex = viewModel.state.value.stack.size - 1
         )
 
         supportFragmentManager.commit {

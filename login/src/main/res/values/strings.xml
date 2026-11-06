@@ -72,4 +72,5 @@
     <!-- I4 — import method chooser (P2P vs File) + same-device file-only -->
     <!-- Intro copy folded from the old pre-prompt into the single combined chooser dialog -->
 
+    <string name="profile_avatar_reselect">The selected image is no longer available. Please choose it again.</string>
 </resources>

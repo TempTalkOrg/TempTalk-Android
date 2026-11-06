@@ -15,8 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * nothing, unlike `ScreenLockUtil.recentlyUnlocked`.
  *
  * A quick check decides in about 100 ms; the full (deeplink) check takes about 1.1 s and the flag
- * may drop and rise again between its two passes. A flag still set after [MAX_PENDING_MS] means a
- * path missed its clear, so a watchdog clears it rather than keep every startup prompt waiting.
+ * may drop and rise again between its two passes. A check deferred while MainActivity routes stays
+ * set until the next page's re-run decides, which sets it again. A flag still set after
+ * [MAX_PENDING_MS] means a path missed its clear, so a watchdog clears it rather than keep every
+ * startup prompt waiting.
  */
 class ScreenLockPending(
     private val handler: Handler = Handler(Looper.getMainLooper()),

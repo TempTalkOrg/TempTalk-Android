@@ -401,6 +401,7 @@ class MigrationV2SampleGeneratorTest {
                 is NeutralRecord.GroupKey -> record.value.groupId
                 is NeutralRecord.Identity -> "identity"
                 is NeutralRecord.Credential -> "credential"
+                is NeutralRecord.PendingEnvelope -> record.value.messageId
             }
             key to codec.encodeRecord(record)
         }

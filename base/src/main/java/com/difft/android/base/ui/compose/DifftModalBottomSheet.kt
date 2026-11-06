@@ -15,6 +15,8 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -25,10 +27,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.difft.android.base.R
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.hideNavigationBar
+import com.difft.android.base.utils.hideSystemBars
 
 /**
  * Shared visual tokens for every bottom sheet in the app. The View-based
@@ -66,6 +72,11 @@ object DifftBottomSheetDefaults {
  *
  * [containerColor] / [dragHandleColor] default to the [DifftTheme] tokens; every host mounting a
  * sheet provides that theme, so a caller only passes them to deviate from the library look.
+ *
+ * [hideSystemBars] hides every system bar on the sheet's dialog window, for a host window that is
+ * itself fully immersive (call screen share, #1451); the dialog does not inherit that state, so
+ * without it opening the sheet brings the status bar back. Turning it off while the sheet is open
+ * shows the bars again (the navigation bar stays hidden under [hideNavigationBar]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +90,7 @@ fun DifftModalBottomSheet(
     showDragHandle: Boolean = true,
     dragHandleColor: Color = DifftTheme.colors.textDisabled,
     hideNavigationBar: Boolean = false,
+    hideSystemBars: Boolean = false,
     contentWindowInsets: @Composable () -> WindowInsets = { BottomSheetDefaults.windowInsets },
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -99,6 +111,7 @@ fun DifftModalBottomSheet(
         if (hideNavigationBar) {
             HideDialogNavigationBarEffect()
         }
+        DialogSystemBarsEffect(hidden = hideSystemBars, keepNavigationBarHidden = hideNavigationBar)
         content()
     }
 }
@@ -135,4 +148,32 @@ fun HideDialogNavigationBarEffect() {
         (view.parent as? DialogWindowProvider)?.window?.hideNavigationBar()
         onDispose { }
     }
+}
+
+/**
+ * Mirrors a fully immersive host on the dialog window of the current composition (#1451). Runs
+ * as a [SideEffect] so the bars are hidden in the same pass as the sheet's first composition,
+ * before its window draws; a no-op until [hidden] is first true, so default sheets are untouched.
+ */
+@Composable
+private fun DialogSystemBarsEffect(hidden: Boolean, keepNavigationBarHidden: Boolean) {
+    val view = LocalView.current
+    val applied = remember { AppliedBarsState() }
+    SideEffect {
+        if (hidden == applied.hidden) return@SideEffect
+        val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
+        applied.hidden = hidden
+        L.i { "[BottomSheet] dialog system bars hidden=$hidden" }
+        if (hidden) {
+            window.hideSystemBars()
+        } else {
+            WindowCompat.getInsetsController(window, window.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
+            if (keepNavigationBarHidden) window.hideNavigationBar()
+        }
+    }
+}
+
+private class AppliedBarsState {
+    var hidden = false
 }

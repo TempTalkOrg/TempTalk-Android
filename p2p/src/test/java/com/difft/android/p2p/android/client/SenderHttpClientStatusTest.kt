@@ -71,7 +71,8 @@ class SenderHttpClientStatusTest {
         assertNull(client.status("no-such-session", token))
 
         // Past the commit point the cancel is too late and the session stays live.
-        sessions.committing()
+        sessions.authorizeUpload(id, "f", prepared.slots.getValue("f").token, "127.0.0.1")
+        assertTrue(sessions.committing(id))
         assertEquals(CancelState.TOO_LATE, client.cancel(id, token))
         assertTrue(client.status(id, token)!!.terminal == null)
 

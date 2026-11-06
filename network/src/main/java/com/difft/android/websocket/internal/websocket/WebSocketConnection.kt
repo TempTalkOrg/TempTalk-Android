@@ -17,7 +17,7 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -35,6 +35,7 @@ import com.difft.android.websocket.api.websocket.HealthMonitor
 import com.difft.android.websocket.api.websocket.KeepAliveSender
 import com.difft.android.websocket.api.websocket.LocalDisconnectReason
 import com.difft.android.websocket.api.websocket.WebSocketConnectionState
+import com.difft.android.websocket.api.websocket.WebSocketResponseTimeoutException
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketMessage
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketRequestMessage
 import org.whispersystems.signalservice.internal.websocket.WebSocketProtos.WebSocketResponseMessage
@@ -243,6 +244,16 @@ class WebSocketConnection @AssistedInject constructor(
         return incomingRequests.take()
     }
 
+    /**
+     * Drops frames read from a socket that is gone, so none is ACKed on a later socket; the server
+     * redelivers every unacknowledged one. @return how many were dropped.
+     */
+    fun clearIncomingRequests(): Int {
+        val dropped = incomingRequests.size
+        incomingRequests.clear()
+        return dropped
+    }
+
     @Throws(IOException::class)
     suspend fun sendRequestAwaitResponse(request: WebSocketRequestMessage): WebsocketResponse {
         L.d { "$name sendMessageRequest() requestId=${request.requestId}, path=${request.path}, verb=${request.verb}" }
@@ -266,8 +277,11 @@ class WebSocketConnection @AssistedInject constructor(
                 throw IOException("$name Write failed!")
             }
 
-            return withTimeout(10_000) {
+            return withTimeoutOrNull(REQUEST_RESPONSE_TIMEOUT_MS) {
                 deferred.await()
+            } ?: run {
+                L.w { "$name request timeout requestId=${request.requestId} verb=${request.verb} waitedMs=$REQUEST_RESPONSE_TIMEOUT_MS" }
+                throw WebSocketResponseTimeoutException(REQUEST_RESPONSE_TIMEOUT_MS)
             }
         } finally {
             synchronized(this) {
@@ -486,6 +500,7 @@ class WebSocketConnection @AssistedInject constructor(
 
     companion object {
         const val KEEP_ALIVE_TIMEOUT_SECONDS: Int = 30
+        private const val REQUEST_RESPONSE_TIMEOUT_MS = 10_000L
     }
 }
 

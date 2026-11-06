@@ -37,6 +37,12 @@ interface AvatarViewBinder {
 }
 
 interface LCallToChatController {
+    /**
+     * Whether an incoming group call that arrived over the chat socket may alert this device (mute
+     * sub-options, focus mode). True when the feature is off, matching the behavior before it.
+     */
+    suspend fun shouldNotifyGroupCall(gid: String): Boolean
+
     suspend fun joinCall(context: Context, roomId: String, roomName: String?, callerId: String, callType: CallType, conversationId: String?, isNeedAppLock: Boolean): Boolean
 
     suspend fun rejectCall(callerId: String, callRole: CallRole?, type: String, roomId: String, conversationId: String?)
@@ -85,6 +91,12 @@ interface LCallToChatController {
     fun isNotificationShowing(notificationId: Int): Boolean
 
     fun sendOrCreateCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For, callType: CallType, createCallMsg: Boolean, inviteeLIst: List<String> = emptyList())
+
+    /**
+     * Stores the chat-side record of a received call message and returns once it is stored, so the
+     * caller's receive admission covers the write (#1382). A failure is logged, not thrown.
+     */
+    suspend fun saveReceivedCallTextMessage(callActionType: CallActionType, textContent: String, sourceDevice: Int, timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For)
 
     /**
      * 发送截屏通知消息到对应会话

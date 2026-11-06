@@ -1,5 +1,7 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.test.fakes.TestMessagingPause
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.GlobalHiltEntryPoint
@@ -51,6 +53,9 @@ import kotlin.test.assertEquals
 @Config(sdk = [28])
 class MessageContentProcessorWeakContactTest {
 
+    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
+
     private val testDispatcher = UnconfinedTestDispatcher()
 
     private lateinit var context: Application
@@ -94,6 +99,7 @@ class MessageContentProcessorWeakContactTest {
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = mockk(relaxed = true),
+            groupFocusRepository = mockk(relaxed = true),
         )
     }
 
@@ -153,7 +159,7 @@ class MessageContentProcessorWeakContactTest {
         )
         val envelope = minimalEnvelope("peer-1", 100L)
 
-        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG)
+        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG, admission)
 
         val snapSlot = slot<ContactorModel>()
         coVerify(exactly = 1) {
@@ -180,7 +186,7 @@ class MessageContentProcessorWeakContactTest {
         )
         val envelope = minimalEnvelope("peer-1b", 110L)
 
-        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG)
+        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG, admission)
 
         coVerify(exactly = 1) {
             weakContactReconciler.enterWeak("peer-1b", 99_000L, 0, 8_888L, any())
@@ -194,7 +200,7 @@ class MessageContentProcessorWeakContactTest {
         val data = weakData(uid = "peer-2", changeType = 1, serverTimestamp = 7_000L)
         val envelope = minimalEnvelope("peer-2", 200L)
 
-        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG)
+        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG, admission)
 
         coVerify(exactly = 1) { weakContactReconciler.removeWeak("peer-2") }
         coVerify(exactly = 0) { weakContactReconciler.enterWeak(any(), any(), any(), any(), any()) }
@@ -207,7 +213,7 @@ class MessageContentProcessorWeakContactTest {
         val data = weakData(uid = null, changeType = 0, serverTimestamp = 1_000L)
         val envelope = minimalEnvelope("peer-3", 300L)
 
-        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG)
+        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG, admission)
 
         coVerify(exactly = 0) { weakContactReconciler.enterWeak(any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { weakContactReconciler.removeWeak(any()) }
@@ -220,7 +226,7 @@ class MessageContentProcessorWeakContactTest {
         val data = weakData(uid = "peer-4", changeType = 9, serverTimestamp = 1_000L)
         val envelope = minimalEnvelope("peer-4", 400L)
 
-        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG)
+        processor.process(SignalServiceDataClass(envelope, null, notify(data)), TAG, admission)
 
         coVerify(exactly = 0) { weakContactReconciler.enterWeak(any(), any(), any(), any(), any()) }
         coVerify(exactly = 0) { weakContactReconciler.removeWeak(any()) }

@@ -88,6 +88,43 @@ class DeviceRepositoryTest {
         assertEquals(listOf(AuthFailureSource.DEVICE_API), authFailureSink.sources)
     }
 
+    // --- credential-bound probe (#1382 A09) ---
+
+    @Test
+    fun `checkDeviceAuthAs sends exactly the given credential`() = runTest {
+        coEvery { deviceApiService.getDevicesAs("Basic old") } returns Response.success(200, "".toResponseBody(null))
+
+        repository.checkDeviceAuthAs("Basic old", reportAuthFailure = false)
+
+        coVerify(exactly = 1) { deviceApiService.getDevicesAs("Basic old") }
+        coVerify(exactly = 0) { deviceApiService.getDevices() }
+    }
+
+    @Test
+    fun `the migration probe's 401 and 403 throw but never reach the global sink`() = runTest {
+        for (code in listOf(401, 403)) {
+            coEvery { deviceApiService.getDevicesAs(any()) } returns Response.error(
+                code, "no".toResponseBody("text/plain".toMediaType())
+            )
+            val e = assertFailsWith<AuthorizationFailedException> {
+                repository.checkDeviceAuthAs("Basic old", reportAuthFailure = false)
+            }
+            assertEquals(code, e.code)
+        }
+        assertTrue(authFailureSink.sources.isEmpty())
+    }
+
+    @Test
+    fun `a reporting bound confirm keeps the global 403 policy`() = runTest {
+        coEvery { deviceApiService.getDevicesAs(any()) } returns Response.error(
+            403, "no".toResponseBody("text/plain".toMediaType())
+        )
+
+        assertFailsWith<AuthorizationFailedException> { repository.checkDeviceAuthAs("Basic old", reportAuthFailure = true) }
+
+        assertEquals(listOf(AuthFailureSource.DEVICE_API), authFailureSink.sources)
+    }
+
     @Test
     fun `getDevices 404 does not report an auth failure`() = runTest {
         coEvery { deviceApiService.getDevices() } returns Response.error(

@@ -1,6 +1,8 @@
 package com.difft.android.websocket.api
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.websocket.api.messages.ChatDataMessageFlag
 import com.difft.android.websocket.api.messages.ConversationPreviewWrapper
 import com.difft.android.websocket.api.util.EnvelopDeserializer
@@ -27,6 +29,7 @@ class AppWebSocketHelper
     // chat socket
     @param:Named("chat-data")
     val chatDataWebSocketConnection: WebSocketConnection,
+    private val messagingGate: MessagingGate,
 ) {
     @Throws(IOException::class)
     suspend fun sendChatMessage(
@@ -67,16 +70,16 @@ class AppWebSocketHelper
                         ConversationPreviewWrapper(conversationPreview)
                     )
                 } else if (isSocketConversationEmptyRequest(request)) {
+                    if (!ackIfAdmitted(request.requestId, "conversation-empty")) return null
                     L.i { "[AppWebSocketHelper] conversation previews done, acked requestId=${request.requestId}" }
-                    sendAckToChatDataWebSocket(request.requestId);
                     return Pair(request.requestId, ChatDataMessageFlag.END_CONVERSATION_PREVIEW_MGS)
                 } else if (isSocketEmptyRequest(request)) {
+                    if (!ackIfAdmitted(request.requestId, "queue-empty")) return null
                     L.i { "[AppWebSocketHelper] queue empty, acked requestId=${request.requestId}" }
-                    sendAckToChatDataWebSocket(request.requestId);
                     return Pair(request.requestId, ChatDataMessageFlag.END_QUEUE)
                 } else {
                     L.i { "[AppWebSocketHelper] read message other type:" + request.path }
-                    sendAckToChatDataWebSocket(request.requestId);
+                    ackIfAdmitted(request.requestId, "other")
                     return null
                 }
             } catch (e: Exception) {
@@ -95,13 +98,30 @@ class AppWebSocketHelper
         val envelope: Envelope? = EnvelopDeserializer.deserializeFrom(input)
         if (envelope == null) {
             L.w { "[AppWebSocketHelper] read message envelope is null:" + request.requestId }
-            sendAckToChatDataWebSocket(request.requestId);
+            ackIfAdmitted(request.requestId, "unparseable")
         } else {
             L.d { "[AppWebSocketHelper] parse envelope success: ${request.requestId} ${envelope.timestamp}" }
         }
         return envelope
     }
 
+
+    /**
+     * ACKs a frame that is consumed here, only while messaging is open (#1382). A refused frame
+     * is neither ACKed nor handed on, so the server keeps it queued.
+     *
+     * @return whether the frame was admitted and ACKed.
+     */
+    @Throws(IOException::class)
+    private fun ackIfAdmitted(requestId: Long, what: String): Boolean {
+        val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "ws-$what")
+        if (admission == null) {
+            L.i { "[MigrationPause] event=receive_dropped source=ws-$what count=1" }
+            return false
+        }
+        admission.use { sendAckToChatDataWebSocket(requestId) }
+        return true
+    }
 
     @Throws(IOException::class)
     fun sendAckToChatDataWebSocket(requestId: Long) {

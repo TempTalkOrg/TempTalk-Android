@@ -11,6 +11,7 @@ import androidx.annotation.LayoutRes
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.difft.android.base.R
+import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.SecureModeUtil
 import com.difft.android.base.utils.WindowSizeClassUtil
@@ -228,6 +229,13 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
         dialog.setCanceledOnTouchOutside(isCancelableByUser())
 
         dialog.setOnShowListener { dialogInterface ->
+            // Dialog.show() posts this callback; a recreation, or a self-dismiss queued from
+            // onContentViewCreated, can detach the fragment before it runs (#1440).
+            val host = activity ?: run {
+                val sheetName = javaClass.simpleName
+                L.w { "[BottomSheet] onShow after detach sheet=$sheetName" }
+                return@setOnShowListener
+            }
             val bottomSheetDialog = dialogInterface as BottomSheetDialog
             val bottomSheet = bottomSheetDialog.findViewById<FrameLayout>(
                 com.google.android.material.R.id.design_bottom_sheet
@@ -241,7 +249,7 @@ abstract class BaseBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 behavior.isDraggable = isDraggable()
                 behavior.isHideable = isCancelableByUser()
 
-                val screenHeight = WindowSizeClassUtil.getWindowHeightPx(requireActivity())
+                val screenHeight = WindowSizeClassUtil.getWindowHeightPx(host)
 
                 if (peekHeightRatio > 0 && !isExpandable()) {
                     // Fixed height mode (non-expandable) - similar to ChatPopupActivity

@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.base.utils.pane.PageWait
 import android.os.Bundle
 import com.difft.android.base.log.lumberjack.L
 import android.view.LayoutInflater
@@ -12,7 +13,8 @@ import androidx.core.view.isVisible
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
-import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
+import com.difft.android.base.utils.DualPaneUtils.setupDynamicBackButton
+import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.chat.R
 import com.difft.android.chat.common.header.CommonHeaderFragment
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -21,8 +23,6 @@ import com.difft.android.chat.databinding.ChatFragmentHeaderBinding
 import com.difft.android.chat.group.CreateGroupActivity
 import com.difft.android.chat.setting.archive.toArchiveTimeDisplayText
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
-import com.difft.android.chat.ui.ChatActivity.Companion.source
-import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.coroutines.cancellation.CancellationException
@@ -41,6 +41,9 @@ import org.difft.app.database.wcdb
 
 @AndroidEntryPoint
 class ChatHeaderFragment : CommonHeaderFragment() {
+    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    private val pageWait = PageWait(this)
+
     // Use parent fragment as ViewModel owner when nested (in ChatFragment),
     // otherwise use activity (when directly in ChatActivity).
     // Parent fragment initializes ViewModels in onCreateView before child fragments are created.
@@ -103,7 +106,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
 
         // 给整个 header 区域添加点击事件，跳转到单聊设置页面
         binding.root.setOnClickListener {
-            SingleChatSettingActivity.startActivity(requireActivity(), chatViewModel.forWhat.id)
+            detailNavigation().push(this, SingleChatSettingDestination(chatViewModel.forWhat.id))
         }
 
 //        binding.imageviewMenuMore.setOnClickListener {
@@ -112,18 +115,13 @@ class ChatHeaderFragment : CommonHeaderFragment() {
 
         // 观察选择状态来切换返回按钮行为
         chatViewModel.selectMessagesState.onEach {
-            if (isInDualPaneMode() && !it.editModel) {
-                // In dual-pane mode, hide back button when not in edit mode
-                binding.ibBack.visibility = View.GONE
-            } else if (it.editModel) {
-                binding.ibBack.visibility = View.VISIBLE
-                binding.ibBack.setImageResource(R.drawable.chat_icon_close)
-                binding.ibBack.setOnClickListener { chatViewModel.selectModel(false) }
-            } else {
-                binding.ibBack.visibility = View.VISIBLE
-                binding.ibBack.setImageResource(com.difft.android.base.R.drawable.chative_ic_back)
-                binding.ibBack.setOnClickListener { activity?.finish() }
-            }
+            setupDynamicBackButton(
+                backButton = binding.ibBack,
+                isEditMode = it.editModel,
+                backIconRes = com.difft.android.base.R.drawable.chative_ic_back,
+                closeIconRes = R.drawable.chat_icon_close,
+                onExitEditMode = { chatViewModel.selectModel(false) },
+            )
         }.launchIn(viewLifecycleOwner.lifecycleScope)
         return binding.root
     }
@@ -181,22 +179,15 @@ class ChatHeaderFragment : CommonHeaderFragment() {
     }
 
     private fun requestAddFriend() {
-        var sourceType: String? = null
-        var source: String? = null
-        if (requireActivity() is ChatActivity) {
-            (requireActivity() as ChatActivity).intent?.let {
-                sourceType = it.sourceType
-                source = it.source
-            }
-        }
-        ComposeDialogManager.showWait(requireActivity(), "")
+        val (sourceType, source) = ChatFragment.conversationSourceOf(this)
+        pageWait.show()
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
                     ContactorUtil.fetchAddFriendRequest(requireContext(), chatViewModel.forWhat.id, sourceType, source)
                 }
                 if (!isAdded || view == null) return@launch
-                ComposeDialogManager.dismissWait()
+                pageWait.dismiss()
                 if (result.status == 0) {
                     ToastUtil.show(R.string.contact_request_sent)
                     ContactorUtil.sendFriendRequestMessage(viewLifecycleOwner.lifecycleScope, getString(R.string.contact_friend_request), chatViewModel.forWhat)
@@ -207,7 +198,7 @@ class ChatHeaderFragment : CommonHeaderFragment() {
                 throw e
             } catch (e: Exception) {
                 if (!isAdded || view == null) return@launch
-                ComposeDialogManager.dismissWait()
+                pageWait.dismiss()
                 e.message?.let { message -> ToastUtil.show(message) }
             }
         }

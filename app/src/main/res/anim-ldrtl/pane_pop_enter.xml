@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RTL mirror of anim/pane_pop_enter: the uncovered page returns from the start (right). -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="250"
+    android:fromXDelta="25%"
+    android:interpolator="@android:anim/decelerate_interpolator"
+    android:toXDelta="0" />

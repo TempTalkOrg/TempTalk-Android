@@ -5,6 +5,9 @@ import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.call.CallRole
 import com.difft.android.base.call.CallType
+import com.difft.android.base.user.CallConfig
+import com.difft.android.base.user.Data
+import com.difft.android.base.user.NewGlobalConfig
 import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.call.CallIntent
@@ -148,7 +151,7 @@ class CallSessionLauncherTest {
 
         assertTrue(launcher.launch(context, intent(CallIntent.Action.JOIN_CALL, CallRole.CALLEE), WAIT_TOKEN))
 
-        verify(exactly = 1) { LCallManager.stopIncomingCallService(any(), any()) }
+        verify(exactly = 1) { LCallManager.stopIncomingCallService(ROOM_ID, any()) }
     }
 
     @Test
@@ -167,10 +170,26 @@ class CallSessionLauncherTest {
         assertNotNull(session.params.callConfig)
     }
 
+    @Test
+    fun `a START snapshot becomes the session's config, a launch without one reads the live config`() {
+        val snapshot = CallConfig(createCallMsg = true)
+        every { globalConfigs.getNewGlobalConfigs() } returns NewGlobalConfig(data = Data(call = CallConfig(createCallMsg = false)))
+
+        assertTrue(launcher.launch(context, intent(CallIntent.Action.START_CALL, CallRole.CALLER), WAIT_TOKEN, snapshot))
+        assertSame("START shares its envelope's snapshot (#1395)", snapshot, checkNotNull(h.holder.current.value).params.callConfig)
+        verify(exactly = 0) { globalConfigs.getNewGlobalConfigs() }
+        h.holder.current.value?.end(CallSessionEndReason.EXIT_CLEAR)
+
+        assertTrue(launcher.launch(context, intent(CallIntent.Action.JOIN_CALL, CallRole.CALLEE), WAIT_TOKEN))
+        assertFalse("JOIN reads the live config", checkNotNull(h.holder.current.value).params.callConfig.createCallMsg)
+        verify(exactly = 1) { globalConfigs.getNewGlobalConfigs() }
+    }
+
     private fun intent(action: CallIntent.Action, role: CallRole, needAppLock: Boolean = false): Intent =
         CallIntent.Builder(ApplicationProvider.getApplicationContext(), LCallActivity::class.java)
             .withIntentFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .withAction(action)
+            .withRoomId(ROOM_ID)
             .withCallType(CallType.ONE_ON_ONE.type)
             .withCallRole(role.type)
             .withConversationId("conv-1")
@@ -180,5 +199,6 @@ class CallSessionLauncherTest {
 
     private companion object {
         const val WAIT_TOKEN = 7
+        const val ROOM_ID = "room-1"
     }
 }

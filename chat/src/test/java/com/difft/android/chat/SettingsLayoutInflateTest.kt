@@ -56,13 +56,12 @@ class SettingsLayoutInflateTest {
             R.id.ll_search_chat_history,
             R.id.rel_group_management,
             R.id.switch_stick,
-            R.id.switch2mute,
+            // Mute / notification / sound rows now live in this Compose section.
+            R.id.compose_notification_section,
             R.id.save_to_photos_container,
             R.id.translate_container,
             R.id.translate_text,
             R.id.disappearing_time_container,
-            R.id.rel_notification_sound,
-            R.id.rel_notification,
             R.id.leave_container,
         ).forEach { id -> assertNotNull("missing id $id", root.findViewById<View>(id)) }
     }

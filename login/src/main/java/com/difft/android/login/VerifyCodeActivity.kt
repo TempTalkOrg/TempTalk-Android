@@ -143,6 +143,7 @@ class VerifyCodeActivity : BaseActivity() {
         }
         setContentView(mBinding.root)
         initView()
+        mBinding.liftCodeAboveKeyboard()
         startObserve()
         resendCountdown.start()
         startAutoFillHelpers()

@@ -8,7 +8,6 @@ import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.LinkDataEntity
-import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.ui.ChatActivity
 import dagger.hilt.android.EntryPointAccessors
@@ -16,10 +15,11 @@ import util.AppForegroundObserver
 
 /**
  * Transparent trampoline Activity that routes notification clicks to MainActivity
- * with appropriate flags based on app foreground state.
+ * with appropriate flags based on [AppForegroundObserver.hasUserFacingActivity].
  *
- * - Foreground: Routes WITHOUT CLEAR_TASK, with EXTRA_OPEN_POPUP=true -> opens popup
- * - Background/Cold start: Routes WITH CLEAR_TASK -> normal deeplink flow
+ * - Foreground (a non-PiP page resumed since it last started): Routes WITHOUT CLEAR_TASK,
+ *   with EXTRA_OPEN_POPUP=true -> opens popup
+ * - Background (including a call PiP window only) / cold start: Routes WITH CLEAR_TASK -> normal deeplink flow
  *
  * Note: Uses Activity instead of BroadcastReceiver because Android 12+ blocks
  * BroadcastReceivers from starting Activities (trampoline restriction).
@@ -58,11 +58,10 @@ class NotificationTrampolineActivity : android.app.Activity() {
             applicationContext,
             NotificationTrampolineEntryPoint::class.java
         )
-        val isInPipMode = entryPoint.onGoingCallStateManager().isInPipMode()
-        val startedActivityCount = AppForegroundObserver.getStartedActivityCount()
-        val isPipOnlyOnDesktop = isInPipMode && startedActivityCount <= 1
-        val isForegrounded = AppForegroundObserver.isForegrounded() && !isPipOnlyOnDesktop
-        L.i { "[NotificationTrampoline] isForegrounded=$isForegrounded, isInPipMode=$isInPipMode, startedActivityCount=$startedActivityCount, contactId=$contactId, groupId=$groupId" }
+        // Not isForegrounded(): this launch may restart the page below first (HyperOS), and a
+        // call PiP window alone is not the app being in use (#1427).
+        val isForegrounded = AppForegroundObserver.hasUserFacingActivity()
+        L.i { "[NotificationTrampoline] isForegrounded=$isForegrounded, processForegrounded=${AppForegroundObserver.isForegrounded()}, startedActivityCount=${AppForegroundObserver.getStartedActivityCount()}, contactId=$contactId, groupId=$groupId" }
 
         val mainIntent = createMainActivityIntent(entryPoint, contactId, groupId, isForegrounded)
         startActivity(mainIntent)
@@ -100,6 +99,5 @@ class NotificationTrampolineActivity : android.app.Activity() {
     @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
     interface NotificationTrampolineEntryPoint {
         fun activityProvider(): ActivityProvider
-        fun onGoingCallStateManager(): OnGoingCallStateManager
     }
 }

@@ -15,9 +15,9 @@ class KeepAliveHealthModelTest {
         "lat_fcm_10s=0 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
         "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
         "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
-        "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+        "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 late_5m=0 " +
         "pv=na pv_why=none pv_days=0 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na " +
-        "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=unknown fcm_fail_h=0" +
+        "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 pv_late_n=0 fcm_state=unknown fcm_fail_h=0" +
         " adb=na" + zeroPower
 
     @Test
@@ -120,9 +120,9 @@ class KeepAliveHealthModelTest {
                     "lat_fcm_10s=5 lat_fcm_1m=0 lat_fcm_5m=0 lat_fcm_30m=0 lat_fcm_2h=0 lat_fcm_more=0 " +
                     "lat_pull_10s=0 lat_pull_1m=0 lat_pull_5m=0 lat_pull_30m=0 lat_pull_2h=0 lat_pull_more=0 " +
                     "fcmt_10s=0 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=0 " +
-                    "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 " +
+                    "stall_30m=0 stall_2h=0 stall_more=0 stall_min=0 late_5m=0 " +
                     "pv=1 pv_why=L,P pv_days=4 pv_n=120 pv_fcm_n=40 pv_fcm_slow=25 " +
-                    "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 fcm_state=fail fcm_fail_h=30" +
+                    "pv_fcmt_n=0 pv_fcmt_slow=na pv_stall_2h=0 pv_late_n=0 fcm_state=fail fcm_fail_h=30" +
                     " adb=na" + zeroPower
             )
         )
@@ -182,9 +182,9 @@ class KeepAliveHealthModelTest {
             line.endsWith(
                 " lat_pull_2h=0 lat_pull_more=0 " +
                     "fcmt_10s=6 fcmt_1m=0 fcmt_5m=0 fcmt_30m=0 fcmt_2h=0 fcmt_more=2 " +
-                    "stall_30m=3 stall_2h=0 stall_more=1 stall_min=250 " +
+                    "stall_30m=3 stall_2h=0 stall_more=1 stall_min=250 late_5m=0 " +
                     "pv=0 pv_why=none pv_days=5 pv_n=0 pv_fcm_n=0 pv_fcm_slow=na " +
-                    "pv_fcmt_n=8 pv_fcmt_slow=25 pv_stall_2h=1 fcm_state=ok fcm_fail_h=0" +
+                    "pv_fcmt_n=8 pv_fcmt_slow=25 pv_stall_2h=1 pv_late_n=0 fcm_state=ok fcm_fail_h=0" +
                     " adb=na" + zeroPower
             ),
             line
@@ -197,5 +197,17 @@ class KeepAliveHealthModelTest {
         assertEquals(true, KeepAliveHealthModel.isEligible(true, 99))
         assertEquals(true, KeepAliveHealthModel.isEligible(false, KeepAliveHealthModel.CONTROL_SAMPLE_PERCENT - 1))
         assertEquals(false, KeepAliveHealthModel.isEligible(false, KeepAliveHealthModel.CONTROL_SAMPLE_PERCENT))
+    }
+
+    @Test
+    fun `formatReport adds the late delivery count and its verdict mirror without renaming other fields`() {
+        val snapshot = HealthSnapshot(34, true, true, false, 1, true, true, 10)
+        val line = KeepAliveHealthModel.formatReport(
+            snapshot, day, emptyMap(), emptyMap(),
+            mapOf("late_5m" to 4),
+            verdict = HealthVerdict("1", listOf("L"), 4, 0, 0, null, lateDeliveries = 4),
+        )
+        assertEquals(true, line.contains(" stall_min=0 late_5m=4 pv=1 pv_why=L "), line)
+        assertEquals(true, line.contains(" pv_stall_2h=0 pv_late_n=4 fcm_state="), line)
     }
 }

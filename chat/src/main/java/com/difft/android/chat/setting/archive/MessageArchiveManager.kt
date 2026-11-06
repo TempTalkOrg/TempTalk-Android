@@ -2,7 +2,10 @@ package com.difft.android.chat.setting.archive
 
 
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
+import com.difft.android.base.log.WCDBKeyUnavailableException
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
@@ -112,8 +115,28 @@ class MessageArchiveManager @Inject constructor(
     // Channel to signal state changes and interrupt the delay
     private val stateChangeSignal = Channel<Unit>(Channel.CONFLATED)
 
-    fun startCheckTask() {
-        if (!isStarted.compareAndSet(false, true)) return
+    // A cipher-key failure lasts the process lifetime: log the first skipped round only (#1395).
+    private val keyUnavailableLogged = AtomicBoolean(false)
+
+    // Test seams (#1395): WCDB's native library does not load in a JVM unit test.
+    @VisibleForTesting
+    internal var isDbInaccessible: () -> Boolean = { wcdb.isDbInaccessible }
+
+    @VisibleForTesting
+    internal var elapsedRealtime: () -> Long = { SystemClock.elapsedRealtime() }
+
+    @VisibleForTesting
+    internal var archivePass: suspend () -> Unit = { archiveMessages() }
+
+    @VisibleForTesting
+    internal val lastCheckTimeForTest: Long get() = lastCheckTime
+
+    /**
+     * Starts the process-wide archive loop once. Returns true only for the call that started it;
+     * IndexActivity and the warm-process foreground resync share this guard (#1395).
+     */
+    fun startCheckTask(): Boolean {
+        if (!isStarted.compareAndSet(false, true)) return false
 
         currentInterval = if (AppForegroundObserver.isForegrounded()) {
             FOREGROUND_INTERVAL_MS
@@ -124,23 +147,37 @@ class MessageArchiveManager @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             // Fail-soft: skip all DB work if the cipher key is unavailable (one-way process-lifetime
             // flag). The archive task self-heals on the next cold start; the appScope CEH is the net.
-            if (wcdb.isDbInaccessible) {
+            if (isDbInaccessible()) {
                 L.w { "[MessageArchiveManager] skip check task, DB inaccessible" }
                 return@launch
             }
 
             checkIdentityKeyReset()
 
-            while (true) {
+            runArchiveLoop()
+        }
+        return true
+    }
+
+    @VisibleForTesting
+    internal suspend fun runArchiveLoop() {
+        while (true) {
+            try {
                 doArchiveIfNeeded()
-                // Wait for either: interval timeout OR state change signal
-                val signaled = withTimeoutOrNull(currentInterval) {
-                    stateChangeSignal.receive()
-                    true
+            } catch (e: WCDBKeyUnavailableException) {
+                // Key failures only: the round is skipped unstamped and retried next round. Any
+                // other exception still reaches appScope's handler and surfaces as a crash.
+                if (keyUnavailableLogged.compareAndSet(false, true)) {
+                    L.w { "[MessageArchiveManager] archive round skipped error=${e.javaClass.simpleName}" }
                 }
-                if (signaled == true) {
-                    L.i { "[MessageArchiveManager] State changed, interval now ${currentInterval / 1000}s" }
-                }
+            }
+            // Wait for either: interval timeout OR state change signal
+            val signaled = withTimeoutOrNull(currentInterval) {
+                stateChangeSignal.receive()
+                true
+            }
+            if (signaled == true) {
+                L.i { "[MessageArchiveManager] State changed, interval now ${currentInterval / 1000}s" }
             }
         }
     }
@@ -155,15 +192,17 @@ class MessageArchiveManager @Inject constructor(
     }
 
     private suspend fun doArchiveIfNeeded() = archiveMutex.withLock {
+        // Silent skip while the DB is inaccessible: no log, no stamp; the loop waits its interval.
+        if (isDbInaccessible()) return@withLock
         // Monotonic clock: a wall-clock rollback would make this negative and stall the archive gate.
         // elapsedRealtime is never meaningfully 0 at runtime, so the lastCheckTime == 0L sentinel holds.
-        val timeSinceLastCheck = SystemClock.elapsedRealtime() - lastCheckTime
+        val timeSinceLastCheck = elapsedRealtime() - lastCheckTime
 
         // First call (lastCheckTime = 0) or exceeded interval
         if (lastCheckTime == 0L || timeSinceLastCheck >= currentInterval) {
             L.i { "[MessageArchiveManager] Archive check triggered (${timeSinceLastCheck / 1000}s since last)" }
-            archiveMessages()
-            lastCheckTime = SystemClock.elapsedRealtime()
+            archivePass()
+            lastCheckTime = elapsedRealtime()
         } else {
             L.d { "[MessageArchiveManager] Skip archive check, ${(currentInterval - timeSinceLastCheck) / 1000}s remaining" }
         }
@@ -491,8 +530,12 @@ class MessageArchiveManager @Inject constructor(
     /**
      * Update local message expiry. Called by MessageContentProcessor when handling Type 5 notify.
      * Note: Event notification is emitted by the caller (MessageContentProcessor), not here.
+     *
+     * @param admission the receive ticket of the envelope that carried the change; the launched write
+     *   holds a ticket retained from it, so the migration pause waits for the write (#1382).
      */
-    fun updateLocalArchiveTime(forWhat: For, messageExpiry: Long, messageClearAnchor: Long) {
+    fun updateLocalArchiveTime(forWhat: For, messageExpiry: Long, messageClearAnchor: Long, admission: MessagingTicket?) {
+        val held = admission?.retain("archive-time")
         appScope.launch(Dispatchers.IO) {
             try {
                 dbRoomStore.updateMessageExpiry(forWhat, messageExpiry, messageClearAnchor)
@@ -502,7 +545,7 @@ class MessageArchiveManager @Inject constructor(
             } catch (e: Exception) {
                 L.e { "[MessageArchiveManager] updateLocalArchiveTime error: ${e.stackTraceToString()}" }
             }
-        }
+        }.invokeOnCompletion { held?.close() } // also runs when the launch is cancelled before it starts
     }
 
     /** Messages [userId] sent before [timestamp] that an identity-key reset clears (the self room is never touched). */

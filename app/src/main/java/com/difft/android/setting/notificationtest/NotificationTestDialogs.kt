@@ -49,8 +49,8 @@ internal fun NotificationTestDialogs(dialog: Dialog?, onIntent: (Intent) -> Unit
             confirmText = stringResource(ChatR.string.notification_test_yes),
             cancelText = stringResource(ChatR.string.notification_test_no),
             cancelable = false,
-            onConfirm = { onIntent(Intent.Answer(seen = true)) },
-            onCancel = { onIntent(Intent.Answer(seen = false)) },
+            onConfirm = { onIntent(Intent.Answer(seen = true, runId = dialog.runId)) },
+            onCancel = { onIntent(Intent.Answer(seen = false, runId = dialog.runId)) },
         )
         is Dialog.Failed -> FailedDialog(dialog, onIntent)
         is Dialog.Info -> MessageDialog(
@@ -102,6 +102,8 @@ private fun blockText(block: PrecheckBlock): Int = when (block) {
 }
 
 private fun noticeText(notice: Notice): Int = when (notice) {
+    Notice.BUSY -> ChatR.string.notification_test_busy
+    Notice.PERSISTENCE_FAILED -> ChatR.string.notification_test_persistence_failed
     Notice.NO_LOCK -> ChatR.string.notification_test_no_lock
     Notice.POST_FAILED -> ChatR.string.notification_test_post_failed
     Notice.VOID_UNLOCKED -> ChatR.string.notification_test_void_unlocked

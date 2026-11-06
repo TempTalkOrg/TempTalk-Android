@@ -87,6 +87,7 @@ object RoundTripVerifier {
         // Same as Identity: memory-sink only, never a staging row, at most one per container — and
         // it only ever exists on a same-device handoff container, which this verifier never sees.
         is NeutralRecord.Credential -> "credential"
+        is NeutralRecord.PendingEnvelope -> "pendingEnvelope:${r.value.messageId}"
     }
 
     private fun diff(src: NeutralRecord, imp: NeutralRecord): List<FieldMismatch> = when {

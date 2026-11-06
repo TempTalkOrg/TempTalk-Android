@@ -22,7 +22,6 @@
     <ID>LongMethod:FilePreSendActivity.kt:@Composable private fun FilePreSendScreen</ID>
     <ID>LongMethod:GroupChatFragment.kt:GroupChatFragment$private fun onCreateForShowingMessages</ID>
     <ID>LongMethod:GroupChatPopupActivity.kt:GroupChatPopupActivity$private fun onCreateForShowingMessages</ID>
-    <ID>LongMethod:GroupInfoActivity.kt:GroupInfoActivity$private fun setOtherView</ID>
     <ID>LongMethod:GroupUpdater.kt:GroupUpdater$private suspend fun processGroupNotifyMessage</ID>
     <ID>LongMethod:MediaReviewFragment.kt:MediaReviewFragment$override fun onViewCreated</ID>
     <ID>LongMethod:MessageActionPopup.kt:MessageActionPopup$fun show</ID>
@@ -33,7 +32,6 @@
     <ID>LongMethod:RecentChatAdapter.kt:RecentChatViewHolder$@SuppressLint("ClickableViewAccessibility") fun bind</ID>
     <ID>LongMethod:RecentChatFragment.kt:RecentChatFragment$private fun buildSortedListForCalling: Pair&lt;List&lt;RoomViewData&gt;, Map&lt;String, RoomViewData&gt;&gt;</ID>
     <ID>LongMethod:SelectChatsUtils.kt:ChatSelectBottomSheetFragment$override fun onContentViewCreated</ID>
-    <ID>LongMethod:SingleChatSettingActivity.kt:SingleChatSettingActivity$override fun onCreate</ID>
     <ID>LongMethod:TextPreviewSelectionPopup.kt:@Composable private fun TextPreviewSelectionOverlay</ID>
   </CurrentIssues>
 </SmellBaseline>

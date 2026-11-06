@@ -16,6 +16,10 @@ data class ServerConfigSnapshot(
     /** Raw server value; the applier normalises it. */
     val messageExpiry: Long?,
     val messageClearAnchor: Long?,
+    /** Mute sub-options; null when the source does not carry them. */
+    val allowMentionMe: Boolean? = null,
+    val allowMentionAll: Boolean? = null,
+    val allowGroupCall: Boolean? = null,
 ) {
     companion object {
         /** `v1/conversation/get`: every field. */
@@ -27,6 +31,9 @@ data class ServerConfigSnapshot(
             confidentialMode = body.confidentialMode,
             messageExpiry = body.messageExpiry,
             messageClearAnchor = body.messageClearAnchor,
+            allowMentionMe = body.allowMentionMe,
+            allowMentionAll = body.allowMentionAll,
+            allowGroupCall = body.allowGroupCall,
         )
 
         /** `v1/conversation/set` echo: the expiry fields belong to another API and are never applied from it. */
@@ -38,9 +45,12 @@ data class ServerConfigSnapshot(
             confidentialMode = body.confidentialMode,
             messageExpiry = null,
             messageClearAnchor = null,
+            allowMentionMe = body.allowMentionMe,
+            allowMentionAll = body.allowMentionAll,
+            allowGroupCall = body.allowGroupCall,
         )
 
-        /** Notify type 4: mute, block and confidential only. */
+        /** Notify type 4: mute (with sub-options), block and confidential only. */
         fun fromNotify(notify: NotifyConversation) = ServerConfigSnapshot(
             conversation = notify.conversation,
             version = notify.version,
@@ -49,6 +59,9 @@ data class ServerConfigSnapshot(
             confidentialMode = notify.confidentialMode,
             messageExpiry = null,
             messageClearAnchor = null,
+            allowMentionMe = notify.allowMentionMe,
+            allowMentionAll = notify.allowMentionAll,
+            allowGroupCall = notify.allowGroupCall,
         )
     }
 }

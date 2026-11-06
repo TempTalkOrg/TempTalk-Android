@@ -1,226 +1,39 @@
 package com.difft.android.chat.group
 
 import android.app.Activity
-import com.difft.android.base.log.lumberjack.L
+import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import android.text.TextUtils
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.flowWithLifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import com.difft.android.base.BaseActivity
-import org.difft.app.database.convertToContactorModels
-import org.difft.app.database.members
-import com.difft.android.chat.R
-import com.difft.android.chat.databinding.ActivityGroupModeratorsManagementBinding
-import com.difft.android.network.group.ChangeGroupSettingsReq
-import com.difft.android.network.group.ChangeRolepReq
-import com.difft.android.network.group.GroupRepo
-import com.hi.dhl.binding.viewbind
-import com.difft.android.base.widget.ComposeDialogManager
+import androidx.fragment.app.Fragment
+import com.difft.android.base.utils.pane.DetailShellActivity
+import com.difft.android.chat.group.mvi.GroupPageContract.ModeratorAction
 import dagger.hilt.android.AndroidEntryPoint
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
 
-import kotlinx.coroutines.withContext
-import org.difft.app.database.models.GroupModel
-import javax.inject.Inject
-import com.difft.android.base.widget.ToastUtil
 @AndroidEntryPoint
-class GroupModeratorsManagementActivity : BaseActivity() {
-
-    @Inject
-    lateinit var groupRepo: GroupRepo
-
-    @Inject
-    lateinit var groupUtil: GroupUtil
-
-    private var groupInfo: GroupModel? = null
+class GroupModeratorsManagementActivity : DetailShellActivity() {
+    override fun createPage(): Fragment? {
+        val gid = intent.getStringExtra(KEY_GID)?.takeIf { it.isNotBlank() } ?: return null
+        val action = ActionType.entries.firstOrNull { it.action == intent.getStringExtra(KEY_ACTION) } ?: return null
+        return GroupModeratorsFragment.newInstance(gid, ModeratorAction.valueOf(action.name))
+    }
 
     companion object {
-        fun startActivity(activity: Activity, groupId: String, actionType: String) {
-            val intent = Intent(activity, GroupModeratorsManagementActivity::class.java)
-            intent.putExtra("groupId", groupId)
-            intent.putExtra("actionType", actionType)
-            activity.startActivity(intent)
-        }
-    }
-
-    private val mBinding: ActivityGroupModeratorsManagementBinding by viewbind()
-
-    private val groupId: String by lazy {
-        intent.getStringExtra("groupId") ?: ""
-    }
-
-    private val actionType: ActionType by lazy {
-        val actionType = intent.getStringExtra("actionType") ?: ""
-        ActionType.fromAction(actionType)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        mBinding.ibBack.setOnClickListener { finish() }
-
-        if (TextUtils.isEmpty(groupId)) return
-
-        lifecycleScope.launch {
-            try {
-                val group = groupUtil.getSingleGroupInfo(groupId, true)
-                if (group != null) {
-                    groupInfo = group
-                    initView(group)
-                }
-            } catch (e: Exception) {
-                L.w { "[GroupModeratorsManagementActivity] getSingleGroupInfo error: ${e.stackTraceToString()}" }
-            }
-        }
-
-        groupUtil.singleGroupsUpdate
-            .onEach {
-                if (it.gid == groupId) {
-                    if (it.status != 0) { finish(); return@onEach }
-                    groupInfo = it
-                    initView(it)
-                }
-            }
-            .catch { L.w { "[GroupModeratorsManagementActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
-            .flowWithLifecycle(lifecycle, Lifecycle.State.STARTED)
-            .launchIn(lifecycleScope)
-    }
-
-    private var selectedIds: Set<String> = emptySet()
-
-    private val mGroupsAdapter: GroupModeratorsAdapter by lazy {
-        GroupModeratorsAdapter { ids ->
-            selectedIds = ids
-        }
-    }
-
-    fun initView(group: GroupModel) {
-
-        mBinding.rvMembers.apply {
-            layoutManager = LinearLayoutManager(this@GroupModeratorsManagementActivity)
-            adapter = mGroupsAdapter
-            itemAnimator = null
-        }
-
-        mGroupsAdapter.selectionMode = SelectionMode.SINGLE
-        val members = if (actionType.isAdd()) {
-            mBinding.tvTitle.text = getString(R.string.group_add_moderators)
-            group.members.filter { it.groupRole == GROUP_ROLE_MEMBER }
-        } else if (actionType.isRemove()) {
-            mBinding.tvTitle.text = getString(R.string.group_remove_moderators)
-            group.members.filter { it.groupRole == GROUP_ROLE_ADMIN }
-        } else if (actionType.isTransfer()) {
-            mBinding.tvTitle.text = getString(R.string.group_transfer_owner)
-            group.members.filter { it.groupRole != GROUP_ROLE_OWNER }
-        } else {
-            emptyList()
-        }
-        lifecycleScope.launch(Dispatchers.IO) {
-            val contactMembers = members.convertToContactorModels()
-            withContext(Dispatchers.Main) {
-                mGroupsAdapter.clearSelections()
-                mGroupsAdapter.submitList(contactMembers)
-            }
-        }
-
-        mBinding.doneButton.setOnClickListener {
-            if (selectedIds.isNotEmpty()) {
-                if (actionType.isAdd()) {
-                    changeMemberRole(GROUP_ROLE_ADMIN)
-                } else if (actionType.isRemove()) {
-                    changeMemberRole(GROUP_ROLE_MEMBER)
-                } else if (actionType.isTransfer()) {
-                    showTransferDialog()
-                }
-            }
-        }
-    }
-
-    private fun changeMemberRole(role: Int) {
-        ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
-        lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    groupRepo.changeMemberRole(groupId, selectedIds.first(), ChangeRolepReq(role))
-                }
-                ComposeDialogManager.dismissWait()
-                if (result.status == 0) {
-                    ToastUtil.showLong(getString(R.string.operation_successful))
-                } else {
-                    result.reason?.let { message -> ToastUtil.show(message) }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[GroupModeratorsManagementActivity] changeMemberRole error: ${e.stackTraceToString()}" }
-                ComposeDialogManager.dismissWait()
-                e.message?.let { message -> ToastUtil.show(message) }
-            }
-        }
-    }
-
-    private fun showTransferDialog() {
-        val name = groupInfo?.members?.find { it.id == selectedIds.first() }?.displayName
-        ComposeDialogManager.showMessageDialog(
-            context = this,
-            title = getString(R.string.tip),
-            message = getString(R.string.group_transfer_owner_tips, name),
-            confirmText = getString(R.string.chat_dialog_ok),
-            cancelText = getString(R.string.chat_dialog_cancel),
-            onConfirm = {
-                transferOwner()
-            }
-        )
-    }
-
-    private fun transferOwner() {
-        ComposeDialogManager.showWait(this@GroupModeratorsManagementActivity, "")
-        lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    groupRepo.changeGroupSettings(
-                        groupId, ChangeGroupSettingsReq(owner = selectedIds.first())
-                    )
-                }
-                ComposeDialogManager.dismissWait()
-                if (result.status == 0) {
-                    ToastUtil.showLong(getString(R.string.operation_successful))
-                    setResult(RESULT_OK)
-                    finish()
-                } else {
-                    result.reason?.let { message -> ToastUtil.show(message) }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w { "[GroupModeratorsManagementActivity] transferOwner error: ${e.stackTraceToString()}" }
-                ComposeDialogManager.dismissWait()
-                e.message?.let { message -> ToastUtil.show(message) }
-            }
-        }
+        private const val KEY_GID = "groupId"
+        private const val KEY_ACTION = "actionType"
+        fun intent(context: Context, gid: String, action: ModeratorAction): Intent =
+            Intent(context, GroupModeratorsManagementActivity::class.java).putExtra(KEY_GID, gid)
+                .putExtra(KEY_ACTION, ActionType.valueOf(action.name).action)
+        fun startActivity(activity: Activity, groupId: String, actionType: String) =
+            activity.startActivity(intent(activity, groupId, ModeratorAction.valueOf(ActionType.fromAction(actionType).name)))
     }
 }
 
+/** Kept for existing external callers of the shell. */
 enum class ActionType(val action: String) {
-    ADD("add"),
-    REMOVE("remove"),
-    TRANSFER("transfer");
-
+    ADD("add"), REMOVE("remove"), TRANSFER("transfer");
     companion object {
-        fun fromAction(action: String): ActionType {
-            return entries.find { it.action == action }
-                ?: throw IllegalArgumentException("Unknown action type: $action")
-        }
+        fun fromAction(action: String): ActionType = entries.firstOrNull { it.action == action }
+            ?: throw IllegalArgumentException("Unknown action type: $action")
     }
-
     fun isAdd() = this == ADD
     fun isRemove() = this == REMOVE
     fun isTransfer() = this == TRANSFER

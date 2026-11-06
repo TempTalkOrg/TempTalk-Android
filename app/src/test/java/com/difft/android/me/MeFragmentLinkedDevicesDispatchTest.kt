@@ -26,8 +26,7 @@ class FakeDualPaneHostActivity : FragmentActivity(), DualPaneHost {
     var showDetailCalls = 0
     var shownFragment: Fragment? = null
     override val isDualPaneMode: Boolean get() = dualPane
-    override val navigationRailCollapsed: StateFlow<Boolean> = MutableStateFlow(false)
-    override fun toggleNavigationRail() = Unit
+    override val homeTabBarObstructionPx: StateFlow<Int> = MutableStateFlow(0)
     override fun showDetailFragment(fragment: Fragment, tag: String?) {
         showDetailCalls++
         shownFragment = fragment

@@ -25,7 +25,7 @@ import javax.inject.Singleton
  *
  * - Priority is [PromptId] order; the first ELIGIBLE, not snoozed entry wins. A lower entry is not
  *   chosen while a higher one is UNKNOWN, for at most 15 s after the host first became presentable;
- *   after that UNKNOWN entries are skipped. Only NOT_ELIGIBLE removes a record.
+ *   after that UNKNOWN entries are skipped. Only NOT_ELIGIBLE removes a record (the background-connection slot keeps its dismissal history).
  * - One prompt per session: Declined and ActionTaken use the budget, Preempted does not. A prompt
  *   still unanswered when the app goes to the background stays current and records nothing; it is
  *   the prompt of the next session too, until it is answered, preempted or resolved.
@@ -121,11 +121,17 @@ class StartupPromptCoordinator internal constructor(
         ticketShown = true
         val now = clock()
         val records = store.update {
-            it.edit(ticket.id) { r -> r.keyed(ticket).copy(shownCount = r.shownCount + 1, lastShownAt = now, showingSince = now) }
+            it.edit(ticket.id) { r ->
+                r.keyed(ticket).copy(
+                    shownCount = r.shownCount + 1,
+                    lastShownAt = now,
+                    showingSince = now,
+                )
+            }
         }
         val record = records[ticket.id]
         val via = if (ticket.viaSystemRequest) "system" else "dialog"
-        L.i { "[StartupPrompt] show id=${ticket.id} shown=${record?.shownCount} declines=${record?.declines} via=$via" }
+        L.i { "[StartupPrompt] show id=${ticket.id} shown=${record?.shownCount} declines=${record?.declines} via=$via${ticket.backgroundTrigger?.let { " trigger=$it" }.orEmpty()}" }
     }
 
     /**
@@ -180,7 +186,7 @@ class StartupPromptCoordinator internal constructor(
             if (isStale(ticket, "DECLINED")) return@perform
             val now = clock()
             val records = persistOrLog {
-                store.update { it.edit(ticket.id) { r -> PromptBackoffPolicy.declined(r.keyed(ticket), now) } }
+                store.update { it.edit(ticket.id) { r -> PromptBackoffPolicy.declined(r.keyed(ticket), now, PromptBackoffPolicy.floorFor(ticket.id), endsSwitchOff = true) } }
             }
             closeTicket(ticket, budget = true)
             logDeclined(ticket.id, records?.get(ticket.id), now)
@@ -352,15 +358,15 @@ class StartupPromptCoordinator internal constructor(
         val holdOpen = sincePresentable < PromptBackoffPolicy.UNKNOWN_HOLD_MS
         var heldBy: PromptId? = null
         for (id in PromptId.entries) {
-            val answer = answers.getValue(id)
             val record = records[id] ?: PromptRecord()
+            val answer = answers.getValue(id).forRecord(id, record, now)
             val eligible = answer.eligibility == Eligibility.ELIGIBLE
             if (record.pendingActionAt != 0L) {
                 if (eligible) logSkip(id.name, "PENDING_ACTION")
                 continue
             }
             if (PromptBackoffPolicy.isSnoozed(record, now)) {
-                if (eligible) logSkip(id.name, "SNOOZED", "until=${record.snoozeUntil}")
+                if (eligible) logSkip(id.name, "SNOOZED", "until=${PromptBackoffPolicy.snoozedUntil(record)}")
                 continue
             }
             if (answer.eligibility == Eligibility.UNKNOWN && heldBy == null) heldBy = id
@@ -379,7 +385,7 @@ class StartupPromptCoordinator internal constructor(
             val viaSystem = id == PromptId.NOTIFICATIONS &&
                 NotificationRequestOutcome.useSystemRequest(answer.permissionRequestable, notificationRationale, record.systemDenials)
             ticketShown = false
-            _current.value = PromptTicket(id, ++seq, answer.issue, viaSystem, answer.offerKey)
+            _current.value = PromptTicket(id, ++seq, answer.issue, viaSystem, answer.offerKey, answer.triggers.minOrNull())
             return
         }
     }
@@ -455,7 +461,9 @@ class StartupPromptCoordinator internal constructor(
 
         /**
          * Pure record maintenance for one evaluation: a confirmed NOT_ELIGIBLE removes the record
-         * (a later revocation starts at step 0); a pending primary action that is still ELIGIBLE
+         * (a later revocation starts at step 0), except the background-connection slot, which keeps its
+         * dismissal history (floor, ladder step and switched-off flag) and only settles
+         * its in-flight state; a pending primary action that is still ELIGIBLE
          * counts as one decline (§9 D2), and so does one still UNKNOWN after the 30-minute own-trip
          * window; a new update offer resets its record; a snooze longer than
          * its step is clamped. UNKNOWN never changes a record.
@@ -466,11 +474,16 @@ class StartupPromptCoordinator internal constructor(
                 for ((id, record) in records) {
                     val answer = answers[id] ?: ProviderAnswer.UNKNOWN
                     when (answer.eligibility) {
-                        Eligibility.NOT_ELIGIBLE -> events += "id=$id result=RESOLVED"
+                        Eligibility.NOT_ELIGIBLE -> if (id == PromptId.BACKGROUND_CONNECTION && PromptBackoffPolicy.hasHistory(record)) {
+                            if (record.pendingActionAt != 0L || record.showingSince != 0L) events += "id=$id result=RESOLVED kept=history"
+                            put(id, record.copy(pendingActionAt = 0, showingSince = 0))
+                        } else {
+                            events += "id=$id result=RESOLVED"
+                        }
                         Eligibility.UNKNOWN -> if (record.pendingActionAt != 0L && now - record.pendingActionAt !in 0..PromptBackoffPolicy.OWN_TRIP_WINDOW_MS) {
                             // The result could not be read for longer than an own trip lasts: count the
                             // trip as one decline so the record never waits forever.
-                            val declined = PromptBackoffPolicy.declined(record, minOf(record.pendingActionAt, now))
+                            val declined = PromptBackoffPolicy.declined(record, minOf(record.pendingActionAt, now), PromptBackoffPolicy.floorFor(id))
                             events += "id=$id result=DECLINED cause=pendingExpired declines=${declined.declines}"
                             put(id, declined)
                         } else {
@@ -485,7 +498,7 @@ class StartupPromptCoordinator internal constructor(
                             }
                             if (r.pendingActionAt != 0L) {
                                 // The decline happened at the trip, not when the result was read.
-                                r = PromptBackoffPolicy.declined(r, minOf(r.pendingActionAt, now))
+                                r = PromptBackoffPolicy.declined(r, minOf(r.pendingActionAt, now), PromptBackoffPolicy.floorFor(id))
                                 events += "id=$id result=DECLINED cause=returnUnfixed declines=${r.declines}"
                             }
                             put(id, PromptBackoffPolicy.clamp(r, now))

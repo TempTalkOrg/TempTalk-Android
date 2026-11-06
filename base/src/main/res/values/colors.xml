@@ -39,6 +39,8 @@
     <color name="bg.popup.night" tools:ignore="ResourceName">#1E2329</color>
     <color name="bg.blue" tools:ignore="ResourceName">#EBF7FF</color>
     <color name="bg.sky" tools:ignore="ResourceName">#EBF7FF</color>
+    <!-- bgspace (DifftTheme backgroundSpace): the chat-list focus swipe button. -->
+    <color name="bg.space" tools:ignore="ResourceName">#001C4E</color>
     <color name="bg.primary.clicked" tools:ignore="ResourceName">#2558C1</color>
     <color name="bg.secondary.clicked" tools:ignore="ResourceName">#F5F5F5</color>
     <color name="bg.secondary" tools:ignore="ResourceName">@color/bg1</color>

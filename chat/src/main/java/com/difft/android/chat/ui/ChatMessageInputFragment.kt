@@ -1,10 +1,13 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.base.utils.pane.PageWait
+import android.annotation.SuppressLint
 import android.app.Activity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
@@ -15,9 +18,11 @@ import android.text.Spanned
 import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,13 +47,13 @@ import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.PushReadReceiptSendJobFactory
 import com.difft.android.PushScreenShotSendJobFactory
 import com.difft.android.PushTextSendJobFactory
-import com.difft.android.base.BaseActivity
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.launchMediaSelectionOrOpen
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.common.ScreenshotDetector
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.appScope
+import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.RecallResultTracker
@@ -57,6 +62,7 @@ import com.difft.android.base.utils.TextSizeUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.normalizeNewlines
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.utils.pane.dismissWithView
 import com.difft.android.base.utils.utf8Substring
 import com.difft.android.base.widget.ComposeDialog
 import com.difft.android.base.widget.ComposeDialogManager
@@ -93,9 +99,9 @@ import com.difft.android.chat.mention.MentionStatsRepository
 import com.difft.android.chat.mention.MentionStatsSnapshot
 import com.difft.android.chat.setting.archive.MessageArchiveManager
 import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
-import com.difft.android.chat.ui.ChatActivity.Companion.source
-import com.difft.android.chat.ui.ChatActivity.Companion.sourceType
 import com.difft.android.chat.widget.AudioMessageManager
+import com.difft.android.chat.widget.UnifiedInputTouchHandler
+import com.difft.android.chat.widget.buildHoldToTalkHint
 import com.difft.android.messageserialization.db.store.formatBase58Id
 import com.difft.android.messageserialization.db.store.getDisplayNameWithoutRemarkForUI
 import com.difft.android.network.ChativeHttpClient
@@ -186,9 +192,16 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
+import org.difft.app.database.cache.OfficialAccountCache
 
 @AndroidEntryPoint
 class ChatMessageInputFragment : Fragment() {
+    // Wait dialog claims scoped to this page (released with its view, dismissed by token only),
+    // one per flow: a flow releases only the wait it showed.
+    private val recallWait = PageWait(this)
+    private val addFriendWait = PageWait(this)
+    private val saveWait = PageWait(this)
+
 
     // Use parent fragment as ViewModel owner when nested (in ChatFragment/GroupChatFragment),
     // otherwise use activity (when directly in Activity).
@@ -294,6 +307,9 @@ class ChatMessageInputFragment : Fragment() {
     /** Resolved once per view lifecycle; null when the host provides no keyboard/panel coordination. */
     private var keyboardPanelHost: KeyboardPanelHost? = null
 
+    /** Host of the voice-recording overlay driven by holding the input field; resolved like [keyboardPanelHost]. */
+    private var voiceRecordHost: VoiceRecordHost? = null
+
     // Last state pushed to the host — suppresses duplicate notifications so a host can treat every
     // call as a real transition (panel animations must not restart on a no-op re-notify).
     private var lastNotifiedPanelVisible = false
@@ -319,11 +335,10 @@ class ChatMessageInputFragment : Fragment() {
     }
 
     companion object {
-        // If focus was lost more than this before the screenshot callback, the notification
-        // panel was likely open. The callback has ~944ms system delay (Pixel Android 14+),
-        // so 2000ms safely covers ROM variation while staying below the notification-panel minimum.
-        private const val SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
         private const val PANEL_ANIM_DURATION = CHAT_PANEL_ANIM_DURATION_MS
+        private const val PRESSED_INPUT_SCALE = 0.97f
+        private const val PRESS_ANIM_DURATION_MS = 100L
+        private const val VOICE_HOLD_DIMMED_ALPHA = 0.4f
     }
 
     /**
@@ -386,6 +401,7 @@ class ChatMessageInputFragment : Fragment() {
         // Resolved before initView() so every click handler that reads the field sees it set.
         keyboardPanelHost = resolveKeyboardPanelHost()
         L.i { "[ChatInput] keyboard/panel host=${keyboardPanelHost?.javaClass?.simpleName ?: "none"}" }
+        voiceRecordHost = parentFragment as? VoiceRecordHost ?: activity as? VoiceRecordHost
 
         isGroup = chatViewModel.forWhat is For.Group
 
@@ -445,6 +461,7 @@ class ChatMessageInputFragment : Fragment() {
                 }
                 // Display-only: normalize newlines in the quote preview.
                 binding.quoteText.text = text.normalizeNewlines()
+                appendQuotedAuthorMention(it.authorId)
                 binding.edittextInput.requestFocus()
                 ServiceUtil.getInputMethodManager(activity)
                     .showSoftInput(binding.edittextInput, InputMethodManager.SHOW_IMPLICIT)
@@ -544,6 +561,7 @@ class ChatMessageInputFragment : Fragment() {
                                     sourceAuthorIds = listOf(messageToForward.authorId),
                                     combinedForwardMode = singleMode,
                                     carriesForeignContent = carriesForeignContent,
+                                    wait = saveWait,
                                 )
                             } else {
                                 selectChatsUtils.showChatSelectAndSendDialog(
@@ -632,13 +650,9 @@ class ChatMessageInputFragment : Fragment() {
         chatViewModel.selectMessagesState.onEach {
             binding.combineForward.isVisible = it.editModel
             binding.clSendMessage.visible = !it.editModel
-            if (it.editModel && isVoiceMode) {
-                // Voice recorder lives in the parent ChatFragment and is anchored to the
-                // bottom of the screen. It would cover the multi-select action bar, so we
-                // exit voice mode when entering selection mode.
-                isVoiceMode = false
-                chatViewModel.setVoiceVisibility(false)
-                updateSubmitButtonView()
+            if (it.editModel) {
+                // The recorder overlay would cover the multi-select action bar.
+                voiceRecordHost?.voiceRecorderView?.cancelHold()
             }
             if (binding.combineForward.isVisible) {
                 binding.combineForward.setContent {
@@ -669,37 +683,48 @@ class ChatMessageInputFragment : Fragment() {
             }
         }.launchIn(viewLifecycleOwner.lifecycleScope)
 
-        chatViewModel.forwardMultiMessage.filterNotNull().onEach {
-            selectChatsUtils.showChatSelectAndSendDialog(
-                requireActivity(),
-                it.content,
-                null,
-                null,
-                it.forwardContexts,
-                scene = it.scene,
-                // Source conversation = the user's current chat, plumbed through ForwardContextData from the ViewModel.
-                sourceConversation = it.sourceConversation,
-                sourceAuthorIds = it.sourceAuthorIds,
-                messageCount = it.messageCount,
-                combinedForwardMode = it.combinedForwardMode,
-                carriesForeignContent = it.carriesForeignContent,
-            )
-        }.launchIn(viewLifecycleOwner.lifecycleScope)
+        // STARTED-scoped: an effect that arrives while stopped stays buffered in the ViewModel and
+        // is shown on return instead of being dropped by show() after state save (#1440).
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                chatViewModel.forwardMultiMessage.collect {
+                    selectChatsUtils.showChatSelectAndSendDialog(
+                        requireActivity(),
+                        it.content,
+                        null,
+                        null,
+                        it.forwardContexts,
+                        scene = it.scene,
+                        // Source conversation = the user's current chat, plumbed through ForwardContextData from the ViewModel.
+                        sourceConversation = it.sourceConversation,
+                        sourceAuthorIds = it.sourceAuthorIds,
+                        messageCount = it.messageCount,
+                        combinedForwardMode = it.combinedForwardMode,
+                        carriesForeignContent = it.carriesForeignContent,
+                    )
+                }
+            }
+        }
 
-        chatViewModel.saveMultiMessageToNote.filterNotNull().onEach {
-            // Pass the WHOLE list — not `.first()`. Previous bug dropped N-1 attachments
-            // + produced wrong notice text on multi-select save-to-notes.
-            selectChatsUtils.saveToNotes(
-                requireActivity(),
-                it.content,
-                it.forwardContexts,
-                sourceConversation = it.sourceConversation,
-                sourceAuthorIds = it.sourceAuthorIds,
-                messageCount = it.messageCount,
-                combinedForwardMode = it.combinedForwardMode,
-                carriesForeignContent = it.carriesForeignContent,
-            )
-        }.launchIn(viewLifecycleOwner.lifecycleScope)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                chatViewModel.saveMultiMessageToNote.collect {
+                    // Pass the WHOLE list — not `.first()`. Previous bug dropped N-1 attachments
+                    // + produced wrong notice text on multi-select save-to-notes.
+                    selectChatsUtils.saveToNotes(
+                        requireActivity(),
+                        it.content,
+                        it.forwardContexts,
+                        sourceConversation = it.sourceConversation,
+                        sourceAuthorIds = it.sourceAuthorIds,
+                        messageCount = it.messageCount,
+                        combinedForwardMode = it.combinedForwardMode,
+                        carriesForeignContent = it.carriesForeignContent,
+                        wait = saveWait,
+                    )
+                }
+            }
+        }
 
         registerKeyboardStateListener()
 
@@ -775,40 +800,15 @@ class ChatMessageInputFragment : Fragment() {
         binding.edittextInput.textSize = if (textSizeLarger) 21f else 16f
     }
 
-    private var isVoiceMode: Boolean = false
-
     private fun updateSubmitButtonView() {
-        val message: String = binding.edittextInput.text.toString().trim()
-        if (!isGroup && !isFriend) {
-            binding.clRightActions.visibility = View.GONE
-            binding.buttonVoice.visibility = View.GONE
-            binding.buttonKeyboard.visibility = View.GONE
-            if (!TextUtils.isEmpty(message)) {
-                binding.clRightActions.visibility = View.VISIBLE
-                binding.buttonSubmit.visibility = View.VISIBLE
-            } else {
-                binding.clRightActions.visibility = View.GONE
-                binding.buttonSubmit.visibility = View.GONE
-            }
-        } else {
-            binding.clRightActions.visibility = View.VISIBLE
-            if (isVoiceMode) {
-                binding.buttonSubmit.visibility = View.GONE
-                binding.buttonVoice.visibility = View.GONE
-                binding.buttonKeyboard.visibility = View.VISIBLE
-            } else {
-                if (!TextUtils.isEmpty(message)) {
-                    binding.buttonSubmit.visibility = View.VISIBLE
-                    binding.buttonVoice.visibility = View.GONE
-                    binding.buttonKeyboard.visibility = View.GONE
-                } else {
-                    binding.buttonSubmit.visibility = View.GONE
-                    binding.buttonVoice.visibility = View.VISIBLE
-                    binding.buttonKeyboard.visibility = View.GONE
-                }
-            }
-        }
+        val hasText = binding.edittextInput.text.toString().trim().isNotEmpty()
+        binding.buttonSubmit.visibility = if (hasText) View.VISIBLE else View.GONE
+        // The collapsed confidential toggle (>3 lines) lives in the right column, so keep the
+        // column for it even when the draft is only whitespace.
+        val keepForConfidential = isConfidentialCollapsed && !shouldHideConfidential
+        binding.clRightActions.visibility = if (hasText || keepForConfidential) View.VISIBLE else View.GONE
         updateInputContentGoneMargin()
+        updateInputCursor()
     }
 
     private fun updateInputContentGoneMargin() {
@@ -944,6 +944,8 @@ class ChatMessageInputFragment : Fragment() {
             }
         }
 
+        initUnifiedInputGesture()
+
         // Photo entry moved into the more-actions grid (M2); same behavior as the former
         // standalone button_media in the input row.
         binding.buttonPhoto.setOnClickListener {
@@ -1030,56 +1032,21 @@ class ChatMessageInputFragment : Fragment() {
                 }
                 syncActionButtons(PanelMode.MORE)
                 showPanel(animated = !hasKeyboard)
-                chatViewModel.setVoiceVisibility(false)
                 chatViewModel.showChatActions()
                 ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
             }
-
-            isVoiceMode = false
-            updateSubmitButtonView()
         }
 
         binding.buttonMoreActionsClose.setOnClickListener {
             // Show keyboard to replace panel — keyboard slides up as overlay,
             // panel dismissed in onKeyboardAnimationEnded (same as tapping EditText)
             syncActionButtons(PanelMode.NONE)
-
-            isVoiceMode = false
-            updateSubmitButtonView()
             ViewUtil.focusAndShowKeyboard(binding.edittextInput)
         }
 
         binding.buttonGif.setOnClickListener {
             if (!checkCanSpeak()) return@setOnClickListener
             openGifPanel()
-        }
-
-        binding.buttonVoice.setOnClickListener {
-            if (!checkCanSpeak()) return@setOnClickListener
-            ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
-
-            viewLifecycleOwner.lifecycleScope.launch {
-                delay(100)
-                if (!isAdded || view == null) return@launch
-                isVoiceMode = true
-                updateSubmitButtonView()
-
-                chatViewModel.setVoiceVisibility(true)
-
-                hidePanel {
-                    keyboardPanelHost?.releaseKeyboardPaddingFreeze()
-                }
-                // Voice is mutually exclusive with any panel: collapse to NONE.
-                syncActionButtons(PanelMode.NONE)
-            }
-        }
-
-        binding.buttonKeyboard.setOnClickListener {
-            ViewUtil.focusAndShowKeyboard(binding.edittextInput)
-            chatViewModel.setVoiceVisibility(false)
-
-            isVoiceMode = false
-            updateSubmitButtonView()
         }
 
         updateConfidential()
@@ -1132,6 +1099,7 @@ class ChatMessageInputFragment : Fragment() {
                         binding.ivConfidentialRight.visibility = View.GONE
                         binding.ivFullInputOpen.visibility = View.GONE
                     }
+                    updateSubmitButtonView()
                 }
             }
         }
@@ -1174,8 +1142,9 @@ class ChatMessageInputFragment : Fragment() {
 //            requestAddFriend()
         }
 
+        // Ignoring a message request leaves the conversation, also at a two-pane root.
         binding.tvIgnore.setOnClickListener {
-            requireActivity().finish()
+            detailNavigation().closeConversation(this)
         }
 
         binding.tvAccept.setOnClickListener {
@@ -1723,16 +1692,18 @@ class ChatMessageInputFragment : Fragment() {
                         spans.forEach { (span, range) ->
                             spannable.setSpan(span, range.first, range.second, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                         }
+
+                        // After the recompute: a draft saved before it would carry the previous mentions.
+                        // Only while the text is still the one these offsets were computed for.
+                        if (saveDraft && binding.edittextInput.text.toString().trim() == text) {
+                            currentDraft = currentDraft.copy(mentions = mentions.toList())
+                            draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
+                        }
                     }
                 }
             }.onFailure { e ->
                 L.e { "update mentions span error: ${e.stackTraceToString()}" }
             }
-        }
-
-        if (saveDraft) {
-            currentDraft = currentDraft.copy(mentions = mentions.toList())
-            draftViewModel.updateDraft(chatViewModel.forWhat.id, currentDraft)
         }
     }
 
@@ -1868,6 +1839,30 @@ class ChatMessageInputFragment : Fragment() {
         return rebuilt.values.toList()
     }
 
+    /**
+     * Quoting someone in a group pre-fills an @ of them at the end of the input (as on difft): they
+     * are notified only if the @ is still there when sent, so deleting it un-mentions them. Not for
+     * 1:1 chats, my own messages, official accounts, or someone the text already mentions.
+     */
+    private fun appendQuotedAuthorMention(authorId: String) {
+        if (chatViewModel.forWhat !is For.Group) return
+        if (authorId == globalServices.myId || OfficialAccountCache.contains(authorId)) return
+        // `mentions` is recomputed from the text, so an @ the user deleted no longer counts.
+        if (mentions.any { it.uid == authorId }) return
+        val contact = chatViewModel.contactorCache.getContactor(authorId) ?: return
+        val editable = binding.edittextInput.text ?: return
+        val separator = if (editable.isNotEmpty() && !editable.last().isWhitespace()) " " else ""
+        val insertion = "$separator@${contact.getDisplayNameWithoutRemarkForUI()} "
+        // The text watcher truncates at MAX_TEXT_FILE_SIZE; an @ that would be cut off is not inserted.
+        val bytes = editable.toString().toByteArray(Charsets.UTF_8).size + insertion.toByteArray(Charsets.UTF_8).size
+        if (bytes > MAX_TEXT_FILE_SIZE) return
+        editable.append(insertion)
+        // The watcher may have replaced the buffer: place the cursor by the live length.
+        binding.edittextInput.setSelection(binding.edittextInput.length())
+        mentionsSelectedContacts.add(contact)
+        updateMentions(false)
+    }
+
     private fun insertTextToEdittext(content: String) {
         val editable: Editable? = binding.edittextInput.text
         val cursorPosition = binding.edittextInput.selectionStart
@@ -1995,7 +1990,6 @@ class ChatMessageInputFragment : Fragment() {
             // Hide confidential toggle (group member limit exceeded or bot chat)
             binding.ivConfidential.visibility = View.GONE
             binding.ivConfidentialRight.visibility = View.GONE
-            binding.edittextInput.hint = getString(chatViewModel.neutralInputHintRes)
             binding.vConfidentialLine.visibility = View.GONE
             applyConfidentialAreaStyle(false)
         } else {
@@ -2020,15 +2014,125 @@ class ChatMessageInputFragment : Fragment() {
                 view.tag = if (isConfidentialOn) 1 else 0
             }
             if (isConfidentialOn) {
-                binding.edittextInput.hint = getString(R.string.chat_message_input_hint_confidential)
                 binding.vConfidentialLine.visibility = View.VISIBLE
                 applyConfidentialAreaStyle(true)
             } else {
-                binding.edittextInput.hint = getString(chatViewModel.neutralInputHintRes)
                 binding.vConfidentialLine.visibility = View.GONE
                 applyConfidentialAreaStyle(false)
             }
         }
+        refreshInputHint()
+        updateSubmitButtonView()
+    }
+
+    private val canRecordVoice: Boolean
+        get() = isGroup || isFriend
+
+    /**
+     * Text-input mode: the field is focused with a keyboard available (on-screen IME up, or an
+     * attached physical keyboard), so touches belong to the EditText.
+     */
+    private fun isInputMode(): Boolean {
+        if (!binding.edittextInput.hasFocus()) return false
+        val config = resources.configuration
+        val hardKeyboard = config.keyboard != Configuration.KEYBOARD_NOKEYS &&
+            config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
+        return hardKeyboard || ViewCompat.getRootWindowInsets(binding.root)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+    }
+
+    private fun refreshInputHint() {
+        if (view == null) return
+        binding.edittextInput.hint = if (canRecordVoice && !isInputMode()) {
+            buildHoldToTalkHint(requireContext())
+        } else {
+            val isConfidentialOn = !shouldHideConfidential &&
+                chatSettingViewModel.currentConversationSet?.confidentialMode == 1
+            getString(if (isConfidentialOn) R.string.chat_message_input_hint_confidential else chatViewModel.neutralInputHintRes)
+        }
+        updateInputCursor()
+    }
+
+    /**
+     * Hide the cursor while the hold-to-talk hint shows: the field may keep focus after the
+     * keyboard closes, and a blinking cursor would suggest typing is already active.
+     */
+    private fun updateInputCursor() {
+        val holdHintShown = canRecordVoice && !isInputMode() && binding.edittextInput.text.isNullOrEmpty()
+        binding.edittextInput.isCursorVisible = !holdHintShown
+    }
+
+    /**
+     * Unified input (no voice/keyboard toggle): outside text-input mode a tap opens the keyboard
+     * and a long press holds to record a voice message on the host's overlay.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun initUnifiedInputGesture() {
+        binding.edittextInput.setOnFocusChangeListener { _, _ -> refreshInputHint() }
+        val handler = UnifiedInputTouchHandler(
+            touchSlop = ViewConfiguration.get(requireContext()).scaledTouchSlop,
+            shouldIntercept = { canRecordVoice && binding.edittextInput.isEnabled && !isInputMode() },
+            callbacks = object : UnifiedInputTouchHandler.Callbacks {
+                override fun onPressStateChanged(pressed: Boolean) {
+                    val scale = if (pressed) PRESSED_INPUT_SCALE else 1f
+                    binding.clInputContent.animate().scaleX(scale).scaleY(scale).setDuration(PRESS_ANIM_DURATION_MS).start()
+                }
+
+                override fun onTap() {
+                    binding.edittextInput.performClick()
+                }
+
+                override fun onLongPress(): Boolean = startVoiceHold()
+
+                override fun onHoldMove(rawX: Float, rawY: Float) {
+                    voiceRecordHost?.voiceRecorderView?.moveHold(rawX, rawY)
+                }
+
+                override fun onHoldEnd() {
+                    voiceRecordHost?.voiceRecorderView?.endHold()
+                }
+            },
+        )
+        binding.edittextInput.setOnTouchListener(handler)
+    }
+
+    private fun startVoiceHold(): Boolean {
+        // The record bar is laid over the field's on-screen bounds, so drop the press scale first.
+        binding.clInputContent.animate().cancel()
+        binding.clInputContent.scaleX = 1f
+        binding.clInputContent.scaleY = 1f
+        if (!checkCanSpeak()) return false
+        val host = voiceRecordHost
+        val recorder = host?.voiceRecorderView
+        if (recorder == null) {
+            L.w { "[ChatInput] voice hold ignored, no recorder host" }
+            return false
+        }
+        recorder.onHoldSessionEnded = {
+            if (isAdded && view != null) setVoiceHoldDimmed(false)
+        }
+        host.setVoiceRecordOverlayVisible(true)
+        if (!recorder.beginHold(binding.clInputContent)) {
+            host.setVoiceRecordOverlayVisible(false)
+            return false
+        }
+        // Only once recording really runs: a rejected hold (permission, previous session still
+        // finalizing) must not feel like it started.
+        binding.clInputContent.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        setVoiceHoldDimmed(true)
+        if (binding.llChatActions.isVisible) {
+            // Recording replaces any open panel; the record bar follows the field down.
+            hidePanel {
+                keyboardPanelHost?.releaseKeyboardPaddingFreeze()
+            }
+            syncActionButtons(PanelMode.NONE)
+        }
+        return true
+    }
+
+    private fun setVoiceHoldDimmed(dimmed: Boolean) {
+        val alpha = if (dimmed) VOICE_HOLD_DIMMED_ALPHA else 1f
+        binding.clLeftActions.alpha = alpha
+        binding.clRightActions.alpha = alpha
     }
 
     private fun applyConfidentialAreaStyle(isConfidential: Boolean) {
@@ -2065,7 +2169,7 @@ class ChatMessageInputFragment : Fragment() {
     )
 
     private fun showRecallDialog(message: ChatMessage) {
-        ComposeDialogManager.showMessageDialog(
+        dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireActivity(),
             title = requireActivity().getString(R.string.chat_message_action_recall),
             message = requireActivity().getString(R.string.chat_recall_tips),
@@ -2074,14 +2178,14 @@ class ChatMessageInputFragment : Fragment() {
             onConfirm = {
                 recallMessage(message.id)
             }
-        )
+        ))
     }
 
     /**
      * Show batch recall confirmation dialog
      */
     private fun showBatchRecallDialog(messageIds: Set<String>) {
-        ComposeDialogManager.showMessageDialog(
+        dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireActivity(),
             title = requireActivity().getString(R.string.chat_message_action_recall),
             message = requireActivity().getString(R.string.chat_recall_tips),
@@ -2090,7 +2194,7 @@ class ChatMessageInputFragment : Fragment() {
             onConfirm = {
                 batchRecallMessages(messageIds)
             }
-        )
+        ))
     }
 
     /**
@@ -2098,7 +2202,7 @@ class ChatMessageInputFragment : Fragment() {
      * Waits for all recall jobs to complete (success or failure) before dismissing loading
      */
     private fun batchRecallMessages(messageIds: Set<String>) {
-        ComposeDialogManager.showWait(requireActivity(), cancelable = false)
+        recallWait.show()
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -2145,7 +2249,7 @@ class ChatMessageInputFragment : Fragment() {
                 L.e { "Batch recall failed: ${e.stackTraceToString()}" }
                 ToastUtil.show(R.string.operation_failed)
             } finally {
-                ComposeDialogManager.dismissWait()
+                recallWait.dismiss()
             }
         }
     }
@@ -2200,7 +2304,7 @@ class ChatMessageInputFragment : Fragment() {
         // Mark as shown when dialog closes (regardless of how it's closed)
         globalServices.userManager.update { hasShownConfidentialTip = true }
         var dialog: ComposeDialog? = null
-        dialog = ComposeDialogManager.showBottomDialog(
+        dialog = dismissWithView(ComposeDialogManager.showBottomDialog(
             activity = requireActivity(),
             onDismiss = { }
         ) {
@@ -2212,7 +2316,7 @@ class ChatMessageInputFragment : Fragment() {
                     onConfirm()
                 }
             )
-        }
+        })
     }
 
     /**
@@ -2449,14 +2553,7 @@ class ChatMessageInputFragment : Fragment() {
      */
     private fun checkAndSendAddFriendRequest() {
         if (!isGroup && !isFriend) {
-            var sourceType: String? = null
-            var source: String? = null
-            if (requireActivity() is ChatActivity) {
-                (requireActivity() as ChatActivity).intent?.let {
-                    sourceType = it.sourceType
-                    source = it.source
-                }
-            }
+            val (sourceType, source) = ChatFragment.conversationSourceOf(this)
             requestAddFriend(sourceType, source)
         }
     }
@@ -2468,18 +2565,19 @@ class ChatMessageInputFragment : Fragment() {
         showLoading: Boolean = false
     ) {
         if (showLoading) {
-            ComposeDialogManager.showWait(requireActivity(), "")
+            addFriendWait.show()
         }
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
                     ContactorUtil.fetchAddFriendRequest(requireContext(), chatViewModel.forWhat.id, sourceType, source, action)
                 }
-                ComposeDialogManager.dismissWait()
+                if (showLoading) addFriendWait.dismiss()
                 if (response.status == 0) {
                     if (action == "accept") {
                         isFriend = true
                         updateSubmitButtonView()
+                        refreshInputHint()
                         updateBottomView()
                         ContactorUtil.emitFriendStatusUpdate(chatViewModel.forWhat.id, true)
                     }
@@ -2489,7 +2587,7 @@ class ChatMessageInputFragment : Fragment() {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ComposeDialogManager.dismissWait()
+                if (showLoading) addFriendWait.dismiss()
                 e.message?.let { message -> ToastUtil.show(message) }
             }
         }
@@ -2688,12 +2786,8 @@ class ChatMessageInputFragment : Fragment() {
             binding.llChatActions.minHeight = cachedPanelHeightPx()
             syncActionButtons(PanelMode.GIF)
             showPanel(animated = !hasKeyboard)
-            chatViewModel.setVoiceVisibility(false)
             ViewUtil.hideKeyboard(requireContext(), binding.edittextInput)
         }
-
-        isVoiceMode = false
-        updateSubmitButtonView()
     }
 
     private fun hideGifPanel() {
@@ -2966,7 +3060,7 @@ class ChatMessageInputFragment : Fragment() {
     )
 
     private fun recallMessage(messageID: String) {
-        ComposeDialogManager.showWait(requireActivity(), cancelable = false)
+        recallWait.show()
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -2979,7 +3073,7 @@ class ChatMessageInputFragment : Fragment() {
                             if (!result.success) {
                                 ToastUtil.show(R.string.operation_failed)
                             }
-                            ComposeDialogManager.dismissWait()
+                            recallWait.dismiss()
                         }
                     }
                 }
@@ -2990,14 +3084,14 @@ class ChatMessageInputFragment : Fragment() {
                 if (originMessage == null) {
                     L.w { "Recall message failed, original message not found: $messageID" }
                     resultJob.cancel()
-                    ComposeDialogManager.dismissWait()
+                    recallWait.dismiss()
                     ToastUtil.show(R.string.operation_failed)
                     return@launch
                 }
                 if (originMessage.fromWho != globalServices.myId) {
                     L.w { "Recall message failed, the sender does not match, realSource:${originMessage.fromWho}" }
                     resultJob.cancel()
-                    ComposeDialogManager.dismissWait()
+                    recallWait.dismiss()
                     ToastUtil.show(R.string.operation_failed)
                     return@launch
                 }
@@ -3038,13 +3132,13 @@ class ChatMessageInputFragment : Fragment() {
 
                 // If timeout without receiving result, dismiss loading
                 if (!resultReceived) {
-                    ComposeDialogManager.dismissWait()
+                    recallWait.dismiss()
                 }
 
                 recall = null
             } catch (e: Exception) {
                 L.e { "Recall message failed: ${e.stackTraceToString()}" }
-                ComposeDialogManager.dismissWait()
+                recallWait.dismiss()
                 ToastUtil.show(R.string.operation_failed)
                 recall = null
             }
@@ -3109,7 +3203,7 @@ class ChatMessageInputFragment : Fragment() {
 
             PermissionUtil.PermissionState.PermanentlyDenied -> {
                 L.d { "onPicturePermissionForMessageResult: PermanentlyDenied" }
-                ComposeDialogManager.showMessageDialog(
+                dismissWithView(ComposeDialogManager.showMessageDialog(
                     context = requireActivity(),
                     title = getString(R.string.tip),
                     message = getString(R.string.no_permission_picture_tip),
@@ -3124,7 +3218,7 @@ class ChatMessageInputFragment : Fragment() {
                             requireContext(), getString(R.string.not_granted_necessary_permissions)
                         )
                     }
-                )
+                ))
             }
         }
     }
@@ -3246,8 +3340,8 @@ class ChatMessageInputFragment : Fragment() {
      * Deliberately NOT routed through [sendTextPush]: that path persists an outgoing row which, for
      * a notice the user can neither see a status icon on nor resend, would surface as an unclearable
      * "Send failed" chat-list tag when offline (issue #1265).
-     * [com.difft.android.chat.jobs.PushScreenShotSendJob] sends first and writes the local notice
-     * only once the server accepted it. The composer state (quote / forward / mentions / reactions /
+     * [com.difft.android.chat.jobs.PushScreenShotSendJob] shows the notice at once and withdraws it
+     * if the send finally fails (issue #1435). The composer state (quote / forward / mentions / reactions /
      * shared contacts) is deliberately absent — an automatic notice must never inherit a pending
      * reply.
      */
@@ -3283,14 +3377,8 @@ class ChatMessageInputFragment : Fragment() {
                 activity = requireActivity(),
                 coroutineScope = viewLifecycleOwner.lifecycleScope,
                 onScreenshotDetected = {
-                    val focusLostAt = (requireActivity() as? BaseActivity)?.windowFocusLostAt ?: 0L
-                    val focusLostDuration = if (focusLostAt > 0L) System.currentTimeMillis() - focusLostAt else 0L
-                    if (focusLostAt > 0L && focusLostDuration >= SCREENSHOT_NOTIFICATION_PANEL_THRESHOLD_MS) {
-                        L.i { "[ChatMessageInputFragment][Screenshot] Skipped: focus lost ${focusLostDuration}ms ago (notification panel open)" }
-                    } else {
-                        L.i { "[ChatMessageInputFragment][Screenshot] Screenshot detected, sending notification" }
-                        sendScreenshotNotification()
-                    }
+                    L.i { "[ChatMessageInputFragment][Screenshot] Screenshot detected, sending notification" }
+                    sendScreenshotNotification()
                 }
             )
         }
@@ -3300,6 +3388,8 @@ class ChatMessageInputFragment : Fragment() {
     override fun onPause() {
         super.onPause()
         screenshotDetector?.stopListening()
+        // A fold/unfold recreation or a covering page pauses this input; keep what was just typed.
+        draftViewModel.flushNow()
     }
 
     override fun onDestroyView() {
@@ -3340,6 +3430,8 @@ class ChatMessageInputFragment : Fragment() {
         }
         keyboardStateListener = null
         keyboardPanelHost = null
+        voiceRecordHost?.voiceRecorderView?.onHoldSessionEnded = null
+        voiceRecordHost = null
         // The Fragment instance survives view re-creation, so stale dedupe state would suppress the
         // first real notification after the view returns.
         lastNotifiedPanelVisible = false
@@ -3358,13 +3450,16 @@ class ChatMessageInputFragment : Fragment() {
                 // Keyboard is mutually exclusive with any panel (MORE or GIF): collapse to NONE.
                 syncActionButtons(PanelMode.NONE)
                 updateSubmitButtonView()
+                refreshInputHint()
             }
             override fun onKeyboardHidden() {
                 if (!isAdded || view == null) return
                 updateSubmitButtonView()
+                refreshInputHint()
             }
             override fun onKeyboardAnimationEnded(isKeyboardVisible: Boolean) {
                 if (!isAdded || view == null) return
+                refreshInputHint()
                 val panelVisible = binding.llChatActions.isVisible
                 if (isKeyboardVisible && panelVisible) {
                     hidePanel(animated = false)

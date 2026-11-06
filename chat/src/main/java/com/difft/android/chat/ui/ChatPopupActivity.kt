@@ -39,6 +39,7 @@ import com.difft.android.chat.setting.viewmodel.ChatSettingViewModel
 import com.difft.android.chat.ui.popup.PopupChatSheetController
 import com.difft.android.chat.ui.popup.PopupSheetViews
 import com.difft.android.chat.widget.RecordingState
+import com.difft.android.chat.widget.VoiceRecorderView
 import com.difft.android.create
 import com.difft.android.network.config.GlobalConfigsManager
 import com.difft.android.network.responses.ConversationSetResponseBody
@@ -66,7 +67,14 @@ import javax.inject.Inject
  * Used when opening chat from ContactDetail popup.
  */
 @AndroidEntryPoint
-class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost {
+class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost, VoiceRecordHost {
+
+    override val voiceRecorderView: VoiceRecorderView?
+        get() = mBinding.vVoiceRecorder
+
+    override fun setVoiceRecordOverlayVisible(visible: Boolean) {
+        mBinding.clVoiceRecord.visibility = if (visible) View.VISIBLE else View.GONE
+    }
 
     companion object {
         const val BUNDLE_KEY_CONTACT_ID = "BUNDLE_KEY_CONTACT_ID"
@@ -237,15 +245,9 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
             .catch { L.w { "[ChatPopupActivity] observe contactsUpdate error: ${it.stackTraceToString()}" } }
             .launchIn(lifecycleScope)
 
-        chatViewModel.voiceVisibilityChange
-            .onEach {
-                mBinding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
-            }
-            .catch { L.w { "[ChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
-            .launchIn(lifecycleScope)
-
         mBinding.vVoiceRecorder.onRecordingDismissed = {
             mBinding.vVoiceRecordBg.visibility = View.GONE
+            mBinding.clVoiceRecord.visibility = View.GONE
         }
         mBinding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -437,6 +439,7 @@ class ChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanel
 
     override fun onResume() {
         super.onResume()
+        chatViewModel.onShown()
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
         priorConversationReporter.onConversationOpened(chatViewModel.forWhat)

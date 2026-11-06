@@ -14,6 +14,9 @@ import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.difft.android.base.android.permission.PermissionUtil
 import com.difft.android.base.android.permission.PermissionUtil.registerPermission
 import com.difft.android.base.call.CallRole
@@ -21,6 +24,7 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.CallChat
 import com.difft.android.base.user.CallConfig
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.FoldDiagnostics
 import com.difft.android.base.utils.OrientationDisplayWatcher
 import com.difft.android.base.utils.OrientationPolicy
 import com.difft.android.base.widget.ToastUtil
@@ -40,6 +44,7 @@ import com.difft.android.call.session.CallSessionHolder
 import com.difft.android.call.session.resolveCallSession
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.ui.screenshare.applyScreenShareOrientation
+import com.difft.android.call.ui.tabletop.CallFoldTracker
 import com.difft.android.base.utils.hideNavigationBar
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.withCreationCallback
@@ -64,7 +69,7 @@ import javax.inject.Inject
  * - [CallScreenshotController] — screenshot detection and notification.
  */
 @AndroidEntryPoint
-class LCallActivity : AppCompatActivity() {
+class LCallActivity : AppCompatActivity(), FoldDiagnostics.Host {
 
     @Inject
     internal lateinit var callToChatController: LCallToChatController
@@ -123,6 +128,9 @@ class LCallActivity : AppCompatActivity() {
 
     internal lateinit var backPressedCallback: OnBackPressedCallback
 
+    /** Folding features for the tabletop layout, provided to the call UI as `LocalCallFoldReports`. */
+    internal val foldTracker = CallFoldTracker(this)
+
     // Registered at construction time (required before RESUMED). Results route through
     // LCallActivityMediaPermissions.onMediaPermissionResult; taps come from the Compose toolbar
     // via onMediaControlTapped.
@@ -142,22 +150,6 @@ class LCallActivity : AppCompatActivity() {
     internal val viewModel: LCallViewModel by viewModels(extrasProducer = {
         defaultViewModelCreationExtras.withCreationCallback<LCallViewModelFactory> { it.create(session) }
     })
-
-    /**
-     * Timestamp when the window last lost focus.
-     *
-     * Kept on the Activity to avoid an initialization race window: e.g.
-     * `CallWaitDialogUtil` may fire `onWindowFocusChanged` before
-     * [screenshotController] is created. [CallScreenshotController] reads
-     * this value through a provider.
-     */
-    @Volatile
-    internal var windowFocusLostAt: Long = 0L
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        windowFocusLostAt = if (hasFocus) 0L else System.currentTimeMillis()
-    }
 
     /**
      * Activity creation and bootstrapping.
@@ -192,6 +184,7 @@ class LCallActivity : AppCompatActivity() {
             return
         }
         session = resolved
+        foldTracker.attach()
 
         // Placeholder content to ensure ViewTreeLifecycleOwner is installed,
         // avoiding "ViewTreeLifecycleOwner not found" crashes when CallWaitDialogUtil
@@ -217,7 +210,22 @@ class LCallActivity : AppCompatActivity() {
 
     // Set by ScreenSharingView while a remote share is shown: re-applies then go through
     // applyScreenShareOrientation, so a fold or unfold mid-share is not frozen by the share lock.
-    internal var screenShareOrientationActive = false
+    // Snapshot state so the call's bottom sheets can mirror the share's hidden system bars (#1451).
+    internal var screenShareOrientationActive by mutableStateOf(false)
+
+    // The call page's debounced fold is half open (CallContent reports it): a share then keeps the
+    // policy's lock instead of turning landscape (design decision 38).
+    internal var foldHalfOpen = false
+        private set
+
+    /** Records the debounced half-open state and, while a share is shown, re-decides its orientation. */
+    internal fun onFoldHalfOpenChanged(halfOpen: Boolean) {
+        if (foldHalfOpen == halfOpen) return
+        foldHalfOpen = halfOpen
+        if (screenShareOrientationActive && !isInPictureInPictureMode) {
+            policyAppliedOrientation = applyScreenShareOrientation(this, halfOpen = halfOpen)
+        }
+    }
 
     // Same display-level replay BaseActivity has: a fold the OS answers with a letterbox delivers
     // no configuration change at all, and a call is the screen most likely to be open across a fold.
@@ -234,13 +242,14 @@ class LCallActivity : AppCompatActivity() {
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        FoldDiagnostics.onConfigurationArrived(this, via = "onConfigurationChanged")
         if (isInPictureInPictureMode) return
         reapplyOrientationPolicyIfOwned()
     }
 
     private fun reapplyOrientationPolicyIfOwned(display: Display? = null) {
         if (screenShareOrientationActive) {
-            policyAppliedOrientation = applyScreenShareOrientation(this, display)
+            policyAppliedOrientation = applyScreenShareOrientation(this, display, foldHalfOpen)
             return
         }
         val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
@@ -252,6 +261,13 @@ class LCallActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         orientationDisplayWatcher.start()
+    }
+
+    /** #1454 snapshot extras: policy ownership, the share lock and whether the tabletop dock is shown. */
+    override fun foldDiagExtras(): String {
+        val owned = policyAppliedOrientation?.let { requestedOrientation == it } == true
+        val tabletop = if (::session.isInitialized) viewModel.callUiController.dockPinned.value.toString() else "none"
+        return "owned=$owned share=$screenShareOrientationActive tabletop=$tabletop"
     }
 
     override fun onStop() {

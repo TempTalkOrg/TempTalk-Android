@@ -3,6 +3,7 @@ package com.difft.android.chat.jobs
 import android.text.TextUtils
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.RecallResultTracker
 import com.difft.android.base.utils.RoomChangeTracker
@@ -32,6 +33,9 @@ import difft.android.messageserialization.model.ROOM_SENDING_STATUS_ACTIVE
 import difft.android.messageserialization.model.ROOM_SEND_STATUS_FAILED
 import difft.android.messageserialization.model.TextMessage
 import difft.android.messageserialization.model.isAttachmentMessage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.difft.app.database.delete
 import org.difft.app.database.models.DBGroupMemberContactorModel
@@ -63,7 +67,8 @@ class PushTextSendJob @AssistedInject constructor(
     private val localMessageCreator: LocalMessageCreator,
     private val messageStore: difft.android.messageserialization.MessageStore,
     private val groupUtil: GroupUtil,
-) : PushSendJob(parameters ?: buildParameters(textMessage.forWhat, textMessage.isAttachmentMessage())) {
+    messagingGate: MessagingGate,
+) : PushSendJob(parameters ?: buildParameters(textMessage.forWhat, textMessage.isAttachmentMessage()), messagingGate) {
 
     @dagger.hilt.EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -147,12 +152,18 @@ class PushTextSendJob @AssistedInject constructor(
                 notification = createNotification()
             }
 
+            // Admitted after the upload, which does not touch the message queue; a deferral
+            // re-serializes the uploaded pointer. A refusal returns without throwing, so the catch
+            // below never maps it to a retry or a failure (#1382).
+            val admission = admitSend() ?: return
+
             L.i { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Send text message to-> ${textMessage.forWhat.id}, RetryCount: $runAttempt" }
             val result = newSignalServiceMessageSender.sendDataMessage(
                 textMessage.forWhat,
                 textMessage.forWhat,
                 dataMessage,
                 notification?.toNewNotification(),
+                admission,
             )
 
             result.success?.let {
@@ -169,6 +180,8 @@ class PushTextSendJob @AssistedInject constructor(
                 markSendFailed()
             }
         } catch (e: Exception) {
+            // Real cancellation leaves the message pending for the next run instead of failing it.
+            if (e is CancellationException) currentCoroutineContext().ensureActive()
             L.e { "[Message][PushTextSendJob] timeStamp:${textMessage.timeStamp} Send message exception, Exception: ${e.stackTraceToString()}, RetryCount: $runAttempt" }
 
             // 处理已知的特定异常，这些异常不需要重试

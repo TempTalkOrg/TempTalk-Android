@@ -138,6 +138,7 @@ object ComposeDialogManager {
 
             val dialog = object : ComposeDialog {
                 override fun dismiss() = closer.dismiss()
+                override val isShowing: Boolean get() = !closer.isClosed
             }
 
             composeView.setContent {
@@ -168,6 +169,8 @@ object ComposeDialogManager {
                 override fun dismiss() {
                     // 什么都不做
                 }
+
+                override val isShowing: Boolean get() = false
             }
         }
     }
@@ -303,12 +306,16 @@ object ComposeDialogManager {
         content: @Composable () -> Unit
     ): ComposeDialog {
         val composeView = ComposeView(activity)
+        var showing = true
 
         val dialog = object : ComposeDialog {
             override fun dismiss() {
+                showing = false
                 ComposeActivityMount.unmount(activity, composeView)
                 onDismiss()
             }
+
+            override val isShowing: Boolean get() = showing
         }
 
         composeView.setContent {
@@ -325,6 +332,7 @@ object ComposeDialogManager {
                     isVisible = showSheet,
                     onDismiss = {
                         showSheet = false
+                        showing = false
                         onDismiss()
                         ComposeActivityMount.unmount(activity, composeView)
                     },
@@ -348,12 +356,16 @@ object ComposeDialogManager {
         onViewCreated: (View) -> Unit = {}
     ): ComposeDialog {
         val composeView = ComposeView(activity)
+        var showing = true
 
         val dialog = object : ComposeDialog {
             override fun dismiss() {
+                showing = false
                 ComposeActivityMount.unmount(activity, composeView)
                 onDismiss()
             }
+
+            override val isShowing: Boolean get() = showing
         }
 
         composeView.setContent {
@@ -370,6 +382,7 @@ object ComposeDialogManager {
                     isVisible = showSheet,
                     onDismiss = {
                         showSheet = false
+                        showing = false
                         onDismiss()
                         ComposeActivityMount.unmount(activity, composeView)
                     },

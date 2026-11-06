@@ -1,23 +1,22 @@
 package com.difft.android.chat.group
 
 import android.Manifest
-import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.os.bundleOf
-import com.difft.android.base.widget.InsetAwareConstraintLayout
+import com.difft.android.base.utils.pane.dismissWithView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
+import com.difft.android.base.utils.pane.ReopenableConversationPage
+import com.difft.android.base.utils.pane.SoftInputModeLease
+import com.difft.android.base.utils.pane.detailNavigation
 import com.difft.android.ChatMessageViewModelFactory
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.android.permission.PermissionUtil
@@ -40,7 +39,9 @@ import com.difft.android.chat.ui.ChatHeaderCallFragment
 import com.difft.android.chat.ui.ChatMessageListFragment
 import com.difft.android.chat.ui.ChatMessageListProvider
 import com.difft.android.chat.ui.ChatMessageViewModel
+import com.difft.android.chat.ui.VoiceRecordHost
 import com.difft.android.chat.widget.RecordingState
+import com.difft.android.chat.widget.VoiceRecorderView
 import com.difft.android.network.group.GroupRepo
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.difft.android.selector.utils.ToastUtils
@@ -68,7 +69,18 @@ import javax.inject.Inject
  * 用于支持大屏双栏布局
  */
 @AndroidEntryPoint
-class GroupChatFragment : Fragment(), ChatMessageListProvider {
+class GroupChatFragment : Fragment(), ChatMessageListProvider, VoiceRecordHost, ReopenableConversationPage {
+
+    override fun onConversationReopened() {
+        chatViewModel.onReopened()
+    }
+
+    override val voiceRecorderView: VoiceRecorderView?
+        get() = _binding?.vVoiceRecorder
+
+    override fun setVoiceRecordOverlayVisible(visible: Boolean) {
+        _binding?.clVoiceRecord?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
 
     companion object {
         const val ARG_GROUP_ID = "ARG_GROUP_ID"
@@ -157,21 +169,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // API < 30: WindowInsetsAnimationCompat doesn't work with adjustNothing,
-        // fall back to adjustResize for basic keyboard handling (no smooth animation).
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            requireActivity().window.setSoftInputMode(
-                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
-            )
-        }
-
-        // Configure InsetAwareConstraintLayout for dual-pane mode
-        // In dual-pane, IndexActivity handles system bars; Fragment only needs IME
-        val rootLayout = binding.root as InsetAwareConstraintLayout
-        if (isInDualPaneMode()) {
-            rootLayout.setUseWindowTypes(false)
-        }
+        // API < 30: WindowInsetsAnimationCompat doesn't work with adjustNothing, so the window
+        // resizes for the keyboard; shared with the other pages of this window (no-op on 30+).
+        SoftInputModeLease.acquireResize(requireActivity(), this, conversationRoot = true)
 
         onCreateForShowingMessages()
         registerCallStatusViewListener()
@@ -179,6 +179,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
 
     override fun onResume() {
         super.onResume()
+        chatViewModel.onShown()
 
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
@@ -192,12 +193,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     }
 
     override fun onDestroyView() {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            requireActivity().window.setSoftInputMode(
-                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
-                    android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
-            )
-        }
+        // The last page of this window to let go restores the window's mode, so a conversation
+        // closed in another tab does not reset it under a page still using the keyboard.
+        SoftInputModeLease.release(requireActivity(), this)
         super.onDestroyView()
         _binding = null
     }
@@ -207,10 +205,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
 
         if (TextUtils.isEmpty(chatViewModel.forWhat.id)) {
             ToastUtil.show("No groupID detected. Finishing Activity.")
-            requireActivity().finish()
+            detailNavigation().closeConversation(this)
             return
         }
-        SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
 
         getGroupInfo(false)
         getGroupInfo(true)
@@ -221,7 +218,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
                 if (it.gid == chatViewModel.forWhat.id) {
                     if (it.status != 0) {
                         // Group is gone (kicked / left / dismissed / destroyed) — close.
-                        activity?.finish()
+                        detailNavigation().closeConversation(this@GroupChatFragment)
                         return@onEach
                     }
                     chatViewModel.setChatUIData(ChatUIData(null, it))
@@ -232,16 +229,9 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
             .catch { L.w { "[GroupChatFragment] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
             .launchIn(viewLifecycleOwner.lifecycleScope)
 
-        chatViewModel.voiceVisibilityChange
-            .onEach {
-                if (!isAdded || view == null) return@onEach
-                binding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
-            }
-            .catch { L.w { "[GroupChatFragment] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
-            .launchIn(viewLifecycleOwner.lifecycleScope)
-
         binding.vVoiceRecorder.onRecordingDismissed = {
             binding.vVoiceRecordBg.visibility = View.GONE
+            binding.clVoiceRecord.visibility = View.GONE
         }
         binding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -402,16 +392,10 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     }
 
 
+    // Group info stacks above this conversation in the home detail stack (its shell Activity
+    // elsewhere). Leaving or losing the group closes the conversation through the navigation.
     fun openGroupInfoActivity() {
-        groupInfoActivityLauncher.launch(
-            Intent(requireContext(), GroupInfoActivity::class.java).putExtra(KEY_GROUP_ID, chatViewModel.forWhat.id)
-        )
-    }
-
-    private val groupInfoActivityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == Activity.RESULT_OK) {
-            requireActivity().finish()
-        }
+        detailNavigation().push(this, GroupInfoDestination(chatViewModel.forWhat.id))
     }
 
     private fun onAudioPermissionForMessageResult(permissionState: PermissionUtil.PermissionState) {
@@ -433,7 +417,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
     }
 
     private fun showAudioPermissionDialog() {
-        ComposeDialogManager.showMessageDialog(
+        dismissWithView(ComposeDialogManager.showMessageDialog(
             context = requireContext(),
             title = getString(R.string.tip),
             message = getString(R.string.no_permission_voice_tip),
@@ -448,7 +432,7 @@ class GroupChatFragment : Fragment(), ChatMessageListProvider {
                     requireContext(), getString(R.string.not_granted_necessary_permissions)
                 )
             }
-        )
+        ))
     }
 
     private fun registerCallStatusViewListener() {

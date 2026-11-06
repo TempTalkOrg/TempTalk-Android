@@ -71,6 +71,12 @@ interface ContainerWriter {
          * determinate bar from the first frame. Null writes zeros, which readers treat as unknown.
          */
         totals: ContainerTotals? = null,
+        /**
+         * Runs right before the end marker, after every record and attachment frame. Until the end
+         * marker and the trailing HMAC are written the receiver cannot commit, so a hook that throws
+         * aborts the container uncommittable (the migration message pause's commit marker, #1382).
+         */
+        beforeFinalize: (suspend () -> Unit)? = null,
     ): ContainerManifest
 }
 
@@ -89,12 +95,13 @@ class ContainerWriterImpl @Inject constructor(
         sourceAccount: String,
         sourceAppVersion: String,
         totals: ContainerTotals?,
+        beforeFinalize: (suspend () -> Unit)?,
     ): ContainerManifest = withContext(Dispatchers.IO) {
         L.i { "[MigrationV2][Container] write start platform=${ContainerFormat.SOURCE_PLATFORM_ANDROID} formatVersion=${ContainerFormat.FORMAT_VERSION}" }
         var committed = false
         try {
             val manifest = BufferedOutputStream(sink.openStream(), BackupCrypto.IO_BUFFER_BYTES).use { out ->
-                runWrite(records, out, passphrase, attachmentBytes, sourceAccount, sourceAppVersion, totals)
+                runWrite(records, out, passphrase, attachmentBytes, sourceAccount, sourceAppVersion, totals, beforeFinalize)
             }
             committed = true
             L.i { "[MigrationV2][Container] write done records=${manifest.recordCount} attachments=${manifest.attachmentCount}" }
@@ -143,6 +150,7 @@ class ContainerWriterImpl @Inject constructor(
         sourceAccount: String,
         sourceAppVersion: String,
         totals: ContainerTotals?,
+        beforeFinalize: (suspend () -> Unit)?,
     ): ContainerManifest {
         val salt = crypto.randomBytes(BackupCrypto.SALT_BYTES)
         val iv = crypto.randomBytes(BackupCrypto.IV_BYTES)
@@ -192,7 +200,11 @@ class ContainerWriterImpl @Inject constructor(
             }
         }
 
-        // 4. End-of-stream sentinel.
+        // 4. End-of-stream sentinel, after the caller's last word: a hook that throws leaves no end marker.
+        if (beforeFinalize != null) {
+            beforeFinalize()
+            currentCoroutineContext().ensureActive()
+        }
         writeFrame(out, cipher, mac, ContainerFormat.TAG_END, ByteArray(0))
 
         // 5. Finalise cipher + flush trailing HMAC over header ‖ ciphertext.

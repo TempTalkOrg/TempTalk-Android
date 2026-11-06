@@ -1,133 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- CoordinatorLayout + AppBarLayout so the title row can collapse with the list's nested
+     scroll on a short window (HomeHeaderCollapser sets the scroll flag there); on
+     every other window the row has no scroll flag and the layout behaves like a plain column. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/recent_chat_coordinator"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="52dp">
-
-        <!-- Dual-pane only (self-hides on phones): collapses / expands the navigation rail. -->
-        <com.difft.android.base.widget.DualPaneRailToggleView
-            android:id="@+id/rail_toggle"
-            android:layout_width="44dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="6dp"
-            android:contentDescription="@string/dual_pane_rail_collapse_hint"
-            android:padding="10dp"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
-
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/chat_title"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginStart="4dp"
-            android:gravity="center_vertical"
-            android:text="@string/chat_chats"
-            android:textColor="@color/t.primary"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            app:layout_constraintStart_toEndOf="@id/rail_toggle"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_goneMarginStart="16dp" />
-
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/add_options"
-            android:layout_width="44dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="6dp"
-            android:contentDescription="@string/chat_add_options"
-            android:padding="10dp"
-            android:src="@drawable/chat_add_options"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/t.primary" />
-
-        <!--
-          Status indicator, so it sits with the other title-bar icons next to the add button; the
-          migration pill is an ACTION and takes the outer slot. Horizontal padding matches
-          add_options' 10dp, so the gap to every neighbour is set by padding alone rather than by
-          per-view margins.
-        -->
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/iv_proxy_status"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:contentDescription="@string/chat_proxy_status"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:scaleType="centerInside"
-            android:src="@drawable/chat_ic_proxy_shield_checking"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/add_options"
-            app:layout_constraintTop_toTopOf="parent"
-            tools:visibility="visible" />
-
-        <!--
-          Retiring package only (org.difft.chative): the always-present "move to the new app" pill;
-          content is composed by the fragment. The gap to its right comes from the proxy icon's start
-          padding — and from goneMarginEnd when the proxy indicator is hidden, which is its default.
-        -->
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/migrate_entry"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/iv_proxy_status"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_goneMarginEnd="10dp" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/cl_permission_tip"
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/home_app_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/yellow_50"
-        android:padding="16dp"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/chat_title"
-        tools:visibility="visible">
+        android:background="@android:color/transparent"
+        app:elevation="0dp"
+        app:liftOnScroll="false">
 
-        <androidx.appcompat.widget.AppCompatTextView
-            android:id="@+id/tv_permission_tip"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:text="@string/notification_no_permission_tip"
-            android:textColor="@color/t.black"
-            android:textSize="14sp"
-            app:layout_constraintEnd_toStartOf="@+id/iv_permission_tip_close"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+        <!-- Title row: the only collapsible child (scroll flag set at runtime). -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/home_header"
+            android:layout_width="match_parent"
+            android:layout_height="52dp">
 
-        <androidx.appcompat.widget.AppCompatImageView
-            android:id="@+id/iv_permission_tip_close"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_close"
-            android:tint="@color/icon"
-            app:layout_constraintBottom_toBottomOf="@+id/tv_permission_tip"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@+id/tv_permission_tip"
-            app:tint="@color/t.black" />
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/chat_title"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_marginStart="16dp"
+                android:gravity="center_vertical"
+                android:text="@string/chat_chats"
+                android:textColor="@color/t.primary"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/add_options"
+                android:layout_width="44dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="6dp"
+                android:contentDescription="@string/chat_add_options"
+                android:padding="10dp"
+                android:src="@drawable/chat_add_options"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@color/t.primary" />
+
+            <!--
+              Status indicator, so it sits with the other title-bar icons next to the add button; the
+              migration pill is an ACTION and takes the outer slot. Horizontal padding matches
+              add_options' 10dp, so the gap to every neighbour is set by padding alone rather than by
+              per-view margins.
+            -->
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_proxy_status"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/chat_proxy_status"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/chat_ic_proxy_shield_checking"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/add_options"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:visibility="visible" />
+
+            <!--
+              Retiring package only (org.difft.chative): the always-present "move to the new app" pill;
+              content is composed by the fragment. The gap to its right comes from the proxy icon's start
+              padding — and from goneMarginEnd when the proxy indicator is hidden, which is its default.
+            -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/migrate_entry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/iv_proxy_status"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_goneMarginEnd="10dp" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- Group focus: "no focus group selected" strip; content and visibility come from
+             FocusStatusStrip. No scroll flag: it stays pinned when the title collapses. -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/focus_status_strip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+    </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <!-- RecyclerView for Recent Messages -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_view_recent_message"
             android:layout_width="match_parent"
@@ -135,5 +108,4 @@
             tools:listitem="@layout/chat_fragment_recent_chat_list_item" />
 
     </FrameLayout>
-    <!-- RecyclerView for Recent Messages -->
-</LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -72,14 +72,13 @@
     <string name="e2ee_sheet_got_it">OK</string>
     <string name="e2ee_learn_more">Learn more</string>
     <string name="base_bottom_sheet_drag_handle">Drag handle</string>
-    <string name="dual_pane_rail_collapse_hint">Hide navigation rail</string>
-    <string name="dual_pane_rail_expand_hint">Show navigation rail</string>
 
     <!-- Notification category display names (shown in system settings) -->
     <string name="notification_channel_message">Messages</string>
     <string name="notification_channel_call">Calls</string>
-    <string name="notification_channel_critical_alert">Critical alerts</string>
+    <string name="notification_channel_critical_alert">Critical Alerts</string>
     <string name="notification_channel_other_alerts">Other alerts</string>
     <string name="notification_channel_running_in_background">Running in background</string>
     <string name="notification_channel_group_message">Messages</string>
+    <string name="settings_accepted_local_commit_failed">The change was accepted, but could not be saved on this device. Try again to finish saving.</string>
 </resources>

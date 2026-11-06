@@ -2,6 +2,7 @@ package com.difft.android.chat.jobs
 
 import com.difft.android.PushGroupKeySendJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.chat.crypto.GroupCryptoRepo
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
@@ -39,7 +40,8 @@ class PushGroupKeySendJob @AssistedInject constructor(
     @Assisted("isBroadcast") private val isBroadcast: Boolean,
     private val messageSender: NewSignalServiceMessageSender,
     private val groupCryptoRepo: GroupCryptoRepo,
-) : PushSendJob(parameters ?: buildParameters()) {
+    messagingGate: MessagingGate,
+) : PushSendJob(parameters ?: buildParameters(), messagingGate) {
 
     private val recipient: For
         get() = if (isBroadcast) For.Group(gid) else For.Account(recipientId)
@@ -72,7 +74,8 @@ class PushGroupKeySendJob @AssistedInject constructor(
             "[GE][PushGroupKeySendJob] Sending group key: gid=$gid, recipient=$recipientId," +
                 " broadcast=$isBroadcast, attempt=$runAttempt"
         }
-        messageSender.sendGroupKeyMessage(target, target, message)
+        val admission = admitSend() ?: return
+        messageSender.sendGroupKeyMessage(target, target, message, admission)
     }
 
     override fun onFailure() {

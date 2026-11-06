@@ -325,6 +325,10 @@ class FavoriteWriteRepository @Inject constructor(
     suspend fun rewrapOnMasterKeyRotation(oldPriv: ByteArray?, newPriv: ByteArray) =
         keyLifecycle.rewrapOnMasterKeyRotation(oldPriv, newPriv)
 
+    suspend fun rewrapOnMasterKeyRotation(
+        oldPriv: ByteArray?, newPriv: ByteArray, expectedAccount: String, expectedAuthorization: String?,
+    ) = keyLifecycle.rewrapOnMasterKeyRotation(oldPriv, newPriv, expectedAccount, expectedAuthorization)
+
     /**
      * Primary-device login rewrap-vs-reset decision (design §3.4). Delegates to
      * [FavoriteKeyLifecycle]; kept here as the public entry (LoginViewModel).
@@ -405,7 +409,10 @@ class FavoriteWriteRepository @Inject constructor(
 
     /** PUT action=rewrap: updates only the wrappedFavKey column (no listVersion, no CAS). Driven from
      *  [FavoriteKeyLifecycle]. */
-    internal suspend fun putRewrap(wrappedFavKey: String) = withContext(Dispatchers.IO) {
+    internal suspend fun putRewrap(
+        wrappedFavKey: String, expectedAccount: String? = null, expectedAuthorization: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        if (expectedAccount != null && !keyRepo.matchesSession(expectedAccount, expectedAuthorization)) return@withContext
         val resp = httpClient.httpService.putFavorites(
             favoritesUrl,
             FavoritesPutRequest(

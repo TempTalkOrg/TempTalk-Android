@@ -13,37 +13,19 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
 /**
- * Framework-assumption test for the restoreDetailFragmentsState state-loss fix
- * (per docs/agents/testing-patterns.md § Framework Assumption Tests).
+ * Framework-assumption test (per docs/agents/testing-patterns.md § Framework Assumption Tests)
+ * for the detail-pane commit policy.
  *
- * ## Coverage contract — read before relying on this test
+ * Pins the two framework instruments behind it:
+ *   - a show()/hide() FragmentTransaction committed AFTER onSaveInstanceState() throws
+ *     IllegalStateException with plain commit(), which is why `PaneNavigator` queues every stack
+ *     change while state is saved and replays it on start/resume (`PaneNavigatorTest` covers that
+ *     queue against the real navigator);
+ *   - the same transaction does NOT throw with commitAllowingStateLoss(), the escape hatch the
+ *     navigator deliberately does not use.
  *
- * This test pins the two framework instruments the one-line fix in
- * IndexActivity.restoreDetailFragmentsState() (transaction.commit() ->
- * commitAllowingStateLoss()) depends on:
- *   - CRASH instrument: a show()/hide() FragmentTransaction committed AFTER
- *     onSaveInstanceState() throws IllegalStateException with plain commit().
- *   - FIX instrument: the same transaction does NOT throw with
- *     commitAllowingStateLoss().
- *
- * What it guarantees: the fix is not dead code — the framework behaves exactly as
- * the fix assumes. Per testing-patterns.md § Framework Assumption Tests, a wrong
- * assumption here would make the fix ineffective while other tests still passed;
- * this test rules that out.
- *
- * ## What this test does NOT cover — no revert-detection
- *
- * It deliberately does NOT exercise IndexActivity.restoreDetailFragmentsState.
- * IndexActivity is a Hilt @AndroidEntryPoint whose onCreate needs test modules the
- * :app module lacks. Because this test drives a bare FragmentActivity host and never
- * references the production call site, it will NOT fail if the IndexActivity fix line
- * is reverted from commitAllowingStateLoss() back to commit() — both @Test methods
- * would still pass. Revert-detection needs real-IndexActivity integration coverage,
- * blocked on that Hilt test-infra buildout.
- *
- * The mechanic under test — FragmentManager.checkStateLoss() on commit — is
- * qualifier- and IndexActivity-independent, so a bare FragmentActivity host
- * reproduces it exactly.
+ * The mechanic under test, FragmentManager.checkStateLoss() on commit, is qualifier- and
+ * IndexActivity-independent, so a bare FragmentActivity host reproduces it exactly.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [33])

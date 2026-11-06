@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.difft.android.ChatSettingViewModelFactory
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.utils.globalServices
 import com.difft.android.messageserialization.db.store.DBRoomStore
 import com.difft.android.base.widget.ToastUtil
@@ -31,7 +30,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import difft.android.messageserialization.For
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -157,7 +159,10 @@ class ChatSettingViewModel @AssistedInject constructor(
                     messageExpiry = update.messageExpiry ?: current.messageExpiry,
                     messageClearAnchor = update.messageClearAnchor ?: current.messageClearAnchor,
                     saveToPhotos = if (hasSaveToPhotosUpdate) newSaveToPhotos else current.saveToPhotos,
-                    translateSetting = update.translateSetting ?: current.translateSetting
+                    translateSetting = update.translateSetting ?: current.translateSetting,
+                    allowMentionMe = update.allowMentionMe ?: current.allowMentionMe,
+                    allowMentionAll = update.allowMentionAll ?: current.allowMentionAll,
+                    allowGroupCall = update.allowGroupCall ?: current.allowGroupCall
                 )
         } ?: run {
             // If no current config, create a new config with update values
@@ -169,7 +174,10 @@ class ChatSettingViewModel @AssistedInject constructor(
                 messageExpiry = update.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime(),
                 messageClearAnchor = update.messageClearAnchor ?: 0L,
                 saveToPhotos = newSaveToPhotos,
-                translateSetting = update.translateSetting ?: 0
+                translateSetting = update.translateSetting ?: 0,
+                allowMentionMe = update.allowMentionMe,
+                allowMentionAll = update.allowMentionAll,
+                allowGroupCall = update.allowGroupCall
             )
         }
     }
@@ -186,28 +194,49 @@ class ChatSettingViewModel @AssistedInject constructor(
         remark: String? = null,
         muteStatus: Int? = null,
         blockStatus: Int? = null,
-        confidentialMode: Int? = null
+        confidentialMode: Int? = null,
+        allowMentionMe: Boolean? = null,
+        allowMentionAll: Boolean? = null,
+        allowGroupCall: Boolean? = null
     ): ConversationSetResponseBody = copy(
         remark = remark ?: this.remark,
         muteStatus = muteStatus ?: this.muteStatus,
         blockStatus = blockStatus ?: this.blockStatus,
-        confidentialMode = confidentialMode ?: this.confidentialMode
+        confidentialMode = confidentialMode ?: this.confidentialMode,
+        allowMentionMe = allowMentionMe ?: this.allowMentionMe,
+        allowMentionAll = allowMentionAll ?: this.allowMentionAll,
+        allowGroupCall = allowGroupCall ?: this.allowGroupCall
     )
 
-    fun updateSelectedOption(activity: Activity, time: Long) {
-        ComposeDialogManager.showWait(activity, "")
+    private val _archiveBusy = MutableStateFlow(false)
+
+    /** An archive-time update is running; the page shows its wait from this. */
+    val archiveBusy: StateFlow<Boolean> = _archiveBusy.asStateFlow()
+
+    private val _archiveErrors = Channel<String>(Channel.BUFFERED)
+
+    /** One message per failed archive-time update, shown once by the page. */
+    val archiveErrors: Flow<String> = _archiveErrors.receiveAsFlow()
+
+    /**
+     * Sets the conversation's message archive time. Runs on [viewModelScope]: it survives a fold
+     * (the page's ViewModel is retained) and is cancelled when the page closes for good. One at a
+     * time; a request while one runs is ignored.
+     */
+    fun updateArchiveTime(time: Long) {
+        if (!_archiveBusy.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     messageArchiveManager.updateMessageArchiveTime(conversation, time)
                 }
-                ComposeDialogManager.dismissWait()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                ComposeDialogManager.dismissWait()
-                L.w { "[ChatSettingViewModel] updateSelectedOption error: ${e.stackTraceToString()}" }
-                e.message?.let { message -> ToastUtil.show(message) }
+                L.w { "[ChatSettingViewModel] updateArchiveTime error: ${e.stackTraceToString()}" }
+                e.message?.let { _archiveErrors.trySend(it) }
+            } finally {
+                _archiveBusy.value = false
             }
         }
     }
@@ -228,7 +257,10 @@ class ChatSettingViewModel @AssistedInject constructor(
         muteStatus: Int? = null,
         blockStatus: Int? = null,
         needFinishActivity: Boolean = false,
-        successTips: String? = null
+        successTips: String? = null,
+        allowMentionMe: Boolean? = null,
+        allowMentionAll: Boolean? = null,
+        allowGroupCall: Boolean? = null
     ): Job {
         return viewModelScope.launch {
             try {
@@ -239,7 +271,10 @@ class ChatSettingViewModel @AssistedInject constructor(
                                 conversation = conversation,
                                 remark = remark,
                                 muteStatus = muteStatus,
-                                blockStatus = blockStatus
+                                blockStatus = blockStatus,
+                                allowMentionMe = allowMentionMe,
+                                allowMentionAll = allowMentionAll,
+                                allowGroupCall = allowGroupCall
                             )
                         )
                 }
@@ -260,7 +295,7 @@ class ChatSettingViewModel @AssistedInject constructor(
                         // for, exactly as an update event would. A re-fetch instead would discard
                         // them, report nothing when the GET fails, and could land after a newer write.
                         val mergedConfig = _conversationSet.updateAndGet { latest ->
-                            latest?.applying(remark, muteStatus, blockStatus)
+                            latest?.applying(remark, muteStatus, blockStatus, allowMentionMe = allowMentionMe, allowMentionAll = allowMentionAll, allowGroupCall = allowGroupCall)
                         }
                         if (mergedConfig == null) {
                             // No local config to merge into: pull the whole thing, and await it so
@@ -275,7 +310,10 @@ class ChatSettingViewModel @AssistedInject constructor(
                                 updateCachedSettings(
                                     conversationId = conversation,
                                     muteStatus = muteStatus,
-                                    blockStatus = blockStatus
+                                    blockStatus = blockStatus,
+                                    allowMentionMe = allowMentionMe,
+                                    allowMentionAll = allowMentionAll,
+                                    allowGroupCall = allowGroupCall
                                 )
                             }
                         }
@@ -374,7 +412,10 @@ class ChatSettingViewModel @AssistedInject constructor(
                         messageExpiry = room.messageExpiry ?: messageArchiveManager.getDefaultMessageArchiveTime(),
                         messageClearAnchor = room.messageClearAnchor ?: 0L,
                         saveToPhotos = room.saveToPhotos,
-                        translateSetting = room.translateSetting
+                        translateSetting = room.translateSetting,
+                        allowMentionMe = room.allowMentionMe,
+                        allowMentionAll = room.allowMentionAll,
+                        allowGroupCall = room.allowGroupCall
                     )
                 } else {
                     null
@@ -438,19 +479,28 @@ class ChatSettingViewModel @AssistedInject constructor(
     private fun updateCachedSettings(
         conversationId: String,
         muteStatus: Int? = null,
-        blockStatus: Int? = null
+        blockStatus: Int? = null,
+        allowMentionMe: Boolean? = null,
+        allowMentionAll: Boolean? = null,
+        allowGroupCall: Boolean? = null
     ) {
         // The store skips null columns and writes nothing when all are null; mirror that here so
         // the log never claims a write that did not happen.
-        if (muteStatus == null && blockStatus == null) return
+        if (listOf<Any?>(muteStatus, blockStatus, allowMentionMe, allowMentionAll, allowGroupCall).all { it == null }) return
         try {
             dbRoomStore.createRoomIfNotExist(conversation)
             dbRoomStore.updateConversationSettings(
                 roomId = conversationId,
                 muteStatus = muteStatus,
-                blockStatus = blockStatus
+                blockStatus = blockStatus,
+                allowMentionMe = allowMentionMe,
+                allowMentionAll = allowMentionAll,
+                allowGroupCall = allowGroupCall
             )
-            L.i { "[ChatSettings] cached settings updated conversationId=$conversationId mute=$muteStatus block=$blockStatus" }
+            L.i {
+                "[ChatSettings] cached settings updated conversationId=$conversationId mute=$muteStatus block=$blockStatus " +
+                    "allowMe=$allowMentionMe allowAll=$allowMentionAll allowCall=$allowGroupCall"
+            }
         } catch (e: Exception) {
             L.e { "[ChatSettings] updateCachedSettings failed conversationId=$conversationId: ${e.stackTraceToString()}" }
         }

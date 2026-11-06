@@ -3,6 +3,7 @@ package com.difft.android.chat.messages
 import android.content.Context
 import android.text.TextUtils
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ValidatorUtil
@@ -15,6 +16,8 @@ import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.ContactsUpdater
 import com.difft.android.chat.contacts.WeakContactReconciler
 import com.difft.android.chat.contacts.data.ContactorUtil
+import com.difft.android.chat.focus.FocusSnapshot
+import com.difft.android.chat.focus.GroupFocusRepository
 import com.difft.android.chat.group.GroupUpdater
 import com.difft.android.chat.message.LocalMessageCreator
 import com.difft.android.chat.setting.ConversationSettingsManager
@@ -75,6 +78,9 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
+/** The `tag` of envelopes decrypted from an FCM push; the server already judged those for notification. */
+const val ENVELOPE_TAG_FCM = "fcm"
+
 /**
  * Takes data about a decrypted message, transforms it into user-presentable data, and writes that
  * data to our data stores.
@@ -103,6 +109,7 @@ class MessageContentProcessor @Inject constructor(
     private val gson: Gson,
     private val conversationUnreadMarker: com.difft.android.chat.message.ConversationUnreadMarker,
     private val criticalAlertHighlightWriter: CriticalAlertHighlightWriter,
+    private val groupFocusRepository: GroupFocusRepository,
 ) {
 
     /**
@@ -112,15 +119,18 @@ class MessageContentProcessor @Inject constructor(
      *
      * This is super-stateful, and it's recommended that this be run in a transaction so that no
      * intermediate results are persisted to the database if the app were to crash.
+     *
+     * @param admission the open receive ticket of the envelope; work this deferral hands to a queue
+     *   or a launched write retains its own ticket from it (#1382).
      */
-    suspend fun process(content: SignalServiceDataClass, tag: String): Message? {
+    suspend fun process(content: SignalServiceDataClass, tag: String, admission: MessagingTicket): Message? {
         L.i { "[Message][${tag}] process message -> timestamp:${content.signalServiceEnvelope.timestamp}  device:${content.signalServiceEnvelope.sourceDevice}  stamp:${content.envelopeConversation?.id ?: "absent"}" }
-        return handleMessage(content, tag)
+        return handleMessage(content, tag, admission)
     }
 
-    private suspend fun handleMessage(content: SignalServiceDataClass, tag: String): Message? {
+    private suspend fun handleMessage(content: SignalServiceDataClass, tag: String, admission: MessagingTicket): Message? {
         if (content.signalCustomNotifyMessage != null) {
-            handleNotifyMessage(content, tag)
+            handleNotifyMessage(content, tag, admission)
         } else if (content.signalServiceContent != null) {
             val serviceContent: SignalServiceProtos.Content = content.signalServiceContent ?: return null
             if (serviceContent.hasGroupKeyMessage()) {
@@ -195,11 +205,11 @@ class MessageContentProcessor @Inject constructor(
                 return if (serviceContent.syncMessage.hasMarkAsUnread()) handleMarkAsUnreadSync(content, serviceContent.syncMessage.markAsUnread, tag) else null
             } else if (serviceContent.hasReceiptMessage()) {
                 L.d { "[Message][${tag}] process receipt message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
-                receiptMessageHelper.handleReceiptMessage(serviceContent.receiptMessage, content)
+                receiptMessageHelper.handleReceiptMessage(serviceContent.receiptMessage, content, admission)
             } else if (serviceContent.hasCallMessage()) {
                 L.i { "[Message][${tag}] process call message -> timestamp:${content.signalServiceEnvelope.timestamp}" }
                 LCallManager.removePendingMessage(content.signalServiceEnvelope.source, content.signalServiceEnvelope.timestamp.toString())
-                lCallManagerProvider.get().handleCallMessage(content)
+                lCallManagerProvider.get().handleCallMessage(content, admission, fromServerPush = tag == ENVELOPE_TAG_FCM)
             } else if (serviceContent.hasActivityNotice()) {
                 if (isCrossConversationInjection(content, tag)) return null // drop: no render/persist; eager-ACK already sent
                 // Place ahead of forwardNotice — same rationale as the sync branch
@@ -817,9 +827,21 @@ class MessageContentProcessor @Inject constructor(
         return null
     }
 
+    /** Type 29: the server pushes the full focus snapshot; the repository applies it by version. */
+    private suspend fun handleFocusNotify(message: TTNotifyMessage, tag: String) {
+        val focusJson = message.data?.focus
+        val snapshot = focusJson?.let { runCatching { gson.fromJson(it, FocusSnapshot::class.java) }.getOrNull() }
+        if (snapshot == null) {
+            L.w { "[Message][${tag}] focus notify without a readable snapshot, skip" }
+            return
+        }
+        groupFocusRepository.apply(snapshot, message.data?.trigger)
+    }
+
     private suspend fun handleNotifyMessage(
         content: SignalServiceDataClass,
         tag: String,
+        admission: MessagingTicket,
     ) {
         val (envelop, _, notifyMessageContent) = content
         if (notifyMessageContent != null) {
@@ -828,7 +850,7 @@ class MessageContentProcessor @Inject constructor(
             if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_CONVERSATION_SHARE_SETTING) {
                 // Type 5: messageExpiry, messageClearAnchor
                 message.data?.let { data ->
-                    updateDisappearingTime(content.conversation, data.messageExpiry, data.messageClearAnchor)
+                    updateDisappearingTime(content.conversation, data.messageExpiry, data.messageClearAnchor, admission)
                     // 通知 ViewModel 更新 (携带具体值)
                     conversationSettingsManager.emitConversationSettingUpdate(
                         conversationId = content.conversation.id,
@@ -865,9 +887,9 @@ class MessageContentProcessor @Inject constructor(
                     }
                 }
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_GROUP) {
-                groupUpdater.handleGroupNotifyMessage(message, content)
+                groupUpdater.handleGroupNotifyMessage(message, content, admission)
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_UPDATE_CONTACT) {
-                contactsUpdater.updateBySignalNotifyMessage(message)
+                contactsUpdater.updateBySignalNotifyMessage(message, admission)
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_ADD_FRIEND) {
                 message.data?.let { data ->
                     when (data.actionType) {
@@ -938,6 +960,8 @@ class MessageContentProcessor @Inject constructor(
                 // 本地生成 critical alert 文本消息
                 createCriticalAlertMessage(serverTimestamp, timestamp, source, forWhat, data.showCriticalAlert, data.sourceDevice, data.roomId)
 
+            } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_FOCUS) {
+                handleFocusNotify(message, tag)
             } else if (message.notifyType == TTNotifyMessage.NOTIFY_MESSAGE_TYPE_WEAK_CONTACT) {
                 val data = message.data
                 val uid = data?.uid
@@ -1093,8 +1117,8 @@ class MessageContentProcessor @Inject constructor(
         )
     }
 
-    private fun updateDisappearingTime(forWhat: For, messageExpiry: Int, messageClearAnchor: Long) {
-        messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor)
+    private fun updateDisappearingTime(forWhat: For, messageExpiry: Int, messageClearAnchor: Long, admission: MessagingTicket) {
+        messageArchiveManager.updateLocalArchiveTime(forWhat, messageExpiry.toLong(), messageClearAnchor, admission)
     }
 
     /**

@@ -4,6 +4,7 @@ import com.difft.android.base.utils.globalServices
 
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.appScope
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
@@ -77,6 +78,8 @@ class GroupUpdater @Inject constructor(
         val message: TTNotifyMessage,
         val wrapperData: SignalServiceDataClass,
         val groupVersion: Int,
+        // Retained from the envelope's receive ticket; closed once the batch is handled (#1382).
+        val held: MessagingTicket?,
     )
 
     private val notifyMessageChannel = Channel<PendingGroupMessage>(Channel.BUFFERED)
@@ -100,6 +103,12 @@ class GroupUpdater @Inject constructor(
             // buffered channel; group state is re-fetched from the server on the next cold start.
             if (wcdb.isDbInaccessible) {
                 L.w { "[GroupUpdater] DB inaccessible, stopping notify poll for this process" }
+                // Nothing will process the queued items; release their tickets so a migration pause
+                // does not wait for them.
+                while (true) {
+                    val dropped = notifyMessageChannel.tryReceive().getOrNull() ?: break
+                    dropped.held?.close()
+                }
                 break
             }
 
@@ -111,7 +120,11 @@ class GroupUpdater @Inject constructor(
             }
 
             if (batch.isNotEmpty()) {
-                processBatch(batch)
+                try {
+                    processBatch(batch)
+                } finally {
+                    batch.forEach { it.held?.close() }
+                }
             }
         }
     }
@@ -146,14 +159,14 @@ class GroupUpdater @Inject constructor(
                     // Check if version is consecutive
                     if (messageVersion == currentVersion + 1) {
                         L.i { "[GroupUpdater] Version has grown by 1 for group $groupId. Current: $currentVersion, Message: $messageVersion" }
-                        processGroupNotifyMessage(pendingMessage.message, pendingMessage.wrapperData)
+                        processGroupNotifyMessage(pendingMessage.message, pendingMessage.wrapperData, pendingMessage.held)
                         // Update version only after successful processing
                         currentVersion = messageVersion
                         groupVersionCache[groupId] = currentVersion
                     } else {
                         // Version gap detected, force update and recheck
                         L.i { "[GroupUpdater] Version gap detected for group $groupId. Current: $currentVersion, Message: $messageVersion" }
-                        processGroupNotifyMessage(pendingMessage.message, pendingMessage.wrapperData)
+                        processGroupNotifyMessage(pendingMessage.message, pendingMessage.wrapperData, pendingMessage.held)
                         forceUpdateGroup(groupId)
                         // Recheck version after force update
                         val updatedGroup = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupId))
@@ -169,9 +182,14 @@ class GroupUpdater @Inject constructor(
         }
     }
 
+    /**
+     * Queues the notify for the batched consumer, handing it a ticket retained from [admission] so
+     * the migration pause waits until the group change and its notify message are stored (#1382).
+     */
     suspend fun handleGroupNotifyMessage(
         message: TTNotifyMessage,
-        wrapperData: SignalServiceDataClass
+        wrapperData: SignalServiceDataClass,
+        admission: MessagingTicket,
     ) {
         // Fail-soft: the consumer loop breaks once DB is inaccessible, so drop the enqueue to avoid
         // filling the buffered channel with messages nothing will ever drain (back-pressure guard).
@@ -180,12 +198,20 @@ class GroupUpdater @Inject constructor(
             return
         }
         val groupVersion = message.data?.groupVersion ?: 0
-        notifyMessageChannel.send(PendingGroupMessage(message, wrapperData, groupVersion))
+        val held = admission.retain("group-notify")
+        var queued = false
+        try {
+            notifyMessageChannel.send(PendingGroupMessage(message, wrapperData, groupVersion, held))
+            queued = true
+        } finally {
+            if (!queued) held?.close()
+        }
     }
 
     private suspend fun processGroupNotifyMessage(
         message: TTNotifyMessage,
-        wrapperData: SignalServiceDataClass
+        wrapperData: SignalServiceDataClass,
+        held: MessagingTicket?,
     ) {
         val myId = wrapperData.myId
         val groupID = wrapperData.conversation.id
@@ -208,13 +234,14 @@ class GroupUpdater @Inject constructor(
                 // Create notification content first
                 notifyContent = context.getString(R.string.group_create_a_group, operatorName)
                 // Then create group in parallel
+                val createHeld = held?.retain("group-create")
                 appScope.launch {
                     if (wcdb.isDbInaccessible) {
                         L.w { "[GroupUpdater] skip createNewGroup, DB inaccessible groupID=$groupID" }
                         return@launch
                     }
                     createNewGroupIfNotExist(groupID)
-                }
+                }.invokeOnCompletion { createHeld?.close() }
             }
 
             GroupNotifyDetailType.DismissGroup.value -> {
@@ -247,7 +274,7 @@ class GroupUpdater @Inject constructor(
             GroupNotifyDetailType.GroupMsgExpiryChange.value -> {
                 L.i { "[GroupUpdater] Group message expire change notify" }
                 message.data?.group?.let {
-                    updateGroupExpireChange(groupID, it.messageExpiry, it.messageClearAnchor, groupVersion)
+                    updateGroupExpireChange(groupID, it.messageExpiry, it.messageClearAnchor, groupVersion, held)
                 }
             }
 
@@ -552,14 +579,20 @@ class GroupUpdater @Inject constructor(
         }
     }
 
-    private suspend fun updateGroupExpireChange(groupID: String, messageExpireValue: Int, messageClearAnchor: Long, version: Int) {
+    private suspend fun updateGroupExpireChange(
+        groupID: String,
+        messageExpireValue: Int,
+        messageClearAnchor: Long,
+        version: Int,
+        held: MessagingTicket?,
+    ) {
         L.i { "[GroupUpdater] Update group expire, new expire is $messageExpireValue" }
         val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(groupID))
         if (group != null) {
             group.messageExpiry = messageExpireValue
             group.version = version
             wcdb.group.updateObject(group, arrayOf(DBGroupModel.messageExpiry, DBGroupModel.version), DBGroupModel.gid.eq(groupID))
-            messageArchiveManager.updateLocalArchiveTime(For.Group(groupID), messageExpireValue.toLong(), messageClearAnchor)
+            messageArchiveManager.updateLocalArchiveTime(For.Group(groupID), messageExpireValue.toLong(), messageClearAnchor, held)
             // 通知 ViewModel 更新
             conversationSettingsManager.emitConversationSettingUpdate(
                 conversationId = groupID,

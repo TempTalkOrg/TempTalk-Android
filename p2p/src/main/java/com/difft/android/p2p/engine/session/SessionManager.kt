@@ -89,6 +89,9 @@ class SessionManager(
 
     private var active: Session? = null
 
+    /** Whether this manager ever opened a session; guarded by [lock]. */
+    private var sessionOpened = false
+
     /** Newest last. Only records within [RETENTION_MS] of the clock survive a reload. */
     private val retained = ArrayDeque<TerminalRecord>()
 
@@ -117,6 +120,7 @@ class SessionManager(
             val slots = files.mapValues { (_, meta) -> FileSlot(meta, newFileToken()) }
             val session = Session(sessionId, newSessionToken(), sourceIp, slots, clock())
             active = session
+            sessionOpened = true
             PreparedSession(sessionId, slots, session.sessionToken)
         }
 
@@ -231,12 +235,29 @@ class SessionManager(
     /**
      * The transfer ended: [terminal] is one of [TransferTerminal]. Moves the live session into the
      * retained records so `/status` keeps answering after the upload connection is gone. A session
-     * that already ended (a cancel got there first) is left as it was.
+     * that already ended with a verdict (a cancel got there first) is left as it was.
+     *
+     * A committing session the linger path retired first ([retireLiveForLinger]) is retained with no
+     * verdict; a definite [terminal] arriving after that fills it in, so the order of the two never
+     * loses a failure (#1382). A cancelled record is never rewritten: it never committed.
      */
     fun markTerminal(sessionId: String, terminal: String) {
         synchronized(lock) {
-            val s = active?.takeIf { it.sessionId == sessionId } ?: return
-            retire(s, terminal)
+            active?.takeIf { it.sessionId == sessionId }?.let { s ->
+                retire(s, terminal)
+                return
+            }
+            if (terminal != TransferTerminal.FAILED && terminal != TransferTerminal.SUCCEEDED) return
+            val index = retained.indexOfLast { it.sessionId == sessionId }
+            val record = retained.getOrNull(index)?.takeIf { it.terminal == null } ?: return
+            retained[index] = record.copy(
+                terminal = terminal,
+                stage = if (terminal == TransferTerminal.SUCCEEDED) TransferStages.DONE else TransferStages.FAILED,
+                progressRevision = record.progressRevision + 1,
+                at = clock(),
+            )
+            L.i { "[P2P][Receiver] retained verdict filled terminal=$terminal" }
+            terminalStore?.let { store -> runCatching { store.save(retained.toList()) } }
         }
     }
 
@@ -258,13 +279,28 @@ class SessionManager(
      */
     fun clear() {
         synchronized(lock) {
-            active?.let { s ->
-                // A committed-but-unconfirmed session must not be retired as CANCELLED: that publishes
-                // a definite, false terminal — and persists it for the whole retention window —
-                // minutes after the data was already promoted.
-                if (s.unconfirmed) retire(s, terminal = null) else retire(s, TransferTerminal.CANCELLED)
-            }
+            active?.let(::retireUnfinished)
         }
+    }
+
+    /**
+     * Under [lock]: ends a session this side gave up on. A committed-but-unconfirmed session must not
+     * be retired as CANCELLED: that publishes a definite, false terminal, persisted for the whole
+     * retention window, after the data was already promoted. A committing session may still
+     * promote, so it is never published as cancelled either (#1382 A05).
+     */
+    private fun retireUnfinished(s: Session) {
+        if (s.unconfirmed || s.committing) retire(s, terminal = null) else retire(s, TransferTerminal.CANCELLED)
+    }
+
+    /**
+     * For a listener kept up after its transfer failed or was cancelled (#1382 A07): retires a
+     * session still live exactly as [clear] does, and says whether this manager ever opened one, so
+     * the owner keeps answering `/status` only when there is a session to answer for.
+     */
+    fun retireLiveForLinger(): Boolean = synchronized(lock) {
+        active?.let(::retireUnfinished)
+        sessionOpened
     }
 
     /** The active sessionId, or null. (Diagnostics / demo display.) */
@@ -290,11 +326,27 @@ class SessionManager(
         true
     }
 
-    override fun committing() = bump { s ->
-        val changed = !s.committing || s.stage != TransferStages.PROMOTING
-        s.committing = true
-        s.stage = TransferStages.PROMOTING
-        changed
+    override fun bodySessionId(): String? = synchronized(lock) { active?.takeIf { it.bodyStarted }?.sessionId }
+
+    /**
+     * The commit entry, under the same [lock] as [cancel] (#1382): only the import's own session,
+     * still live with its upload started, may pass the cutoff. A session [cancel] already retired
+     * answers false even while a newer session is live, and the caller aborts before promote, so a
+     * `stopped` / `rolled_back` answer means this receiver never commits that session.
+     */
+    override fun committing(sessionId: String?): Boolean = synchronized(lock) {
+        val s = active
+        if (sessionId == null || s == null || s.sessionId != sessionId || !s.bodyStarted) {
+            L.w { "[P2P][Receiver] event=commit_refused active=${s != null} sameSession=${s != null && s.sessionId == sessionId}" }
+            return false
+        }
+        if (!s.committing || s.stage != TransferStages.PROMOTING) {
+            s.committing = true
+            s.stage = TransferStages.PROMOTING
+            s.progressRevision++
+            s.updatedAt = clock()
+        }
+        true
     }
 
     /** Applies [change] to the live session; a `true` return is real work and bumps the revision. */

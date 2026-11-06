@@ -17,8 +17,8 @@ class ChatListTagGeometryTest {
 
     private val density = 3f
 
-    /** avatar 64 + text column 28 + tag marginEnd 4 + detail marginEnd 16 + slack 4 = 116dp */
-    private val fixedReserveDp = 64 + 28 + 4 + 16 + 4
+    /** avatar 68 + text column 28 + tag marginEnd 4 + detail marginEnd 16 + slack 4 = 120dp */
+    private val fixedReserveDp = 68 + 28 + 4 + 16 + 4
 
     private fun width(
         rowWidthPx: Int = 1080,
@@ -40,7 +40,7 @@ class ChatListTagGeometryTest {
     @Test
     fun `T4-12 baseline row reserves only the fixed chrome plus the preview floor`() {
         assertEquals(1080f - density * (fixedReserveDp + 56), width(), 0f)
-        assertEquals(564f, width(), 0f)
+        assertEquals(552f, width(), 0f)
     }
 
     // ── T4-13 ────────────────────────────────────────────────────────────────

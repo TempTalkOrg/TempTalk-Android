@@ -1,9 +1,14 @@
 package com.difft.android.call.ui.invite
 
+import android.os.Build
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.View
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.widget.AppCompatEditText
 import androidx.appcompat.widget.AppCompatImageButton
@@ -16,7 +21,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.ui.theme.tokens.ColorTokens
 import com.difft.android.base.utils.WindowSizeClassUtil
+import com.difft.android.base.utils.hideNavigationBar
+import com.difft.android.base.utils.hideSystemBars
+import com.difft.android.call.LCallActivity
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
 import com.difft.android.call.LCallToChatController
 import com.difft.android.call.R
@@ -48,6 +57,14 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
     private var searchTextWatcher: android.text.TextWatcher? = null
     private var searchInput: AppCompatEditText? = null
     private var previousNightMode: Int? = null
+
+    /** Sheet height while the tabletop dock is shown; null for the full-height sheet. */
+    private var dockHeightPx: Int? = null
+
+    /** Whether the call page hides its status bar now; this window follows it. */
+    private var statusBarHidden = false
+    private var sheetView: View? = null
+    private var sheetBehavior: BottomSheetBehavior<*>? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         (activity as? AppCompatActivity)?.let { appCompatActivity ->
@@ -72,17 +89,172 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
     // 使用默认容器（带圆角和拖拽条）
     override fun getContentLayoutResId(): Int = R.layout.layout_meeting_invite_bottom_sheet
 
-    // 全屏显示
-    override fun isFullScreen(): Boolean = true
+    // Full screen unless docked: the base's full-screen setup in onShow would stretch a docked
+    // sheet back to the window before applySheetHeight runs.
+    override fun isFullScreen(): Boolean = dockHeightPx == null
+
+    override fun onStart() {
+        super.onStart()
+        applySystemBars()
+        // A docked sheet is sized here, before its first layout: Dialog.show() posts onShow, so the
+        // base's setup can land after the first frame and the sheet would open at the window's
+        // height and slide down to the dock.
+        if (dockHeightPx == null) return
+        val sheet = dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet) ?: return
+        val behavior = BottomSheetBehavior.from(sheet)
+        sheetView = sheet
+        sheetBehavior = behavior
+        applySheetHeight(sheet, behavior)
+        // BottomSheetDialog.onAttachedToWindow, on the first traversal, sets the window and the
+        // sheet's parents back to fitting system windows; docking again right after keeps the first
+        // frame at the window bottom too.
+        val decor = dialog?.window?.decorView ?: return
+        if (decor.isAttachedToWindow) return
+        decor.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                v.removeOnAttachStateChangeListener(this)
+                sheetView?.let { reachWindowBottom(it, dockHeightPx != null) }
+            }
+
+            override fun onViewDetachedFromWindow(v: View) = Unit
+        })
+    }
 
     override fun onBottomSheetReady(sheet: View, behavior: BottomSheetBehavior<*>) {
+        sheetView = sheet
+        sheetBehavior = behavior
+        applySheetHeight(sheet, behavior)
+    }
+
+    /** Follows the call page's status bar ([hidden]); applies at once to a shown sheet. */
+    fun setStatusBarHidden(hidden: Boolean) {
+        if (statusBarHidden == hidden) return
+        statusBarHidden = hidden
+        if (dialog?.window != null) applySystemBars()
+    }
+
+    /**
+     * The sheet is its own dialog window and does not inherit the call's hidden bars; showing
+     * them would shift the call's insets (and the tabletop console) while the sheet is open.
+     */
+    private fun applySystemBars() {
+        val window = dialog?.window ?: return
+        val immersive = statusBarHidden || (activity as? LCallActivity)?.screenShareOrientationActive == true
+        if (immersive) {
+            window.hideSystemBars()
+        } else {
+            window.hideNavigationBar()
+            WindowCompat.getInsetsController(window, window.decorView).show(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
+    /**
+     * Confines the sheet to the tabletop dock below the fold ([px] tall, over the console), or null
+     * for the full-height sheet. Applies at once to a shown sheet.
+     */
+    fun setDockHeight(px: Int?) {
+        if (dockHeightPx == px) return
+        dockHeightPx = px
+        val sheet = sheetView ?: return
+        val behavior = sheetBehavior ?: return
+        applySheetHeight(sheet, behavior)
+    }
+
+    private fun applySheetHeight(sheet: View, behavior: BottomSheetBehavior<*>) {
         val screenHeight = activity?.let { WindowSizeClassUtil.getWindowHeightPx(it) }
             ?: resources.displayMetrics.heightPixels
-        behavior.isFitToContents = false
+        val dockHeight = dockHeightPx?.takeIf { it in 1 until screenHeight }
         behavior.skipCollapsed = true
-        behavior.expandedOffset = 0
-        behavior.peekHeight = screenHeight
+        if (dockHeight != null) {
+            // Fixed to the dock's height: the stage above the fold stays visible, undimmed.
+            sheet.layoutParams = sheet.layoutParams.apply { height = dockHeight }
+            behavior.isFitToContents = true
+            behavior.peekHeight = dockHeight
+            dialog?.window?.setDimAmount(0f)
+        } else {
+            sheet.layoutParams = sheet.layoutParams.apply { height = ViewGroup.LayoutParams.MATCH_PARENT }
+            behavior.isFitToContents = false
+            behavior.expandedOffset = 0
+            behavior.peekHeight = screenHeight
+            dialog?.window?.setDimAmount(ColorTokens.ScrimDimAmount)
+        }
         behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        val docked = dockHeight != null
+        reachWindowBottom(sheet, docked)
+        val heightPx = dockHeight ?: screenHeight
+        L.i { "[MeetingInvite] sheetHeight docked=$docked heightPx=$heightPx" }
+    }
+
+    /** The dialog window's and the sheet containers' own inset handling, kept to restore after docking. */
+    private var undockedInsets: UndockedInsets? = null
+
+    /**
+     * What docking changes, to restore on undocking. The window's own fields are taken at the first
+     * docking; the parents' fitting and padding, which `BottomSheetDialog.onAttachedToWindow` sets
+     * from its edge-to-edge setting, only once the window is attached, after Material has set them.
+     */
+    private class UndockedInsets(val fitInsetsTypes: Int, val softInputMode: Int) {
+        var parentsFit: List<Boolean>? = null
+        var parentsPadding: List<IntArray>? = null
+    }
+
+    /**
+     * A docked sheet reaches the window bottom, over the console: the dialog window and the sheet's
+     * coordinator and container stop keeping clear of the navigation bar, which the call page hides.
+     * Otherwise a three-button bar's band (48dp on the Galaxy Z Flip6) stays under the sheet with the
+     * console showing through it. Undocked, the dialog's own handling comes back.
+     */
+    private fun reachWindowBottom(sheet: View, docked: Boolean) {
+        val window = dialog?.window ?: return
+        val parents = generateSequence(sheet.parent as? View) { it.parent as? View }.take(2).toList()
+        if (docked) {
+            val saved = undockedInsets ?: UndockedInsets(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) window.attributes.fitInsetsTypes else 0,
+                window.attributes.softInputMode,
+            ).also { undockedInsets = it }
+            if (saved.parentsFit == null && window.decorView.isAttachedToWindow) {
+                saved.parentsFit = parents.map { it.fitsSystemWindows }
+                saved.parentsPadding = parents.map { intArrayOf(it.paddingLeft, it.paddingTop, it.paddingRight, it.paddingBottom) }
+            }
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.attributes = window.attributes.apply { fitInsetsTypes = 0 }
+            }
+            // The keyboard's height comes to the container as an inset (below), never as a pan.
+            @Suppress("DEPRECATION")
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            parents.forEach {
+                it.fitsSystemWindows = false
+                it.setPadding(0, 0, 0, 0)
+            }
+            // Nothing fits system windows now, so the keyboard would cover the docked sheet (its
+            // search field): the container keeps the IME's height clear instead.
+            parents.lastOrNull()?.let { container ->
+                ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+                    view.setPadding(0, 0, 0, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
+                    insets
+                }
+                ViewCompat.requestApplyInsets(container)
+            }
+        } else {
+            val saved = undockedInsets ?: return
+            undockedInsets = null
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.attributes = window.attributes.apply { fitInsetsTypes = saved.fitInsetsTypes }
+            }
+            window.setSoftInputMode(saved.softInputMode)
+            parents.lastOrNull()?.let { ViewCompat.setOnApplyWindowInsetsListener(it, null) }
+            // Never attached while docked: Material sets the fitting itself when it attaches.
+            val fits = saved.parentsFit ?: return
+            val paddings = saved.parentsPadding ?: return
+            // Material fits the decor exactly when it fits the container (both from its edge-to-edge setting).
+            WindowCompat.setDecorFitsSystemWindows(window, fits.lastOrNull() ?: true)
+            parents.forEachIndexed { i, view ->
+                view.fitsSystemWindows = fits[i]
+                paddings[i].let { (l, t, r, b) -> view.setPadding(l, t, r, b) }
+            }
+            parents.firstOrNull()?.let(ViewCompat::requestApplyInsets)
+        }
     }
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -373,6 +545,8 @@ class MeetingInviteBottomSheetFragment : BaseBottomSheetDialogFragment() {
         searchInput = null
         onInviteAction = null
         inviteCallHandler = null
+        sheetView = null
+        sheetBehavior = null
     }
 
     override fun onDismiss(dialog: android.content.DialogInterface) {

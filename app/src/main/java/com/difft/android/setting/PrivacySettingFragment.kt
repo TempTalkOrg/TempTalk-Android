@@ -1,35 +1,28 @@
 package com.difft.android.setting
 
 import android.os.Bundle
-import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
+import com.difft.android.base.utils.pane.dismissWithView
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import com.difft.android.R
-import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.DualPaneUtils.setupBackButton
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.databinding.ActivityPrivacySettingBinding
-import com.difft.android.login.data.RenewIdentityKeyRequestBody
-import com.difft.android.login.repo.LoginRepo
-import com.difft.android.websocket.internal.util.JsonUtil
-import com.difft.android.base.utils.Base64
 import androidx.lifecycle.lifecycleScope
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import com.difft.android.base.utils.pane.*
+import com.difft.android.setting.mvi.AccountSettingsContract
+import com.difft.android.base.utils.globalServices
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.signal.libsignal.protocol.IdentityKeyPair
-import org.signal.libsignal.protocol.util.KeyHelper
-import com.difft.android.chat.crypto.IdentityKeyUtil
-import com.difft.android.chat.cryptonew.EncryptionDataManager
-import com.difft.android.chat.gif.favorite.FavoriteWriteRepository
-import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,7 +33,7 @@ import javax.inject.Inject
  * Can be displayed in both Activity (single-pane) and dual-pane mode
  */
 @AndroidEntryPoint
-class PrivacySettingFragment : Fragment() {
+class PrivacySettingFragment : Fragment(), SettingsIdiomPage {
 
     companion object {
         fun newInstance() = PrivacySettingFragment()
@@ -49,20 +42,11 @@ class PrivacySettingFragment : Fragment() {
     private var _binding: ActivityPrivacySettingBinding? = null
     private val binding get() = _binding!!
 
-    @Inject
-    lateinit var userManager: UserManager
-
-    @Inject
-    lateinit var loginRepo: LoginRepo
-
-    @Inject
-    lateinit var encryptionDataManager: EncryptionDataManager
+    private val model: com.difft.android.setting.mvi.AccountSettingsViewModel by viewModels()
+    private val identityWait = PageWait(this)
 
     @Inject
     lateinit var proxyConfigProvider: com.difft.android.network.proxy.ProxyConfigProvider
-
-    @Inject
-    lateinit var favoriteWriteRepo: FavoriteWriteRepository
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -77,23 +61,43 @@ class PrivacySettingFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         setupBackButton(binding.ibBack)
+        applyDetailPageInsets(view)
+        waitWhileVisibleTop(PageOperations.running("identity-rotation:${globalServices.myId}"), identityWait)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                model.state.collect {
+                    binding.clRenewIdentityKey.isEnabled = !it.busy
+                    updateIdentityTime()
+                }
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            detailBackOwner().repeatOnLifecycle(Lifecycle.State.STARTED) {
+                model.effect.collect { effect ->
+                    when (effect) {
+                        AccountSettingsContract.Effect.Applied -> ToastUtil.show(com.difft.android.chat.R.string.operation_successful)
+                        is AccountSettingsContract.Effect.Failed -> ToastUtil.show(if (effect.accepted) getString(com.difft.android.base.R.string.settings_accepted_local_commit_failed) else effect.message ?: getString(com.difft.android.chat.R.string.operation_failed))
+                    }
+                }
+            }
+        }
         initView()
     }
 
     private fun initView() {
         binding.clScreenLock.setOnClickListener {
-            ScreenLockSettingActivity.startActivity(requireActivity())
+            detailNavigation().push(this, ScreenLockSettingDestination)
         }
 
         binding.llUseProxy.visibility = View.VISIBLE
         binding.clUseProxy.setOnClickListener {
-            ProxySettingsActivity.startActivity(requireActivity())
+            detailNavigation().push(this, ProxySettingsDestination)
         }
 
         binding.clRenewIdentityKey.visibility = View.VISIBLE
         binding.tvRenewKeyTips.visibility = View.VISIBLE
         // to show the last identity key generate time.
-        val userData = userManager.getUserData()
+        val userData = model.state.value.user
         val lastGenTime = userData?.aciIdentityKeyGenTime ?: 0L
         if (lastGenTime > 0) {
             val timeFormat = SimpleDateFormat(ResUtils.getString(R.string.settings_new_key_time_format), Locale.ENGLISH)
@@ -107,7 +111,7 @@ class PrivacySettingFragment : Fragment() {
         }
 
         binding.clRenewIdentityKey.setOnClickListener {
-            ComposeDialogManager.showMessageDialog(
+            val pageDialog = dismissWithView(ComposeDialogManager.showMessageDialog(
                 context = requireContext(),
                 title = getString(com.difft.android.chat.R.string.me_renew_identity_key),
                 message = getString(com.difft.android.chat.R.string.me_renew_identity_key_tips),
@@ -115,14 +119,15 @@ class PrivacySettingFragment : Fragment() {
                 cancelText = getString(com.difft.android.chat.R.string.me_renew_identity_key_cancle),
                 confirmButtonColor = androidx.compose.ui.graphics.Color(ContextCompat.getColor(requireContext(), com.difft.android.base.R.color.t_error)),
                 onConfirm = {
-                    renewIdentityKey()
+                    if (detailBackOwner().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) model.dispatch(AccountSettingsContract.Intent.RenewIdentity)
                 }
-            )
+            ))
+            dismissWhenLeavingVisibleTop { pageDialog?.dismiss() }
         }
 
         binding.llDeleteAccount.visibility = View.VISIBLE
         binding.llDeleteAccount.setOnClickListener {
-            DeleteAccountActivity.startActivity(requireActivity())
+            detailNavigation().push(this, DeleteAccountDestination)
         }
     }
 
@@ -137,83 +142,13 @@ class PrivacySettingFragment : Fragment() {
         )
     }
 
-    private fun renewIdentityKey() {
-        ComposeDialogManager.showWait(requireContext(), "")
-        val registrationId = KeyHelper.generateRegistrationId(false)
-        val newIdentityKeyPair: IdentityKeyPair = IdentityKeyUtil.generateIdentityKeyPair()
-
-        val data = "${Base64.encodeBytesWithoutPadding(newIdentityKeyPair.publicKey.serialize())}$registrationId"
-        val newSignByteArray = newIdentityKeyPair.privateKey.calculateSignature(data.toByteArray())
-
-        // 从UserManager获取当前身份密钥
-        val currentIdentityKeyPair = encryptionDataManager.getAciIdentityKey()
-        val oldSignByteArray = currentIdentityKeyPair.privateKey.calculateSignature(newSignByteArray)
-
-        val requestBody = RenewIdentityKeyRequestBody(Base64.encodeBytesWithoutPadding(newIdentityKeyPair.publicKey.serialize()), registrationId, Base64.encodeBytesWithoutPadding(newSignByteArray), Base64.encodeBytesWithoutPadding(oldSignByteArray))
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    loginRepo.renewIdentityKey(JsonUtil.toJson(requestBody))
-                }
-                ComposeDialogManager.dismissWait()
-                if (!isAdded || view == null) return@launch
-                if (result.status == 0) {
-                    val currentTimeMillis = System.currentTimeMillis()
-
-                    // 存储旧ACI身份密钥和时间到UserManager
-                    encryptionDataManager.setOldAciIdentityKey(currentIdentityKeyPair)
-                    // 更新新的ACI身份密钥对到UserManager
-                    encryptionDataManager.updateAciIdentityKey(newIdentityKeyPair)
-                    userManager.update {
-                        this.aciIdentityKeyGenTime = currentTimeMillis
-                    }
-
-                    // Re-wrap the favorites key under the new identity while the old private key is
-                    // still available, so linked devices (e.g. desktop) can recover the favorites
-                    // list after they re-link with the rotated identity. Best-effort: a failure here
-                    // must not fail the identity reset itself.
-                    try {
-                        favoriteWriteRepo.rewrapOnMasterKeyRotation(
-                            currentIdentityKeyPair.privateKey.serialize(),
-                            newIdentityKeyPair.privateKey.serialize()
-                        )
-                    } catch (e: Exception) {
-                        L.w { "[PrivacySetting] favorites rewrap after identity reset failed: ${e.message}" }
-                    }
-
-                    // 更新UI显示新的身份密钥创建时间
-                    ResUtils.getString(R.string.settings_new_key_time_format).let {
-                        val timeFormat = SimpleDateFormat(it, Locale.ENGLISH)
-                        val date = Date(currentTimeMillis)
-                        timeFormat.format(date).let {
-                            val timeTips = getString(R.string.settings_new_key_time_info, it)
-                            binding.tvRenewKeyTips.text = getString(R.string.settings_new_key_tips, timeTips)
-                        }
-                    }
-                    ToastUtil.show(com.difft.android.chat.R.string.operation_successful)
-                } else {
-                    result.reason?.let { message -> ToastUtil.show(message) }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                ComposeDialogManager.dismissWait()
-                if (!isAdded || view == null) return@launch
-                L.w { "[PrivacySettingFragment] renewIdentityKey error: ${e.stackTraceToString()}" }
-                if (e is HttpException) {
-                    when (e.code()) {
-                        413 -> {
-                            ToastUtil.show(R.string.settings_new_key_times_limit_tips)
-                        }
-                        else -> {
-                            e.message?.let { message -> ToastUtil.show(message) }
-                        }
-                    }
-                } else {
-                    e.message?.let { message -> ToastUtil.show(message) }
-                }
-            }
-        }
+    private fun updateIdentityTime() {
+        val time = model.state.value.user?.aciIdentityKeyGenTime ?: 0L
+        val formatted = if (time > 0L) {
+            val format = SimpleDateFormat(getString(R.string.settings_new_key_time_format), Locale.ENGLISH)
+            getString(R.string.settings_new_key_time_info, format.format(Date(time)))
+        } else ""
+        binding.tvRenewKeyTips.text = getString(R.string.settings_new_key_tips, formatted)
     }
 
     override fun onDestroyView() {

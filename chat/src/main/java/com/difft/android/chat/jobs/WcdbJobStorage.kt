@@ -6,6 +6,8 @@ import com.difft.android.base.utils.RoomChangeTracker
 import com.difft.android.base.utils.RoomChangeType
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.jobmanager.persistence.ConstraintSpec
+import com.difft.android.chat.jobmanager.persistence.DurableJob
+import com.difft.android.chat.jobmanager.persistence.StrictWrite
 import com.difft.android.chat.jobmanager.persistence.FullSpec
 import com.difft.android.chat.jobmanager.persistence.JobSpec
 import com.tencent.wcdb.base.Value
@@ -81,6 +83,43 @@ class WcdbJobStorage @Inject constructor(
             // Legacy swallows — match legacy (JobDatabase.kt:87-105)
             L.e { "[JobStorage] insertJobs failed count=${fullSpecs.size}: ${e.stackTraceToString()}" }
         }
+    }
+
+    /** Acknowledges the transaction boundary; legacy insertJobs deliberately remains best effort. */
+    @WorkerThread
+    fun insertJobsStrict(fullSpecs: List<FullSpec>): StrictWrite {
+        if (fullSpecs.any { it.isMemoryOnly }) return StrictWrite.RejectedMemoryOnly
+        var entered = false
+        return try {
+            wcdb.db.runTransaction {
+                entered = true
+                fullSpecs.forEach { spec ->
+                    wcdb.jobSpec.insertOrIgnoreObject(spec.jobSpec.toModel())
+                    spec.constraintSpecs.forEach { wcdb.jobConstraint.insertOrIgnoreObject(it.toModel()) }
+                }
+                true
+            }
+            StrictWrite.Committed
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.w { "[JobStorage] event=strict_write_failed entered=$entered ${e.stackTraceToString()}" }
+            // A driver exception at commit may be raised after the durable commit. Resolve by ID.
+            if (entered) StrictWrite.Unknown("transaction_exception") else StrictWrite.Failed("before_transaction")
+        }
+    }
+
+    @WorkerThread
+    fun findDurableJob(id: String): DurableJob = try {
+        // Two id-conditioned reads; the serial management dispatcher owns job-row writes, so no transaction.
+        val row = wcdb.jobSpec.getFirstObject(DBJobSpecModel.jobSpecId.eq(id))
+        if (row == null) DurableJob.Absent
+        else DurableJob.Found(row.toJobSpec(), wcdb.jobConstraint.getAllObjects(DBJobConstraintModel.jobSpecId.eq(id)).map { it.toConstraintSpec() })
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        L.w { "[JobStorage] event=strict_read_failed ${e.stackTraceToString()}" }
+        DurableJob.ReadFailed("database_exception")
     }
 
     /**
@@ -280,6 +319,10 @@ class WcdbJobStorage @Inject constructor(
      *
      * Genuine orphans only happen when `job_spec` has no PushTextSendJob — the
      * upgrade-boundary case the sweep was designed for.
+     *
+     * A pending screenshot row owned by a live `PushScreenShotSendJob` is flipped too; that is
+     * accepted, since screenshot rows render no status, sit outside the room aggregates and are
+     * settled (Sent or withdrawn) by their job later (issue #1435).
      *
      * Idempotent by WHERE clause. Called from
      * [com.difft.android.app.TempTalkApplication]'s `AppStartup` chain.

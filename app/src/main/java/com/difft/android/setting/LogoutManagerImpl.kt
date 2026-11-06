@@ -1,6 +1,10 @@
 package com.difft.android.setting
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.HeldSendJobs
+import com.difft.android.base.migration.pause.MessagingPauseState
+import com.difft.android.base.migration.pause.MigrationMessagePause
+import com.difft.android.base.migration.pause.MigrationPauseScope
 import com.difft.android.base.storage.user.StorageBoundUserManager
 import com.difft.android.base.user.LogoutManager
 import com.difft.android.base.user.UserData
@@ -51,6 +55,8 @@ class LogoutManagerImpl @Inject constructor(
     // logout must not be the thing that constructs them (TranslateQueue starts a worker in init).
     private val translateModelStore: dagger.Lazy<TranslateModelStore>,
     private val translateQueue: dagger.Lazy<TranslateQueue>,
+    private val migrationMessagePause: MigrationMessagePause,
+    private val heldSendJobs: HeldSendJobs,
 ) : LogoutManager {
     private val logoutLatch = SingleShotLatch()
 
@@ -95,6 +101,20 @@ class LogoutManagerImpl @Inject constructor(
         // so it does not spend the moments before the exit logging IO errors about deleted rows.
         forwardAttachmentMigration.cancel()
         appScope.launch {
+            // The login a migration message pause waits on is ending (#1382). First, because the
+            // storage clears below wipe app_state on disk without updating the pause in memory;
+            // messaging stays closed until the process exits. A passive logout keeps the database, so
+            // the sends that pause holds are dropped while it is still closed: a later login must
+            // never send them. With messaging open only the sends the ending login cannot claim go
+            // (untagged, or another login's), so its own running sends are not cut.
+            if (!clearAllData) {
+                val endingLogin = userManager.getUserData()?.baseAuth?.takeIf { it.isNotBlank() }?.let(MigrationPauseScope::credentialHash)
+                val paused = migrationMessagePause.state is MessagingPauseState.Paused
+                heldSendJobs.dropAll("logout", keepLogin = if (paused) null else endingLogin)
+            }
+            if (!migrationMessagePause.clearForLogout()) {
+                L.w { "[Logout] migration pause clear failed" }
+            }
             if (clearAllData) {
                 clearData()
             } else {
@@ -104,6 +124,7 @@ class LogoutManagerImpl @Inject constructor(
 
                     this.passcode = null
                     this.passcodeAttempts = 0
+                    this.passcodeAutoMisses = 0
                     this.pattern = null
                     this.patternAttempts = 0
                     this.microToken = null

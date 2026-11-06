@@ -2,9 +2,12 @@ package com.difft.android.call.ui.screenshare
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.viewinterop.AndroidView
@@ -13,6 +16,8 @@ import com.difft.android.call.ui.video.ScreenShareVisibility
 import io.livekit.android.renderer.TextureViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.track.CameraPosition
+import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.RemoteVideoTrack
 import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.VideoTrack
@@ -51,6 +56,17 @@ fun StableFloatingVideoRenderer(
     }
 
     val visibility = remember { ScreenShareVisibility() }
+
+    // Mirror the local front camera like every other self view (VideoItemTrackSelector).
+    var mirror by remember { mutableStateOf(false) }
+    LaunchedEffect(participant, videoTrack) {
+        val localTrack = videoTrack as? LocalVideoTrack
+        if (participant == room.localParticipant && localTrack != null) {
+            localTrack::options.flow.collect { options -> mirror = options.position == CameraPosition.FRONT }
+        } else {
+            mirror = false
+        }
+    }
     val viewRef = remember { arrayOfNulls<TextureViewRenderer>(1) }
     val trackRef = remember { arrayOfNulls<VideoTrack>(1) }
 
@@ -70,6 +86,7 @@ fun StableFloatingVideoRenderer(
             TextureViewRenderer(context).apply {
                 room.initVideoRenderer(this)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                setMirror(mirror)
                 viewRef[0] = this
                 val track = videoTrack
                 trackRef[0] = track
@@ -87,6 +104,7 @@ fun StableFloatingVideoRenderer(
             }
         },
         update = { view ->
+            view.setMirror(mirror)
             val current = trackRef[0]
             val target = videoTrack
             if (current !== target) {

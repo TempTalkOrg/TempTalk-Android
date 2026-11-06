@@ -1,5 +1,7 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.google.gson.JsonSyntaxException
 import com.google.protobuf.InvalidProtocolBufferException
@@ -31,6 +33,7 @@ class EnvelopToMessageProcessorClassifyTest {
     private lateinit var contentProcessor: MessageContentProcessor
     private lateinit var dbMessageStore: DBMessageStore
     private lateinit var processor: EnvelopToMessageProcessor
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
 
     @Before
     fun setUp() {
@@ -42,6 +45,7 @@ class EnvelopToMessageProcessorClassifyTest {
             messageContentProcessor = contentProcessor,
             dbMessageStore = dbMessageStore,
             healthCounters = mockk(relaxed = true),
+            lateDeliveryTracker = mockk(relaxed = true),
         )
     }
 
@@ -54,7 +58,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause = DtProtoException.DecryptMessageDataException("MAC failed")
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.PermanentFailure)
         assertEquals(DropReason.DECRYPTION_FAILED, (res as EnvelopeProcessResult.PermanentFailure).reason)
@@ -68,7 +72,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause = DtProtoException.VersionException("version error")
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.TransientFailure)
         assertEquals(cause, (res as EnvelopeProcessResult.TransientFailure).cause)
@@ -79,7 +83,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause = InvalidProtocolBufferException("corrupt bytes")
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.PermanentFailure)
         assertEquals(DropReason.DECRYPTION_DATA_CORRUPT, (res as EnvelopeProcessResult.PermanentFailure).reason)
@@ -90,7 +94,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause = JsonSyntaxException("bad json")
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.PermanentFailure)
         assertEquals(DropReason.MALFORMED_NOTIFY_JSON, (res as EnvelopeProcessResult.PermanentFailure).reason)
@@ -101,7 +105,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause = Base64DecodeException("identityKey", null)
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.PermanentFailure)
         assertEquals(DropReason.BASE64_DECODE_FAILED, (res as EnvelopeProcessResult.PermanentFailure).reason)
@@ -112,7 +116,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause = IOException("network")
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.TransientFailure)
     }
@@ -121,7 +125,7 @@ class EnvelopToMessageProcessorClassifyTest {
     fun `decrypt throws NullPointerException - TransientFailure`() = runBlocking {
         every { decryptionUtil.decrypt(any()) } throws NullPointerException("contact not yet synced")
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.TransientFailure)
     }
@@ -130,7 +134,7 @@ class EnvelopToMessageProcessorClassifyTest {
     fun `decrypt throws IllegalArgumentException (non-Base64) - TransientFailure`() = runBlocking {
         every { decryptionUtil.decrypt(any()) } throws IllegalArgumentException("not from decryption stack")
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.TransientFailure)
     }
@@ -144,7 +148,7 @@ class EnvelopToMessageProcessorClassifyTest {
         val cause: WCDBException = mockk(relaxed = true)
         every { decryptionUtil.decrypt(any()) } throws cause
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.TransientFailure)
     }
@@ -154,7 +158,7 @@ class EnvelopToMessageProcessorClassifyTest {
         every { decryptionUtil.decrypt(any()) } throws CancellationException("scope cancel")
 
         try {
-            processor.process(envelope(), "test")
+            processor.process(envelope(), "test", admission)
             assertTrue("Expected CancellationException to propagate", false)
         } catch (e: CancellationException) {
             // Expected — coroutine cancel must not be swallowed by classify.
@@ -166,7 +170,7 @@ class EnvelopToMessageProcessorClassifyTest {
         every { decryptionUtil.decrypt(any()) } throws OutOfMemoryError("oom")
 
         try {
-            processor.process(envelope(), "test")
+            processor.process(envelope(), "test", admission)
             assertTrue("Expected OutOfMemoryError to propagate", false)
         } catch (e: OutOfMemoryError) {
             // Expected — system errors bubble up to crash reporters.
@@ -179,7 +183,7 @@ class EnvelopToMessageProcessorClassifyTest {
         // (e.g., unsupported version dropped by NewMessageDecryptionUtil).
         every { decryptionUtil.decrypt(any()) } returns null
 
-        val res = processor.process(envelope(), "test")
+        val res = processor.process(envelope(), "test", admission)
 
         assertTrue(res is EnvelopeProcessResult.Success)
         assertEquals(null, (res as EnvelopeProcessResult.Success).result)

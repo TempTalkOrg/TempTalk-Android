@@ -17,6 +17,7 @@ import com.difft.android.p2p.engine.model.P2pJson
 import com.difft.android.p2p.engine.model.PrepareUploadRequest
 import com.difft.android.p2p.engine.model.PrepareUploadResponse
 import com.difft.android.p2p.engine.model.QrPayload
+import com.difft.android.p2p.engine.upload.MigrationRejectReason
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -171,6 +172,8 @@ class SenderHttpClient(
         // The 200's headers, for a sender that must read an explicit acknowledgment before it acts
         // ([com.difft.android.p2p.engine.upload.UploadReplyHeaders]). Not fired on a non-2xx.
         onReply: (headers: Map<String, String>) -> Unit = {},
+        // The receiver's own typed refusal on a non-2xx ([typedRejection]); not fired otherwise.
+        onRejected: (reason: String) -> Unit = {},
         onProgress: (sent: Long, total: Long) -> Unit = { _, _ -> },
     ): Boolean = withContext(Dispatchers.IO) {
         val body = StreamingRequestBody(source, onProgress, onBodySent)
@@ -180,7 +183,15 @@ class SenderHttpClient(
             .build()
         clientForUpload.newCall(req).await().use { resp ->
             L.i { "[P2P][Sender] upload fileId=$fileId result=${resp.code}" }
-            if (resp.isSuccessful) onReply(resp.headers.names().associateWith { resp.header(it).orEmpty() })
+            if (resp.isSuccessful) {
+                onReply(resp.headers.names().associateWith { resp.header(it).orEmpty() })
+            } else {
+                val bodyText = runCatching { resp.body.string() }.getOrNull().orEmpty()
+                typedRejection(resp.code, bodyText)?.let { reason ->
+                    L.w { "[P2P][Sender] upload rejected by receiver reason=$reason" }
+                    onRejected(reason)
+                }
+            }
             resp.isSuccessful
         }
     }
@@ -373,6 +384,20 @@ class SenderHttpClient(
     }
 
     companion object {
+        /**
+         * The receiver's own refusal of an upload, which a sender may treat as a definite failure
+         * like `/status failed` (#1382 A06): a 403 whose body is exactly one of the
+         * [MigrationRejectReason] wire tokens the receiver writes for a refusal it stands behind
+         * (today `insufficient-storage`; any token of that vocabulary counts). Every other non-2xx —
+         * a 403 with another detail, any 4xx/5xx without such a token, an HTML or proxy body — is
+         * null, so the caller treats the outcome as unknown.
+         */
+        fun typedRejection(code: Int, body: String): String? {
+            if (code != PrepareRejection.HTTP_FORBIDDEN) return null
+            val token = body.trim()
+            return MigrationRejectReason.entries.firstOrNull { it.wire == token }?.wire
+        }
+
         private const val STATUS_CALL_TIMEOUT_SECONDS = 8L
 
         /** Login-path calls must not make a sign-in wait for an unreachable LAN. */

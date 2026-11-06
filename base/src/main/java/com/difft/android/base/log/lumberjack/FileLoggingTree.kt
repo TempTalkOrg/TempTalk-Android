@@ -18,6 +18,7 @@ import timber.log.BaseTree
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 
 /**
@@ -111,7 +112,12 @@ class FileLoggingTree(
         val timestamp = getLogTimestamp() ?: System.currentTimeMillis()
         // SimpleDateFormat is not thread-safe and SDK passthrough (LiveKit) logs from its own
         // threads; a garbled prefix would also corrupt the day key of the daily budget.
-        val formattedTime = synchronized(dateFormatter) { dateFormatter.format(Date(timestamp)) }
+        val formattedTime = synchronized(dateFormatter) {
+            // Follow a time zone change in a long-lived process (#1395).
+            val zone = TimeZone.getDefault()
+            if (zone.id != dateFormatter.timeZone.id) dateFormatter.timeZone = zone
+            dateFormatter.format(Date(timestamp))
+        }
 
         // Backstop redaction on the persisted line: covers Timber-appended throwable text and
         // SDK passthrough that never went through L.replaceUid.

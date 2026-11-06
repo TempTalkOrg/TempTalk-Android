@@ -127,6 +127,24 @@ object ReceiverCaps {
 
     /** Sends `102 Processing` on the `/upload` connection while the verdict is pending. Liveness only. */
     const val BEAT_V1 = "beat-v1"
+
+    /**
+     * Imports the container's `pendingEnvelope` records durably and fails the import rather than
+     * skip one (#1382). A sender holding such records refuses a receiver without it: an older
+     * receiver would skip them as an unknown type and still report success.
+     */
+    const val PENDING_ENVELOPE_V1 = "pending-envelope-v1"
+
+    /**
+     * Keeps answering `/status` for the same window after a failed or cancelled session as after a
+     * success, so a sender can always read the negative terminal (#1382 A06/A07). A sender treats an
+     * unexplained non-200 upload reply as unknown only with this token: an older receiver stops
+     * answering after a failure, and waiting on it would hold the sender's pause indefinitely.
+     */
+    const val VERDICT_RETAIN_V1 = "verdict-retain-v1"
+
+    /** What a receiver advertises unless its owner declares more. */
+    val BASE: List<String> = listOf(STATUS_V1, BEAT_V1)
 }
 
 /** How a session ended — [StatusResponse.terminal] and the retained record. */

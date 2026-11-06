@@ -71,6 +71,7 @@
     <string name="chat_message_input_hint">消息</string>
     <string name="chat_message_input_hint_e2ee">已端到端加密</string>
     <string name="chat_message_input_hint_confidential">机密消息</string>
+    <string name="chat_message_input_hint_hold_to_talk">轻点输入，按住说话</string>
     <string name="chat_message_confidential_tips">左边下滑以阅读，右边下滑以翻页</string>
     <string name="chat_message_action_copy">复制</string>
     <string name="chat_message_action_copied">已复制</string>
@@ -196,7 +197,6 @@
     <string name="chat_action_confidential_mode">机密模式</string>
     <string name="chat_action_mention">提及</string>
 
-    <string name="chat_voice_hold_to_talk">按住说话</string>
     <string name="chat_voice_release_to_send">松开发送</string>
     <string name="chat_voice_release_to_cancel">松开取消</string>
     <string name="chat_voice_cancel">取消</string>
@@ -429,21 +429,35 @@
     <string name="tip">提示</string>
     <string name="notification_no_permission_tip">应用没有显示通知的权限，您可以在系统设置中启用它。</string>
     <string name="notification_no_permission_tip1">请允许%s显示通知，以便您能正常接收到消息和电话通知。</string>
-    <string name="notification_no_google_tip">为了能及时收到消息和来电通知，请保持开启后台连接功能。</string>
+    <string name="background_connection_prompt_delay">消息或来电可能无法及时送达。开启后台连接，可以更及时地收到消息和来电。</string>
+    <string name="background_connection_prompt_critical">你已开启紧急联络。开启后台连接，紧急联络才能尽可能及时送达。</string>
     <string name="notification_ignore">稍后</string>
     <string name="notification_go_to_settings">设置</string>
     <string name="notification_title">通知</string>
-    <string name="notification_group_chat_notification">群通知</string>
+    <string name="notification_group_chat_notification">群消息通知</string>
     <string name="notification_message_notifications">消息通知</string>
     <string name="notification_call_notifications">来电通知</string>
-    <string name="notification_group_lock_screen_caption">来电和紧急联络在锁屏时弹出所需</string>
     <string name="notification_full_screen_display">全屏显示</string>
+    <string name="notification_app_notifications">应用通知</string>
+    <string name="notification_calls">来电</string>
+    <string name="notification_dnd_access">勿扰权限</string>
+    <string name="notification_dnd_access_granted">已允许</string>
+    <string name="notification_dnd_access_denied">未允许</string>
+    <string name="notification_critical_alert_category">紧急联络通知</string>
+    <string name="notification_status_needs_full_screen">需开启全屏显示</string>
+    <string name="notification_full_screen_note_calls">锁屏时弹出来电界面</string>
+    <string name="notification_full_screen_note_critical">锁屏时弹出紧急联络</string>
+    <string name="notification_oem_popup_note">锁屏时弹出所需，App 无法读取此权限</string>
+    <string name="critical_alert_category_note">需允许弹出横幅和突破勿扰</string>
+    <string name="critical_alert_category_note_xiaomi">需允许弹出横幅和突破勿扰；锁屏显示需在类别设置中确认</string>
+    <string name="critical_alert_dnd_caption">开启紧急联络，并让它突破静音和勿扰（部分手机上称为“模式访问”）</string>
+    <string name="critical_alert_connection_caption">让紧急联络尽可能及时送达</string>
     <string name="notification_banner_off">通知已关闭，消息和来电都无法提醒</string>
     <string name="notification_banner_enable">去开启</string>
-    <string name="critical_alerts_content">允许 %s 访问并启用“免打扰”权限（某些设备上称为“模式访问”权限）。开启后，紧急联络可突破静音和勿扰模式。</string>
-    <string name="critical_alert_delivery_caption">当前无法接收推送，需开启后台连接，紧急联络才能送达。</string>
+    <string name="critical_alert_enable_background_connection">开启后台连接</string>
     <string name="notification_level_no_banner">不弹出横幅</string>
     <string name="notification_level_silent">已静默</string>
+    <string name="notification_lock_screen_check_note">锁屏显示需在类别设置中确认</string>
     <string name="notification_level_lock_hidden">锁屏不显示</string>
     <string name="notification_level_check">需要检查</string>
     <string name="notification_status_ok">正常</string>
@@ -494,6 +508,13 @@
     <string name="notification_test_done">完成</string>
     <string name="background_activity_check">后台运行</string>
     <string name="background_vendor_settings">厂商后台设置</string>
+    <string name="background_power_check">后台耗电</string>
+    <string name="background_power_hint_vivo">在打开的页面点「后台耗电管理」，选「允许后台耗电」</string>
+    <string name="background_hint_auto_start_vivo">在「设备管理」里打开「自启动」</string>
+    <string name="background_hint_auto_start_xiaomi">在列表中打开 %s</string>
+    <string name="background_hint_power_policy_xiaomi">选择「无限制」</string>
+    <string name="background_hint_vendor_guide">按设置指引逐项确认</string>
+    <string name="background_vendor_checks_caption">以下设置 App 无法读取，请点进去确认。</string>
     <string name="notification_settings_open_fail">此设备没有通知设置页面</string>
     <string name="notification_enable">已开启</string>
     <string name="notification_disable">已关闭</string>
@@ -594,7 +615,7 @@
 
     <string name="background_connection">后台连接</string>
     <string name="background_connection_enabled">后台连接已启用</string>
-    <string name="background_connection_tips">保持开启后台连接，以便能正常接收消息和来电通知。开启前，请确保以上设置项均为正常状态。</string>
+    <string name="background_connection_status_off">未开启</string>
 
     <!-- 后台连接检查项 -->
     <string name="background_restriction_check">后台限制</string>
@@ -612,14 +633,23 @@
     <string name="auto_start_check">自启动权限</string>
     <string name="auto_start_need_check">需要检查</string>
     <string name="background_connection_guide_prompt">仍然收不到消息或来电？</string>
+    <string name="notification_overview_caption">此手机的应用通知设置中另有一组应用级开关，消息、来电和紧急联络都受其影响，仅在分类内打开不生效，请一并检查：</string>
+    <string name="notification_overview_caption_xiaomi">消息、来电和紧急联络都受应用通知设置中「通知权限设置」的「悬浮通知」和「锁屏通知」影响，仅在分类内打开不生效：</string>
+    <string name="notification_overview_caption_vivo">消息、来电和紧急联络都受应用通知设置中「提醒方式」影响，请在其中勾选「锁屏通知」和「悬浮通知」，并关闭「静默通知」：</string>
+    <string name="notification_overview_action">前往设置</string>
+    <string name="critical_alert_status_dnd_blocked">勿扰时不提醒</string>
+    <string name="critical_alert_status_needs_connection">需开启后台连接</string>
     <string name="background_connection_guide_link">查看设置指引</string>
-    <string name="background_connection_guide_check">建议对照设置指引核对一次本机的系统设置，让后台连接更稳定。</string>
+    <string name="background_connection_guide_prompt_page">如果消息或来电收得不及时，请完成上方检查项，并</string>
+    <string name="background_connection_guide_link_page">核对设置指引</string>
+    <string name="background_system_checks_title">系统设置</string>
+    <string name="background_vendor_checks_title">厂商设置</string>
 
     <string name="exact_alarm_check">精确闹钟</string>
     <string name="exact_alarm_granted">正常</string>
     <string name="exact_alarm_not_granted">受限</string>
 
-    <string name="background_connection_check_failed">请先确保以下设置项为正常状态，再开启后台连接</string>
+    <string name="background_connection_fix_first">请先完成「%s」，再开启后台连接</string>
 
 
     <string name="disappearing_messages">倒计时</string>
@@ -763,4 +793,7 @@
     <!-- 旧包：标题栏迁移入口 + 首次启动一次性提示 -->
     <string name="legacy_migration_app_name_new">Quicall（新版）</string>
     <string name="legacy_migration_entry_short">迁移到新版</string>
+    <string name="notification_test_busy">已有通知测试正在进行。</string>
+    <string name="notification_test_persistence_failed">无法保存测试结果，请重新测试。</string>
+    <string name="group_change_followup_pending">变更已接受，本地更新尚未完成。重试将仅完成后续步骤，不会再次提交变更。</string>
 </resources>

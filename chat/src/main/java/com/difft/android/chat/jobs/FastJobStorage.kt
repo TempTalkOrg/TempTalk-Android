@@ -3,6 +3,9 @@ package com.difft.android.chat.jobs
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobmanager.persistence.ConstraintSpec
+import com.difft.android.chat.jobmanager.persistence.DurableRestore
+import com.difft.android.chat.jobmanager.persistence.DurableJob
+import com.difft.android.chat.jobmanager.persistence.StrictWrite
 import com.difft.android.chat.jobmanager.persistence.FullSpec
 import com.difft.android.chat.jobmanager.persistence.JobSpec
 import com.difft.android.chat.jobmanager.persistence.JobStorage
@@ -43,6 +46,32 @@ class FastJobStorage(private val jobStorage: WcdbJobStorage) : JobStorage {
             jobs.add(fullSpec.jobSpec)
             constraintsByJobId[fullSpec.jobSpec.id] = fullSpec.constraintSpecs.toMutableList()
         }
+    }
+
+    override fun insertJobsStrict(fullSpecs: List<FullSpec>): StrictWrite {
+        if (fullSpecs.any { it.isMemoryOnly }) return StrictWrite.RejectedMemoryOnly
+        val result = jobStorage.insertJobsStrict(fullSpecs)
+        val verified = result == StrictWrite.Committed || (result is StrictWrite.Unknown && fullSpecs.all { candidate ->
+            val found = jobStorage.findDurableJob(candidate.jobSpec.id)
+            found is DurableJob.Found && found.spec.serializedData == candidate.jobSpec.serializedData
+        })
+        if (verified) {
+            fullSpecs.forEach { spec ->
+                if (jobs.none { it.id == spec.jobSpec.id }) jobs.add(spec.jobSpec)
+                constraintsByJobId[spec.jobSpec.id] = spec.constraintSpecs.toMutableList()
+            }
+        }
+        return if (verified) StrictWrite.Committed else result
+    }
+
+    override fun findDurableJob(id: String): DurableJob = jobStorage.findDurableJob(id)
+
+    override fun restoreDurableJob(found: DurableJob.Found): DurableRestore {
+        if (found.spec.isMemoryOnly || found.constraints.any { it.isMemoryOnly }) return DurableRestore.Unsupported
+        if (jobs.any { it.id == found.spec.id }) return DurableRestore.AlreadyCached
+        jobs.add(found.spec)
+        constraintsByJobId[found.spec.id] = found.constraints.toMutableList()
+        return DurableRestore.Restored
     }
 
     override fun getJobSpec(id: String): JobSpec? {

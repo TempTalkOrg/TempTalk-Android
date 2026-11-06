@@ -2,6 +2,10 @@ package com.difft.android.migration.v2.transfer.send
 
 import com.difft.android.R
 import com.difft.android.migration.model.MigrationError
+import com.difft.android.migration.v2.pause.MigrationPauseException
+import com.difft.android.migration.v2.pause.SenderPauseSession
+import com.difft.android.migration.v2.transfer.ReceiverCapabilityMissingException
+import com.difft.android.p2p.engine.model.ReceiverCaps
 import com.difft.android.migration.ui.component.MigrationResultTone
 import com.difft.android.p2p.android.client.PrepareUploadReasons
 import com.difft.android.p2p.android.client.PrepareUploadRejectedException
@@ -100,5 +104,36 @@ class MigrationP2pErrorStringsTest {
         assertEquals(R.string.migration_p3_failed_title, kind.titleRes)
         assertEquals(R.string.migration_p3_reason_unknown, kind.reasonRes)
         assertEquals(MigrationResultTone.ERROR, kind.tone)
+    }
+
+    @Test
+    fun `a message pause the export could not take shows the generic failure, as iOS does`() {
+        listOf(
+            SenderPauseSession.REASON_NO_LOGIN,
+            SenderPauseSession.REASON_UNAVAILABLE,
+            SenderPauseSession.REASON_QUIESCENCE_TIMEOUT,
+            SenderPauseSession.REASON_COMMIT_FAILED,
+            SenderPauseSession.REASON_RESIDUAL,
+        ).forEach { reason ->
+            // Thrown as MigrationPauseException; the service reports its message as the reason.
+            val kind = classifyFailure(MigrationPauseException(reason).message.orEmpty())
+            assertEquals(MigrationFailureKind.UNKNOWN, kind, reason)
+            assertEquals(R.string.migration_p3_failed_title, kind.titleRes)
+            assertEquals(R.string.migration_p3_reason_unknown, kind.reasonRes)
+        }
+    }
+
+    @Test
+    fun `a new device missing a capability asks for its update without touching the existing update kind`() {
+        val kind = classifyFailure(ReceiverCapabilityMissingException(setOf(ReceiverCaps.PENDING_ENVELOPE_V1)).message.orEmpty())
+
+        assertEquals(MigrationFailureKind.RECEIVER_UPDATE_NEEDED, kind)
+        assertEquals(R.string.migration_m3_title, kind.titleRes)
+        assertEquals(R.string.migration_m3_body_new_device, kind.reasonRes)
+        assertEquals(MigrationResultTone.WARNING, kind.tone)
+        // The version reject keeps its own copy and its update-this-device action.
+        val versionKind = classifyFailure("403 forbidden: ${MigrationRejectReason.VERSION_INCOMPATIBLE.wire}")
+        assertEquals(MigrationFailureKind.UPDATE_NEEDED, versionKind)
+        assertEquals(R.string.migration_m3_body, versionKind.reasonRes)
     }
 }

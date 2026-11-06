@@ -11,7 +11,10 @@ import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.base.utils.TextSizeUtil
+import com.difft.android.base.utils.padBottomForHomeTabBar
+import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.chat.databinding.ChatFragmentGroupBinding
 import com.difft.android.chat.group.GroupChatContentActivity
 import com.difft.android.chat.group.GroupUtil
@@ -60,6 +63,12 @@ class GroupsFragment : Fragment(), DualPaneSelectionListener {
             layoutManager = LinearLayoutManager(context)
             adapter = mAdapter
             itemAnimator = null
+            // Extra room for the Contacts title's collapse range (see HomeHeaderCollapser).
+            padBottomForHomeTabBar(
+                viewLifecycleOwner,
+                activity as? DualPaneHost,
+                extraPx = (parentFragment as? ContactsFragment)?.headerCollapseRangePx ?: 0,
+            )
         }
 
 

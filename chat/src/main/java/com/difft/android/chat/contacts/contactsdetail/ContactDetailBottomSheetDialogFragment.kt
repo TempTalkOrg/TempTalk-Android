@@ -29,6 +29,7 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
         private const val ARG_SOURCE = "ARG_SOURCE"
         private const val ARG_AVATAR = "ARG_AVATAR"
         private const val ARG_JOINED_AT = "ARG_JOINED_AT"
+        private const val ARG_OVER_CONVERSATION = "ARG_OVER_CONVERSATION"
 
         private fun newInstance(
             contactId: String,
@@ -36,7 +37,8 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
             sourceType: String? = null,
             source: String? = null,
             avatar: String? = null,
-            joinedAt: String? = null
+            joinedAt: String? = null,
+            overConversation: String? = null,
         ): ContactDetailBottomSheetDialogFragment {
             return ContactDetailBottomSheetDialogFragment().apply {
                 arguments = Bundle().apply {
@@ -46,12 +48,15 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
                     putString(ARG_SOURCE, source)
                     putString(ARG_AVATAR, avatar)
                     putString(ARG_JOINED_AT, joinedAt)
+                    putString(ARG_OVER_CONVERSATION, overConversation)
                 }
             }
         }
 
         /**
-         * Show contact detail bottom sheet from an Activity.
+         * Show contact detail bottom sheet from an Activity. [overConversation] is the conversation
+         * on screen behind the sheet when it is shown from one (a message link), null when shown
+         * from the list; the card pushes onto the home stack only over that conversation.
          */
         fun show(
             activity: FragmentActivity,
@@ -60,9 +65,10 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
             sourceType: String? = null,
             source: String? = null,
             avatar: String? = null,
-            joinedAt: String? = null
+            joinedAt: String? = null,
+            overConversation: String? = null,
         ) {
-            newInstance(contactId, contactName, sourceType, source, avatar, joinedAt)
+            newInstance(contactId, contactName, sourceType, source, avatar, joinedAt, overConversation)
                 .show(activity.supportFragmentManager, TAG)
         }
 
@@ -98,6 +104,9 @@ class ContactDetailBottomSheetDialogFragment : BaseBottomSheetDialogFragment() {
                 .show(fragmentManager, TAG)
         }
     }
+
+    /** See [show]: kept in the arguments, so a sheet restored after a fold keeps its origin. */
+    val overConversation: String? get() = arguments?.getString(ARG_OVER_CONVERSATION)
 
     override fun getContentFragment(): Fragment {
         return ContactDetailFragment.newInstance(

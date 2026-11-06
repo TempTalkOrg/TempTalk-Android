@@ -25,8 +25,6 @@ import kotlinx.coroutines.CoroutineScope
  *   no new capture is observed while one of them holds. A reading already taken survives that:
  *   [millisSinceLastScreenshot] falls back to [Long.MAX_VALUE] only while no detector was ever
  *   started, which is the whole call when it is instant from the outset.
- * - Window focus lost longer than the threshold (treated as the notification shade being pulled
- *   down) drops the notification only; the capture is still observed and timed.
  */
 internal class CallScreenshotController(
     private val activity: AppCompatActivity,
@@ -36,7 +34,6 @@ internal class CallScreenshotController(
     private val conversationIdProvider: () -> String?,
     private val callTypeProvider: () -> String,
     private val isInPipModeProvider: () -> Boolean,
-    private val focusLostAtProvider: () -> Long,
 ) {
     private var screenshotDetector: ScreenshotDetector? = null
 
@@ -105,13 +102,6 @@ internal class CallScreenshotController(
             L.i { "[Call][Screenshot] Skipped: suppression condition met at dispatch" }
             return
         }
-        val focusLostAt = focusLostAtProvider()
-        val focusLostDuration =
-            if (focusLostAt > 0L) System.currentTimeMillis() - focusLostAt else 0L
-        if (focusLostAt > 0L && focusLostDuration >= NOTIFICATION_PANEL_THRESHOLD_MS) {
-            L.i { "[Call][Screenshot] Skipped: focus lost ${focusLostDuration}ms ago (notification panel open)" }
-            return
-        }
         callToChatController.sendScreenshotNotification(conversationId, callType)
     }
 
@@ -130,9 +120,5 @@ internal class CallScreenshotController(
             return resolved
         }
         return if (ValidatorUtil.isGid(conversationId)) CallType.GROUP else CallType.ONE_ON_ONE
-    }
-
-    companion object {
-        private const val NOTIFICATION_PANEL_THRESHOLD_MS = 2000L
     }
 }

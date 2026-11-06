@@ -7,6 +7,7 @@ import com.difft.android.base.call.CallDataCaller
 import com.difft.android.base.call.CallDataSourceType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.ApplicationHelper
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.appScope
@@ -43,10 +44,14 @@ internal fun CallMessageHandler.handleCallingMessage(
     envelope: SignalServiceProtos.Envelope,
     content: SignalServiceProtos.CallMessage,
     roomId: String,
+    admission: MessagingTicket,
+    fromServerPush: Boolean,
 ) {
     L.i { "[Call] handleCallMessage, has calling message envelope.timestamp:${envelope.timestamp}" }
     L.i { "[Call] handleCallMessage, start checkCall roomId: $roomId" }
 
+    // Held until the chat-side call record is stored, so a migration pause waits for it (#1382).
+    val held = admission.retain("call-calling")
     appScope.launch(Dispatchers.IO) {
         try {
             val callerId = content.calling?.caller ?: message.senderId
@@ -65,6 +70,14 @@ internal fun CallMessageHandler.handleCallingMessage(
             if (content.calling.createCallMsg) {
                 handleCallTextMessage(envelope, content, callInfo)
             }
+            held?.close()
+
+            // No live-call handling while messaging is paused (#1382); showIncomingNotificationOrActivity
+            // re-checks, for a pause that begins during checkCall.
+            if (!messagingGate.isOpen) {
+                L.i { "[Call] event=calling_live_skipped reason=messaging_paused roomId=$roomId" }
+                return@launch
+            }
 
             val response = callService.checkCall(roomId)
             if (response.status != CallMessageHandler.RESPONSE_STATUS_SUCCESS ||
@@ -76,12 +89,14 @@ internal fun CallMessageHandler.handleCallingMessage(
 
             L.i { "[Call] handleCallMessage, checkCall success" }
 
-            handleCallData(roomId, callInfo, envelope, response.data, message.senderId, content)
+            handleCallData(roomId, callInfo, envelope, response.data, message.senderId, content, fromServerPush)
         } catch (error: CancellationException) {
             // Preserve structured concurrency — never swallow coroutine cancellation.
             throw error
         } catch (error: Exception) {
             L.e { "[Call] handleCallMessage, checkCall fail:${error.stackTraceToString()}" }
+        } finally {
+            held?.close()
         }
     }
 }
@@ -145,6 +160,7 @@ internal suspend fun CallMessageHandler.handleCallData(
     checkCallData: RoomState?,
     senderId: String,
     content: SignalServiceProtos.CallMessage,
+    fromServerPush: Boolean,
 ) {
     val existingCall = callDataManager.getCallListData()[roomId]
     val shouldAddCallData = existingCall == null ||
@@ -161,11 +177,11 @@ internal suspend fun CallMessageHandler.handleCallData(
 
         checkCallData?.anotherDeviceJoined?.let { anotherDeviceJoined ->
             if (checkIfShowIncomingCall(anotherDeviceJoined, senderId, callData)) {
-                showIncomingNotificationOrActivity(callData)
+                showIncomingNotificationOrActivity(callData, fromServerPush)
             }
         }
     } else if (content.calling.controlType == CallActionType.INVITE.type) {
-        showIncomingNotificationOrActivity(existingCall)
+        showIncomingNotificationOrActivity(existingCall, fromServerPush)
     }
 }
 

@@ -5,4 +5,5 @@
     <item name="keyboard_guideline" type="id" />
     <item name="parent_start_guideline" type="id" />
     <item name="parent_end_guideline" type="id" />
+    <item name="detail_shell_container" type="id" />
 </resources>

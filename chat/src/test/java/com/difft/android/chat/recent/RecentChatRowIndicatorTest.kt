@@ -2,39 +2,47 @@ package com.difft.android.chat.recent
 
 import com.difft.android.base.R
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Pinned-row indicator and background rules of the chat list row. */
+/** Trailing-slot indicator and background rules of the chat list row. */
 class RecentChatRowIndicatorTest {
 
-    private fun showPin(
+    private fun indicator(
         isForSearch: Boolean = false,
+        isFocusCard: Boolean = false,
         isPinned: Boolean = true,
         displayUnreadNum: Int = 0,
-    ) = shouldShowPinnedIcon(isForSearch, isPinned, displayUnreadNum)
+    ) = trailingIndicator(isForSearch, isFocusCard, isPinned, displayUnreadNum)
 
     @Test
     fun `pinned row with a free trailing slot shows the pin`() {
-        assertTrue(showPin())
+        assertEquals(TrailingIndicator.PIN, indicator())
     }
 
     @Test
-    fun `unpinned row never shows the pin`() {
-        assertFalse(showPin(isPinned = false))
+    fun `unpinned plain row shows nothing`() {
+        assertEquals(TrailingIndicator.NONE, indicator(isPinned = false))
     }
 
     @Test
-    fun `unread count or manual-unread dot takes the slot before the pin`() {
+    fun `unread count or manual-unread dot takes the slot before every icon`() {
         // displayUnreadNum is 1 for a manual-unread dot and the real count otherwise.
-        assertFalse(showPin(displayUnreadNum = 1))
-        assertFalse(showPin(displayUnreadNum = 120))
+        assertEquals(TrailingIndicator.UNREAD, indicator(displayUnreadNum = 1))
+        assertEquals(TrailingIndicator.UNREAD, indicator(displayUnreadNum = 120))
+        assertEquals(TrailingIndicator.UNREAD, indicator(isFocusCard = true, displayUnreadNum = 3))
     }
 
     @Test
-    fun `search results hide the pin`() {
-        assertFalse(showPin(isForSearch = true))
+    fun `the focus row shows the focus icon instead of the pin, pinned or not`() {
+        assertEquals(TrailingIndicator.FOCUS, indicator(isFocusCard = true, isPinned = true))
+        assertEquals(TrailingIndicator.FOCUS, indicator(isFocusCard = true, isPinned = false))
+    }
+
+    @Test
+    fun `search results show only the unread badge`() {
+        assertEquals(TrailingIndicator.NONE, indicator(isForSearch = true))
+        assertEquals(TrailingIndicator.NONE, indicator(isForSearch = true, isFocusCard = true))
+        assertEquals(TrailingIndicator.UNREAD, indicator(isForSearch = true, displayUnreadNum = 2))
     }
 
     private fun background(isSelected: Boolean = false, isPinned: Boolean = false, hasCallBar: Boolean = false) =

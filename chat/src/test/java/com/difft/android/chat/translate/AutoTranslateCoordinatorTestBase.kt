@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -144,7 +145,10 @@ abstract class AutoTranslateCoordinatorTestBase {
             conversationSettingsManager = settingsManager,
             messageHydrator = hydrator,
         )
-        coordinator.overlay.onEach { overlayEmissions += it }.launchIn(scope)
+        // Recorded inline with the update (Unconfined): the initial value lands before any test
+        // body runs, and every set is appended before `update` returns, so consecutive updates
+        // are never conflated away. The coordinator itself never runs on Unconfined.
+        coordinator.overlay.onEach { overlayEmissions += it }.launchIn(scope + Dispatchers.Unconfined)
     }
 
     @After

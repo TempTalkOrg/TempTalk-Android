@@ -3,7 +3,10 @@ package com.difft.android.migration.v2.handoff
 import android.content.Context
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.migration.PeerApps
+import com.difft.android.base.migration.pause.MigrationPauseOutcome
 import com.difft.android.base.storage.user.StorageBoundUserManager
+import com.difft.android.migration.v2.pause.SenderVerdictSettlement
+import com.difft.android.migration.v2.pause.SettleResult
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +27,8 @@ class MigrationHandoffReconciler @Inject constructor(
     private val userManager: StorageBoundUserManager,
     private val statusClient: MigrationStatusClient,
     private val completer: MigrationHandoffCompleter,
+    // A handoff's message pause is owned by its handoff id (#1382); a peer that adopted nothing ends it.
+    private val settlement: SenderVerdictSettlement,
 ) {
 
     /** What the reconciliation concluded; the failure screen renders its retry affordance from this. */
@@ -88,13 +93,7 @@ class MigrationHandoffReconciler @Inject constructor(
                 completer.complete(handoffId)
                 Outcome.SIGNED_OUT
             }
-            HandoffResult.UNKNOWN -> {
-                // The peer answered and it did not adopt anything: this device is still the live
-                // session, and starting over is safe.
-                L.i { "[MigrationV2][Handoff] reconcile($trigger): peer did not adopt — staying online" }
-                clearHandoffId()
-                Outcome.NOT_MIGRATED
-            }
+            HandoffResult.UNKNOWN -> settleNotAdopted(handoffId, trigger)
             null -> {
                 // Unreachable / too old / timed out. Keep the id so a later trigger can ask again,
                 // and do not let the user retry on an unknown peer state.
@@ -102,6 +101,27 @@ class MigrationHandoffReconciler @Inject constructor(
                 Outcome.UNKNOWN
             }
         }
+    }
+
+    /**
+     * The peer answered and adopted nothing: this device is still the live session, so the handoff's
+     * message pause ends as failed (#1382). The handoff id is the pause's only recovery key (a handoff
+     * has no `/status` receipt), so it is cleared only once the settlement resolved:
+     * - APPLIED / NO_PAUSE: the pause is gone; clear the id, retry is safe.
+     * - SKIPPED: the record belongs to another export or was already cleared; this id can no longer
+     *   settle anything, so keeping it would only re-ask the peer forever. Clear it.
+     * - WRITE_FAILED: the pause is still on; keep the id so the next trigger settles it, and report
+     *   UNKNOWN so no retry is offered while paused.
+     */
+    private suspend fun settleNotAdopted(handoffId: String, trigger: String): Outcome {
+        val result = settlement.settle(handoffId, null, MigrationPauseOutcome.FAILED, "handoff_reconcile")
+        if (result == SettleResult.WRITE_FAILED) {
+            L.w { "[MigrationV2][Handoff] reconcile($trigger): not adopted, pause write failed — id kept" }
+            return Outcome.UNKNOWN
+        }
+        L.i { "[MigrationV2][Handoff] reconcile($trigger): not adopted — online result=${result.name.lowercase()}" }
+        clearHandoffId()
+        return Outcome.NOT_MIGRATED
     }
 
     private fun clearHandoffId() {

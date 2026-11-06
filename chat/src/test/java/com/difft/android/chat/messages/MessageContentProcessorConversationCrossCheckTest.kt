@@ -1,5 +1,7 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.test.fakes.TestMessagingPause
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.GlobalHiltEntryPoint
@@ -70,6 +72,9 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMe
 @Config(sdk = [28])
 class MessageContentProcessorConversationCrossCheckTest {
 
+    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
+
     private val testDispatcher = UnconfinedTestDispatcher()
 
     private lateinit var context: Application
@@ -132,6 +137,7 @@ class MessageContentProcessorConversationCrossCheckTest {
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = mockk(relaxed = true),
+            groupFocusRepository = mockk(relaxed = true),
         )
 
         // Real receive-path chain around the real processor: decrypt + persist mocked only.
@@ -142,12 +148,14 @@ class MessageContentProcessorConversationCrossCheckTest {
             messageContentProcessor = processor,
             dbMessageStore = envelopeDbMessageStore,
             healthCounters = mockk(relaxed = true),
+            lateDeliveryTracker = mockk(relaxed = true),
         )
         incomingConversationProcessor = IncomingConversationMessageProcessor(
             webSocket = mockk(relaxed = true),
             dbRoomStore = mockk(relaxed = true),
             envelopToMessageProcessor = envelopToMessageProcessor,
             priorConversationReporter = mockk(relaxed = true),
+            messagingGate = TestMessagingPause().open().gate,
         )
     }
 
@@ -170,7 +178,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = attacker, conv = For.Account(attacker))
         val content = groupData(victimGroup, body = "hi")
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
         coVerify(exactly = 0) { asyncMessageJobsManager.makeSureGroupExist(any()) }
@@ -185,7 +193,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = For.Group(envelopeGroup))
         val content = groupData(contentGroup, body = "hi")
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
         coVerify(exactly = 0) { asyncMessageJobsManager.makeSureGroupExist(any()) }
@@ -200,7 +208,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = For.Group(envelopeGroup))
         val content = oneToOneData()
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
     }
@@ -218,7 +226,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = For.Group(group))
         val content = groupData(group, body = "hi")
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         coVerify(exactly = 1) { asyncMessageJobsManager.makeSureGroupExist(group) }
         assertNotNull(result)
@@ -232,7 +240,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = For.Account(peer))
         val content = oneToOneData()
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 0) { asyncMessageJobsManager.makeSureGroupExist(any()) }
@@ -249,7 +257,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = null)
         val content = groupData(group, body = "hi")
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         coVerify(exactly = 1) { asyncMessageJobsManager.makeSureGroupExist(group) }
         assertNotNull(result)
@@ -261,7 +269,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = null)
         val content = oneToOneData()
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
     }
@@ -280,7 +288,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = MY_ID, conv = For.Account("+10009999"))
         val content = groupData(group, body = "")
 
-        processor.process(SignalServiceDataClass(env, content, null), TAG)
+        processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         coVerify(exactly = 1) { asyncMessageJobsManager.makeSureGroupExist(group) }
     }
@@ -293,7 +301,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = MY_ID, conv = For.Account("+10009999"))
         val content = syncSentGroup(group)
 
-        processor.process(SignalServiceDataClass(env, content, null), TAG)
+        processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         coVerify(exactly = 1) { asyncMessageJobsManager.makeSureGroupExist(group) }
     }
@@ -312,7 +320,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = attacker, conv = For.Account(attacker))
         val content = groupData(victimGroup, recallSource = "+18880001")
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
         coVerify(exactly = 0) { asyncMessageJobsManager.makeSureGroupExist(any()) }
@@ -328,7 +336,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = member, conv = For.Group(group))
         val content = groupData(group, recallSource = "+18880002") // source != member
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         coVerify(exactly = 1) { asyncMessageJobsManager.makeSureGroupExist(group) }
         assertNull(result)
@@ -347,7 +355,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val peer = "+15558888"
         val group = "j".repeat(32)
 
-        val helper = PendingMessageHelper(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
+        val helper = PendingMessageHelper(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
         val pending = PendingMessage(
             type = 1, relay = null, timestamp = 100L, source = peer, sourceDevice = 1,
             content = null, systemShowTimestamp = 100L, sequenceId = 0L, notifySequenceId = 0L,
@@ -365,7 +373,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         assertArrayEquals(c2Bytes, built.msgExtra.conversationId.groupId.toByteArray())
 
         // The built envelope's stamp decodes back to For.Group(group) == content side => PROCESS.
-        val result = processor.process(SignalServiceDataClass(built, groupData(group, body = "hi"), null), TAG)
+        val result = processor.process(SignalServiceDataClass(built, groupData(group, body = "hi"), null), TAG, admission)
         coVerify(exactly = 1) { asyncMessageJobsManager.makeSureGroupExist(group) }
         assertNotNull(result)
     }
@@ -387,7 +395,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = attacker, conv = For.Account(attacker))
         val content = forwardNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
         coVerify(exactly = 0) {
@@ -403,7 +411,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = member, conv = For.Group(group))
         val content = forwardNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -419,7 +427,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = null)
         val content = forwardNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -437,7 +445,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = member, conv = For.Group(group))
         val content = forwardNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -457,7 +465,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = member, conv = For.Group(envelopeGroup))
         val content = forwardNoticeGroup(contentGroup)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
         coVerify(exactly = 0) {
@@ -474,7 +482,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = MY_ID, conv = For.Account("+10009999"))
         val content = forwardNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -495,7 +503,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = attacker, conv = For.Account(attacker))
         val content = activityNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNull(result)
         coVerify(exactly = 0) {
@@ -511,7 +519,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = member, conv = For.Group(group))
         val content = activityNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -527,7 +535,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = peer, conv = null)
         val content = activityNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -544,7 +552,7 @@ class MessageContentProcessorConversationCrossCheckTest {
         val env = envelopeWith(source = member, conv = For.Group(group))
         val content = activityNoticeGroup(group)
 
-        val result = processor.process(SignalServiceDataClass(env, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(env, content, null), TAG, admission)
 
         assertNotNull(result)
         coVerify(exactly = 1) {
@@ -620,7 +628,9 @@ class MessageContentProcessorConversationCrossCheckTest {
         every { decryptionUtil.decrypt(any()) } returns
             SignalServiceDataClass(env, groupData(victimGroup, body = "hi"), null)
 
-        val res = envelopToMessageProcessor.process(env, TAG)
+        val res = envelopToMessageProcessor.process(
+            env, TAG, requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, TAG)),
+        )
 
         // Drop maps to ACK-consumed Success(null), never the TransientFailure retry queue.
         assertTrue(res is EnvelopeProcessResult.Success)

@@ -41,14 +41,14 @@ import org.difft.app.database.models.MessageModel
  * Screenshot rows are excluded for the same reason as the tombstone: they render as a centered
  * notice with no status icon and no resend, so a failed one is invisible in the conversation yet
  * would still earn the room a tag the user cannot clear (issue #1265). `PushScreenShotSendJob`
- * persists its row only as Sent — a state neither aggregate's predicate matches — so this exclusion
- * is load-bearing only for the FAILED / SENDING screenshot rows existing installs already hold.
+ * shows its row as Sending before the send and the cold-start sweep may flip it to SentFailed until
+ * the job settles it (issue #1435), so this exclusion is load-bearing for every screenshot row.
  *
  * The exclusion deliberately applies to the SENDING aggregate ([sendingOutgoingCondition],
  * [WCDB.hasSendingOutgoingMessage]) and the cold-start sweep's tag side
- * ([WCDB.roomIdsWithStaleSendingOutgoing]) as well, not just FAILED: a legacy screenshot row stuck
- * at Sending has no job left to settle it and no resend path the user could take, so counting it
- * would pin that room's sending indicator on forever.
+ * ([WCDB.roomIdsWithStaleSendingOutgoing]) as well, not just FAILED: a screenshot row at Sending may
+ * wait up to a day for the network, and a legacy one has no job left to settle it, so counting it
+ * would pin that room's sending indicator on.
  */
 private fun realOutgoingMessageScope(): Expression =
     DBMessageModel.type.notIn(MessageModel.TYPE_NOTIFY, MessageModel.TYPE_CONFIDENTIAL_PLACEHOLDER)

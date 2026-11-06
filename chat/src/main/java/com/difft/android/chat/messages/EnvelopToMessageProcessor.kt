@@ -1,8 +1,10 @@
 package com.difft.android.chat.messages
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.monitor.DeliveryChannel
 import com.difft.android.base.monitor.KeepAliveHealthCounters
+import com.difft.android.base.monitor.LateDeliveryTracker
 import com.difft.android.messageserialization.db.store.DBMessageStore
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
 import com.google.gson.JsonSyntaxException
@@ -24,6 +26,7 @@ class EnvelopToMessageProcessor @Inject constructor(
     private val messageContentProcessor: MessageContentProcessor,
     private val dbMessageStore: DBMessageStore,
     private val healthCounters: KeepAliveHealthCounters,
+    private val lateDeliveryTracker: LateDeliveryTracker,
 ) {
 
     companion object {
@@ -62,14 +65,31 @@ class EnvelopToMessageProcessor @Inject constructor(
      * All callers (`appScope`, `IncomingMessageObserver` scope) are also
      * `Dispatchers.IO`, so this `withContext` is a no-op in the steady
      * state and only kicks in if a Default-scoped caller is added.
+     *
+     * @param admission the caller's open receive ticket (#1382); the caller acquired it before its
+     *   first side effect and closes it after its own ACK, server delete or persistence, whichever
+     *   it owns. Admitted work is never refused; a closed ticket is a caller bug and returns
+     *   [EnvelopeProcessResult.Paused] untouched.
      */
-    suspend fun process(envelope: Envelope, tag: String): EnvelopeProcessResult = withContext(Dispatchers.IO) {
+    suspend fun process(envelope: Envelope, tag: String, admission: MessagingTicket): EnvelopeProcessResult {
+        if (admission.isClosed) {
+            L.e { "[MigrationPause] event=process_without_ticket tag=$tag ts=${envelope.timestamp}" }
+            return EnvelopeProcessResult.Paused
+        }
+        return processAdmitted(envelope, tag, admission)
+    }
+
+    private suspend fun processAdmitted(
+        envelope: Envelope,
+        tag: String,
+        admission: MessagingTicket,
+    ): EnvelopeProcessResult = withContext(Dispatchers.IO) {
         try {
             val result = envelope
                 .takeIf { envelopSizeNotExceedOneMillion(it, tag) }
                 ?.decrypt()
                 ?.takeIf { dataMessageBodyNotExceed8K(it, tag) }
-                ?.processContentToMessage(tag)
+                ?.processContentToMessage(tag, admission)
                 ?.compatTimestamp()
             val inserted = result?.let { dbMessageStore.putWhenNonExist(it.message) } ?: 0
             val channel = LIVE_DELIVERY_CHANNELS[tag]
@@ -78,6 +98,7 @@ class EnvelopToMessageProcessor @Inject constructor(
             if (inserted > 0 && channel != null) {
                 // Telemetry must never turn a processed message into a failure.
                 runCatching { healthCounters.onEnvelopeDelivered(envelope.systemShowTimestamp, channel) }
+                runCatching { lateDeliveryTracker.onEnvelopeDelivered(envelope.systemShowTimestamp) }
             }
             EnvelopeProcessResult.Success(result)
         } catch (e: CancellationException) {
@@ -155,9 +176,9 @@ class EnvelopToMessageProcessor @Inject constructor(
         return newMessageDecryptionUtil.decrypt(this)
     }
 
-    private suspend fun SignalServiceDataClass.processContentToMessage(tag: String): Result? {
+    private suspend fun SignalServiceDataClass.processContentToMessage(tag: String, admission: MessagingTicket): Result? {
         L.d { "[Message][${tag}] Start processing Message " }
-        return messageContentProcessor.process(content = this, tag)?.let {
+        return messageContentProcessor.process(content = this, tag, admission)?.let {
             Result(
                 message = it,
                 shouldShowNotification = shouldShowNotification,

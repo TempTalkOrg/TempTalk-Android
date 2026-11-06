@@ -115,6 +115,7 @@ class CallJoinStarterTest {
         verify(exactly = 1) { launcher.launch(appContext, any(), WAIT_TOKEN) }
         val intent = CallIntent(launchedIntent.captured)
         assertEquals(CallIntent.Action.JOIN_CALL, intent.action)
+        assertEquals("the accept path stops this room's ringing (#1446)", ROOM_ID, intent.roomId)
         assertEquals(Intent.FLAG_ACTIVITY_NEW_TASK, launchedIntent.captured.flags)
         assertEquals(CONVERSATION_ID, intent.conversationId)
         assertTrue(intent.needAppLock)

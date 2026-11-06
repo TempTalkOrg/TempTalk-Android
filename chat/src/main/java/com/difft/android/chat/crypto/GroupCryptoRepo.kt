@@ -2,6 +2,7 @@ package com.difft.android.chat.crypto
 
 import android.util.Base64
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.chat.group.requireGroupWriteSession
 import com.difft.android.network.group.CryptoDisposeReq
 import com.difft.android.network.group.GroupRepo
 import com.tencent.wcdb.base.Value
@@ -40,6 +41,15 @@ internal fun decideRGroupWrite(storedVersion: Int?, incomingVersion: Int): RGrou
         else -> RGroupWriteDecision.SKIP
     }
 }
+
+/**
+ * Whether the rotation initiator's own key may be written over the stored one. Equal versions are
+ * written (the server may omit keyVersion while the group is already at that generation), but an
+ * older one is not: a newer key from a later rotation, received meanwhile (the rotation can now
+ * outlive its page and finish late), must not be regressed.
+ */
+internal fun shouldApplyInitiatorRotation(storedVersion: Int?, version: Int): Boolean =
+    storedVersion == null || version >= storedVersion
 
 /**
  * Single point of access for group crypto keys (`group_crypto_keys` table) and
@@ -164,17 +174,23 @@ class GroupCryptoRepo @Inject constructor() {
     }
 
     /**
-     * Unconditionally persist the locally-generated rotated R_group for the rotation
-     * INITIATOR. Unlike [saveOrRotateRGroup] (receive-side, version-gated), the
-     * initiator's freshly-generated key is authoritative and must always be written,
-     * even if [version] is not strictly greater than the stored one (e.g. the server
-     * omitted keyVersion and the group was already at the same generation locally).
+     * Persist the locally-generated rotated R_group for the rotation INITIATOR. Unlike
+     * [saveOrRotateRGroup] (receive-side, strictly newer only), the initiator's key is written
+     * even if [version] equals the stored one (e.g. the server omitted keyVersion and the group
+     * was already at the same generation locally); a strictly older version is ignored
+     * ([shouldApplyInitiatorRotation]).
+     * @return whether the key was written.
      * Also resets member signatureVerify (new pk_bind invalidates prior verifications).
      * Same `@Synchronized` + transaction semantics as the OVERWRITE path of
      * [saveOrRotateRGroup]. Must be called from IO thread.
      */
     @Synchronized
-    fun setRotatedRGroup(gid: String, rGroup: ByteArray, version: Int) {
+    fun setRotatedRGroup(gid: String, rGroup: ByteArray, version: Int): Boolean {
+        val storedVersion = wcdb.groupCryptoKeys.getFirstObject(DBGroupCryptoKeysModel.gid.eq(gid))?.keyVersion
+        if (!shouldApplyInitiatorRotation(storedVersion, version)) {
+            L.w { "[GroupCrypto] stale rotate write ignored gid=$gid v=$version stored=$storedVersion" }
+            return false
+        }
         // Atomic: key write + signatureVerify reset must commit together, else a
         // crash between them leaves a new key with stale verify=true.
         wcdb.db.runTransaction {
@@ -187,6 +203,7 @@ class GroupCryptoRepo @Inject constructor() {
             true
         }
         L.i { "[GroupCryptoRepo] set rotated R_group gid=$gid v=$version (initiator)" }
+        return true
     }
 
     /**
@@ -258,10 +275,11 @@ class GroupCryptoRepo @Inject constructor() {
      * only be called once per in-flight fetchAndSaveSingleGroupInfo, so no
      * additional time-based throttle here.
      */
-    suspend fun verifyAllPendingForGroup(gid: String, groupRepo: GroupRepo) {
+    suspend fun verifyAllPendingForGroup(gid: String, groupRepo: GroupRepo, commitAllowed: (() -> Boolean)? = null) {
         if (gid.isEmpty()) return
 
         val pending = withContext(Dispatchers.IO) {
+            requireGroupWriteSession(commitAllowed)
             wcdb.groupMemberContactor.getAllObjects(
                 DBGroupMemberContactorModel.gid.eq(gid)
                     .and(DBGroupMemberContactorModel.signatureVerify.isNull())
@@ -269,7 +287,7 @@ class GroupCryptoRepo @Inject constructor() {
         }
         if (pending.isEmpty()) return
 
-        runVerifyAndDispose(gid, pending, groupRepo, "verifyAll")
+        runVerifyAndDispose(gid, pending, groupRepo, "verifyAll", commitAllowed)
     }
 
     /**
@@ -298,12 +316,14 @@ class GroupCryptoRepo @Inject constructor() {
         members: List<GroupMemberContactorModel>,
         groupRepo: GroupRepo,
         tag: String,
+        commitAllowed: (() -> Boolean)? = null,
     ) {
         L.i { "[GroupCryptoRepo] $tag start gid=$gid count=${members.size}" }
 
         data class VerifyResult(val verified: List<String>, val invalid: List<String>)
 
         val result = withContext(Dispatchers.IO) {
+            requireGroupWriteSession(commitAllowed)
             val rGroupBytes = getRGroupBytes(gid) ?: run {
                 L.i { "[GroupCryptoRepo] $tag gid=$gid no R_group skip" }
                 return@withContext null
@@ -335,7 +355,7 @@ class GroupCryptoRepo @Inject constructor() {
                 if (ok) verified += uid else invalid += uid
             }
 
-            if (verified.isNotEmpty()) batchMarkVerified(gid, verified)
+            if (verified.isNotEmpty()) batchMarkVerified(gid, verified, commitAllowed)
             VerifyResult(verified, invalid)
         } ?: return
 
@@ -344,6 +364,7 @@ class GroupCryptoRepo @Inject constructor() {
         if (result.invalid.isNotEmpty()) {
             L.w { "[GroupCryptoRepo] $tag gid=$gid invalid=${result.invalid.size} uids=${result.invalid}" }
             try {
+                requireGroupWriteSession(commitAllowed)
                 val resp = groupRepo.cryptoDispose(gid, CryptoDisposeReq(result.invalid))
                 serverRemoved = resp.data?.removed?.size ?: 0
                 serverRejected = resp.data?.rejected?.size ?: 0
@@ -375,10 +396,11 @@ class GroupCryptoRepo @Inject constructor() {
 
     // Chunked under SQLite's SQLITE_MAX_VARIABLE_NUMBER (default 999); 500 leaves
     // headroom. Typical groups (≤ a few hundred members) are a single UPDATE.
-    private suspend fun batchMarkVerified(gid: String, verifiedUids: List<String>) {
+    private suspend fun batchMarkVerified(gid: String, verifiedUids: List<String>, commitAllowed: (() -> Boolean)? = null) {
         if (verifiedUids.isEmpty()) return
         withContext(Dispatchers.IO) {
             verifiedUids.chunked(UPDATE_CHUNK_SIZE).forEach { chunk ->
+                requireGroupWriteSession(commitAllowed)
                 wcdb.groupMemberContactor.updateValue(
                     Value(true),
                     DBGroupMemberContactorModel.signatureVerify,

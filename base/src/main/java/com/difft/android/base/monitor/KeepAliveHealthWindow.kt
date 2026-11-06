@@ -2,6 +2,7 @@ package com.difft.android.base.monitor
 
 import androidx.datastore.preferences.core.MutablePreferences
 import com.difft.android.base.storage.AppStateKeys
+import java.util.TimeZone
 
 /** One UTC day of verdict counters; [t0] is the wall-clock ms of the slot's first write. */
 data class DailySlot(val day: Long, val t0: Long, val counts: Map<String, Int>)
@@ -24,7 +25,9 @@ data class HealthVerdict(
     /** Share of FCM transit samples slower than 30 min, whole percent; null without samples. */
     val fcmTransitSlowPercent: Int? = null,
     /** App stalls longer than 2 h; diagnostic only. */
-    val stallsOver2h: Int = 0
+    val stallsOver2h: Int = 0,
+    /** Deliveries counted as late (more than 5 min, background or catch-up) in the window; drives rule `L`. */
+    val lateDeliveries: Int = 0
 ) {
     companion object {
         val NA = HealthVerdict("na", emptyList(), 0, 0, 0, null)
@@ -49,31 +52,35 @@ object KeepAliveHealthWindow {
     /** Signal's `minimumEventAgeMs`: no verdict before this much real observation time. */
     const val MIN_OBSERVATION_MS = 3 * DAY_MS
 
-    const val MIN_LATENCY_SAMPLES = 50
-    private const val SLOW_SHARE_PERCENT = 50
-    private const val VERY_SLOW_SHARE_PERCENT = 10
     private const val MIN_FGS_ATTEMPTS = 10
     private const val FGS_FAIL_SHARE_PERCENT = 50
     private const val MIN_PULL_FAILS = 5
 
     /**
-     * Counter keys kept per day: 18 latency buckets, 6 FCM transit buckets, 4 stall counters, FCM/pull
-     * outcomes and foreground-service outcomes.
+     * Counter keys kept per day: 18 latency buckets, 6 FCM transit buckets, 4 stall counters, the late
+     * delivery count, FCM/pull outcomes and foreground-service outcomes.
      */
     val DAILY_KEYS: Set<String> = (
         HealthEventKeys.ALL_LATENCY_KEYS + HealthEventKeys.ALL_FCM_TRANSIT_KEYS + HealthEventKeys.ALL_STALL_KEYS + listOf(
-            HealthEventKeys.FCM_RECV, HealthEventKeys.FCM_DEPRIO,
+            HealthEventKeys.LATE_5M, HealthEventKeys.FCM_RECV, HealthEventKeys.FCM_DEPRIO,
             HealthEventKeys.PULL_OK, HealthEventKeys.PULL_FAIL,
             HealthEventKeys.FGS_STARTS, HealthEventKeys.FGS_FAIL
         )
         ).toSet()
 
-    fun dayIndex(nowWall: Long): Long = Math.floorDiv(nowWall, DAY_MS)
+    /** Day slots follow the device's calendar day, the same rule as [LateDeliveryTracker]. */
+    internal var zoneOffsetMs: (Long) -> Long = { TimeZone.getDefault().getOffset(it).toLong() }
 
-    /** Drops slots older than the window; any future-dated slot empties it. */
+    fun dayIndex(nowWall: Long): Long = Math.floorDiv(nowWall + zoneOffsetMs(nowWall), DAY_MS)
+
+    /**
+     * Drops slots older than the window; a slot dated more than one day ahead empties it (the clock
+     * moved back). One day ahead is tolerated: slots written before day indexes followed the device
+     * calendar day can sit one day ahead in zones west of UTC.
+     */
     fun normalize(slots: List<DailySlot>, nowWall: Long): List<DailySlot> {
         val today = dayIndex(nowWall)
-        if (slots.any { it.day > today }) return emptyList()
+        if (slots.any { it.day > today + 1 }) return emptyList()
         return slots.filter { it.day >= today - (WINDOW_DAYS - 1) }
     }
 
@@ -128,10 +135,10 @@ object KeepAliveHealthWindow {
         fun channelCount(channel: DeliveryChannel) = HealthEventKeys.LATENCY_SUFFIXES.sumOf { count(HealthEventKeys.latencyKey(channel, it)) }
         fun channelSlow(channel: DeliveryChannel) =
             count(HealthEventKeys.latencyKey(channel, "2h")) + count(HealthEventKeys.latencyKey(channel, HealthEventKeys.LATENCY_MORE))
+        val lateDeliveries = count(HealthEventKeys.LATE_5M)
+        val lateDays = slots.count { (it.counts[HealthEventKeys.LATE_5M] ?: 0) > 0 }
 
         val samples = DeliveryChannel.entries.sumOf { channelCount(it) }
-        val slow = DeliveryChannel.entries.sumOf { channelSlow(it) }
-        val verySlow = DeliveryChannel.entries.sumOf { count(HealthEventKeys.latencyKey(it, HealthEventKeys.LATENCY_MORE)) }
         val fcmSamples = channelCount(DeliveryChannel.FCM)
         val fcmSlowPercent = if (fcmSamples > 0) channelSlow(DeliveryChannel.FCM) * 100 / fcmSamples else null
         val transitSamples = HealthEventKeys.ALL_FCM_TRANSIT_KEYS.sumOf { count(it) }
@@ -139,7 +146,7 @@ object KeepAliveHealthWindow {
         val transitSlowPercent = if (transitSamples > 0) transitSlow * 100 / transitSamples else null
         fun result(value: String, why: List<String>) = HealthVerdict(
             value, why, slots.size, samples, fcmSamples, fcmSlowPercent,
-            transitSamples, transitSlowPercent, count(HealthEventKeys.STALL_MORE)
+            transitSamples, transitSlowPercent, count(HealthEventKeys.STALL_MORE), lateDeliveries
         )
 
         val start = windowStart(slots)
@@ -147,9 +154,7 @@ object KeepAliveHealthWindow {
         if (!mature) return result("na", emptyList())
 
         val why = buildList {
-            if (samples >= MIN_LATENCY_SAMPLES &&
-                (slow * 100 >= samples * SLOW_SHARE_PERCENT || verySlow * 100 >= samples * VERY_SLOW_SHARE_PERCENT)
-            ) add("L")
+            if (lateDays >= LateDeliveryRule.MIN_DAYS) add("L")
             val attempts = count(HealthEventKeys.FGS_STARTS) + count(HealthEventKeys.FGS_FAIL)
             if (attempts >= MIN_FGS_ATTEMPTS && count(HealthEventKeys.FGS_FAIL) * 100 >= attempts * FGS_FAIL_SHARE_PERCENT) add("F")
             if (count(HealthEventKeys.PULL_FAIL) >= MIN_PULL_FAILS) add("P")

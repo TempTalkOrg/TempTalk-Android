@@ -14,6 +14,7 @@ import org.difft.app.database.models.ForwardModel
 import org.difft.app.database.models.GroupCryptoKeysModel
 import org.difft.app.database.models.MentionModel
 import org.difft.app.database.models.MessageModel
+import org.difft.app.database.models.PendingMessageModelNew
 import org.difft.app.database.models.QuoteModel
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.ReadInfoModel
@@ -74,6 +75,13 @@ interface WcdbWriteTarget : RoomStateReadWrite {
 
     /** Insert a group crypto-key row (string PK, no autoincrement). */
     fun insertGroupKey(model: GroupCryptoKeysModel)
+
+    /**
+     * Insert or replace a `pending_message_new` row keyed on its messageId, mirroring the live
+     * `savePendingMessage` (#1382). Throws on failure: the importer fails the import rather than
+     * drop the row.
+     */
+    fun insertPendingEnvelope(model: PendingMessageModelNew)
 
     /**
      * Expand one rung of a read ladder over [roomId]'s incoming messages: set `readTime = readAt` on
@@ -160,6 +168,10 @@ class WcdbWriteTargetImpl(private val target: WCDB) : WcdbWriteTarget {
 
     override fun insertGroupKey(model: GroupCryptoKeysModel) {
         target.groupCryptoKeys.insertOrReplaceObject(model)
+    }
+
+    override fun insertPendingEnvelope(model: PendingMessageModelNew) {
+        target.pendingMessageNew.insertOrReplaceObject(model)
     }
 
     override fun markReadUpTo(roomId: String, maxServerTime: Long, readAt: Long, selfUid: String) {

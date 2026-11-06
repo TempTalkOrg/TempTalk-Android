@@ -2,6 +2,7 @@ package com.difft.android.chat
 
 import com.difft.android.base.monitor.KeepAliveHealthCounters
 import com.difft.android.chat.PendingMessageHelper.PullTrigger
+import com.difft.android.test.fakes.TestMessagingPause
 import io.mockk.coEvery
 import io.mockk.mockk
 import io.mockk.spyk
@@ -25,7 +26,7 @@ class PendingMessageHelperPullCountingTest {
 
     @Before
     fun setUp() {
-        helper = spyk(PendingMessageHelper(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), counters))
+        helper = spyk(PendingMessageHelper(mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), counters, TestMessagingPause().open().gate))
     }
 
     @After

@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
+import com.difft.android.PushScreenShotSendJobFactory
 import com.difft.android.PushTextSendJobFactory
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.base.call.CallActionType
@@ -13,12 +14,7 @@ import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.call.VoiceRecordingTracker
 import com.difft.android.base.log.lumberjack.L
-import com.difft.android.base.user.AutoLeave
-import com.difft.android.base.user.CallChat
-import com.difft.android.base.user.CallConfig
-import com.difft.android.base.user.CountdownTimer
-import com.difft.android.base.user.PromptReminder
-import com.difft.android.base.user.defaultBarrageTexts
+import com.difft.android.base.user.callConfigSnapshot
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.ValidatorUtil
 import com.difft.android.base.utils.appScope
@@ -33,6 +29,7 @@ import com.difft.android.call.state.CriticalAlertStateManager
 import com.difft.android.call.state.InComingCallStateManager
 import com.difft.android.call.state.OnGoingCallStateManager
 import com.difft.android.call.util.ScreenDeviceUtil
+import com.difft.android.chat.focus.GroupNotifyGate
 import com.difft.android.chat.common.SendType
 import com.difft.android.chat.contacts.contactsall.sortedByPinyin
 import com.difft.android.chat.contacts.data.ContactorUtil
@@ -57,6 +54,7 @@ import difft.android.messageserialization.For
 import difft.android.messageserialization.model.RealSource
 import difft.android.messageserialization.model.ScreenShot
 import difft.android.messageserialization.model.TextMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -76,6 +74,7 @@ class LCallToChatControllerImpl @Inject constructor(
     private val callMessageCreator: CallMessageCreator,
     private val messageNotificationUtil: MessageNotificationUtil,
     private val pushTextJobFactory: PushTextSendJobFactory,
+    private val pushScreenShotSendJobFactory: PushScreenShotSendJobFactory,
     private val conversationManager: ConversationManager,
     private val encryptionDataManager: EncryptionDataManager,
     private val localMessageCreator: LocalMessageCreator,
@@ -88,27 +87,23 @@ class LCallToChatControllerImpl @Inject constructor(
     private val globalConfigsManager: GlobalConfigsManager,
     private val groupUtil: GroupUtil,
     private val joinStarter: CallJoinStarter,
+    private val groupNotifyGate: GroupNotifyGate,
 ) : LCallToChatController {
+
+    override suspend fun shouldNotifyGroupCall(gid: String): Boolean = groupNotifyGate.shouldNotifyGroupCall(gid)
 
     private val callService by lazy { httpClient.getService(LCallHttpService::class.java) }
     private val mySelfId: String by lazy { globalServices.myId }
     private val callDataManager: CallDataManager by lazy { callDataManagerLazy.get() }
-
-    private val callConfig: CallConfig by lazy {
-        globalConfigsManager.getNewGlobalConfigs()?.data?.call ?: CallConfig(
-            autoLeave = AutoLeave(promptReminder = PromptReminder()),
-            chatPresets = defaultBarrageTexts,
-            chat = CallChat(),
-            countdownTimer = CountdownTimer(),
-        )
-    }
 
     private val controlMessageSender by lazy {
         CallControlMessageSender(callService, callMessageCreator, mySelfId, onGoingCallStateManager)
     }
 
     private val inviteExecutor by lazy {
-        CallInviteExecutor(callService, callMessageCreator, callConfig, mySelfId, contactorCacheManager)
+        CallInviteExecutor(
+            callService, callMessageCreator, { globalConfigsManager.callConfigSnapshot() }, mySelfId, contactorCacheManager,
+        )
     }
 
     // region Call signaling
@@ -203,6 +198,24 @@ class LCallToChatControllerImpl @Inject constructor(
         }
     }
 
+    override suspend fun saveReceivedCallTextMessage(
+        callActionType: CallActionType, textContent: String, sourceDevice: Int,
+        timestamp: Long, systemShowTime: Long, fromWho: For, forWhat: For,
+    ) {
+        try {
+            localMessageCreator.createCallTextMessage(
+                callActionType = callActionType, textContent = textContent,
+                sourceDevice = sourceDevice, timestamp = timestamp,
+                systemShowTime = systemShowTime, fromWho = fromWho, forWhat = forWhat,
+                saveToLocal = true,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.e { "[Call] saveReceivedCallTextMessage failed: ${e.stackTraceToString()}" }
+        }
+    }
+
     override fun sendScreenshotNotification(conversationId: String, callType: CallType) {
         if (conversationId.isBlank()) return
         appScope.launch {
@@ -224,7 +237,7 @@ class LCallToChatControllerImpl @Inject constructor(
                     null, null, null, null, null, null, null, screenShot, null,
                 )
                 ApplicationDependencies.getJobManager().add(
-                    pushTextJobFactory.create(null, textMessage, null)
+                    pushScreenShotSendJobFactory.create(null, textMessage)
                 )
             }.onFailure { e -> L.e(e) { "[Call] sendScreenshotNotification Error:" } }
         }

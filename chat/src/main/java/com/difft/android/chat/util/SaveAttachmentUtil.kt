@@ -14,6 +14,8 @@ import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.PackageUtil
+import com.difft.android.base.utils.pane.PageWait
+import com.difft.android.base.utils.pane.withTaskWait
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
@@ -96,13 +98,14 @@ object SaveAttachmentUtil {
             }
         }
 
-    suspend fun saveWithUI(context: Context, attachment: Attachment) {
-        ComposeDialogManager.showWait(context)
-        try {
+    /**
+     * Saves behind the wait dialog. A page in the home screen's detail stack passes its [wait], so
+     * the dialog goes with the page; otherwise only this save's own claim is released.
+     */
+    suspend fun saveWithUI(context: Context, attachment: Attachment, wait: PageWait? = null) {
+        withTaskWait(context, wait) {
             val result = saveAttachment(context, attachment)
             showResultToast(context, result)
-        } finally {
-            ComposeDialogManager.dismissWait()
         }
     }
 

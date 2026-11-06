@@ -56,7 +56,7 @@ class BindAccountActivity : BaseActivity() {
     private val activityLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == Activity.RESULT_OK) {
             // 绑定成功，将结果传递给调用方
-            setResult(Activity.RESULT_OK)
+            setResult(Activity.RESULT_OK, SecurityResultNonce.resultData(intent))
             finish()
         } else if (it.resultCode != Activity.RESULT_CANCELED) {
             // 其他情况（如验证失败），不设置RESULT_OK
@@ -70,6 +70,7 @@ class BindAccountActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
         initView()
     }
 
@@ -127,6 +128,7 @@ class BindAccountActivity : BaseActivity() {
         mBinding.btnNext.setOnClickListener {
             verifyAccount(null)
         }
+        mBinding.liftFormAboveKeyboard()
     }
 
     private fun getDefaultCountryCode(): String {

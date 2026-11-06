@@ -20,6 +20,7 @@ abstract class GroupMembersAdapter(private val showType: Int) : ListAdapter<Grou
 
     abstract fun onMemberClicked(model: GroupMemberModel, position: Int)
     open fun onCheckBoxClicked(model: GroupMemberModel, position: Int) {}
+    open fun isMemberSelected(model: GroupMemberModel): Boolean = model.isSelected
 
     override fun onBindViewHolder(holder: GroupMemberItemViewHolder, position: Int) {
         val data = getItem(position)
@@ -29,17 +30,19 @@ abstract class GroupMembersAdapter(private val showType: Int) : ListAdapter<Grou
         }
         holder.showCheckBox = data.showCheckBox
         holder.checkBoxEnable = data.checkBoxEnable
-        holder.isSelected = data.isSelected
+        holder.isSelected = isMemberSelected(data)
         holder.setAvatarUrl(data.avatarUrl, data.avatarEncKey, data.sortLetters, data.uid!!)
         holder.checkBox.setOnClickListener {
             val actualPosition = holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION } ?: return@setOnClickListener
             onCheckBoxClicked(data, actualPosition)
+            holder.isSelected = isMemberSelected(data)
         }
 
         holder.rootView.setOnClickListener {
             if (!data.checkBoxEnable || !data.showCheckBox) return@setOnClickListener
             val actualPosition = holder.bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION } ?: return@setOnClickListener
             onCheckBoxClicked(data, actualPosition)
+            holder.isSelected = isMemberSelected(data)
         }
 
 
@@ -66,4 +69,6 @@ data class GroupMemberModel(
     var isRemovable: Boolean? = true,
     /** Name without remark for avatar letter display */
     var letterName: String? = null,
+    /** Raw contact names (remark, publicName, name) a member search also matches; [name] is the display pick. */
+    var searchNames: List<String> = emptyList(),
 )

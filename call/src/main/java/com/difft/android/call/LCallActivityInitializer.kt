@@ -5,8 +5,10 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.call.data.CallEndType
@@ -20,6 +22,7 @@ import com.difft.android.call.manager.PictureInPictureManager
 import com.difft.android.call.receiver.ScreenUnlockBroadcastReceiver
 import com.difft.android.call.session.CallRoomState
 import com.difft.android.call.ui.CallContent
+import com.difft.android.call.ui.tabletop.LocalCallFoldReports
 import com.difft.android.call.util.CallWaitDialogUtil
 import com.difft.android.base.utils.hideNavigationBar
 import kotlinx.coroutines.Dispatchers
@@ -98,6 +101,9 @@ internal fun LCallActivity.configureWindow() {
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
     allowOnLockScreen()
+    // Edge to edge for the whole call: the layout works in window coordinates and the chrome pads
+    // itself with explicit insets.
+    WindowCompat.setDecorFitsSystemWindows(window, false)
     window.hideNavigationBar()
     @Suppress("DEPRECATION")
     window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
@@ -132,26 +138,29 @@ internal fun LCallActivity.initializeView() {
         }
         setContent {
             val isUserSharingScreen by viewModel.callUiController.isShareScreening.collectAsState()
-            CallContent(
-                room = room,
-                viewModel = viewModel,
-                inviteCallHandler = inviteCallManager,
-                isUserSharingScreen = isUserSharingScreen,
-                callConfig = callConfig,
-                callIntent = callIntent,
-                callRole = callRole,
-                conversationId = onGoingCallStateManager.getConversationId(),
-                autoHideTimeout = autoHideTimeout,
-                muteOtherEnabled = muteOtherEnabled,
-                onScreenClick = { handleScreenClick() },
-                // The session publishes the call type to OnGoingCallStateManager itself.
-                onCallTypeChanged = { updateScreenshotListeningState() },
-                onInviteUsersClick = { handleInviteUsersClick() },
-                onWindowZoomOutClick = { handleWindowZoomOutClick() },
-                onInviteViewAction = { handleInviteViewAction(it) },
-                onExitClick = { params, callEndType -> handleExitClick(params, callEndType) },
-                onBottomCallEndAction = { action -> handleBottomCallEndAction(action) }
-            )
+            // The tabletop layout reads this activity's fold reports (one collector per page).
+            CompositionLocalProvider(LocalCallFoldReports provides foldTracker.reports) {
+                CallContent(
+                    room = room,
+                    viewModel = viewModel,
+                    inviteCallHandler = inviteCallManager,
+                    isUserSharingScreen = isUserSharingScreen,
+                    callConfig = callConfig,
+                    callIntent = callIntent,
+                    callRole = callRole,
+                    conversationId = onGoingCallStateManager.getConversationId(),
+                    autoHideTimeout = autoHideTimeout,
+                    muteOtherEnabled = muteOtherEnabled,
+                    onScreenClick = { handleScreenClick() },
+                    // The session publishes the call type to OnGoingCallStateManager itself.
+                    onCallTypeChanged = { updateScreenshotListeningState() },
+                    onInviteUsersClick = { handleInviteUsersClick() },
+                    onWindowZoomOutClick = { handleWindowZoomOutClick() },
+                    onInviteViewAction = { handleInviteViewAction(it) },
+                    onExitClick = { params, callEndType -> handleExitClick(params, callEndType) },
+                    onBottomCallEndAction = { action -> handleBottomCallEndAction(action) }
+                )
+            }
         }
     }
 }
@@ -166,6 +175,11 @@ internal fun LCallActivity.initializePictureInPictureManager() {
             onGoingCallStateManager.setIsInPipMode(isInPipMode)
         }
     ).also { it.initialize() }
+    lifecycleScope.launch {
+        viewModel.callUiController.pipContentAspect.collect { aspect ->
+            pictureInPictureManager?.updateAspectRatio(aspect)
+        }
+    }
 }
 
 internal fun LCallActivity.initializeDialogManager() {
@@ -222,7 +236,6 @@ internal fun LCallActivity.initializeScreenshotController() {
         isInPipModeProvider = {
             onGoingCallStateManager.isInPipMode() || isInPictureInPictureMode
         },
-        focusLostAtProvider = { windowFocusLostAt }
     )
 }
 

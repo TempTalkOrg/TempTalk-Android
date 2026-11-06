@@ -70,6 +70,7 @@ class ScreenLockActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
         PasscodeUtil.needRecordLastUseTime = false
 
         // 检查是否为验证模式
@@ -318,13 +319,14 @@ class ScreenLockActivity : BaseActivity() {
     private fun onVerificationSuccess() {
         userManager.update {
             this.passcodeAttempts = 0
+            this.passcodeAutoMisses = 0
             this.patternAttempts = 0
             this.lastUseTime = System.currentTimeMillis()
         }
 
         if (isVerificationMode) {
             // 验证模式下，返回成功结果
-            setResult(RESULT_OK)
+            setResult(RESULT_OK, SecurityResultNonce.resultData(intent))
         } else {
             // Replay a queued popup only on a real app-entry unlock (not passcode setup); poll()
             // clears the slot so it can never replay twice.
@@ -353,11 +355,13 @@ class ScreenLockActivity : BaseActivity() {
             return
         }
 
-        val attempts = userManager.getUserData()?.passcodeAttempts ?: 0
+        val userData = userManager.getUserData()
+        val attempts = userData?.passcodeAttempts ?: 0
+        val autoMisses = userData?.passcodeAutoMisses ?: 0
 
-        // Past the attempt limit only a manual submit is verified
-        if (attempts >= 5 && !isManualVerify) {
-            L.i { "[ScreenLockActivity] Auto verification blocked due to passcode attempts limit" }
+        // Past either budget only a manual submit is verified
+        if (!isManualVerify && !PasscodeAutoVerifyPolicy.allowsAutoVerify(attempts, autoMisses)) {
+            L.i { "[ScreenLockActivity] auto verify blocked attempts=$attempts autoMisses=$autoMisses" }
             return
         }
 
@@ -462,6 +466,14 @@ class ScreenLockActivity : BaseActivity() {
                         val delaySeconds = (attemptsCount + 1 - 4) * (attemptsCount + 1 - 4)
                         startCountdownTimer(delaySeconds, false)
                     }
+                }
+            } else {
+                val autoMisses = (userManager.getUserData()?.passcodeAutoMisses ?: 0) + 1
+                userManager.update {
+                    this.passcodeAutoMisses = autoMisses
+                }
+                if (autoMisses == PasscodeAutoVerifyPolicy.AUTO_MISS_LIMIT) {
+                    L.i { "[ScreenLockActivity] auto verify budget spent autoMisses=$autoMisses" }
                 }
             }
         }

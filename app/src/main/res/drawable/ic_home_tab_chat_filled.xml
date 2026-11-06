@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tabler "message-circle-filled": the selected Chats tab glyph shared with iOS (lg_message-filled). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:pathData="M5.821 4.91c3.898 -2.765 9.469 -2.539 13.073 .536c3.667 3.127 4.168 8.238 1.152 11.898c-2.842 3.447 -7.965 4.283 -11.906 2.19l-4.146 1.308c-.606 .19 -1.179 -.436 -.976 -1.047l1.342 -4.055c-2.3 -3.867 -1.185 -8.59 2.46 -11.29z"
+      android:fillColor="@color/icon" />
+</vector>

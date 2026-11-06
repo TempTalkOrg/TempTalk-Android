@@ -2,7 +2,18 @@ package com.difft.android.setting
 
 import android.content.Context
 import com.difft.android.BuildConfig
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
+import android.view.View
+import androidx.lifecycle.Lifecycle
+import com.difft.android.base.utils.pane.PageWait
+import com.difft.android.base.utils.pane.detailBackOwner
+import com.difft.android.base.utils.pane.isVisibleTopNow
+import com.difft.android.base.utils.pane.dismissWithView
+import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
@@ -54,7 +65,6 @@ class UpdateManager @Inject constructor(
                     val configs = withContext(Dispatchers.IO) {
                         globalConfigHttpClient.httpService.getAppVersionConfigs(urlManager.appVersionConfigUrl)
                     }
-                    L.d { "[UpdateManager] get App Version Configs success:$configs" }
                     if (isFromSetting) {
                         ComposeDialogManager.dismissWait()
                     }
@@ -86,6 +96,11 @@ class UpdateManager @Inject constructor(
                                 }
                             }
                         }
+                    } else {
+                        L.w { "[UpdateManager] check update failed status=${result.status}" }
+                        if (isFromSetting) {
+                            ToastUtil.show(result.reason?.takeIf { it.isNotBlank() } ?: context.getString(com.difft.android.chat.R.string.chat_net_error))
+                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -101,6 +116,85 @@ class UpdateManager @Inject constructor(
         userManager.update {
             this.lastCheckUpdateTime = System.currentTimeMillis()
         }
+    }
+
+    /** Page-owned settings check. The caller binds busy/wait once with waitWhileVisibleTop. */
+    fun checkUpdate(page: Fragment, busy: MutableStateFlow<Boolean>, wait: PageWait): Job {
+        val originalView = page.requireView()
+        return page.viewLifecycleOwner.lifecycleScope.launch {
+            if (busy.value || !page.isVisibleTopNow() || !page.detailBackOwner().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
+            busy.value = true
+            try {
+                userManager.update { lastCheckUpdateTime = System.currentTimeMillis() }
+                if (environmentHelper.isInsiderChannel()) {
+                    val configs = withContext(Dispatchers.IO) {
+                        globalConfigHttpClient.httpService.getAppVersionConfigs(urlManager.appVersionConfigUrl)
+                    }
+                    busy.value = false
+                    wait.dismiss()
+                    if (!awaitSettingsPageVisible(page, originalView)) return@launch
+                    if (configs.versionCode > PackageUtil.getAppVersionCode()) {
+                        page.context?.let { delivery.deliver(it, UpdateOffer(configs.url, configs.hash), false, ::handOff) }
+                    } else {
+                        delay(500)
+                        if (awaitSettingsPageVisible(page, originalView)) ToastUtil.showLong(page.getString(R.string.settings_version_is_latest))
+                    }
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        settingRepo.checkUpdate(PackageUtil.getAppVersionName().orEmpty(), BuildConfig.APP_CHANNEL)
+                    }
+                    busy.value = false
+                    wait.dismiss()
+                    if (!awaitSettingsPageVisible(page, originalView)) return@launch
+                    if (result.status == 0) {
+                        result.data?.let { response ->
+                            if (response.update) showPageUpdateDialog(page, response)
+                            else {
+                                delay(500)
+                                if (awaitSettingsPageVisible(page, originalView)) ToastUtil.showLong(page.getString(R.string.settings_version_is_latest))
+                            }
+                        }
+                    } else {
+                        ToastUtil.show(result.reason?.takeIf { it.isNotBlank() }
+                            ?: page.getString(com.difft.android.chat.R.string.chat_net_error))
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                busy.value = false
+                wait.dismiss()
+                L.w { "[UpdateManager] page_check_failed error=${e.javaClass.simpleName}" }
+                if (awaitSettingsPageVisible(page, originalView)) {
+                    ToastUtil.show(e.message ?: page.getString(com.difft.android.chat.R.string.chat_net_error))
+                }
+            } finally {
+                busy.value = false
+                wait.dismiss()
+            }
+        }
+    }
+
+    private fun showPageUpdateDialog(page: Fragment, response: CheckUpdateResponse) {
+        val context = page.context ?: return
+        var dialogReference: java.lang.ref.WeakReference<ComposeDialog>? = null
+        val dialog = page.dismissWithView(ComposeDialogManager.showMessageDialog(
+            context = context,
+            title = context.getString(R.string.settings_check_new_version),
+            message = response.notes,
+            confirmText = context.getString(R.string.settings_dialog_update),
+            cancelText = context.getString(R.string.settings_dialog_cancel),
+            cancelable = !response.force,
+            showCancel = !response.force,
+            autoDismiss = !response.force,
+            onConfirm = {
+                if (page.isVisibleTopNow() && page.detailBackOwner().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) page.context?.let {
+                    if (delivery.isInProgress) ToastUtil.show(R.string.status_upgrade_downloading)
+                    else delivery.deliver(it, response.toOffer(), response.force) { dialogReference?.get()?.dismiss(); handOff() }
+                }
+            },
+        ))
+        dialogReference = dialog?.let { java.lang.ref.WeakReference(it) }
+        page.dismissWhenLeavingVisibleTop { dialog?.dismiss() }
     }
 
     private fun showLatestDialog(context: FragmentActivity) {
@@ -173,4 +267,13 @@ class UpdateManager @Inject constructor(
         foreUpdateMessageDialog?.dismiss()
         foreUpdateMessageDialog = null
     }
+}
+
+/** Waits only for the original retained view; DESTROYED is never treated as a visible shell. */
+internal suspend fun awaitSettingsPageVisible(page: Fragment, originalView: View): Boolean {
+    if (page.view !== originalView) return false
+    val state = page.detailBackOwner().lifecycle.currentStateFlow.first {
+        it == Lifecycle.State.DESTROYED || it.isAtLeast(Lifecycle.State.STARTED)
+    }
+    return state.isAtLeast(Lifecycle.State.STARTED) && page.view === originalView && page.isVisibleTopNow()
 }

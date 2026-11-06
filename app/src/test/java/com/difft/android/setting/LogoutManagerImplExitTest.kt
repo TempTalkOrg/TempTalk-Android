@@ -1,6 +1,11 @@
 package com.difft.android.setting
 
+import com.difft.android.base.migration.pause.HeldSendJobs
+import com.difft.android.base.migration.pause.MessagingPauseState
+import com.difft.android.base.migration.pause.MigrationMessagePause
+import com.difft.android.base.migration.pause.MigrationPauseScope
 import com.difft.android.base.storage.user.StorageBoundUserManager
+import com.difft.android.base.user.UserData
 import com.difft.android.base.user.UserManager
 import com.difft.android.chat.attachment.migration.ForwardAttachmentMigration
 import com.difft.android.chat.util.AppIconBadgeManager
@@ -15,6 +20,7 @@ import difft.android.messageserialization.MessageStore
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -60,6 +66,8 @@ class LogoutManagerImplExitTest {
     private lateinit var appExiter: AppExiter
     private lateinit var translateModelStore: TranslateModelStore
     private lateinit var translateQueue: TranslateQueue
+    private val migrationMessagePause: MigrationMessagePause = mockk(relaxed = true)
+    private val heldSendJobs: HeldSendJobs = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -107,6 +115,8 @@ class LogoutManagerImplExitTest {
         appExiter = appExiter,
         translateModelStore = { translateModelStore },
         translateQueue = { translateQueue },
+        migrationMessagePause = migrationMessagePause,
+        heldSendJobs = heldSendJobs,
     )
 
     // T21
@@ -147,6 +157,91 @@ class LogoutManagerImplExitTest {
         coVerify(exactly = 1) { storageBoundUserManager.clearAuthOnly() }
         verify(exactly = 1) { forwardAttachmentMigration.cancel() }
         verify(exactly = 1) { webSocketManager.stop() }
+    }
+
+    // #1382 — every logout ends a migration message pause before the storage clears wipe app_state,
+    // which they do on disk only.
+    @Test
+    fun `a passive logout clears the migration pause before the auth clear`() {
+        every { appVisibility.hasResumedActivity() } returns true
+
+        build().doLogoutWithoutRemoveData()
+
+        verify(timeout = 5_000, exactly = 1) { appExiter.exit(any()) }
+        coVerifyOrder {
+            migrationMessagePause.clearForLogout()
+            storageBoundUserManager.clearAuthOnly()
+        }
+    }
+
+    @Test
+    fun `a full logout clears the migration pause before the full clear`() {
+        every { appVisibility.hasResumedActivity() } returns true
+
+        build().doLogout()
+
+        verify(timeout = 5_000, exactly = 1) { appExiter.exit(any()) }
+        coVerifyOrder {
+            migrationMessagePause.clearForLogout()
+            storageBoundUserManager.clearAll()
+        }
+    }
+
+    @Test
+    fun `the handoff sign-out clears the migration pause before the auth clear`() {
+        every { appVisibility.hasResumedActivity() } returns true
+
+        build().doMigrationHandoffSignOut()
+
+        verify(timeout = 5_000, exactly = 1) { appExiter.exit(any()) }
+        coVerifyOrder {
+            migrationMessagePause.clearForLogout()
+            storageBoundUserManager.clearAuthOnly()
+        }
+    }
+
+    // #1382 — a passive logout keeps the database, so the sends a migration pause holds are dropped
+    // before the pause clears; a later login must never send them.
+    @Test
+    fun `a passive logout while paused drops the held sends before the pause clears`() {
+        every { appVisibility.hasResumedActivity() } returns true
+        every { migrationMessagePause.state } returns MessagingPauseState.Paused(null)
+
+        build().doLogoutWithoutRemoveData()
+
+        verify(timeout = 5_000, exactly = 1) { appExiter.exit(any()) }
+        coVerifyOrder {
+            heldSendJobs.dropAll("logout", null)
+            migrationMessagePause.clearForLogout()
+        }
+    }
+
+    // #1382 A04 — sends queued before the login loaded would otherwise be adopted by the next login.
+    @Test
+    fun `a passive logout with messaging open drops only the sends the ending login does not own`() {
+        every { appVisibility.hasResumedActivity() } returns true
+        every { migrationMessagePause.state } returns MessagingPauseState.Open
+        every { userManager.getUserData() } returns UserData(account = "acc-1", baseAuth = "auth-1")
+
+        build().doLogoutWithoutRemoveData()
+
+        verify(timeout = 5_000, exactly = 1) { appExiter.exit(any()) }
+        coVerifyOrder {
+            heldSendJobs.dropAll("logout", MigrationPauseScope.credentialHash("auth-1"))
+            migrationMessagePause.clearForLogout()
+        }
+    }
+
+    @Test
+    fun `a full logout leaves the held sends to the database wipe`() {
+        every { appVisibility.hasResumedActivity() } returns true
+        every { migrationMessagePause.state } returns MessagingPauseState.Paused(null)
+
+        build().doLogout()
+
+        verify(timeout = 5_000, exactly = 1) { appExiter.exit(any()) }
+        coVerify(exactly = 0) { heldSendJobs.dropAll(any(), any()) }
+        verify(exactly = 1) { messageStore.deleteDatabase() }
     }
 
     // T24 — a user-initiated "Log Out" that loses the latch to an in-flight passive logout must

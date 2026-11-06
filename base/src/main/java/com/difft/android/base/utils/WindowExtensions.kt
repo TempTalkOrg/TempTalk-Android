@@ -15,3 +15,14 @@ fun Window.hideNavigationBar() {
         systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 }
+
+/**
+ * Fully immersive variant of [hideNavigationBar], used by the call window during a screen share
+ * and mirrored by the bottom sheets opened over it (#1451).
+ */
+fun Window.hideSystemBars() {
+    WindowCompat.getInsetsController(this, decorView).apply {
+        hide(WindowInsetsCompat.Type.systemBars())
+        systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
+}

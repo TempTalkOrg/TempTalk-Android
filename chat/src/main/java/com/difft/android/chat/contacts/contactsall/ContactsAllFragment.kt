@@ -19,7 +19,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.difft.android.base.utils.DualPaneHost
 import com.difft.android.base.utils.TextSizeUtil
+import com.difft.android.base.utils.marginBottomForHomeTabBar
+import com.difft.android.base.utils.padBottomForHomeTabBar
+import com.difft.android.chat.contacts.ContactsFragment
 import com.difft.android.base.utils.dp
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.sampleAfterFirst
@@ -103,7 +107,10 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
             this.adapter = mAdapter
             this.layoutManager = LinearLayoutManager(requireContext())
             itemAnimator = null
+            padBottomForHomeTabBar(viewLifecycleOwner, activity as? DualPaneHost, extraPx = headerCollapseRangePx())
         }
+        // The letter index is pinned to the page bottom: keep its last letters above the capsule.
+        binding.sideBar.marginBottomForHomeTabBar(viewLifecycleOwner, activity as? DualPaneHost, extraPx = headerCollapseRangePx())
 
         ContactorUtil.getContactsStatusUpdate
             .onEach { binding.smartRefreshLayout.finishRefresh() }
@@ -208,6 +215,9 @@ class ContactsAllFragment : Fragment(), DualPaneSelectionListener {
         }
         addLettersDecoration(contacts)
     }
+
+    /** The Contacts title's collapse range, kept as extra bottom room (see HomeHeaderCollapser). */
+    private fun headerCollapseRangePx(): Int = (parentFragment as? ContactsFragment)?.headerCollapseRangePx ?: 0
 
     /** Index letters in list order, excluding the pinned pending-removal group (iOS parity). */
     private fun List<ContactListItem>.indexLetters(): List<String> =

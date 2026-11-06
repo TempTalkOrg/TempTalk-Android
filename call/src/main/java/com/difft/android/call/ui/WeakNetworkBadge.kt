@@ -31,10 +31,9 @@ private val BADGE_CORNER = 4.dp
  * two-person hand-off to the top banner are all applied in [resolveBadge] — this composable never
  * re-derives them.
  *
- * Collects [CallUiController.networkQuality] HERE rather than in MultiParticipantItem: a collector in
- * the tile's own scope would recompose the whole cell (ConstraintLayout + the AndroidView video
- * renderer) on every quality change, for every participant. Same rationale as the zero-recomposition
- * chain documented in PortraitParticipantLayout.
+ * Collects [CallUiController.networkQuality] HERE rather than in the call tile: a collector in the
+ * tile's own scope would recompose the whole card (and its AndroidView video renderer) on every
+ * quality change, for every participant.
  *
  * @param localIdentity the local user's uid (`globalServices.myId`) — the SAME string the local tile
  *   passes as [identity]. Never the SDK identity: the local tile's uid is the bare uid, so a suffixed

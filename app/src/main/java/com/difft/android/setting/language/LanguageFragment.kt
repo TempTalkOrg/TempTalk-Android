@@ -2,6 +2,14 @@ package com.difft.android.setting.language
 
 import android.content.Intent
 import android.os.Bundle
+import com.difft.android.base.utils.pane.SettingsIdiomPage
+import com.difft.android.base.utils.pane.dismissWithView
+import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
+import com.difft.android.base.utils.pane.ownsWindow
+import com.difft.android.base.utils.pane.detailNavigation
+import com.difft.android.base.utils.pane.detailPageInsets
+import com.difft.android.base.utils.pane.containerPadsBottom
+import com.difft.android.base.utils.DualPaneUtils.showsDetailBackButton
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -30,7 +38,7 @@ import kotlin.system.exitProcess
  * Can be displayed in both Activity (single-pane) and dual-pane mode
  */
 @AndroidEntryPoint
-class LanguageFragment : Fragment() {
+class LanguageFragment : Fragment(), SettingsIdiomPage {
 
     companion object {
         fun newInstance() = LanguageFragment()
@@ -42,7 +50,7 @@ class LanguageFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent { DifftTheme { LanguagePage() } }
+        setContent { DifftTheme(applyWindowBackground = ownsWindow()) { LanguagePage() } }
     }
 
     // The host applies system-bar insets, so this page must not pad again.
@@ -52,12 +60,13 @@ class LanguageFragment : Fragment() {
         Column(
             Modifier
                 .fillMaxSize()
+                .detailPageInsets(containerPadsBottom())
                 .background(DifftTheme.colors.bg),
         ) {
             TitleBar(
                 titleText = getString(com.difft.android.chat.R.string.me_language),
-                showBackButton = !isInDualPaneMode(),
-                onBackClick = { activity?.finish() },
+                showBackButton = showsDetailBackButton(),
+                onBackClick = { detailNavigation().pop(this@LanguageFragment) },
             )
             // Resolved on every composition: the list carries its own selected flag, and the choice
             // only ever changes by restarting the process.
@@ -77,7 +86,7 @@ class LanguageFragment : Fragment() {
         val ok = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart)
         val cancel = ResUtils.getLocaleStringResource(context, languageData.locale, R.string.language_restart_cancel)
 
-        ComposeDialogManager.showMessageDialog(
+        val dialog = dismissWithView(ComposeDialogManager.showMessageDialog(
             context = context,
             title = title,
             message = content,
@@ -94,6 +103,8 @@ class LanguageFragment : Fragment() {
                 exitProcess(0)
             },
             onCancel = {}
-        )
+        ))
+        dismissWhenLeavingVisibleTop { dialog?.dismiss() }
     }
+
 }

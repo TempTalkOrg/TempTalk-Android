@@ -29,12 +29,14 @@ import java.util.ArrayList
 
 /**
  * Encapsulates the invite-call workflow: parameter validation, request
- * construction, API call, and response/error handling.
+ * construction, API call, and response/error handling. Each invite reads one
+ * [CallConfig] snapshot from [callConfigProvider] and uses it for both the
+ * envelope and the success callback (#1395).
  */
 internal class CallInviteExecutor(
     private val callService: LCallHttpService,
     private val callMessageCreator: CallMessageCreator,
-    private val callConfig: CallConfig,
+    private val callConfigProvider: () -> CallConfig,
     private val mySelfId: String,
     private val contactorCacheManager: ContactorCacheManager,
 ) {
@@ -66,6 +68,7 @@ internal class CallInviteExecutor(
 
         return withContext(Dispatchers.IO) {
             try {
+                val callConfig = callConfigProvider()
                 val callEncryptResult = when (val outcome = callMessageCreator.createCallMessage(
                     null, type, null, CallActionType.INVITE,
                     conversationId = if (type == CallType.INSTANT) null else conversationId,
@@ -81,7 +84,7 @@ internal class CallInviteExecutor(
                 }
                 val requestBody = buildInviteRequest(roomId, callEncryptResult)
                 val response = callService.inviteCall(requestBody)
-                handleResponse(response, inviteMembers, type, createdAt)
+                handleResponse(response, inviteMembers, type, createdAt, callConfig)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -114,10 +117,11 @@ internal class CallInviteExecutor(
         inviteMembers: ArrayList<String>,
         callType: CallType,
         createdAt: Long,
+        callConfig: CallConfig,
     ): InviteRequestState = when (response.status) {
         RESPONSE_STATUS_SUCCESS -> {
             L.d { "[Call] inviteCall, invite success, response: reason:${response.reason}, data:${response.data}" }
-            onSuccess(response.data, inviteMembers, callType, createdAt)
+            onSuccess(response.data, inviteMembers, callType, createdAt, callConfig)
             InviteRequestState.SUCCESS
         }
         RESPONSE_STATUS_INVALID_UIDS -> {
@@ -142,6 +146,7 @@ internal class CallInviteExecutor(
         inviteMembers: ArrayList<String>,
         callType: CallType,
         createdAt: Long,
+        callConfig: CallConfig,
     ) {
         appScope.launch {
             val textContent = ApplicationHelper.instance.getString(

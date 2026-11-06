@@ -59,7 +59,7 @@ internal suspend fun CallMessageHandler.generateCallTextContent(
     }
 }
 
-internal fun CallMessageHandler.handleStartCallTextMessage(
+internal suspend fun CallMessageHandler.handleStartCallTextMessage(
     envelope: SignalServiceProtos.Envelope,
     content: SignalServiceProtos.CallMessage,
     callInfo: CallInfo,
@@ -75,10 +75,10 @@ internal fun CallMessageHandler.handleStartCallTextMessage(
                 CallType.GROUP -> For.Group(otherSideId)
                 else -> For.Account(otherSideId)
             }
-            callToChatController.sendOrCreateCallTextMessage(
+            callToChatController.saveReceivedCallTextMessage(
                 CallActionType.JOINED, textContent, envelope.sourceDevice,
                 content.calling.timestamp, envelope.systemShowTimestamp,
-                For.Account(callerId), forWhat, callInfo.callType, true
+                For.Account(callerId), forWhat,
             )
         } ?: run {
             L.e { "[Call] handleCallMessage conversationId is null" }
@@ -90,10 +90,10 @@ internal fun CallMessageHandler.handleStartCallTextMessage(
             else -> For.Account(callerId)
         }
         forWhat?.let {
-            callToChatController.sendOrCreateCallTextMessage(
+            callToChatController.saveReceivedCallTextMessage(
                 CallActionType.JOINED, textContent, envelope.sourceDevice,
                 content.calling.timestamp, envelope.systemShowTimestamp,
-                For.Account(callerId), it, callInfo.callType, true
+                For.Account(callerId), it,
             )
         } ?: run {
             L.e { "[Call] handleCallMessage forWhat is null" }
@@ -101,7 +101,7 @@ internal fun CallMessageHandler.handleStartCallTextMessage(
     }
 }
 
-internal fun CallMessageHandler.handleInviteCallTextMessage(
+internal suspend fun CallMessageHandler.handleInviteCallTextMessage(
     envelope: SignalServiceProtos.Envelope,
     content: SignalServiceProtos.CallMessage,
     callInfo: CallInfo,
@@ -115,10 +115,10 @@ internal fun CallMessageHandler.handleInviteCallTextMessage(
         // Sync INVITE from another device of the current user.
         inviteeList.forEachIndexed { index, invitee ->
             val callMessageTime = content.calling.timestamp + index
-            callToChatController.sendOrCreateCallTextMessage(
+            callToChatController.saveReceivedCallTextMessage(
                 CallActionType.JOINED, textContent, envelope.sourceDevice,
                 callMessageTime, envelope.systemShowTimestamp,
-                For.Account(callerId), For.Account(invitee), callInfo.callType, true
+                For.Account(callerId), For.Account(invitee),
             )
         }
     } else {
@@ -126,10 +126,10 @@ internal fun CallMessageHandler.handleInviteCallTextMessage(
         val index = inviteeList.indexOf(mySelfId)
         if (index >= 0) {
             val callMessageTime = content.calling.timestamp + index
-            callToChatController.sendOrCreateCallTextMessage(
+            callToChatController.saveReceivedCallTextMessage(
                 CallActionType.JOINED, textContent, envelope.sourceDevice,
                 callMessageTime, envelope.systemShowTimestamp,
-                For.Account(callerId), For.Account(callerId), callInfo.callType, true
+                For.Account(callerId), For.Account(callerId),
             )
         }
     }

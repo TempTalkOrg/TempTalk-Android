@@ -1,5 +1,6 @@
 package com.difft.android.setting
 
+import com.difft.android.login.SecurityResultNonce
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -36,6 +37,7 @@ class SetPatternActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SecurityResultNonce.resultData(intent)?.let { setResult(RESULT_CANCELED, it) }
         initView()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {

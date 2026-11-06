@@ -40,7 +40,12 @@ object EdgeToEdgeUtils {
      * @param rootView The root view to apply padding to
      * @param applyTop Whether to apply top (status bar) padding, default true
      * @param applyBottom Whether to apply bottom (navigation bar) padding, default true
-     * @param applyHorizontal Whether to apply left/right padding for display cutouts, default false
+     * @param applyHorizontal Whether to apply left/right padding for side system bars and
+     *   display cutouts, default false. A cutout only counts horizontally when it reaches into
+     *   the content, i.e. some cutout rect starts below the status strip (a bar phone's hole
+     *   on the long edge in landscape) or the panel has waterfall edges; a hole that sits
+     *   inside the status strip (unfolded foldables in landscape, corner holes) must not push
+     *   the whole content column inwards.
      */
     fun applySystemBarsPadding(
         rootView: View,
@@ -52,10 +57,15 @@ object EdgeToEdgeUtils {
             val insets = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
+            val horizontal = if (cutoutReachesContent(windowInsets, statusStripBottom = insets.top)) {
+                insets
+            } else {
+                windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            }
             view.updatePadding(
-                left = if (applyHorizontal) insets.left else 0,
+                left = if (applyHorizontal) horizontal.left else 0,
                 top = if (applyTop) insets.top else 0,
-                right = if (applyHorizontal) insets.right else 0,
+                right = if (applyHorizontal) horizontal.right else 0,
                 bottom = if (applyBottom) insets.bottom else 0
             )
             // Return the insets so child views can also handle them if needed
@@ -63,6 +73,20 @@ object EdgeToEdgeUtils {
         }
         // Request insets to be applied
         rootView.requestApplyInsets()
+    }
+
+    /**
+     * Whether a display cutout intrudes into the content below the status strip: any cutout
+     * rect that starts at or below [statusStripBottom], or waterfall (curved) edges. A hole
+     * whose rect begins inside the strip is covered by the top padding already; any part of it
+     * that dips a few pixels below the strip lands in the empty top of the toolbar, which beats
+     * pushing the whole content column aside (unfolded vivo in landscape).
+     */
+    private fun cutoutReachesContent(windowInsets: WindowInsetsCompat, statusStripBottom: Int): Boolean {
+        val cutout = windowInsets.displayCutout ?: return false
+        val waterfall = cutout.waterfallInsets
+        if (waterfall.left > 0 || waterfall.right > 0) return true
+        return cutout.boundingRects.any { it.top >= statusStripBottom }
     }
 
     /**

@@ -35,23 +35,17 @@
         android:paddingVertical="8dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <androidx.appcompat.widget.AppCompatEditText
+        <com.difft.android.base.widget.DifftClearableInputView
             android:id="@+id/add_a_message_input"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="8dp"
-            android:background="@drawable/chat_msg_input_bg"
-            android:ellipsize="end"
-            android:gravity="center_vertical"
-            android:hint="@string/MediaReviewFragment__add_a_message"
-            android:maxLines="5"
-            android:minHeight="48dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:textColor="@color/t.primary"
-            android:textColorHint="@color/t.disable"
             android:textSize="16sp"
+            app:difft_inputStyle="search"
+            app:dsi_hint="@string/MediaReviewFragment__add_a_message"
+            app:dsi_maxLines="5"
+            app:dsi_minHeight="48dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@id/confirm_button"
             app:layout_constraintStart_toStartOf="parent" />

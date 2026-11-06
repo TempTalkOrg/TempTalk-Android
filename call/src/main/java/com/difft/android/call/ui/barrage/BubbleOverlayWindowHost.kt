@@ -6,7 +6,11 @@ import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -21,6 +25,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.call.LCallViewModel
+import com.difft.android.call.ui.tabletop.LocalCallTabletop
 
 /**
  * 气泡飘动层的独立窗口宿主。
@@ -62,6 +67,11 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val activity = context.findActivity() ?: return
+    // CompositionLocals do not reach the overlay window, so the tabletop stage's bottom is handed
+    // over as state: bubbles then rise inside the stage above the fold.
+    val tabletopStageBottomPx = LocalCallTabletop.current?.bandTopPx
+    val stageBottomPx = remember { mutableStateOf<Int?>(null) }
+    SideEffect { stageBottomPx.value = tabletopStageBottomPx }
 
     DisposableEffect(activity, lifecycleOwner) {
         if (activity.isFinishing || activity.isDestroyed) {
@@ -88,7 +98,9 @@ fun BubbleOverlayWindowHost(viewModel: LCallViewModel) {
                 // enabled — would target CallContent's own window. This subtree never owns that
                 // window.
                 DifftTheme(darkTheme = true, applyWindowBackground = false) {
-                    BubbleOverlayLayer(viewModel = viewModel)
+                    CompositionLocalProvider(LocalBubbleStageBottomPx provides stageBottomPx.value) {
+                        BubbleOverlayLayer(viewModel = viewModel)
+                    }
                 }
             }
         }

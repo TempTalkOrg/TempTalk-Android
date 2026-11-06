@@ -3,6 +3,8 @@ package com.difft.android.chat.jobs
 import androidx.annotation.VisibleForTesting
 import com.difft.android.SettingSyncJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
@@ -58,6 +60,7 @@ class SettingSyncJob @AssistedInject constructor(
     private val dbRoomStore: DBRoomStore,
     private val applier: ConversationSettingsApplier,
     private val syncState: SettingSyncState,
+    private val messagingGate: MessagingGate,
 ) : Job(parameters ?: buildParameters(roomId, field)) {
 
     enum class Phase { SEND, RECONCILE, ROLLBACK }
@@ -86,7 +89,13 @@ class SettingSyncJob @AssistedInject constructor(
 
     override fun getFactoryKey(): String = KEY
 
+    /**
+     * The change is abandoned (another login's job, or dropped when a login ended, #1382 A04): its
+     * intent stops gating server snapshots at once, so the next pull realigns the local row.
+     */
     override fun onFailure() {
+        syncState.markFinalized(id, queueKey)
+        syncState.clearIntentIf(roomId, field, ts)
         L.w { "[SettingSync] job failed permanently room=$roomId field=${field.key} ts=$ts phase=$phase" }
     }
 
@@ -130,6 +139,25 @@ class SettingSyncJob @AssistedInject constructor(
             L.i { "[SettingSync] decision=serverWon room=$roomId target=$target local=${room.confidentialMode}" }
             phase = Phase.RECONCILE
             return persistPhase()
+        }
+        // The SET is a server write: it is admitted like a message send and held while messaging
+        // is paused (#1382). The runner closes the ticket after this run's result is recorded.
+        val admission = messagingGate.tryAdmit(AdmissionKind.SEND, KEY) ?: run {
+            L.i { "[MigrationPause] event=send_deferred jobKey=$KEY jobId=$id attempt=$runAttempt" }
+            return Result.deferred()
+        }
+        closeWhenRunEnds(admission)
+        // Only the login that made the change sends it (#1382 A04); see SendLogin.
+        when (sendLogin()) {
+            SendLogin.CURRENT -> Unit
+            SendLogin.NONE -> {
+                L.i { "[MigrationPause] event=send_deferred jobKey=$KEY jobId=$id reason=no_login" }
+                return Result.deferred()
+            }
+            SendLogin.OTHER -> {
+                logSendSessionMismatch()
+                return Result.failure()
+            }
         }
         L.i { "[SettingSync] decision=send room=$roomId field=${field.key} target=$target ts=$ts attempt=$runAttempt" }
         val response = try {

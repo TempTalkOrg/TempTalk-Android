@@ -10,6 +10,7 @@ import com.difft.android.chat.jobmanager.impl.JsonDataSerializer
 import com.difft.android.chat.jobmanager.persistence.JobSpec
 import com.difft.android.chat.jobmanager.persistence.JobStorage
 import com.difft.android.chat.util.Debouncer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineName
@@ -17,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -55,19 +57,44 @@ class JobManager(
             else CompositeScheduler(InAppScheduler(this), persistentScheduler),
             persistentScheduler,
             Debouncer(500),
-            this::onEmptyQueue
+            this::onEmptyQueue,
+            configuration.executionHold,
+            configuration.loginTag,
         )
 
+        // A lifted hold leaves the runners parked on an unchanged queue; wake them to re-scan.
+        scope.launch {
+            configuration.executionHold.released.collect {
+                L.i { "[JobManager] event=hold_released" }
+                wakeUp()
+            }
+        }
+
         scope.launch(managementDispatcher) {
+            var storageReady = false
             try {
                 configuration.jobStorage.init()
                 jobController.init()
+                storageReady = true
                 configuration.constraintObservers.forEach { it.register(this@JobManager) }
                 if (Build.VERSION.SDK_INT < 26) {
                     application.startService(Intent(application, KeepAliveService::class.java))
                 }
             } catch (e: Exception) {
                 L.e { "Failed to initialize JobManager: ${e.message}" }
+            }
+            try {
+                // Before initDeferred completes, so no job is dispatched, added or cancelled first.
+                // Not over a storage that failed to load: it would see no jobs and record its work done.
+                if (storageReady) {
+                    configuration.startupTask.run(jobController)
+                } else {
+                    L.w { "[JobManager] event=startup_task_skipped reason=storage_init_failed" }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+                L.e { "[JobManager] event=startup_task_failed ${e.stackTraceToString()}" }
             } finally {
                 initDeferred.complete(Unit)
             }
@@ -119,16 +146,57 @@ class JobManager(
     }
 
     /**
-     * Enqueues a single job to be run.
+     * Enqueues a single job to be run. The job is tagged with the signed-in login here, on the
+     * caller's thread, so it belongs to the login that created it (#1382 A04). Before the login
+     * has loaded, the job is tagged with the login [JobLoginTag.awaitFirstLoad] captured and is
+     * only stored after that load; a process death before it loses the job (accepted: the wait
+     * is the bounded user-data warm-up at start).
      */
     fun add(job: Job) {
+        val loginTag = configuration.loginTag
+        // Loaded first: the login is published before it is marked loaded, so a loaded read sees it.
+        val loadedAtAdd = loginTag.loaded()
+        if (loadedAtAdd) job.creatorLogin = loginTag.current()
         scope.launch(managementDispatcher) {
+            if (!loadedAtAdd) job.creatorLogin = loginTag.awaitFirstLoad()
             initDeferred.await()
             jobTracker.onStateChange(job, JobTracker.JobState.PENDING)
             jobController.submitJob(job)
             jobController.wakeUp()
         }
     }
+
+    /** Awaitable durable admission; cancellation of the UI waiter does not cancel submission. */
+    suspend fun enqueuePersisted(job: Job): QueueAdmission {
+        val tag = configuration.loginTag
+        val captured = if (tag.loaded()) CompletableDeferred(tag.current()) else scope.async { tag.awaitFirstLoad() }
+        return enqueueWithCreator(job) { captured.await() }
+    }
+
+    /** Uses the login that authorized the whole operation, even after an earlier recipient awaited. */
+    suspend fun enqueuePersisted(job: Job, creatorLogin: String): QueueAdmission =
+        enqueueWithCreator(job) { creatorLogin }
+
+    private suspend fun enqueueWithCreator(job: Job, creator: suspend () -> String?): QueueAdmission =
+        scope.async(managementDispatcher) {
+            val expected = creator()
+            if (job.admissionCreatorCaptured && job.creatorLogin != expected) {
+                return@async QueueAdmission.Unconfirmed(job.id, "creator_mismatch")
+            }
+            if (!job.admissionCreatorCaptured) {
+                job.creatorLogin = expected
+                job.admissionCreatorCaptured = true
+            }
+            initDeferred.await()
+            try {
+                jobController.submitJobPersisted(job)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w { "[JobManager] event=admission_unconfirmed ${e.stackTraceToString()}" }
+                QueueAdmission.Unconfirmed(job.id, "submission_exception")
+            }
+        }.await()
 
     /**
      * Attempts to cancel a job. This is best-effort and may not actually prevent a job from
@@ -154,6 +222,17 @@ class JobManager(
             jobController.cancelAllInQueue(queue)
         }
     }
+
+    /**
+     * Cancels every pending or running job [predicate] matches (see [cancel]) and returns once the
+     * cancels are applied, with how many matched. [predicate] is given the job's stored
+     * [Job.creatorLogin].
+     */
+    suspend fun cancelMatching(predicate: (spec: JobSpec, creatorLogin: String?) -> Boolean): Int =
+        withContext(managementDispatcher) {
+            initDeferred.await()
+            jobController.failMatching(predicate)
+        }
 
     /**
      * Snapshot of pending+running jobs in [queue], sorted by createTime ascending.
@@ -255,7 +334,10 @@ class JobManager(
         val dataSerializer: Data.Serializer,
         val jobStorage: JobStorage,
         val jobTracker: JobTracker,
-        val reservedJobRunners: List<JobPredicate>
+        val reservedJobRunners: List<JobPredicate>,
+        val executionHold: JobExecutionHold,
+        val loginTag: JobLoginTag,
+        val startupTask: JobStartupTask,
     ) {
 
         class Builder {
@@ -267,6 +349,9 @@ class JobManager(
             private var jobStorage: JobStorage? = null
             private var jobTracker: JobTracker = JobTracker()
             private val reservedJobRunners: MutableList<JobPredicate> = mutableListOf()
+            private var executionHold: JobExecutionHold = JobExecutionHold.NONE
+            private var loginTag: JobLoginTag = JobLoginTag.NONE
+            private var startupTask: JobStartupTask = JobStartupTask.NONE
 
             fun setJobThreadCount(jobThreadCount: Int): Builder {
                 this.jobThreadCount = jobThreadCount
@@ -275,6 +360,24 @@ class JobManager(
 
             fun addReservedJobRunner(predicate: JobPredicate): Builder {
                 reservedJobRunners.add(predicate)
+                return this
+            }
+
+            /** Jobs [hold] matches stay queued until it releases them. */
+            fun setExecutionHold(hold: JobExecutionHold): Builder {
+                this.executionHold = hold
+                return this
+            }
+
+            /** The login every added job is tagged with; see [JobLoginTag]. */
+            fun setLoginTag(loginTag: JobLoginTag): Builder {
+                this.loginTag = loginTag
+                return this
+            }
+
+            /** Runs before the first job is dispatched; see [JobStartupTask]. */
+            fun setStartupTask(startupTask: JobStartupTask): Builder {
+                this.startupTask = startupTask
                 return this
             }
 
@@ -312,7 +415,10 @@ class JobManager(
                     dataSerializer = dataSerializer,
                     jobStorage = requireNotNull(jobStorage) { "jobStorage must be set" },
                     jobTracker = jobTracker,
-                    reservedJobRunners = reservedJobRunners.toList()
+                    reservedJobRunners = reservedJobRunners.toList(),
+                    executionHold = executionHold,
+                    loginTag = loginTag,
+                    startupTask = startupTask,
                 )
             }
         }

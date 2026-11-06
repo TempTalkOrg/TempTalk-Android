@@ -21,6 +21,7 @@ import org.difft.app.database.models.DBGroupCryptoKeysModel
 import org.difft.app.database.models.DBGroupMemberContactorModel
 import org.difft.app.database.models.DBMentionModel
 import org.difft.app.database.models.DBMessageModel
+import org.difft.app.database.models.DBPendingMessageModelNew
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBReadInfoModel
@@ -32,6 +33,7 @@ import org.difft.app.database.models.MentionModel
 import org.difft.app.database.models.MessageModel
 import org.difft.app.database.models.DBSharedContactModel
 import org.difft.app.database.models.DBSharedContactPhoneModel
+import org.difft.app.database.models.PendingMessageModelNew
 import org.difft.app.database.models.QuoteModel
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.ReadInfoModel
@@ -92,6 +94,8 @@ class StagingDatabase private constructor(
     private val sharedContactPhoneTable: Table<SharedContactPhoneModel> =
         table("shared_contact_phone", DBSharedContactPhoneModel)
     private val readInfoTable: Table<ReadInfoModel> = table("read_info", DBReadInfoModel)
+    // Named like the live accessor: the PK is the natural key messageId, so insert-or-replace is safe.
+    private val pendingMessageNew: Table<PendingMessageModelNew> = table("pending_message_new", DBPendingMessageModelNew)
 
     init {
         // Created but never written: the live schema still carries this table, and promote moves this
@@ -168,6 +172,11 @@ class StagingDatabase private constructor(
 
     override fun insertGroupKey(model: GroupCryptoKeysModel) {
         groupCryptoKeysTable.insertOrReplaceObject(model)
+    }
+
+    override fun insertPendingEnvelope(model: PendingMessageModelNew) {
+        // Promoted with the rest of this file, so the row is in the live table before sign-in (#1382).
+        pendingMessageNew.insertOrReplaceObject(model)
     }
 
     override fun markReadUpTo(roomId: String, maxServerTime: Long, readAt: Long, selfUid: String) {

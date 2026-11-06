@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_list_fold_resume">%1$s 恢复</string>
+    <string name="focus_list_swipe_focus">专注</string>
+    <string name="focus_list_swipe_end_short">结束</string>
+    <string name="focus_list_folded_title">折叠的群(%1$d)</string>
+    <string name="focus_list_folded_preview">%1$s：%2$s</string>
+    <string name="focus_list_folded_screen_title">折叠的群</string>
+</resources>

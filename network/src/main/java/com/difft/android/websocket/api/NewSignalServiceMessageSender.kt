@@ -1,6 +1,8 @@
 package com.difft.android.websocket.api
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.globalServices
 import com.difft.android.websocket.api.messages.DetailMessageType
 import com.difft.android.websocket.api.messages.PublicKeyInfo
@@ -57,6 +59,18 @@ class NewSignalServiceMessageSender @Inject constructor(
         private const val RETRY_COUNT = 3
     }
 
+    /**
+     * Every public send takes the caller's open send ticket (#1382): the migration message pause
+     * must stop a send at its admission, including one that would fall back to HTTP while the
+     * socket is paused. A closed or receive ticket is a caller bug and the send is refused.
+     */
+    private fun requireAdmitted(admission: MessagingTicket, what: String) {
+        if (admission.kind != AdmissionKind.SEND || admission.isClosed) {
+            L.e { "[MigrationPause] event=send_without_ticket what=$what kind=${admission.kind} closed=${admission.isClosed}" }
+            error("send without an open send ticket: $what")
+        }
+    }
+
     private val localAddress: For = For.Account(globalServices.myId)
     private val contentCreator: SignalServiceContentCreator = SignalServiceContentCreator(maxEnvelopeSize)
 
@@ -75,7 +89,9 @@ class NewSignalServiceMessageSender @Inject constructor(
         room: For,
         message: SignalServiceProtos.DataMessage,
         notification: NewOutgoingPushMessage.Notification?,
+        admission: MessagingTicket,
     ): SendMessageResult {
+        requireAdmitted(admission, "data")
         L.i { "[Message] [${message.timestamp}] Sending a data message." }
 
         val timestamp = message.timestamp
@@ -117,7 +133,9 @@ class NewSignalServiceMessageSender @Inject constructor(
         recipient: For,
         room: For,
         groupKeyMessage: SignalServiceProtos.GroupKeyMessage,
+        admission: MessagingTicket,
     ): SendMessageResult {
+        requireAdmitted(admission, "groupKey")
         val timestamp = System.currentTimeMillis()
         val content = contentCreator.createFrom(groupKeyMessage)
         L.i { "[Message] [$timestamp] Sending group key message to ${recipient.id}" }
@@ -659,8 +677,10 @@ class NewSignalServiceMessageSender @Inject constructor(
         message: ReceiptMessage,
         readMessages: List<SyncMessage.Read>,
         sendReceiptToSender: Boolean = true,
-        sendSyncToSelf: Boolean = true
+        sendSyncToSelf: Boolean = true,
+        admission: MessagingTicket,
     ) {
+        requireAdmitted(admission, "receipt")
         val sendTimeStamp = System.currentTimeMillis()
 
         // 1. 发送已读回执给对方（如果需要）
@@ -713,8 +733,10 @@ class NewSignalServiceMessageSender @Inject constructor(
     suspend fun sendMarkAsUnread(
         room: For,
         flag: SyncMessage.MarkAsUnread.Flag,
-        sendTimestamp: Long
+        sendTimestamp: Long,
+        admission: MessagingTicket,
     ): SendMessageResult {
+        requireAdmitted(admission, "markAsUnread")
         L.i { "[Message] [$sendTimestamp] Sending markAsUnread sync flag=${flag.name} room=${room.id}" }
         val syncContent = content {
             syncMessage = syncMessage {
@@ -756,8 +778,10 @@ class NewSignalServiceMessageSender @Inject constructor(
     suspend fun sendClientNotifyMessage(
         recipient: For,
         room: For,
-        message: SignalServiceProtos.NotifyMessage
+        message: SignalServiceProtos.NotifyMessage,
+        admission: MessagingTicket,
     ): SendMessageResult {
+        requireAdmitted(admission, "clientNotify")
         L.i { "[Message] Sending a client notify message." }
 
         val timestamp = System.currentTimeMillis()
@@ -820,8 +844,10 @@ class NewSignalServiceMessageSender @Inject constructor(
         room: For,
         message: SignalServiceProtos.ForwardNoticeMessage,
         sendSyncToSelf: Boolean,
-        sendTimestamp: Long
+        sendTimestamp: Long,
+        admission: MessagingTicket,
     ): SendMessageResult {
+        requireAdmitted(admission, "forwardNotice")
         L.i { "[Message] [$sendTimestamp] Sending a forward notice message to ${recipient.id} (sync=$sendSyncToSelf)" }
         // Primary: Content.forwardNotice → recipient (source conversation).
         // payload.conversation (tag 4) is filled by caller PushForwardNoticeSendJob.
@@ -930,8 +956,10 @@ class NewSignalServiceMessageSender @Inject constructor(
         room: For,
         message: SignalServiceProtos.MessageActivityNotice,
         sendSyncToSelf: Boolean,
-        sendTimestamp: Long
+        sendTimestamp: Long,
+        admission: MessagingTicket,
     ): SendMessageResult {
+        requireAdmitted(admission, "activityNotice")
         L.i { "[Message] [$sendTimestamp] Sending an activity notice message to ${recipient.id} (sync=$sendSyncToSelf)" }
         val primaryContent = contentCreator.createFrom(message)
 

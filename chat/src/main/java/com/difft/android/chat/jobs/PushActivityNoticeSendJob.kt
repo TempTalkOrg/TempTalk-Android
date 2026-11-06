@@ -2,6 +2,7 @@ package com.difft.android.chat.jobs
 
 import com.difft.android.PushActivityNoticeSendJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.base.utils.DEFAULT_DEVICE_ID
 import com.difft.android.base.utils.globalServices
 import com.difft.android.chat.dependencies.ApplicationDependencies
@@ -42,7 +43,8 @@ class PushActivityNoticeSendJob @AssistedInject constructor(
     private val messageSender: NewSignalServiceMessageSender,
     private val localMessageCreator: LocalMessageCreator,
     private val gson: Gson,
-) : PushSendJob(parameters ?: buildParameters(target)) {
+    messagingGate: MessagingGate,
+) : PushSendJob(parameters ?: buildParameters(target), messagingGate) {
 
     override fun serialize(): Data = Data.Builder()
         .putString(KEY_TARGET_ID, target.id)
@@ -78,12 +80,14 @@ class PushActivityNoticeSendJob @AssistedInject constructor(
                 "sendSyncToSelf=$sendSyncToSelf, sendTs=$sendTs, attempt=$runAttempt"
         }
 
+        val admission = admitSend() ?: return
         val result = messageSender.sendActivityNoticeMessage(
             recipient = target,
             room = target,
             message = proto,
             sendSyncToSelf = sendSyncToSelf,
-            sendTimestamp = sendTs
+            sendTimestamp = sendTs,
+            admission = admission
         )
 
         val success = result.success

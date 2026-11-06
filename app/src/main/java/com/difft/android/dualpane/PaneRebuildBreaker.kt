@@ -36,14 +36,15 @@ internal class PaneRebuildBreaker(
         totalRebuilds = 0
     }
 
-    fun onRebuild(gate: Boolean, tree: Boolean, chromeStale: Boolean): PaneRebuildVerdict {
+    /** [staleLayout]: the #1454 override recreate, counted apart from gate/tree disagreements. */
+    fun onRebuild(gate: Boolean, tree: Boolean, chromeStale: Boolean, staleLayout: Boolean = false): PaneRebuildVerdict {
         // Open stays open until an agreement: checked BEFORE the signature compare so that a
         // signature change cannot re-arm an open breaker (that is what makes the total ceiling bind).
         if (rebuilds > maxRebuilds || totalRebuilds > maxTotalRebuilds) {
             return PaneRebuildVerdict.SUPPRESSED
         }
 
-        val current = signatureOf(gate, tree, chromeStale)
+        val current = signatureOf(gate, tree, chromeStale, staleLayout)
         if (current != signature) {
             signature = current
             rebuilds = 1
@@ -59,8 +60,8 @@ internal class PaneRebuildBreaker(
         }
     }
 
-    private fun signatureOf(gate: Boolean, tree: Boolean, chromeStale: Boolean): Int =
-        (if (gate) 1 else 0) or (if (tree) 2 else 0) or (if (chromeStale) 4 else 0)
+    private fun signatureOf(gate: Boolean, tree: Boolean, chromeStale: Boolean, staleLayout: Boolean): Int =
+        (if (gate) 1 else 0) or (if (tree) 2 else 0) or (if (chromeStale) 4 else 0) or (if (staleLayout) 8 else 0)
 
     private companion object {
         const val DEFAULT_MAX_REBUILDS = 3

@@ -206,6 +206,44 @@ class UpdateManagerDeliveryTest {
         verify { userManager.update(any(), any()) }
     }
 
+    @Test
+    fun serverFailure_fromSettings_toastsServerReason() {
+        every { ComposeDialogManager.showWait(any(), any(), any(), any(), any(), any()) } returns 1
+        serverFails(reason = "version not supported")
+
+        manager.checkUpdate(activity, isFromSetting = true)
+        awaitCondition { runCatching { verify { ToastUtil.show("version not supported") } }.isSuccess }
+
+        assertTrue(delivery.delivered.isEmpty())
+    }
+
+    @Test
+    fun serverFailure_fromSettings_withoutReason_toastsGenericFailure() {
+        every { ComposeDialogManager.showWait(any(), any(), any(), any(), any(), any()) } returns 1
+        serverFails(reason = null)
+        val generic = activity.getString(com.difft.android.chat.R.string.chat_net_error)
+
+        manager.checkUpdate(activity, isFromSetting = true)
+        awaitCondition { runCatching { verify { ToastUtil.show(generic) } }.isSuccess }
+    }
+
+    @Test
+    fun serverFailure_onAutomaticCheck_staysSilent() {
+        serverFails(reason = "version not supported")
+
+        manager.checkUpdate(activity, isFromSetting = false)
+        awaitCondition { runCatching { io.mockk.coVerify { settingRepo.checkUpdate(any(), any()) } }.isSuccess }
+        repeat(20) { shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(10) }
+
+        verify(exactly = 0) { ToastUtil.show(any<String>()) }
+        assertTrue(!onConfirm.isCaptured)
+    }
+
+    private fun serverFails(reason: String?) {
+        coEvery { settingRepo.checkUpdate(any(), any()) } returns
+            BaseResponse(ver = 1, status = 1, reason = reason, data = null)
+    }
+
     private fun serverOffers(force: Boolean, updateWithApk: Boolean) {
         val response = CheckUpdateResponse(
             update = true, force = force, url = "u", notes = "n", updateWithApk = updateWithApk, apkHash = "h"

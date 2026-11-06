@@ -43,9 +43,16 @@ internal fun WCDB.reportCorruptionOnce(source: String) {
  * Short-circuits when [WCDB.dbCorrupted] or [WCDB.keyUnavailable] is already set, so a known-bad
  * DB is never re-probed. Returns the tri-state [DbHealth]: file corruption / unexpected error on
  * an existing DB → [DbHealth.CORRUPT] (wipe-eligible); cipher-key failure →
- * [DbHealth.KEY_UNAVAILABLE] (fail-soft, never sets `dbCorrupted`).
+ * [DbHealth.KEY_UNAVAILABLE] (fail-soft, never sets `dbCorrupted`). Every exit marks
+ * [WCDB.probeFinished].
  */
-fun WCDB.probeHealthy(): DbHealth {
+fun WCDB.probeHealthy(): DbHealth = try {
+    probeHealthyOnce()
+} finally {
+    markProbeFinished()
+}
+
+private fun WCDB.probeHealthyOnce(): DbHealth {
     // keyUnavailable takes precedence over dbCorrupted: when both are set, a wipe-and-recreate
     // can't succeed (the fresh DB still needs the missing key), so fail-soft rather than route
     // to the destructive corruption path. Once the key resolves, a later probe re-detects CORRUPT.

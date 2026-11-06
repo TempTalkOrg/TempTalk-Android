@@ -230,6 +230,9 @@ class RestoreOrchestrator @Inject constructor(
         // What the peer reads as "still working" through GET /status: stage, record count, attachment
         // bytes as they land, and the commit point. Distinct from onProgress, this device's own bar.
         liveness: TransferProgressReporter = TransferProgressReporter.None,
+        // The session whose body this import reads, taken at the call: only that session may commit
+        // it, never one that replaced it after a cancel (#1382).
+        livenessSessionId: String? = liveness.bodySessionId(),
         storageGuard: StorageGuard = StorageGuard.forContext(context),
         commitTail: RestoreCommitTail = defaultCommitTail(),
     ): RestoreResult = withContext(Dispatchers.IO) {
@@ -278,7 +281,7 @@ class RestoreOrchestrator @Inject constructor(
             commitTail.run(
                 staging, paths, flagStore, work, promoteStep, isFreshTarget, carriedIdentity,
                 credentialHandoff = credentialHandoff, carriedCredential = carriedCredential,
-                liveness = liveness, storageGuard = storageGuard,
+                liveness = liveness, livenessSessionId = livenessSessionId, storageGuard = storageGuard,
             )?.let { rejected -> _progress.update { null }; return@withContext rejected }
             L.i { "[MigrationV2][Restore] streaming complete → phase=SIGNING_IN (A5/I4 to continue signIn + restart)" }
             _progress.update { null }

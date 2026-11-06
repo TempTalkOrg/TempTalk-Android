@@ -73,6 +73,7 @@
     <string name="chat_message_input_hint">Message</string>
     <string name="chat_message_input_hint_e2ee">End-to-end encrypted</string>
     <string name="chat_message_input_hint_confidential">Confidential Message</string>
+    <string name="chat_message_input_hint_hold_to_talk">Tap to type, hold to talk</string>
     <string name="chat_message_confidential_tips">Swipe left to read, swipe right to turn pages.</string>
     <string name="chat_message_action_copy">Copy</string>
     <string name="chat_message_action_copied">Copied</string>
@@ -201,7 +202,6 @@
     <string name="chat_action_confidential_mode">Confidential\nmode</string>
     <string name="chat_action_mention">Mention</string>
 
-    <string name="chat_voice_hold_to_talk">Hold to talk</string>
     <string name="chat_voice_release_to_send">Release to send</string>
     <string name="chat_voice_release_to_cancel">Release to Cancel</string>
     <string name="chat_voice_cancel">Cancel</string>
@@ -451,21 +451,35 @@
     <string name="tip">Tip</string>
     <string name="notification_no_permission_tip">Application has no permission to show notifications. You can enable it in system settings..</string>
     <string name="notification_no_permission_tip1">Please allow %s to display notifications so that you can receive messages and calls normally.</string>
-    <string name="notification_no_google_tip">To receive messages and call notifications, please keep background connection enabled.</string>
+    <string name="background_connection_prompt_delay">Messages or calls may arrive late. Turn on the background connection to receive them on time.</string>
+    <string name="background_connection_prompt_critical">You have turned on Critical Alerts. Turn on the background connection so they can be delivered as promptly as possible.</string>
     <string name="notification_ignore">Not now</string>
     <string name="notification_go_to_settings">Go to settings</string>
     <string name="notification_title">Notification</string>
-    <string name="notification_group_chat_notification">Group Chat Notification</string>
+    <string name="notification_group_chat_notification">Group Message Notifications</string>
     <string name="notification_message_notifications">Message notifications</string>
     <string name="notification_call_notifications">Call notifications</string>
-    <string name="notification_group_lock_screen_caption">Needed for calls and Critical Alerts to pop up while the screen is locked</string>
     <string name="notification_full_screen_display">Full-screen display</string>
+    <string name="notification_app_notifications">App notifications</string>
+    <string name="notification_calls">Calls</string>
+    <string name="notification_dnd_access">Do Not Disturb access</string>
+    <string name="notification_dnd_access_granted">Allowed</string>
+    <string name="notification_dnd_access_denied">Not allowed</string>
+    <string name="notification_critical_alert_category">Critical Alert notifications</string>
+    <string name="notification_status_needs_full_screen">Full screen off</string>
+    <string name="notification_full_screen_note_calls">Shows the incoming call screen while the phone is locked</string>
+    <string name="notification_full_screen_note_critical">Shows Critical Alerts while the phone is locked</string>
+    <string name="notification_oem_popup_note">Needed to pop up while the phone is locked; the app cannot read it</string>
+    <string name="critical_alert_category_note">Needs banners and permission to break through Do Not Disturb</string>
+    <string name="critical_alert_category_note_xiaomi">Needs banners and permission to break through Do Not Disturb; check lock screen display in the category settings</string>
+    <string name="critical_alert_dnd_caption">Turns on Critical Alerts and lets them break through Silent Mode and Do Not Disturb (called “Mode access” on some phones)</string>
+    <string name="critical_alert_connection_caption">Delivers Critical Alerts as promptly as possible</string>
     <string name="notification_banner_off">Notifications are turned off, so you will not be alerted to messages or calls</string>
     <string name="notification_banner_enable">Turn on</string>
-    <string name="critical_alerts_content">Allow %s to access and enable the “Do Not Disturb” permission (sometimes called “Mode access” permission). When enabled, Critical Alerts break through Silent Mode and Do Not Disturb.</string>
-    <string name="critical_alert_delivery_caption">Push is unavailable. Turn on Background connection so Critical Alerts can be delivered.</string>
+    <string name="critical_alert_enable_background_connection">Turn on background connection</string>
     <string name="notification_level_no_banner">No banner</string>
     <string name="notification_level_silent">Silenced</string>
+    <string name="notification_lock_screen_check_note">Check lock screen display in the category settings</string>
     <string name="notification_level_lock_hidden">Hidden on lock screen</string>
     <string name="notification_level_check">Need to check</string>
     <string name="notification_status_ok">Normal</string>
@@ -516,6 +530,13 @@
     <string name="notification_test_done">Done</string>
     <string name="background_activity_check">Background Activity</string>
     <string name="background_vendor_settings">Vendor background settings</string>
+    <string name="background_power_check">Background power</string>
+    <string name="background_power_hint_vivo">On the page that opens, tap “Background power control” and choose “Allow background power usage”</string>
+    <string name="background_hint_auto_start_vivo">Turn on “Autostart” under “Device management”</string>
+    <string name="background_hint_auto_start_xiaomi">Turn on %s in the list</string>
+    <string name="background_hint_power_policy_xiaomi">Choose “No restrictions”</string>
+    <string name="background_hint_vendor_guide">Follow the setup guide item by item</string>
+    <string name="background_vendor_checks_caption">The app cannot read these settings. Open each one to check.</string>
     <string name="notification_settings_open_fail">Notification settings page not available on this device</string>
     <string name="notification_enable">Enabled</string>
     <string name="notification_disable">Disabled</string>
@@ -619,7 +640,7 @@
 
     <string name="background_connection">Background connection</string>
     <string name="background_connection_enabled">Background connection enabled</string>
-    <string name="background_connection_tips">Keep background connection enabled to receive messages and call notifications. Before enabling, please ensure the settings above are correctly configured.</string>
+    <string name="background_connection_status_off">Not enabled</string>
 
     <!-- Background Connection Checks -->
     <string name="background_restriction_check">Background Restriction</string>
@@ -636,15 +657,24 @@
 
     <string name="auto_start_check">Auto-start Permission</string>
     <string name="auto_start_need_check">Need to Check</string>
-    <string name="background_connection_guide_prompt">Still missing messages or calls?</string>
+    <string name="background_connection_guide_prompt">"Still missing messages or calls? "</string>
+    <string name="notification_overview_caption">"This phone keeps another set of app-level switches in the app\'s notification settings that messages, calls and Critical Alerts all depend on; turning on a category alone has no effect. Check them too: "</string>
+    <string name="notification_overview_caption_xiaomi">"Messages, calls and Critical Alerts all depend on “Floating notifications” and “Lock screen notifications” under “Notification permissions” in the app\'s notification settings; turning them on for a category alone has no effect: "</string>
+    <string name="notification_overview_caption_vivo">"Messages, calls and Critical Alerts all depend on “Reminder mode” in the app\'s notification settings. Check “Lock screen notifications” and “Floating notifications” there and turn off “Silent notification”: "</string>
+    <string name="notification_overview_action">open settings</string>
+    <string name="critical_alert_status_dnd_blocked">Silenced in DND</string>
+    <string name="critical_alert_status_needs_connection">Connection off</string>
     <string name="background_connection_guide_link">View the setup guide</string>
-    <string name="background_connection_guide_check">We recommend checking your phone’s system settings against the setup guide once, to keep the background connection stable.</string>
+    <string name="background_connection_guide_prompt_page">"If messages or calls arrive late, complete the checks above and "</string>
+    <string name="background_connection_guide_link_page">check the setup guide</string>
+    <string name="background_system_checks_title">System settings</string>
+    <string name="background_vendor_checks_title">Manufacturer settings</string>
 
     <string name="exact_alarm_check">Exact Alarm</string>
     <string name="exact_alarm_granted">Normal</string>
     <string name="exact_alarm_not_granted">Restricted</string>
 
-    <string name="background_connection_check_failed">Please ensure the following settings are in normal status before enabling background connection</string>
+    <string name="background_connection_fix_first">Complete “%s” first, then turn on the background connection</string>
 
 
     <string name="disappearing_messages">Timer</string>
@@ -823,4 +853,7 @@
     <!-- Retiring package: title-bar entry + one-time notice for the move to the new app -->
     <string name="legacy_migration_app_name_new">Quicall (New)</string>
     <string name="legacy_migration_entry_short">Move to New App</string>
+    <string name="notification_test_busy">Another notification test is already running.</string>
+    <string name="notification_test_persistence_failed">The test result could not be saved. Please test again.</string>
+    <string name="group_change_followup_pending">Change accepted. Local updates are still pending. Retry to finish without submitting again.</string>
 </resources>

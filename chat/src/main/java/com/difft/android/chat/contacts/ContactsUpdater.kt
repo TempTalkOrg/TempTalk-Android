@@ -1,6 +1,7 @@
 package com.difft.android.chat.contacts
 
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.globalServices
@@ -32,7 +33,9 @@ class ContactsUpdater @Inject constructor(
 ) {
     private data class PendingContactMessage(
         val message: TTNotifyMessage,
-        val directoryVersion: Int
+        val directoryVersion: Int,
+        // Retained from the envelope's receive ticket; closed once the batch is handled (#1382).
+        val held: MessagingTicket?,
     )
 
     private val notifyMessageChannel = Channel<PendingContactMessage>(Channel.BUFFERED)
@@ -55,6 +58,12 @@ class ContactsUpdater @Inject constructor(
             // channel; contacts are re-fetched from the server directory on the next cold start.
             if (wcdb.isDbInaccessible) {
                 L.w { "[ContactsUpdater] DB inaccessible, stopping notify poll for this process" }
+                // Nothing will process the queued items; release their tickets so a migration pause
+                // does not wait for them.
+                while (true) {
+                    val dropped = notifyMessageChannel.tryReceive().getOrNull() ?: break
+                    dropped.held?.close()
+                }
                 break
             }
 
@@ -66,7 +75,11 @@ class ContactsUpdater @Inject constructor(
             }
 
             if (batch.isNotEmpty()) {
-                processBatch(batch)
+                try {
+                    processBatch(batch)
+                } finally {
+                    batch.forEach { it.held?.close() }
+                }
             }
         }
     }
@@ -171,7 +184,11 @@ class ContactsUpdater @Inject constructor(
         }
     }
 
-    suspend fun updateBySignalNotifyMessage(message: TTNotifyMessage) {
+    /**
+     * Queues the notify for the batched consumer, handing it a ticket retained from [admission] so
+     * the migration pause waits until the directory change is stored (#1382).
+     */
+    suspend fun updateBySignalNotifyMessage(message: TTNotifyMessage, admission: MessagingTicket) {
         // Fail-soft: the consumer loop breaks once DB is inaccessible, so drop the enqueue to avoid
         // filling the buffered channel with messages nothing will ever drain (back-pressure guard).
         if (wcdb.isDbInaccessible) {
@@ -182,7 +199,14 @@ class ContactsUpdater @Inject constructor(
         val memberIds = message.data?.members?.map { it.number } ?: emptyList()
         val actions = message.data?.members?.map { it.action } ?: emptyList()
         L.i { "[ContactsUpdater] Received notify - version:$directoryVersion, members:$memberIds, actions:$actions" }
-        notifyMessageChannel.send(PendingContactMessage(message, directoryVersion))
+        val held = admission.retain("contact-notify")
+        var queued = false
+        try {
+            notifyMessageChannel.send(PendingContactMessage(message, directoryVersion, held))
+            queued = true
+        } finally {
+            if (!queued) held?.close()
+        }
     }
 
     private fun getCurrentDirectoryVersion(): Int {

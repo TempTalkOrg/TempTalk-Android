@@ -244,7 +244,6 @@ internal class RoomEventDispatcher(
                 }
             }.collectLatest { updatedParticipants ->
                 participantManager.setParticipants(updatedParticipants)
-                participantManager.resortParticipants()
             }
         }
     }
@@ -315,9 +314,6 @@ internal class RoomEventDispatcher(
             is RoomEvent.TrackSubscribed -> {
                 checkRemoteUserScreenShare(event.participant)
                 onMicTrackSubscribed(event)
-                if (event.publication.source == Track.Source.CAMERA && !event.publication.muted) {
-                    participantManager.resortParticipants()
-                }
                 screenSharePreWarmer.reWarmIfNeeded(
                     event.participant,
                     event.publication.source,
@@ -573,9 +569,6 @@ internal class RoomEventDispatcher(
                 host.showBarrage(event.participant, getString(R.string.call_barrage_message_open_mic))
             }
         }
-        if (event.participant is RemoteParticipant && event.publication.source == Track.Source.CAMERA) {
-            participantManager.resortParticipants()
-        }
     }
 
     /**
@@ -613,7 +606,6 @@ internal class RoomEventDispatcher(
         if (isSharing && !uiState.isShareScreening.value) {
             L.i { "[Call] RoomEventDispatcher ${participant.identity?.value} start screen sharing." }
             screenSharePreWarmer.preWarmSharer(participant)
-            participantManager.resortParticipants()
             participantManager.setScreenSharingUser(participant)
             uiState.setShareScreening(true)
             uiState.emit(CallSessionUiEvent.RevealCallChrome)
@@ -623,7 +615,6 @@ internal class RoomEventDispatcher(
             if (roomCtl.callStatus.value == CallStatus.RECONNECTING || screenSharePreWarmer.isPendingResubscription) return
             L.i { "[Call] RoomEventDispatcher ${participant.identity?.value} stop screen sharing." }
             screenSharePreWarmer.cleanupAll()
-            participantManager.resortParticipants()
             uiState.setShareScreening(false)
             participantManager.setScreenSharingUser(null)
             uiState.emit(CallSessionUiEvent.RevealCallChrome)

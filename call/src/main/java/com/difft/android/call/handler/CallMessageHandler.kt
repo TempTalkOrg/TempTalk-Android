@@ -4,8 +4,11 @@ import android.content.Intent
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallData
 import com.difft.android.base.call.CallRole
+import com.difft.android.base.call.CallType
 import com.difft.android.base.call.LCallConstants
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.globalServices
 import com.difft.android.call.LCallManager
 import com.difft.android.call.LCallToChatController
@@ -58,6 +61,7 @@ class CallMessageHandler @Inject constructor(
     internal val criticalAlertManager: CriticalAlertManager,
     // Lazy: CallSessionCommands → holder → session factory → LCallToChatController → this class.
     private val callSessionCommands: Lazy<CallSessionCommands>,
+    internal val messagingGate: MessagingGate,
 ) {
     internal val callService: LCallHttpService by lazy {
         callHttpClient.getService(LCallHttpService::class.java)
@@ -73,8 +77,11 @@ class CallMessageHandler @Inject constructor(
 
     /**
      * Top-level dispatch for an incoming call message.
+     *
+     * @param admission the envelope's open receive ticket; the asynchronous `Calling` and `Joined`
+     *   work retains its own ticket from it until its database writes are done (#1382).
      */
-    fun handleCallMessage(message: SignalServiceDataClass) {
+    fun handleCallMessage(message: SignalServiceDataClass, admission: MessagingTicket, fromServerPush: Boolean = false) {
         val envelope = message.signalServiceEnvelope
         val content = message.signalServiceContent?.callMessage
         val roomId = envelope.roomId
@@ -88,8 +95,8 @@ class CallMessageHandler @Inject constructor(
         }
 
         when {
-            content?.hasCalling() == true -> handleCallingMessage(message, envelope, content, roomId)
-            content?.hasJoined() == true -> handleJoinedMessage(content, roomId)
+            content?.hasCalling() == true -> handleCallingMessage(message, envelope, content, roomId, admission, fromServerPush)
+            content?.hasJoined() == true -> handleJoinedMessage(content, roomId, admission)
             content?.hasCancel() == true -> handleCancelMessage(content, roomId)
             content?.hasReject() == true -> handleRejectMessage(message, content, roomId)
             content?.hasHangup() == true -> handleHangupMessage(content, roomId)
@@ -191,7 +198,30 @@ class CallMessageHandler @Inject constructor(
                 onGoingCallStateManager.getCurrentRoomId() != callData.roomId
     }
 
-    internal suspend fun showIncomingNotificationOrActivity(callData: CallData) = withContext(Dispatchers.Main) {
+    /**
+     * Rings (or shows the full-screen page) for [callData]. A group call that arrived over the socket
+     * first passes the local notify policy (mute sub-options, focus); the call data is already recorded
+     * by then, so a suppressed call stays joinable from the list. [fromServerPush] calls were judged by
+     * the server and are not re-judged.
+     */
+    internal suspend fun showIncomingNotificationOrActivity(callData: CallData, fromServerPush: Boolean) {
+        if (!fromServerPush && callData.type == CallType.GROUP.type) {
+            val gid = callData.conversation
+            if (gid != null && !callToChatController.shouldNotifyGroupCall(gid)) {
+                L.i { "[Call] incoming group call not alerted by notify policy roomId=${callData.roomId}" }
+                return
+            }
+        }
+        presentIncomingCall(callData)
+    }
+
+    private suspend fun presentIncomingCall(callData: CallData) = withContext(Dispatchers.Main) {
+        // No ringing while messaging is paused for a migration (#1382), also for a call admitted
+        // just before the pause or replayed by the owner's drain; its chat record is still stored.
+        if (!messagingGate.isOpen) {
+            L.i { "[Call] event=incoming_ring_skipped reason=messaging_paused roomId=${callData.roomId}" }
+            return@withContext
+        }
         val intentNotify = Intent().apply {
             putExtra(LCallConstants.BUNDLE_KEY_CALL_TYPE, callData.type)
             putExtra(LCallConstants.BUNDLE_KEY_CALL_ROLE, CallRole.CALLEE.type)

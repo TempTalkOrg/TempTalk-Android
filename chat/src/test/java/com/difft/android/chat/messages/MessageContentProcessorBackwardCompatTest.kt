@@ -1,5 +1,7 @@
 package com.difft.android.chat.messages
 
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.test.fakes.TestMessagingPause
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.utils.GlobalHiltEntryPoint
@@ -50,6 +52,9 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos.SyncMe
 @Config(sdk = [28])
 class MessageContentProcessorBackwardCompatTest {
 
+    // An open receive ticket (#1382); deferred notify work retains its own from it.
+    private val admission = requireNotNull(TestMessagingPause().open().gate.tryAdmit(AdmissionKind.RECEIVE, "test"))
+
     private val testDispatcher = UnconfinedTestDispatcher()
 
     private lateinit var context: Application
@@ -93,6 +98,7 @@ class MessageContentProcessorBackwardCompatTest {
             gson = Gson(),
             conversationUnreadMarker = mockk(relaxed = true),
             criticalAlertHighlightWriter = mockk(relaxed = true),
+            groupFocusRepository = mockk(relaxed = true),
         )
     }
 
@@ -115,7 +121,7 @@ class MessageContentProcessorBackwardCompatTest {
         val envelope = minimalEnvelope("+15557777", 100L)
         val content = Content.newBuilder().build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         assertNull(
             "empty Content (no known branches) must return null — old-version silent-drop contract",
@@ -137,7 +143,7 @@ class MessageContentProcessorBackwardCompatTest {
             .setSyncMessage(SyncMessage.newBuilder().build())
             .build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         assertNull(
             "empty SyncMessage (no sent/read) must return null — " +
@@ -162,7 +168,7 @@ class MessageContentProcessorBackwardCompatTest {
             .setSyncMessage(SyncMessage.newBuilder().build())
             .build()
 
-        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG)
+        val result = processor.process(SignalServiceDataClass(envelope, content, null), TAG, admission)
 
         assertNull(result)
     }

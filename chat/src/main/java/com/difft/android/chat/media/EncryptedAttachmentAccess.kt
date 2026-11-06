@@ -13,14 +13,17 @@ import java.nio.charset.Charset
  *
  * **Every** attachment type is kept encrypted at rest — images, video, voice, audio files, long
  * text, and generic files (documents / archives / apk / octet-stream) — so no plaintext attachment
- * ever touches disk. Each type reads its ciphertext on demand: images and generic files through the
- * decrypting `content://` uri (whose seekable proxy fd is also how video is played and seeked), long
- * text read fully into memory, voice and audio files decrypted to memory bytes for playback.
+ * is kept in the attachment directory. Each type reads its ciphertext on demand: images and generic
+ * files through the decrypting `content://` uri (whose seekable proxy fd is also how video is played
+ * and seeked), long text read fully into memory, voice and audio files decrypted to memory bytes for
+ * playback. Voice waveform extraction decrypts to a short-lived temp in the internal cache dir
+ * (`WaveformSource`, #1438).
  *
- * A plaintext file at `basePath` can therefore only be legacy data, written before that became
- * uniform. The read paths below stay backward compatible with it, and
- * [LegacyPlaintextAttachmentMigration] re-encrypts it in place — narrowing which types are kept
- * encrypted would require bumping that migration's version.
+ * A plaintext file at `basePath` is therefore either legacy data written before that became uniform,
+ * or the source of a self-sent attachment still uploading (its key is stored only after the upload).
+ * The read paths below stay backward compatible with it, and [LegacyPlaintextAttachmentMigration]
+ * re-encrypts legacy data in place — narrowing which types are kept encrypted would require bumping
+ * that migration's version.
  *
  * Reading is funnelled through [EncryptedAttachmentProvider] so that callers obtain a `content://`
  * [Uri] whose bytes are decrypted lazily on a background thread.
@@ -47,7 +50,7 @@ object EncryptedAttachmentAccess {
     /** The on-disk ciphertext file for a given plaintext base path. */
     fun encryptedFile(basePath: String): File = File("$basePath.encrypt")
 
-    /** Legacy plaintext file (may still exist for attachments downloaded before the migration). */
+    /** Plaintext file at [basePath]: legacy data, or a self-sent attachment still uploading. */
     fun plaintextFile(basePath: String): File = File(basePath)
 
     /**

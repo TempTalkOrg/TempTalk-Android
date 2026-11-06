@@ -253,6 +253,21 @@ class MigrationP2pReceiveController(
         session = null
     }
 
+    /**
+     * The failed or cancelled counterpart of [lingerReceiver] (#1382 A07): the sender may still ask
+     * `/status` and must read a definite `failed` / `cancelled` rather than nothing, for the same
+     * window as a success. A listener no session ever reached is stopped instead.
+     */
+    fun lingerAfterUnsuccessfulEnd() {
+        val current = session ?: return
+        if (current.retireForLinger()) {
+            ReceiverLinger.shared.keep(current)
+            session = null
+        } else {
+            stopReceiver()
+        }
+    }
+
     /** Issue a fresh pairing PIN on the live listener; null when nothing is listening. */
     fun rotatePin(): QrPayload? = session?.rotatePin()
 

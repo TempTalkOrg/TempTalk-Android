@@ -42,6 +42,7 @@ internal fun NotificationTestContent(
     state: State,
     onIntent: (Intent) -> Unit,
     modifier: Modifier = Modifier,
+    dialogsVisible: Boolean = true,
 ) {
     Column(
         modifier
@@ -63,7 +64,7 @@ internal fun NotificationTestContent(
         }
         Spacer(Modifier.height(DifftSettingsDefaults.GroupSpacing))
     }
-    NotificationTestDialogs(state.dialog, onIntent)
+    if (dialogsVisible) NotificationTestDialogs(state.dialog, onIntent)
 }
 
 @Composable
@@ -76,7 +77,7 @@ private fun TestRow(kind: NotificationTestKind, state: State, onIntent: (Intent)
             DifftButton(
                 text = stringResource(if (running) android.R.string.cancel else ChatR.string.notification_test_start),
                 onClick = { onIntent(if (running) Intent.Cancel else Intent.Start(kind)) },
-                enabled = running || state.running == null,
+                enabled = (running || state.running == null) && state.phase != com.difft.android.setting.notificationtest.mvi.NotificationTestContract.Phase.FINISHING,
                 size = DifftButtonSize.S,
                 variant = if (running) DifftButtonVariant.Text else DifftButtonVariant.Secondary,
                 modifier = Modifier.testTag(testButtonTag(kind)),

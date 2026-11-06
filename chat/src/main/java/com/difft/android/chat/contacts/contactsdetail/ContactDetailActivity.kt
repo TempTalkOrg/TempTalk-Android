@@ -44,6 +44,14 @@ class ContactDetailActivity : BaseActivity() {
             context.startActivity(intent)
         }
 
+        /** For a page that starts the card as its shell (no NEW_TASK, see [ContactDetailDestination]). */
+        fun intent(context: Context, contactId: String, sourceType: String? = null, source: String? = null): Intent =
+            Intent(context, ContactDetailActivity::class.java).also {
+                it.contactID = contactId
+                it.sourceType = sourceType
+                it.source = source
+            }
+
         private var Intent.contactID: String?
             get() = getStringExtra(BUNDLE_KEY_CONTACT_ID)
             set(value) {

@@ -1,6 +1,8 @@
 package com.difft.android.network.config
 
 import android.content.Context
+import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.storage.SecureConfigStore
 import com.difft.android.base.user.ActiveConversation
@@ -63,8 +65,9 @@ class GlobalConfigsManager @Inject constructor(
         private val UNINITIALIZED_CONFIG_REF = Any()
     }
 
-    @Volatile
-    private var lastRefreshTime: Long = 0L
+    /** Monotonic refresh throttle; replaced only by tests. */
+    @VisibleForTesting
+    internal var refreshGate = RefreshGate { SystemClock.elapsedRealtime() }
 
     @Volatile
     private var currentInterval: Long = FOREGROUND_REFRESH_INTERVAL_MS
@@ -76,7 +79,8 @@ class GlobalConfigsManager @Inject constructor(
         if (!enabled) L.w { "[GlobalConfigsManager] CONFIG_PSK not set — running in plaintext config mode" }
     }
 
-    private val globalConfigUrls: List<String> by lazy {
+    @VisibleForTesting
+    internal val globalConfigUrls: List<String> by lazy {
         if (isEncryptedConfigEnabled) {
             parseConfigUrls(BuildConfig.CONFIG_URLS)
         } else {
@@ -157,23 +161,26 @@ class GlobalConfigsManager @Inject constructor(
         stateChangeSignal.trySend(Unit)
     }
 
-    private suspend fun doRefreshIfNeeded() {
-        val timeSinceLastRefresh = System.currentTimeMillis() - lastRefreshTime
-
-        // First call (lastRefreshTime = 0) or exceeded interval
-        if (lastRefreshTime == 0L || timeSinceLastRefresh >= currentInterval) {
-            L.i { "[GlobalConfigsManager] Refresh triggered (${timeSinceLastRefresh / 1000}s since last)" }
-            fetchGlobalConfigsWithRetry()
-            lastRefreshTime = System.currentTimeMillis()
-        } else {
-            L.d { "[GlobalConfigsManager] Skip refresh, ${(currentInterval - timeSinceLastRefresh) / 1000}s remaining" }
-        }
+    /**
+     * Fetches when the gate is due. Only a fetch that adopted a config stamps the gate, so after a
+     * failed round the next state-change signal retries at once instead of waiting a full
+     * interval (#1395).
+     */
+    @VisibleForTesting
+    internal suspend fun doRefreshIfNeeded() {
+        val gate = refreshGate
+        if (!gate.isDue(currentInterval)) return
+        val sinceS = gate.sinceLastMs()?.div(1000)
+        L.i { "[GlobalConfigsManager] Refresh triggered sinceLastS=${sinceS ?: "never"}" }
+        if (fetchGlobalConfigsWithRetry()) gate.markRefreshed()
     }
 
-    private suspend fun fetchGlobalConfigsWithRetry() {
+    /** Returns true once one URL's config (code 0) is adopted; false when none is. */
+    @VisibleForTesting
+    internal suspend fun fetchGlobalConfigsWithRetry(): Boolean {
         if (globalConfigUrls.isEmpty()) {
             L.e { "[GlobalConfigsManager] No config URLs available" }
-            return
+            return false
         }
         for ((index, url) in globalConfigUrls.withIndex()) {
             try {
@@ -191,7 +198,7 @@ class GlobalConfigsManager @Inject constructor(
                     config.data?.emojiReaction?.let { emojis ->
                         updateMostUseEmojis(emojis)
                     }
-                    return
+                    return true
                 } else {
                     L.i { "[GlobalConfigsManager] get global configs fail: $url code:${config.code}" }
                 }
@@ -204,6 +211,7 @@ class GlobalConfigsManager @Inject constructor(
                 L.e { "[GlobalConfigsManager] All URLs failed, using cached config" }
             }
         }
+        return false
     }
 
     private fun decryptGlobalConfig(encrypted: EncryptedGlobalConfigResponse): NewGlobalConfig {

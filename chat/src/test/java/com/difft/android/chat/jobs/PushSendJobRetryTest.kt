@@ -1,6 +1,7 @@
 package com.difft.android.chat.jobs
 
 import com.difft.android.base.utils.GlobalHiltEntryPoint
+import com.difft.android.test.fakes.TestMessagingPause
 import com.difft.android.websocket.api.NewSignalServiceMessageSender
 import com.difft.android.websocket.api.push.exceptions.NoValidRecipientKeysException
 import com.difft.android.websocket.api.push.exceptions.ServerRejectedException
@@ -42,7 +43,7 @@ import kotlin.test.assertTrue
 class PushSendJobRetryTest {
 
     /** Minimal PushSendJob subclass to reach the protected onShouldRetry. */
-    private class ProbeJob : PushSendJob(buildParams()) {
+    private class ProbeJob : PushSendJob(buildParams(), TestMessagingPause().open().gate) {
         public override suspend fun onPushSend() = Unit
         override fun serialize() = com.difft.android.chat.jobmanager.Data.Builder().build()
         override fun getFactoryKey() = "ProbeJob"
@@ -120,14 +121,15 @@ class PushSendJobRetryTest {
             sendSyncToSelf = false,
             newSignalServiceMessageSender = messageSender,
             gson = gson,
-        )
+            messagingGate = TestMessagingPause().open().gate,
+        ).bindLogin()
     }
 
     /** T13: permanent exception from sender → job exits queue (success, NOT retry). */
     @Test
     fun `read receipt job exits queue on permanent exception`() = runTest {
         coEvery {
-            messageSender.sendReceipt(any(), any(), any(), any(), any(), any())
+            messageSender.sendReceipt(any(), any(), any(), any(), any(), any(), any())
         } throws NoValidRecipientKeysException("invalid group, no keys")
 
         val result = buildReadReceiptJob().run()
@@ -142,7 +144,7 @@ class PushSendJobRetryTest {
     @Test
     fun `read receipt job retries on transient IOException`() = runTest {
         coEvery {
-            messageSender.sendReceipt(any(), any(), any(), any(), any(), any())
+            messageSender.sendReceipt(any(), any(), any(), any(), any(), any(), any())
         } throws IOException("ws down")
 
         val result = buildReadReceiptJob().run()

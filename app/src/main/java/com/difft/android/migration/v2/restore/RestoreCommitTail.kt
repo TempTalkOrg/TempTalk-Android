@@ -50,10 +50,10 @@ class RestoreCommitTail(
      * has its staging discarded and gets the same [MigrationError.TargetNotEmpty] rejection the early
      * guard returns, without promote ever being called.
      *
-     * [carriedIdentity] is installed into secure storage right after that re-check and before promote.
-     * The ordering is crash-safe in both directions: installed but crashed before promote, the retry
+     * [carriedIdentity] is installed into secure storage after every pre-promote reject, including the
+     * session-liveness commit entry, and before promote. The ordering is crash-safe in both directions: installed but crashed before promote, the retry
      * re-installs the same bytes idempotently; crashed after promote, the identity is already persisted
-     * so the resumed sign-in publishes the original one. Placing it after the re-check means a rejected
+     * so the resumed sign-in publishes the original one. Placing it after every reject means a rejected
      * restore never touches secure storage. The identity is deliberately not carried in the promote
      * marker — a private key must not land in a plaintext file, and this ordering already makes resume
      * correct.
@@ -72,6 +72,8 @@ class RestoreCommitTail(
         credentialHandoff: Boolean = false,
         carriedCredential: NeutralCredential? = null,
         liveness: TransferProgressReporter = TransferProgressReporter.None,
+        // The session that delivered this import's bytes, read from [liveness] when the import began.
+        livenessSessionId: String? = null,
         storageGuard: StorageGuard? = null,
     ): RestoreResult? {
         // Re-check: a device that became non-fresh during the import must not be promoted onto, which
@@ -102,14 +104,19 @@ class RestoreCommitTail(
         // Last chance to fail cleanly: past the rename, running out of space can no longer be answered
         // with a retryable verdict. Checked before the identity write below, which nothing reverts.
         storageGuard?.requireHeadroom("promote")
+        // Past this line a peer's /cancel can undo nothing; it is answered `too_late` and the promote
+        // runs to its end. Every reject that could still stop this import is above. A session the
+        // peer already cancelled was answered stopped / rolled_back, so it must not commit (#1382).
+        // Checked before the identity write so a cancelled import never touches secure storage.
+        if (!liveness.committing(livenessSessionId)) {
+            L.w { "[MigrationV2][Restore] event=commit_refused reason=session_not_live" }
+            return discardAndReject(staging, flagStore, work, MigrationError.Cancelled)
+        }
         if (identityToInstall != null) {
             installIdentity(identityToInstall)
         } else {
             L.i { "[MigrationV2][Restore] container carried no identity — login will generate one (pre-1.1 behaviour)" }
         }
-        // Past this line a peer's /cancel can undo nothing; it is answered `too_late` and the promote
-        // runs to its end. Every reject that could still stop this import is above.
-        liveness.committing()
         flagStore.advance(RestorePhase.PROMOTING)
         publish("promoting", 80)
         try {

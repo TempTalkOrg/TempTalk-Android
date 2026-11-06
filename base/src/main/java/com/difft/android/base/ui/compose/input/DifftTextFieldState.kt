@@ -78,16 +78,19 @@ internal fun rememberInputFieldValue(
 /**
  * InputFilter.LengthFilter parity: on overflow, trim the tail of the INSERTED run (which ends at
  * the new selection) instead of the end of the whole string — an insert at the start of a full
- * field must not silently delete trailing characters.
+ * field must not silently delete trailing characters. The cut never splits a surrogate pair:
+ * when it would land inside one, the whole pair goes (as LengthFilter does), so no unpaired
+ * surrogate can reach the host.
  */
 private fun capToMaxLength(raw: TextFieldValue, maxLength: Int?, previous: TextFieldValue): TextFieldValue {
     if (maxLength == null || raw.text.length <= maxLength) return raw
     val overflow = raw.text.length - maxLength
     val insertEnd = raw.selection.end.coerceIn(0, raw.text.length)
-    val trimStart = (insertEnd - overflow).coerceAtLeast(0)
+    var trimStart = (insertEnd - overflow).coerceAtLeast(0)
     // If the edit shape is unexpected (selection not at the insert end), fall back to
     // rejecting the edit outright — still never corrupts existing text.
     if (insertEnd - trimStart != overflow) return previous
+    if (trimStart > 0 && raw.text[trimStart - 1].isHighSurrogate() && raw.text[trimStart].isLowSurrogate()) trimStart--
     val text = raw.text.removeRange(trimStart, insertEnd)
     return TextFieldValue(text, TextRange(trimStart.coerceAtMost(text.length)))
 }

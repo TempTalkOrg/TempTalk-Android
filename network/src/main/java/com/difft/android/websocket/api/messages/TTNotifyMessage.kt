@@ -39,6 +39,8 @@ data class TTNotifyMessage(
         const val NOTIFY_MESSAGE_TYPE_WEAK_CONTACT = 25 // weak contact (delayed removal)
         // reuses Data.changeType: 0=enter weak / 1=remove
 
+        const val NOTIFY_MESSAGE_TYPE_FOCUS = 29 // group focus state; data.focus is the snapshot, data.trigger USER/EXPIRED/INVALIDATED
+
         //本地创建 type
         const val NOTIFY_MESSAGE_TYPE_LOCAL = 10000
 
@@ -129,6 +131,9 @@ data class Data(
     @SerializedName("keptDeviceNames") val keptDeviceNames: List<String>? = null,
     @SerializedName("newDeviceName") val newDeviceName: String? = null,
     @SerializedName("keptTime") val keptTime: Long = 0,
+    // notifyType=29 (FOCUS): the focus snapshot, parsed by the focus package, and what caused it.
+    @SerializedName("focus") val focus: JsonElement? = null,
+    @SerializedName("trigger") val trigger: String? = null,
     )
 
 data class Group(
@@ -195,7 +200,11 @@ data class NotifyConversation(
     val muteStatus: Int,
     val blockStatus: Int,
     val confidentialMode: Int,
-    val conversation: String
+    val conversation: String,
+    /** Mute sub-options; absent from older servers, so nullable. */
+    val allowMentionMe: Boolean? = null,
+    val allowMentionAll: Boolean? = null,
+    val allowGroupCall: Boolean? = null
 )
 
 data class TaskInfo(

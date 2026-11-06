@@ -75,6 +75,10 @@ class MessageForegroundService : Service() {
         if (postForegroundNotification()) {
             isRunning = true
             if (!refusalRecorded) runCatching { healthCounters().onServiceStarted() }
+            // A vendor that kills the process on a recents swipe (HyperOS SwipeUpClean) recreates this
+            // service without delivering onStartCommand, so the connection must not wait for it. A refused
+            // promotion means the service is already stopping, so nothing is started then.
+            if (!refusalRecorded) startConnection()
         }
 
         // Bare call (NOT serviceScope.launch): collector anchors to WCDBUpdateService's process scope and must outlive this Service. Idempotent.
@@ -84,13 +88,20 @@ class MessageForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
 
-        L.d { "[MessageForegroundService] onStartCommand()" }
+        L.i { "[MessageForegroundService] onStartCommand() startId=$startId sticky=${intent == null}" }
 
         if (!postForegroundNotification()) return START_NOT_STICKY
 
+        startConnection()
+
+        return START_STICKY
+    }
+
+    /** Starts the WebSocket off the main thread; [WebSocketManager.start] is idempotent, so both entry points may call it. */
+    private fun startConnection() {
         serviceScope.launch {
-            // F-H1 safety: if startForeground above failed via FGSNAE, the helper
-            // already called stopSelf(). onDestroy() will run and trigger
+            // F-H1 safety: if the caller's foreground promotion was refused (FGSNAE), the
+            // helper already called stopSelf(). onDestroy() will run and trigger
             // serviceScope.cancel() at some point, but until then this launch body
             // may proceed to invoke the @Synchronized non-suspend
             // WebSocketManager.start() (which does NOT consult coroutine isActive,
@@ -98,8 +109,7 @@ class MessageForegroundService : Service() {
             // isStarted=true). To avoid starting WebSocket on a Service that is
             // already on its way to onDestroy, check isActive first.
             //
-            // This is the FIRST line of the launch body; control flow of
-            // onStartCommand itself is unchanged.
+            // This is the FIRST line of the launch body.
             if (!isActive) {
                 L.w { "[MessageForegroundService] launch body skipped — service already stopping" }
                 return@launch
@@ -118,8 +128,6 @@ class MessageForegroundService : Service() {
                 L.e { "[MessageForegroundService] Failed to start WebSocket: ${e.stackTraceToString()}" }
             }
         }
-
-        return START_STICKY
     }
 
     override fun onDestroy() {

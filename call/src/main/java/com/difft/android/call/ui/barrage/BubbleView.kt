@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,12 @@ import com.difft.android.call.data.EmojiBubbleMessage
 import com.difft.android.call.data.TextBubbleMessage
 import kotlin.math.roundToInt
 import kotlinx.coroutines.isActive
+
+/** Bottom of the tabletop stage in overlay-window px while the dock is shown; null otherwise. */
+internal val LocalBubbleStageBottomPx = compositionLocalOf<Int?> { null }
+
+/** Start height above the stage bottom while in tabletop: the portrait 120dp is too tall for a ~410dp stage. */
+private val TABLETOP_BUBBLE_PADDING = 24.dp
 
 private data class BubbleAnimParams(
     val bubblePadding: Float,
@@ -65,16 +72,21 @@ fun BoxScope.BubbleView(
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val windowSize = LocalWindowInfo.current.containerSize
+    val stageBottomPx = LocalBubbleStageBottomPx.current
 
-    val params = remember(messageId, windowSize, density) {
-        val screenHeight = if (windowSize.height > 0) {
+    val params = remember(messageId, windowSize, density, stageBottomPx) {
+        val screenHeight = stageBottomPx?.toFloat() ?: if (windowSize.height > 0) {
             windowSize.height.toFloat()
         } else {
             with(density) { configuration.screenHeightDp.dp.toPx() }
         }
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val bubblePadding = with(density) {
-            if (isLandscape) 56.dp.toPx() else 120.dp.toPx()
+            when {
+                stageBottomPx != null -> TABLETOP_BUBBLE_PADDING.toPx()
+                isLandscape -> 56.dp.toPx()
+                else -> 120.dp.toPx()
+            }
         }
         val fullWidth = if (windowSize.width > 0) {
             windowSize.width.toFloat()
@@ -131,9 +143,12 @@ fun BoxScope.BubbleView(
                 val placeable = measurable.measure(
                     constraints.copy(minWidth = 0, minHeight = 0)
                 )
+                // The column's offset places the bubble's left edge; a bubble wider than the room
+                // right of it (a long name on a narrow window) moves left to stay on screen.
+                val maxX = if (constraints.hasBoundedWidth) (constraints.maxWidth - placeable.width).coerceAtLeast(0) else Int.MAX_VALUE
                 layout(placeable.width, placeable.height) {
                     placeable.place(
-                        x = params.offsetX.roundToInt(),
+                        x = params.offsetX.roundToInt().coerceIn(0, maxX),
                         y = (params.screenHeightPx - placeable.height + renderedOffsetY).roundToInt()
                     )
                 }

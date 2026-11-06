@@ -6,6 +6,8 @@ import com.difft.android.chat.jobmanager.Job
 import com.difft.android.chat.jobmanager.JobLogger
 import com.difft.android.chat.jobmanager.impl.BackoffUtil
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.util.concurrent.TimeUnit
 
 abstract class BaseJob(parameters: Parameters) : Job(parameters) {
@@ -16,15 +18,22 @@ abstract class BaseJob(parameters: Parameters) : Job(parameters) {
             onRun()
             Result.success()
         } catch (e: CancellationException) {
-            throw e // Must rethrow -- coroutine cancellation is not a job failure
+            // Real cancellation of this coroutine propagates; a stray one (e.g. a leaked
+            // TimeoutCancellationException) is a job error, not a reason to end the runner.
+            currentCoroutineContext().ensureActive()
+            handleException(e)
         } catch (e: Exception) {
-            if (onShouldRetry(e)) {
-                L.i { JobLogger.format(this, "Encountered a retryable exception.") + e }
-                Result.retry(getNextRunAttemptBackoff(runAttempt + 1, e))
-            } else {
-                L.w { JobLogger.format(this, "Encountered a failing exception.") + e }
-                Result.failure()
-            }
+            handleException(e)
+        }
+    }
+
+    private fun handleException(e: Exception): Result {
+        return if (onShouldRetry(e)) {
+            L.i { JobLogger.format(this, "Encountered a retryable exception.") + e }
+            Result.retry(getNextRunAttemptBackoff(runAttempt + 1, e))
+        } else {
+            L.w { JobLogger.format(this, "Encountered a failing exception.") + e }
+            Result.failure()
         }
     }
 

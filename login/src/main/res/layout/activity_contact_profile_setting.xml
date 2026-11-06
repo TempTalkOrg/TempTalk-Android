@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
@@ -138,38 +137,19 @@
                     app:layout_constraintTop_toTopOf="parent" />
 
 
-                <androidx.appcompat.widget.AppCompatEditText
+                <com.difft.android.base.widget.DifftClearableInputView
                     android:id="@+id/et_name"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="100dp"
-                    android:layout_marginEnd="16dp"
-                    android:background="@android:color/transparent"
-                    android:cursorVisible="true"
-                    android:inputType="textMultiLine"
-                    android:maxLength="30"
-                    android:textColor="@color/t.primary"
-                    android:textColorHint="@color/t.disable"
-                    android:textCursorDrawable="@null"
                     android:textSize="16sp"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toStartOf="@+id/btn_clear"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    tools:text="123 456 7890 123 456 78 901234 567890 12 345 67890">
-
-                    <requestFocus />
-                </androidx.appcompat.widget.AppCompatEditText>
-
-                <androidx.appcompat.widget.AppCompatImageButton
-                    android:id="@+id/btn_clear"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@null"
-                    android:src="@drawable/base_ic_clear_filled"
-                    android:tint="@color/t.secondary"
+                    app:dsi_autoFocus="true"
+                    app:dsi_containerColor="@android:color/transparent"
+                    app:dsi_imeAction="done"
+                    app:dsi_maxLength="30"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>

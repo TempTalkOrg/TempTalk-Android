@@ -4,6 +4,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.difft.android.base.utils.pane.dismissWithView
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
@@ -25,7 +26,7 @@ fun Fragment.collectFavoriteEffects(favoriteViewModel: FavoriteViewModel) {
                     is FavoriteContract.Effect.ShowCapDialog ->
                         // Confirm-first cap dialog: "Replace oldest" evicts + adds; the secondary
                         // button ("Cancel") just dismisses; the current GIF is not added.
-                        ComposeDialogManager.showMessageDialog(
+                        dismissWithView(ComposeDialogManager.showMessageDialog(
                             context = requireActivity(),
                             title = getString(R.string.gif_favorites_cap_title),
                             message = getString(R.string.gif_favorites_cap_message),
@@ -36,7 +37,7 @@ fun Fragment.collectFavoriteEffects(favoriteViewModel: FavoriteViewModel) {
                                     FavoriteContract.Intent.EvictOldestThenFavorite(effect.onEvictOldest)
                                 )
                             }
-                        )
+                        ))
                 }
             }
         }

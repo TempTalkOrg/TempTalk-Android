@@ -37,7 +37,9 @@ import com.difft.android.call.LCallViewModel
 import com.difft.android.call.R
 import com.difft.android.call.data.BottomButtonTextStyle
 import com.difft.android.call.data.BottomCallEndAction
+import com.difft.android.call.ui.actionbar.rememberKeepsChromeUnderPanels
 import kotlinx.coroutines.launch
+import com.difft.android.call.ui.screenshare.isCallImmersive
 
 private const val END_BUTTON_WEIGHT = 238f
 private const val CANCEL_BUTTON_WEIGHT = 212f
@@ -59,9 +61,12 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
         }
     }
 
+    // Beside the side rail (#1451) or on the tabletop dock an open menu leaves the chrome shown,
+    // so the bar is hidden only in bar mode.
+    val onRail = rememberKeepsChromeUnderPanels()
     LaunchedEffect(showBottomCallEndViewEnable) {
         if (showBottomCallEndViewEnable) {
-            viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
+            if (!onRail) viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
             sheetState.show()
         } else {
             sheetState.hide()
@@ -77,6 +82,7 @@ fun ShowBottomCallEndView(viewModel: LCallViewModel, onDismiss: () -> Unit, onCl
             shape = RoundedCornerShape(size = 12.dp),
             sheetState = sheetState,
             hideNavigationBar = true,
+            hideSystemBars = isCallImmersive(),
             onDismissRequest = {
                 dismissSheet()
             },

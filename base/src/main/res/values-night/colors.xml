@@ -39,6 +39,8 @@
     <color name="divider" tools:ignore="ResourceName">#2B3139</color>
     <color name="bg.blue" tools:ignore="ResourceName">#003366</color>
     <color name="bg.sky" tools:ignore="ResourceName">#003366</color>
+    <!-- bgspace (DifftTheme backgroundSpace): the chat-list focus swipe button. -->
+    <color name="bg.space" tools:ignore="ResourceName">#333941</color>
 
     <color name="bg" tools:ignore="ResourceName">#0B0E11</color>
     <color name="bg.elevated" tools:ignore="ResourceName">#181A20</color>

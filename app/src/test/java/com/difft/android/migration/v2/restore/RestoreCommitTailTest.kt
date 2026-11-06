@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.difft.android.base.user.UserManager
+import com.difft.android.base.utils.Base64
 import com.difft.android.migration.model.MigrationError
 import com.difft.android.migration.model.MigrationException
 import com.difft.android.migration.model.RestorePhase
@@ -184,6 +185,107 @@ class RestoreCommitTailTest {
             carriedIdentity = null,
         )
         assertEquals(RestoreResult.Rejected(MigrationError.TargetNotEmpty), second)
+    }
+
+    @Test
+    fun `a session cancelled before the commit entry is discarded without promote, even with a newer session live`() = runTest {
+        stageEverything()
+        val advanced = mutableListOf<RestorePhase>()
+        val sessions = com.difft.android.p2p.engine.session.SessionManager()
+        fun startBody(): com.difft.android.p2p.engine.session.PreparedSession {
+            val meta = com.difft.android.p2p.engine.model.FileMetadata(id = "f1", fileName = "f1.bin", size = 4, fileType = "application/octet-stream")
+            val prepared = sessions.createSession("1.1.1.1", mapOf("f1" to meta))
+            sessions.authorizeUpload(prepared.sessionId, "f1", prepared.slots.getValue("f1").token, "1.1.1.1")
+            return prepared
+        }
+        val old = startBody()
+        val importSession = sessions.bodySessionId()
+        sessions.cancel(old.sessionId, old.sessionToken)
+        val fresh = startBody()
+
+        val result = tail.run(
+            staging = staging(),
+            paths = paths,
+            flagStore = flagStore(advanced = advanced),
+            work = null,
+            promoteStep = promoteStep,
+            isFreshTarget = { true },
+            carriedIdentity = null,
+            liveness = sessions,
+            livenessSessionId = importSession,
+        )
+        assertEquals(RestoreResult.Rejected(MigrationError.Cancelled), result)
+        assertFalse(PromoteStep.isDatabasePromoted(paths.stagingDbPath, paths.realDbPath), "nothing was promoted")
+        assertFalse(advanced.contains(RestorePhase.PROMOTING))
+        // The newer session was not marked committing by the cancelled import.
+        assertEquals(
+            com.difft.android.p2p.engine.model.TransferStages.PREPARED,
+            sessions.status(fresh.sessionId, fresh.sessionToken).stage,
+        )
+    }
+
+    // Real key shapes: the tail validates the identity before it reaches the commit entry.
+    private fun carriedIdentity() = com.difft.android.migration.v2.model.NeutralIdentity(
+        aciPublicKey = Base64.encodeBytes(byteArrayOf(0x05) + ByteArray(32) { (it + 1).toByte() }),
+        aciPrivateKey = Base64.encodeBytes(ByteArray(32) { (it + 101).toByte() }),
+    )
+
+    private fun liveness(live: Boolean, order: MutableList<String>) =
+        mockk<com.difft.android.p2p.engine.session.TransferProgressReporter>(relaxed = true).also {
+            every { it.committing(any()) } answers { order.add("committing"); live }
+        }
+
+    @Test
+    fun `a cancelled session carrying an identity never writes secure storage`() = runTest {
+        stageEverything()
+        val order = mutableListOf<String>()
+        val advanced = mutableListOf<RestorePhase>()
+        every { userManager.update(any(), any()) } answers { order.add("installIdentity") }
+        val staging = staging()
+
+        val result = tail.run(
+            staging = staging,
+            paths = paths,
+            flagStore = flagStore(advanced = advanced),
+            work = null,
+            promoteStep = promoteStep,
+            isFreshTarget = { true },
+            carriedIdentity = carriedIdentity(),
+            liveness = liveness(live = false, order = order),
+            livenessSessionId = "s1",
+        )
+
+        assertEquals(RestoreResult.Rejected(MigrationError.Cancelled), result)
+        verify(exactly = 0) { userManager.update(any(), any()) }
+        assertEquals(listOf("committing"), order)
+        assertFalse(PromoteStep.isDatabasePromoted(paths.stagingDbPath, paths.realDbPath), "nothing was promoted")
+        assertFalse(advanced.contains(RestorePhase.PROMOTING))
+        verify(exactly = 1) { staging.discard() }
+    }
+
+    @Test
+    fun `a live session installs the identity after the commit entry, then promotes`() = runTest {
+        stageEverything()
+        val order = mutableListOf<String>()
+        val advanced = mutableListOf<RestorePhase>()
+        every { userManager.update(any(), any()) } answers { order.add("installIdentity") }
+
+        val result = tail.run(
+            staging = staging(),
+            paths = paths,
+            flagStore = flagStore(advanced = advanced),
+            work = null,
+            promoteStep = promoteStep,
+            isFreshTarget = { true },
+            carriedIdentity = carriedIdentity(),
+            liveness = liveness(live = true, order = order),
+            livenessSessionId = "s1",
+        )
+
+        assertNull(result)
+        assertEquals(listOf("committing", "installIdentity"), order)
+        assertTrue(advanced.contains(RestorePhase.PROMOTING))
+        assertDataKept()
     }
 
     // ── T37 ────────────────────────────────────────────────────────────────────────────────────

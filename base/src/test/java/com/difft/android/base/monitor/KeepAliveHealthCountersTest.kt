@@ -120,6 +120,17 @@ class KeepAliveHealthCountersTest {
     }
 
     @Test
+    fun `late deliveries count only while collecting`() {
+        counters.lastFlushElapsed = elapsed
+        counters.onLateDelivery()
+        counters.onLateDelivery()
+        assertEquals(mapOf("late_5m" to 2), counters.drain())
+        counters.collecting = false
+        counters.onLateDelivery()
+        assertEquals(emptyMap(), counters.drain())
+    }
+
+    @Test
     fun `pull results count ok and fail`() {
         counters.lastFlushElapsed = elapsed
         counters.lastPullFlushElapsed = elapsed

@@ -3,6 +3,9 @@ package com.difft.android.chat.messages
 import android.content.Context
 import android.os.SystemClock
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.AdmissionKind
+import com.difft.android.base.migration.pause.MessagingGate
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.monitor.BackgroundPowerModel
 import com.difft.android.base.monitor.BackgroundPowerSampler
 import com.difft.android.base.utils.ChunkingMethod
@@ -37,9 +40,10 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
     private val messageNotificationUtil: MessageNotificationUtil,
     private val wakeLock: IncomingMessageWakeLock,
     private val powerSampler: BackgroundPowerSampler,
+    private val messagingGate: MessagingGate,
 ) {
     /** [queuedAt] is `elapsedRealtime`, so the wait includes time the CPU spent suspended. */
-    private data class QueuedEnvelope(val envelope: Envelope, val requestId: Long, val queuedAt: Long, val seq: Long)
+    internal data class QueuedEnvelope(val envelope: Envelope, val requestId: Long, val queuedAt: Long, val seq: Long)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val _incomingMessagesFlow =
@@ -78,8 +82,21 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
         }
     }
 
-    private suspend fun doProcessBatch(batch: List<QueuedEnvelope>) {
+    /**
+     * Admits the batch before its ACK (#1382): a batch refused by the message pause is neither
+     * ACKed nor processed, so the server keeps it queued; an admitted batch runs to completion.
+     */
+    internal suspend fun doProcessBatch(batch: List<QueuedEnvelope>) {
         wakeLock.onBatchStart()
+        val admission = messagingGate.tryAdmit(AdmissionKind.RECEIVE, "ws")
+        if (admission == null) {
+            L.i { "[MigrationPause] event=receive_dropped source=ws count=${batch.size}" }
+            return
+        }
+        admission.use { processAdmittedBatch(batch, it) }
+    }
+
+    private suspend fun processAdmittedBatch(batch: List<QueuedEnvelope>, admission: MessagingTicket) {
         if (batch.size > 1) L.i { "[Message] processing batch size=${batch.size}" }
         // Eager ACK — see issue #754 design §1.5. ACK first so a late
         // processing failure can't block the server's push pipeline;
@@ -99,7 +116,7 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
         val sortedBatch = batch.sortedBy { it.envelope.systemShowTimestamp }
 
         sortedBatch.forEach { (envelope) ->
-            when (val processRes = envelopToMessageProcessor.process(envelope, "message")) {
+            when (val processRes = envelopToMessageProcessor.process(envelope, "message", admission)) {
                 is EnvelopeProcessResult.Success -> {
                     val result = processRes.result
                     // G-3: WebSocket re-deliver dedup. If a previous attempt
@@ -133,6 +150,8 @@ class IncomingEnvelopMessageProcessor @Inject constructor(
                 is EnvelopeProcessResult.TransientFailure -> {
                     failedEnvelopes.add(envelope)
                 }
+                // Unreachable while this batch holds its ticket; nothing was stored.
+                EnvelopeProcessResult.Paused -> Unit
             }
         }
 

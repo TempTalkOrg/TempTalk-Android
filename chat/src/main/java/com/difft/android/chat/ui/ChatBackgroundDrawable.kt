@@ -16,7 +16,10 @@ import com.difft.android.chat.util.ViewUtil
 class ChatBackgroundDrawable(
     context: Context,
     private val view: View? = null, // 改为可空，只有当drawSystemBars为true时才需要
-    private val drawSystemBars: Boolean = false // 新增参数，控制是否绘制系统栏
+    private val drawSystemBars: Boolean = false, // 新增参数，控制是否绘制系统栏
+    // False for a view that starts below the status bar (the home screen's one-pane detail layer):
+    // only the navigation-bar strip is painted, as ChatActivity's window background does there.
+    private val drawStatusBarStrip: Boolean = true,
 ) : Drawable() {
 
     private val backgroundDrawable: Drawable = ContextCompat.getDrawable(context, R.drawable.chat_bg_new)!!
@@ -37,7 +40,7 @@ class ChatBackgroundDrawable(
         // The strips the root pads for (BaseActivity: system bars + cutout). In a freeform window
         // the top one is the caption bar, not a status bar, so status-bar insets alone read 0.
         val barInsets = if (drawSystemBars && view != null) systemBarInsets(view) else null
-        val statusBarHeight = barInsets?.top ?: 0
+        val statusBarHeight = if (drawStatusBarStrip) barInsets?.top ?: 0 else 0
         val navigationBarHeight = barInsets?.bottom ?: 0
 
         // 根据参数决定是否绘制系统栏背景

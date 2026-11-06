@@ -1,5 +1,6 @@
 package com.difft.android.base.user
 
+import com.difft.android.base.utils.IGlobalConfigsManager
 import javax.annotation.concurrent.Immutable
 
 data class NewGlobalConfig(
@@ -182,6 +183,18 @@ data class CallConfig(
     val callServers: CallServers? = null,
     val bubbleMessage: BubbleMessage? = null,
     val chatMessage: ChatMessage? = null
+)
+
+/**
+ * The call config to use for one call operation (START, INVITE, session launch): the live
+ * config's `call` block, or the built-in defaults. Read once at the operation's entry and carry
+ * the result through the operation, so a server flip mid-operation cannot split it (#1395).
+ */
+fun IGlobalConfigsManager.callConfigSnapshot(): CallConfig = getNewGlobalConfigs()?.data?.call ?: CallConfig(
+    autoLeave = AutoLeave(promptReminder = PromptReminder()),
+    chatPresets = defaultBarrageTexts,
+    chat = CallChat(),
+    countdownTimer = CountdownTimer(),
 )
 
 data class ChatMessage(

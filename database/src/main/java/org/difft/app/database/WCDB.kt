@@ -9,6 +9,9 @@ import com.tencent.wcdb.core.Database
 import com.tencent.wcdb.core.Table
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBContactorModel
 import org.difft.app.database.models.DBDraftModel
@@ -109,6 +112,22 @@ class WCDB @Inject constructor(
     // internal (was private): read/written by probeHealthy/reportCorruptionOnce in WCDBHealthProbe.kt.
     @Volatile
     internal var healthyProbePassed = false
+
+    /** Read-only view of [healthyProbePassed] for gates outside this module (#1395). */
+    val isHealthyProbed: Boolean get() = healthyProbePassed
+
+    private val probeFinishedState = MutableStateFlow(false)
+
+    /**
+     * `true` once any [probeHealthy] call has returned this process, whatever its outcome. Lets a
+     * gate tell "not probed yet" (worth a bounded wait) from "probed and not healthy" (#1395).
+     */
+    val probeFinished: StateFlow<Boolean> = probeFinishedState.asStateFlow()
+
+    /** Called from every exit of [probeHealthy]. */
+    internal fun markProbeFinished() {
+        probeFinishedState.value = true
+    }
 
     /**
      * One-shot guard — the WCDB corruption notification can fire repeatedly AND

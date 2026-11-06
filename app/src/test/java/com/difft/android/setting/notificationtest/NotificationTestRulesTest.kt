@@ -49,6 +49,14 @@ class NotificationTestRulesTest {
     }
 
     @Test
+    fun `a never-set Xiaomi category does not block its tests`() {
+        val neverSet = ChannelReading(IMPORTANCE_HIGH, hasSound = true, userSetImportance = false)
+        assertNull(precheck(NotificationTestKind.BANNER, message = neverSet))
+        assertNull(precheck(NotificationTestKind.LOCKSCREEN, message = neverSet))
+        assertNull(precheck(NotificationTestKind.CALL, call = neverSet))
+    }
+
+    @Test
     fun `app notifications off block every test and lead to the app notification page`() {
         assertEquals(Precheck(PrecheckBlock.MESSAGE_OFF, NotificationFix.APP_NOTIFICATIONS), precheck(NotificationTestKind.BANNER, appEnabled = false))
         assertEquals(Precheck(PrecheckBlock.MESSAGE_OFF, NotificationFix.APP_NOTIFICATIONS), precheck(NotificationTestKind.LOCKSCREEN, appEnabled = false))

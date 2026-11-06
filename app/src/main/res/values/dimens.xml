@@ -12,15 +12,16 @@
     so is dropped for) any window below 900dp. Both halves are pinned behaviourally by
     app/src/test/java/com/difft/android/DualPaneBudgetResourceInvariantTest.kt.
 
-    INVARIANT — the qualifier floor IS the pane-budget feasibility floor:
+    INVARIANT — the qualifier floor must cover the pane-budget feasibility floor:
 
-        dual_pane_rail_width + dual_pane_divider_width
-            + dual_pane_list_min_width + dual_pane_detail_min_width
-        == 72 + 1 + 280 + 320 == 673dp
-        == the w673dp component of res/layout-w673dp-h480dp/
+        dual_pane_list_min_width + dual_pane_detail_min_width
+        == 280 + 320 == 600dp
+        <= the w673dp component of res/layout-w673dp-h480dp/
 
-    Changing any minimum here therefore REQUIRES renaming that layout directory (and
-    WindowSizeClassUtil.DUAL_PANE_MIN_WIDTH_DP). Pinned by
+    673 dates from the 72dp navigation rail (+ 1dp seam) that used to sit beside the panes;
+    the home tabs now float over the list pane, and whether the 600-672dp band should gain
+    dual pane is a separate decision. Raising a minimum above the gate REQUIRES renaming
+    that layout directory (and WindowSizeClassUtil.DUAL_PANE_MIN_WIDTH_DP). Pinned by
     app/src/test/java/com/difft/android/DualPaneBudgetResourceInvariantTest.kt.
 
     320dp is the declared static floor only: it can occur solely on 673-712dp windows
@@ -30,11 +31,7 @@
 -->
 <resources>
 
-    <!-- Vertical navigation rail. 72dp gives each auto-sizing label the same 56dp box
-         (72 - 2 x 8dp padding) that a 360dp phone's bottom strip already gives it. -->
-    <dimen name="dual_pane_rail_width">72dp</dimen>
-
-    <!-- Seam between the rail and the list pane. -->
+    <!-- Seam between the list and detail panes (a floating overlay, takes no layout width). -->
     <dimen name="dual_pane_divider_width">1dp</dimen>
 
     <!-- Initial list-pane width; IndexActivity.applyListPaneWidth() re-applies it at
@@ -56,5 +53,7 @@
          be able to drag the detail pane into that clipping zone; only the static budget
          on 673-712dp windows (in-range drag inert there) may go below. -->
     <dimen name="dual_pane_detail_drag_min_width">360dp</dimen>
+    <!-- Me page top gap where it shows no title row (phones). -->
+    <dimen name="me_headerless_top_gap">25dp</dimen>
 
 </resources>

@@ -90,7 +90,7 @@ fun selectVisibleTags(
 }
 
 // --- Fixed geometry, all traced to chat_fragment_recent_chat_list_item.xml ---
-private const val AVATAR_BLOCK_DP = 64          // avatar frame 48 + its marginStart 16
+private const val AVATAR_BLOCK_DP = 68          // avatar frame 52 + its marginStart 16
 private const val TEXT_COLUMN_MARGIN_DP = 28    // text column marginStart 12 + marginEnd 16
 private const val TAG_MARGIN_END_DP = 4         // textview_at marginEnd
 private const val DETAIL_MARGIN_END_DP = 16     // textview_detail marginEnd (applies even when the badge is GONE)
@@ -101,7 +101,7 @@ private const val PREVIEW_FLOOR_LARGE_DP = 84   // 56 * 21/14
 private const val SAFETY_SLACK_DP = 4           // emoji width variance across ROMs
 // imageview_sending 16 + its marginEnd 4. Single tier on purpose (unlike the two-tier badge): the icon is fixed-size regardless of text scale.
 private const val SENDING_ICON_RESERVE_DP = 20
-private const val PINNED_ICON_RESERVE_DP = 18    // imageview_pinned
+private const val PINNED_ICON_RESERVE_DP = 18    // imageview_pinned, or the same-sized imageview_focus
 
 /**
  * Width the tag TextView may occupy before the preview stops being readable. Deliberately
@@ -114,6 +114,7 @@ fun computeTagAvailableWidthPx(
     hasUnreadBadge: Boolean,
     isLargerText: Boolean,
     hasSendingIcon: Boolean = false,
+    /** The trailing slot holds the pin icon or the focus icon (same size). */
     hasPinnedIcon: Boolean = false,
 ): Float {
     fun dp(v: Int) = v * density

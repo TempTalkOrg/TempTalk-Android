@@ -129,7 +129,8 @@
     <string name="call_microphone_permission_deny_content">请在系统设置中允许 %1$s 使用麦克风，然后返回 %1$s 重试。</string>
     <string name="call_camera_permission_deny_content">请在系统设置中允许 %1$s 使用摄像头，然后返回 %1$s 重试。</string>
     <string name="call_permission_button_settings">设置</string>
-    <string name="notification_hint_oem_xiaomi">允许“后台弹出界面”和“锁屏显示”（通常在“其他权限”中）。找不到时，见设置指引。</string>
+    <string name="notification_hint_oem_xiaomi">允许「后台弹出界面」「锁屏显示」和「显示悬浮窗」（通常在「其他权限」中）</string>
+    <string name="notification_hint_oem_vivo">打开「后台弹出界面」「锁屏显示」和「悬浮窗」（在「设备管理」中）</string>
     <string name="notification_prompt_full_screen">请允许%s全屏显示来电，以确保您在设备锁屏时也能正常接听来电。</string>
     <string name="notification_critical_alert_title_default">紧急联络</string>
     <string name="notification_critical_alert_content_default">点击立即联系。</string>
@@ -150,4 +151,8 @@
     <string name="call_critical_alert_confirm_view_button_send">发送</string>
     <string name="call_critical_alert_tooltip">可突破静音和勿扰模式，仅用于紧急情况。</string>
     <string name="call_screen_share_mic_queue">等待发言</string>
+    <plurals name="call_pager_later_people">
+        <item quantity="other">另外 %1$d 人</item>
+    </plurals>
+    <string name="call_pager_back_to_first">回到第 1 页</string>
 </resources>

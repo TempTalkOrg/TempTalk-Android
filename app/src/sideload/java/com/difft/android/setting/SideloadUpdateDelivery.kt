@@ -14,6 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.difft.android.R
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.ApplicationHelper
+import com.difft.android.base.utils.FilePathManager
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils.getString
 import com.difft.android.base.utils.appScope
@@ -26,7 +27,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import util.ScreenLockUtil
 import java.io.File
 import javax.inject.Inject
 
@@ -155,9 +155,6 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
                         }
                         try {
                             val uri = ApkUpdateFiles.contentUri(context, apkFile)
-                            // 仅在 FileProvider 成功、真正调起系统安装器（会切到后台）前才豁免锁屏；
-                            // 放在 getUriForFile 之后，避免它抛异常时误留豁免位导致一次锁屏被跳过。
-                            ScreenLockUtil.temporarilyDisabled = true
                             ApkUpdateFiles.installApk(context, uri)
                         } catch (e: IllegalArgumentException) {
                             L.e { "FileProvider failed to find configured root for: ${apkFile.absolutePath}" }
@@ -188,6 +185,7 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
         if (installMessageDialog == null) {
             clearDownloadedApk(fileDir, filename)
         }
+        appScope.launch(Dispatchers.IO) { clearLegacyExternalApks() }
 
         val file = File(fileDir, filename)
         val filePath = file.absolutePath
@@ -241,6 +239,21 @@ class SideloadUpdateDelivery @Inject constructor() : UpdateDelivery {
     private fun startDownloadService(context: Context, url: String, apkHash: String, filePath: String, isForce: Boolean) {
         if (!AppUpgradeService.start(context, url, apkHash, filePath, isForce)) {
             ToastUtil.showLong(getString(R.string.status_upgrade_downolad_failed))
+        }
+    }
+
+    /**
+     * Update APKs used to live under the base dir (the app-specific external dir when mounted); they
+     * are re-downloadable, so drop them (#1433). The base dir comes from FilePathManager's cache.
+     */
+    private fun clearLegacyExternalApks() {
+        try {
+            val legacyDir = File(FilePathManager.getBaseDirFile(), FileUtil.FILE_DIR_UPGRADE)
+            if (legacyDir.canonicalPath == FilePathManager.upgradeDir.canonicalPath) return
+            val deleted = legacyDir.listFiles().orEmpty().count { it.isFile && it.name.endsWith(".apk") && it.delete() }
+            if (deleted > 0) L.i { "[UpdateManager] legacy external apks deleted=$deleted" }
+        } catch (e: Exception) {
+            L.w { "[UpdateManager] legacy external apk cleanup failed: ${e.stackTraceToString()}" }
         }
     }
 

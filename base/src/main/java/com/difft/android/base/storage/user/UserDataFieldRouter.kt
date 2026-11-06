@@ -81,149 +81,168 @@ internal object UserDataFieldRouter {
      * Diff [old] vs [new]. Null [old] is treated as defaults — every non-default
      * field in [new] counts as a change. Returns the dispatch plan.
      */
-    fun diff(old: UserData?, new: UserData): Diff {
-        val prev = old ?: UserData()
+    fun diff(old: UserData?, new: UserData): Diff = project(old ?: UserData(), new, includeDefaults = false)
+
+    /** Full facade projection, including explicit resets to default values. */
+    fun snapshot(value: UserData): Diff = project(UserData(), value, includeDefaults = true)
+
+    private fun project(prev: UserData, new: UserData, includeDefaults: Boolean): Diff {
 
         // Auth half — compute UserAuthData projections once, compare.
         val oldAuth = UserAuthDataMapper.fromUserData(prev)
         val newAuth = UserAuthDataMapper.fromUserData(new)
-        val authChanged = oldAuth != newAuth
+        val authChanged = includeDefaults || oldAuth != newAuth
 
-        // UX half — accumulate per-field changes (26 fields).
         val ux = buildList<AppStateChange> {
-            if (prev.searchByCustomUid != new.searchByCustomUid) {
-                add(AppStateChange.IntChange(AppStateKeys.SEARCH_BY_CUSTOM_UID, new.searchByCustomUid))
-            }
-            if (prev.directoryVersionForContactors != new.directoryVersionForContactors) {
-                add(AppStateChange.IntChange(AppStateKeys.DIRECTORY_VERSION_FOR_CONTACTORS, new.directoryVersionForContactors))
-            }
-            if (prev.mostUseEmojis != new.mostUseEmojis) {
-                add(AppStateChange.StringChange(AppStateKeys.MOST_USE_EMOJIS, new.mostUseEmojis.orEmpty()))
-            }
-            if (prev.syncedContactsV5 != new.syncedContactsV5) {
-                add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_CONTACTS_V5, new.syncedContactsV5))
-            }
-            if (prev.syncedGroupAndMembers != new.syncedGroupAndMembers) {
-                add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_GROUP_AND_MEMBERS, new.syncedGroupAndMembers))
-            }
-            if (prev.passcodeTimeout != new.passcodeTimeout) {
-                add(AppStateChange.IntChange(AppStateKeys.PASSCODE_TIMEOUT, new.passcodeTimeout))
-            }
-            if (prev.passcodeAttempts != new.passcodeAttempts) {
-                add(AppStateChange.IntChange(AppStateKeys.PASSCODE_ATTEMPTS, new.passcodeAttempts))
-            }
-            if (prev.patternShowPath != new.patternShowPath) {
-                add(AppStateChange.BooleanChange(AppStateKeys.PATTERN_SHOW_PATH, new.patternShowPath))
-            }
-            if (prev.patternAttempts != new.patternAttempts) {
-                add(AppStateChange.IntChange(AppStateKeys.PATTERN_ATTEMPTS, new.patternAttempts))
-            }
-            if (prev.lastUseTime != new.lastUseTime) {
-                add(AppStateChange.LongChange(AppStateKeys.LAST_USE_TIME, new.lastUseTime))
-            }
-            if (prev.theme != new.theme) {
-                add(AppStateChange.IntChange(AppStateKeys.THEME, new.theme))
-            }
-            if (prev.textSize != new.textSize) {
-                add(AppStateChange.IntChange(AppStateKeys.TEXT_SIZE, new.textSize))
-            }
-            if (prev.lastCheckUpdateTime != new.lastCheckUpdateTime) {
-                add(AppStateChange.LongChange(AppStateKeys.LAST_CHECK_UPDATE_TIME, new.lastCheckUpdateTime))
-            }
-            if (prev.saveToPhotos != new.saveToPhotos) {
-                add(AppStateChange.BooleanChange(AppStateKeys.SAVE_TO_PHOTOS, new.saveToPhotos))
-            }
-            if (prev.voicePlaybackSpeed != new.voicePlaybackSpeed) {
-                add(AppStateChange.FloatChange(AppStateKeys.VOICE_PLAYBACK_SPEED, new.voicePlaybackSpeed))
-            }
-            if (prev.dualPaneRatio != new.dualPaneRatio) {
-                add(AppStateChange.FloatChange(AppStateKeys.DUAL_PANE_RATIO, new.dualPaneRatio))
-            }
-            if (prev.dualPaneListCollapsed != new.dualPaneListCollapsed) {
-                add(AppStateChange.BooleanChange(AppStateKeys.DUAL_PANE_LIST_COLLAPSED, new.dualPaneListCollapsed))
-            }
-            if (prev.legacyMigrationGuideShown != new.legacyMigrationGuideShown) {
-                add(AppStateChange.BooleanChange(AppStateKeys.LEGACY_MIGRATION_GUIDE_SHOWN, new.legacyMigrationGuideShown))
-            }
-            if (prev.migrationHandoffId != new.migrationHandoffId) {
-                add(AppStateChange.StringChange(AppStateKeys.MIGRATION_HANDOFF_ID, new.migrationHandoffId))
-            }
-            if (prev.migrationHandoffCompletedId != new.migrationHandoffCompletedId) {
-                add(AppStateChange.StringChange(AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID, new.migrationHandoffCompletedId))
-            }
-            if (prev.migrationHandoffDoneAt != new.migrationHandoffDoneAt) {
-                add(AppStateChange.LongChange(AppStateKeys.MIGRATION_HANDOFF_DONE_AT, new.migrationHandoffDoneAt))
-            }
-            if (prev.dualPaneRailCollapsed != new.dualPaneRailCollapsed) {
-                add(AppStateChange.BooleanChange(AppStateKeys.DUAL_PANE_RAIL_COLLAPSED, new.dualPaneRailCollapsed))
-            }
-            if (prev.callVoiceChangerPreset != new.callVoiceChangerPreset) {
-                add(AppStateChange.StringChange(AppStateKeys.CALL_VOICE_CHANGER_PRESET, new.callVoiceChangerPreset))
-            }
-            if (prev.keepAliveEnabled != new.keepAliveEnabled) {
-                add(AppStateChange.BooleanChange(AppStateKeys.KEEP_ALIVE_ENABLED, new.keepAliveEnabled))
-            }
-            if (prev.autoStartMessageService != new.autoStartMessageService) {
-                add(AppStateChange.BooleanChange(AppStateKeys.AUTO_START_MESSAGE_SERVICE, new.autoStartMessageService))
-            }
-            if (prev.floatingWindowPermissionTipsShowedVersion != new.floatingWindowPermissionTipsShowedVersion) {
-                add(AppStateChange.StringChange(AppStateKeys.FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION, new.floatingWindowPermissionTipsShowedVersion.orEmpty()))
-            }
-            if (prev.notificationContentDisplayType != new.notificationContentDisplayType) {
-                add(AppStateChange.IntChange(AppStateKeys.NOTIFICATION_CONTENT_DISPLAY_TYPE, new.notificationContentDisplayType))
-            }
-            if (prev.globalNotification != new.globalNotification) {
-                add(AppStateChange.IntChange(AppStateKeys.GLOBAL_NOTIFICATION, new.globalNotification))
-            }
-            if (prev.hasShownConfidentialTip != new.hasShownConfidentialTip) {
-                add(AppStateChange.BooleanChange(AppStateKeys.HAS_SHOWN_CONFIDENTIAL_TIP, new.hasShownConfidentialTip))
-            }
-            if (prev.imageEditorMarkerPercentage != new.imageEditorMarkerPercentage) {
-                add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE, new.imageEditorMarkerPercentage))
-            }
-            if (prev.imageEditorHighlighterPercentage != new.imageEditorHighlighterPercentage) {
-                add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE, new.imageEditorHighlighterPercentage))
-            }
-            if (prev.imageEditorBlurPercentage != new.imageEditorBlurPercentage) {
-                add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_BLUR_PERCENTAGE, new.imageEditorBlurPercentage))
-            }
-            // — ad-hoc fields formerly accessed via raw AppStateKeys (issue #725 unification step) —
-            if (prev.unreadMsgNum != new.unreadMsgNum) {
-                add(AppStateChange.IntChange(AppStateKeys.SP_UNREAD_MSG_NUM, new.unreadMsgNum))
-            }
-            if (prev.denoiseMode != new.denoiseMode) {
-                add(AppStateChange.StringChange(AppStateKeys.SP_DENOISE_MODE, new.denoiseMode.orEmpty()))
-            }
-            if (prev.criticalAlertInfos != new.criticalAlertInfos) {
-                add(AppStateChange.StringChange(AppStateKeys.SP_KEY_CRITICAL_ALERT_INFOS, new.criticalAlertInfos.orEmpty()))
-            }
-            if (prev.callLastFeedbackResetTime != new.callLastFeedbackResetTime) {
-                add(AppStateChange.LongChange(AppStateKeys.CALL_LAST_FEEDBACK_RESET_TIME, new.callLastFeedbackResetTime))
-            }
-            if (prev.callFeedbackRandomThreshold != new.callFeedbackRandomThreshold) {
-                add(AppStateChange.IntChange(AppStateKeys.CALL_FEEDBACK_RANDOM_THRESHOLD, new.callFeedbackRandomThreshold))
-            }
-            if (prev.callFeedbackHasTriggered != new.callFeedbackHasTriggered) {
-                add(AppStateChange.BooleanChange(AppStateKeys.CALL_FEEDBACK_HAS_TRIGGERED, new.callFeedbackHasTriggered))
-            }
-            if (prev.callMicPermissionRequested != new.callMicPermissionRequested) {
-                add(AppStateChange.BooleanChange(AppStateKeys.CALL_MIC_PERMISSION_REQUESTED, new.callMicPermissionRequested))
-            }
-            if (prev.callCameraPermissionRequested != new.callCameraPermissionRequested) {
-                add(AppStateChange.BooleanChange(AppStateKeys.CALL_CAMERA_PERMISSION_REQUESTED, new.callCameraPermissionRequested))
-            }
-            if (prev.bestHost != new.bestHost) {
-                add(AppStateChange.StringChange(AppStateKeys.SP_KEY_BEST_HOST, new.bestHost.orEmpty()))
-            }
-            if (prev.grayMapJson != new.grayMapJson) {
-                add(AppStateChange.StringChange(AppStateKeys.GRAY_MAP_JSON, new.grayMapJson.orEmpty()))
-            }
+            appendAccountAndDisplayChanges(prev, new, includeDefaults)
+            appendFeatureAndMigrationChanges(prev, new, includeDefaults)
         }
 
         return Diff(
             newAuth = if (authChanged) newAuth else null,
             appStateChanges = ux,
         )
+    }
+
+    private fun MutableList<AppStateChange>.appendAccountAndDisplayChanges(
+        prev: UserData,
+        new: UserData,
+        includeDefaults: Boolean,
+    ) {
+        if (includeDefaults || prev.searchByCustomUid != new.searchByCustomUid) {
+            add(AppStateChange.IntChange(AppStateKeys.SEARCH_BY_CUSTOM_UID, new.searchByCustomUid))
+        }
+        if (includeDefaults || prev.directoryVersionForContactors != new.directoryVersionForContactors) {
+            add(AppStateChange.IntChange(AppStateKeys.DIRECTORY_VERSION_FOR_CONTACTORS, new.directoryVersionForContactors))
+        }
+        if (includeDefaults || prev.mostUseEmojis != new.mostUseEmojis) {
+            add(AppStateChange.StringChange(AppStateKeys.MOST_USE_EMOJIS, new.mostUseEmojis.orEmpty()))
+        }
+        if (includeDefaults || prev.syncedContactsV5 != new.syncedContactsV5) {
+            add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_CONTACTS_V5, new.syncedContactsV5))
+        }
+        if (includeDefaults || prev.syncedGroupAndMembers != new.syncedGroupAndMembers) {
+            add(AppStateChange.BooleanChange(AppStateKeys.SYNCED_GROUP_AND_MEMBERS, new.syncedGroupAndMembers))
+        }
+        if (includeDefaults || prev.passcodeTimeout != new.passcodeTimeout) {
+            add(AppStateChange.IntChange(AppStateKeys.PASSCODE_TIMEOUT, new.passcodeTimeout))
+        }
+        if (includeDefaults || prev.passcodeAttempts != new.passcodeAttempts) {
+            add(AppStateChange.IntChange(AppStateKeys.PASSCODE_ATTEMPTS, new.passcodeAttempts))
+        }
+        if (includeDefaults || prev.passcodeAutoMisses != new.passcodeAutoMisses) {
+            add(AppStateChange.IntChange(AppStateKeys.PASSCODE_AUTO_MISSES, new.passcodeAutoMisses))
+        }
+        if (includeDefaults || prev.patternShowPath != new.patternShowPath) {
+            add(AppStateChange.BooleanChange(AppStateKeys.PATTERN_SHOW_PATH, new.patternShowPath))
+        }
+        if (includeDefaults || prev.patternAttempts != new.patternAttempts) {
+            add(AppStateChange.IntChange(AppStateKeys.PATTERN_ATTEMPTS, new.patternAttempts))
+        }
+        if (includeDefaults || prev.lastUseTime != new.lastUseTime) {
+            add(AppStateChange.LongChange(AppStateKeys.LAST_USE_TIME, new.lastUseTime))
+        }
+        if (includeDefaults || prev.theme != new.theme) {
+            add(AppStateChange.IntChange(AppStateKeys.THEME, new.theme))
+        }
+        if (includeDefaults || prev.textSize != new.textSize) {
+            add(AppStateChange.IntChange(AppStateKeys.TEXT_SIZE, new.textSize))
+        }
+        if (includeDefaults || prev.lastCheckUpdateTime != new.lastCheckUpdateTime) {
+            add(AppStateChange.LongChange(AppStateKeys.LAST_CHECK_UPDATE_TIME, new.lastCheckUpdateTime))
+        }
+        if (includeDefaults || prev.saveToPhotos != new.saveToPhotos) {
+            add(AppStateChange.BooleanChange(AppStateKeys.SAVE_TO_PHOTOS, new.saveToPhotos))
+        }
+        if (includeDefaults || prev.voicePlaybackSpeed != new.voicePlaybackSpeed) {
+            add(AppStateChange.FloatChange(AppStateKeys.VOICE_PLAYBACK_SPEED, new.voicePlaybackSpeed))
+        }
+        if (includeDefaults || prev.dualPaneRatio != new.dualPaneRatio) {
+            add(AppStateChange.FloatChange(AppStateKeys.DUAL_PANE_RATIO, new.dualPaneRatio))
+        }
+        if (includeDefaults || prev.dualPaneListCollapsed != new.dualPaneListCollapsed) {
+            add(AppStateChange.BooleanChange(AppStateKeys.DUAL_PANE_LIST_COLLAPSED, new.dualPaneListCollapsed))
+        }
+    }
+
+    private fun MutableList<AppStateChange>.appendFeatureAndMigrationChanges(
+        prev: UserData,
+        new: UserData,
+        includeDefaults: Boolean,
+    ) {
+        if (includeDefaults || prev.legacyMigrationGuideShown != new.legacyMigrationGuideShown) {
+            add(AppStateChange.BooleanChange(AppStateKeys.LEGACY_MIGRATION_GUIDE_SHOWN, new.legacyMigrationGuideShown))
+        }
+        if (includeDefaults || prev.migrationHandoffId != new.migrationHandoffId) {
+            add(AppStateChange.StringChange(AppStateKeys.MIGRATION_HANDOFF_ID, new.migrationHandoffId))
+        }
+        if (includeDefaults || prev.migrationHandoffCompletedId != new.migrationHandoffCompletedId) {
+            add(AppStateChange.StringChange(AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID, new.migrationHandoffCompletedId))
+        }
+        if (includeDefaults || prev.migrationHandoffDoneAt != new.migrationHandoffDoneAt) {
+            add(AppStateChange.LongChange(AppStateKeys.MIGRATION_HANDOFF_DONE_AT, new.migrationHandoffDoneAt))
+        }
+        if (includeDefaults || prev.callVoiceChangerPreset != new.callVoiceChangerPreset) {
+            add(AppStateChange.StringChange(AppStateKeys.CALL_VOICE_CHANGER_PRESET, new.callVoiceChangerPreset))
+        }
+        if (includeDefaults || prev.keepAliveEnabled != new.keepAliveEnabled) {
+            add(AppStateChange.BooleanChange(AppStateKeys.KEEP_ALIVE_ENABLED, new.keepAliveEnabled))
+        }
+        if (includeDefaults || prev.autoStartMessageService != new.autoStartMessageService) {
+            add(AppStateChange.BooleanChange(AppStateKeys.AUTO_START_MESSAGE_SERVICE, new.autoStartMessageService))
+        }
+        if (includeDefaults || prev.floatingWindowPermissionTipsShowedVersion != new.floatingWindowPermissionTipsShowedVersion) {
+            add(AppStateChange.StringChange(AppStateKeys.FLOATING_WINDOW_PERMISSION_TIPS_SHOWED_VERSION, new.floatingWindowPermissionTipsShowedVersion.orEmpty()))
+        }
+        if (includeDefaults || prev.notificationContentDisplayType != new.notificationContentDisplayType) {
+            add(AppStateChange.IntChange(AppStateKeys.NOTIFICATION_CONTENT_DISPLAY_TYPE, new.notificationContentDisplayType))
+        }
+        if (includeDefaults || prev.globalNotification != new.globalNotification) {
+            add(AppStateChange.IntChange(AppStateKeys.GLOBAL_NOTIFICATION, new.globalNotification))
+        }
+        if (includeDefaults || prev.hasShownConfidentialTip != new.hasShownConfidentialTip) {
+            add(AppStateChange.BooleanChange(AppStateKeys.HAS_SHOWN_CONFIDENTIAL_TIP, new.hasShownConfidentialTip))
+        }
+        if (includeDefaults || prev.imageEditorMarkerPercentage != new.imageEditorMarkerPercentage) {
+            add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_MARKER_PERCENTAGE, new.imageEditorMarkerPercentage))
+        }
+        if (includeDefaults || prev.imageEditorHighlighterPercentage != new.imageEditorHighlighterPercentage) {
+            add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_HIGHLIGHTER_PERCENTAGE, new.imageEditorHighlighterPercentage))
+        }
+        if (includeDefaults || prev.imageEditorBlurPercentage != new.imageEditorBlurPercentage) {
+            add(AppStateChange.IntChange(AppStateKeys.IMAGE_EDITOR_BLUR_PERCENTAGE, new.imageEditorBlurPercentage))
+        }
+        // Fields keyed directly by AppStateKeys.
+        if (includeDefaults || prev.unreadMsgNum != new.unreadMsgNum) {
+            add(AppStateChange.IntChange(AppStateKeys.SP_UNREAD_MSG_NUM, new.unreadMsgNum))
+        }
+        if (includeDefaults || prev.denoiseMode != new.denoiseMode) {
+            add(AppStateChange.StringChange(AppStateKeys.SP_DENOISE_MODE, new.denoiseMode.orEmpty()))
+        }
+        if (includeDefaults || prev.criticalAlertInfos != new.criticalAlertInfos) {
+            add(AppStateChange.StringChange(AppStateKeys.SP_KEY_CRITICAL_ALERT_INFOS, new.criticalAlertInfos.orEmpty()))
+        }
+        if (includeDefaults || prev.callLastFeedbackResetTime != new.callLastFeedbackResetTime) {
+            add(AppStateChange.LongChange(AppStateKeys.CALL_LAST_FEEDBACK_RESET_TIME, new.callLastFeedbackResetTime))
+        }
+        if (includeDefaults || prev.callFeedbackRandomThreshold != new.callFeedbackRandomThreshold) {
+            add(AppStateChange.IntChange(AppStateKeys.CALL_FEEDBACK_RANDOM_THRESHOLD, new.callFeedbackRandomThreshold))
+        }
+        if (includeDefaults || prev.callFeedbackHasTriggered != new.callFeedbackHasTriggered) {
+            add(AppStateChange.BooleanChange(AppStateKeys.CALL_FEEDBACK_HAS_TRIGGERED, new.callFeedbackHasTriggered))
+        }
+        if (includeDefaults || prev.callMicPermissionRequested != new.callMicPermissionRequested) {
+            add(AppStateChange.BooleanChange(AppStateKeys.CALL_MIC_PERMISSION_REQUESTED, new.callMicPermissionRequested))
+        }
+        if (includeDefaults || prev.callCameraPermissionRequested != new.callCameraPermissionRequested) {
+            add(AppStateChange.BooleanChange(AppStateKeys.CALL_CAMERA_PERMISSION_REQUESTED, new.callCameraPermissionRequested))
+        }
+        if (includeDefaults || prev.bestHost != new.bestHost) {
+            add(AppStateChange.StringChange(AppStateKeys.SP_KEY_BEST_HOST, new.bestHost.orEmpty()))
+        }
+        if (includeDefaults || prev.grayMapJson != new.grayMapJson) {
+            add(AppStateChange.StringChange(AppStateKeys.GRAY_MAP_JSON, new.grayMapJson.orEmpty()))
+        }
     }
 
     /**
@@ -255,6 +274,7 @@ internal object UserDataFieldRouter {
             AppStateKeys.SYNCED_GROUP_AND_MEMBERS -> base.copy(syncedGroupAndMembers = value as Boolean)
             AppStateKeys.PASSCODE_TIMEOUT -> base.copy(passcodeTimeout = value as Int)
             AppStateKeys.PASSCODE_ATTEMPTS -> base.copy(passcodeAttempts = value as Int)
+            AppStateKeys.PASSCODE_AUTO_MISSES -> base.copy(passcodeAutoMisses = value as Int)
             AppStateKeys.PATTERN_SHOW_PATH -> base.copy(patternShowPath = value as Boolean)
             AppStateKeys.PATTERN_ATTEMPTS -> base.copy(patternAttempts = value as Int)
             AppStateKeys.LAST_USE_TIME -> base.copy(lastUseTime = value as Long)
@@ -269,7 +289,6 @@ internal object UserDataFieldRouter {
             AppStateKeys.MIGRATION_HANDOFF_ID -> base.copy(migrationHandoffId = value as String)
             AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID -> base.copy(migrationHandoffCompletedId = value as String)
             AppStateKeys.MIGRATION_HANDOFF_DONE_AT -> base.copy(migrationHandoffDoneAt = value as Long)
-            AppStateKeys.DUAL_PANE_RAIL_COLLAPSED -> base.copy(dualPaneRailCollapsed = value as Boolean)
             AppStateKeys.CALL_VOICE_CHANGER_PRESET -> base.copy(callVoiceChangerPreset = value as String)
             AppStateKeys.KEEP_ALIVE_ENABLED -> base.copy(keepAliveEnabled = value as Boolean)
             AppStateKeys.AUTO_START_MESSAGE_SERVICE -> base.copy(autoStartMessageService = value as Boolean)
@@ -319,6 +338,7 @@ internal object UserDataFieldRouter {
             syncedGroupAndMembers = appState[AppStateKeys.SYNCED_GROUP_AND_MEMBERS] ?: base.syncedGroupAndMembers,
             passcodeTimeout = appState[AppStateKeys.PASSCODE_TIMEOUT] ?: base.passcodeTimeout,
             passcodeAttempts = appState[AppStateKeys.PASSCODE_ATTEMPTS] ?: base.passcodeAttempts,
+            passcodeAutoMisses = appState[AppStateKeys.PASSCODE_AUTO_MISSES] ?: base.passcodeAutoMisses,
             patternShowPath = appState[AppStateKeys.PATTERN_SHOW_PATH] ?: base.patternShowPath,
             patternAttempts = appState[AppStateKeys.PATTERN_ATTEMPTS] ?: base.patternAttempts,
             lastUseTime = appState[AppStateKeys.LAST_USE_TIME] ?: base.lastUseTime,
@@ -333,7 +353,6 @@ internal object UserDataFieldRouter {
             migrationHandoffId = appState[AppStateKeys.MIGRATION_HANDOFF_ID] ?: base.migrationHandoffId,
             migrationHandoffCompletedId = appState[AppStateKeys.MIGRATION_HANDOFF_COMPLETED_ID] ?: base.migrationHandoffCompletedId,
             migrationHandoffDoneAt = appState[AppStateKeys.MIGRATION_HANDOFF_DONE_AT] ?: base.migrationHandoffDoneAt,
-            dualPaneRailCollapsed = appState[AppStateKeys.DUAL_PANE_RAIL_COLLAPSED] ?: base.dualPaneRailCollapsed,
             callVoiceChangerPreset = appState[AppStateKeys.CALL_VOICE_CHANGER_PRESET] ?: base.callVoiceChangerPreset,
             keepAliveEnabled = appState[AppStateKeys.KEEP_ALIVE_ENABLED] ?: base.keepAliveEnabled,
             autoStartMessageService = appState[AppStateKeys.AUTO_START_MESSAGE_SERVICE] ?: base.autoStartMessageService,

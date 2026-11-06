@@ -11,7 +11,7 @@ object ScreenLockUtil {
     private var exemptUntilElapsed = 0L
 
     /**
-     * Temporary screen-lock exemption for file/image selection, share, APK update, etc.
+     * Temporary screen-lock exemption for file/image selection, share, calls, etc.
      * Auto-expires after [DEFAULT_EXEMPTION_MS]; in-process selectors also clear it in their
      * result/cancel callback so the lock re-engages immediately. Boolean get/set semantics are
      * unchanged, so existing `= true` / `= false` call sites keep compiling.

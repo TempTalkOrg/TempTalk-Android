@@ -4,13 +4,17 @@ import android.os.Looper
 import android.view.ContextThemeWrapper
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import com.difft.android.chat.R
 import com.difft.android.chat.common.MAX_TEXT_FILE_SIZE
 import com.difft.android.chat.databinding.ChatFragmentInputBinding
 import com.difft.android.chat.messages.TestScopeApplication
+import com.difft.android.chat.widget.UnifiedInputTouchHandler
+import com.difft.android.chat.widget.VoiceRecorderView
 import difft.android.messageserialization.For
 import difft.android.messageserialization.model.Mention
 import io.mockk.clearMocks
@@ -23,6 +27,7 @@ import io.mockk.verify
 import org.difft.app.database.models.ContactorModel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -77,7 +82,7 @@ class ChatInputMentionDeletionTest {
     }
 
     @Test
-    fun `deleting a mention restores the voice input button`() {
+    fun `deleting a mention hides the send column`() {
         binding.edittextInput.setText("@Alice ")
         setField("mentions", mutableListOf(Mention(0, 6, "alice", 0)))
         assertEquals(View.VISIBLE, binding.buttonSubmit.visibility)
@@ -86,8 +91,7 @@ class ChatInputMentionDeletionTest {
 
         assertEquals("", binding.edittextInput.text.toString().trim())
         assertEquals(View.GONE, binding.buttonSubmit.visibility)
-        assertEquals(View.VISIBLE, binding.buttonVoice.visibility)
-        assertEquals(View.GONE, binding.buttonKeyboard.visibility)
+        assertEquals(View.GONE, binding.clRightActions.visibility)
         verify {
             draftViewModel.updateDraft("test-group", match {
                 it.content == binding.edittextInput.text.toString() && it.mentions.isEmpty()
@@ -104,7 +108,7 @@ class ChatInputMentionDeletionTest {
 
         assertEquals("hello", binding.edittextInput.text.toString().trim())
         assertEquals(View.VISIBLE, binding.buttonSubmit.visibility)
-        assertEquals(View.GONE, binding.buttonVoice.visibility)
+        assertEquals(View.VISIBLE, binding.clRightActions.visibility)
     }
 
     @Test
@@ -112,17 +116,17 @@ class ChatInputMentionDeletionTest {
         binding.edittextInput.setText("@Alice ")
         setField("mentions", mutableListOf(Mention(0, 6, "alice", 0)))
         binding.edittextInput.text!!.clear()
-        assertEquals(View.VISIBLE, binding.buttonVoice.visibility)
+        assertEquals(View.GONE, binding.clRightActions.visibility)
 
         binding.edittextInput.text!!.append("h")
 
         assertEquals("h", binding.edittextInput.text.toString())
         assertEquals(View.VISIBLE, binding.buttonSubmit.visibility)
-        assertEquals(View.GONE, binding.buttonVoice.visibility)
+        assertEquals(View.VISIBLE, binding.clRightActions.visibility)
     }
 
     @Test
-    fun `backspace inside a mention restores the input mode button`() {
+    fun `backspace inside a mention hides the send column`() {
         binding.edittextInput.setText("@Alice ")
         setField("mentions", mutableListOf(Mention(0, 6, "alice", 0)))
         binding.edittextInput.setSelection(6)
@@ -132,44 +136,39 @@ class ChatInputMentionDeletionTest {
 
         assertEquals("", binding.edittextInput.text.toString().trim())
         assertEquals(View.GONE, binding.buttonSubmit.visibility)
-        assertEquals(View.VISIBLE, binding.buttonVoice.visibility)
+        assertEquals(View.GONE, binding.clRightActions.visibility)
     }
 
     @Test
-    fun `the restored button can switch to voice and back to keyboard`() {
-        binding.edittextInput.setText("@Alice ")
-        setField("mentions", mutableListOf(Mention(0, 6, "alice", 0)))
-        binding.edittextInput.text!!.clear()
-        every { fragment.isAdded } returns true
-        every { fragment.view } returns binding.root
+    fun `a whitespace-only multiline draft keeps the collapsed confidential toggle reachable`() {
+        setField("isConfidentialCollapsed", true)
+        setField("shouldHideConfidential", false)
 
-        assertTrue(binding.buttonVoice.performClick())
-        shadowOf(Looper.getMainLooper()).idleFor(100, TimeUnit.MILLISECONDS)
+        binding.edittextInput.setText("\n\n\n\n")
 
-        verify { chatViewModel.setVoiceVisibility(true) }
-        assertEquals(View.VISIBLE, binding.buttonKeyboard.visibility)
-        assertEquals(View.GONE, binding.buttonVoice.visibility)
         assertEquals(View.GONE, binding.buttonSubmit.visibility)
-
-        assertTrue(binding.buttonKeyboard.performClick())
-
-        verify { chatViewModel.setVoiceVisibility(false) }
-        assertEquals(View.VISIBLE, binding.buttonVoice.visibility)
-        assertEquals(View.GONE, binding.buttonKeyboard.visibility)
+        assertEquals(View.VISIBLE, binding.clRightActions.visibility)
     }
 
     @Test
-    fun `ordinary friend chat text still toggles send and voice buttons`() {
+    fun `the right column has no voice or keyboard toggle`() {
+        val ids = (0 until binding.clRightButtons.childCount).map { binding.clRightButtons.getChildAt(it).id }
+
+        assertEquals(listOf(binding.buttonSubmit.id), ids)
+    }
+
+    @Test
+    fun `ordinary friend chat text toggles the send column`() {
         setField("isGroup", false)
         setField("isFriend", true)
 
         binding.edittextInput.setText("hello")
         assertEquals(View.VISIBLE, binding.buttonSubmit.visibility)
-        assertEquals(View.GONE, binding.buttonVoice.visibility)
+        assertEquals(View.VISIBLE, binding.clRightActions.visibility)
 
         binding.edittextInput.text!!.clear()
         assertEquals(View.GONE, binding.buttonSubmit.visibility)
-        assertEquals(View.VISIBLE, binding.buttonVoice.visibility)
+        assertEquals(View.GONE, binding.clRightActions.visibility)
     }
 
     @Test
@@ -219,6 +218,124 @@ class ChatInputMentionDeletionTest {
             shadowOf(Looper.getMainLooper()).idleFor(10, TimeUnit.MILLISECONDS)
         }
         assertEquals(emptyList<Mention>(), mentions)
+    }
+
+    @Test
+    fun `outside text input a group chat shows the hold-to-talk hint`() {
+        every { fragment.view } returns binding.root
+        setField("shouldHideConfidential", true)
+
+        invokePrivate("refreshInputHint")
+
+        val expected = binding.root.context.getString(R.string.chat_message_input_hint_hold_to_talk)
+        assertTrue(binding.edittextInput.hint.toString().startsWith(expected))
+    }
+
+    @Test
+    fun `the cursor is hidden only while the hold-to-talk hint shows`() {
+        every { fragment.view } returns binding.root
+        setField("shouldHideConfidential", true)
+
+        invokePrivate("refreshInputHint")
+        assertFalse(binding.edittextInput.isCursorVisible)
+
+        binding.edittextInput.setText("h")
+        assertTrue(binding.edittextInput.isCursorVisible)
+    }
+
+    @Test
+    fun `a non-friend chat keeps the regular hint`() {
+        every { fragment.view } returns binding.root
+        every { chatViewModel.neutralInputHintRes } returns R.string.chat_message_input_hint
+        setField("isGroup", false)
+        setField("isFriend", false)
+        setField("shouldHideConfidential", true)
+
+        invokePrivate("refreshInputHint")
+
+        assertEquals(binding.root.context.getString(R.string.chat_message_input_hint), binding.edittextInput.hint.toString())
+    }
+
+    @Test
+    fun `a quick tap does not start recording`() {
+        val (host, recorder) = installRecorderHost(beginResult = true)
+
+        touch(MotionEvent.ACTION_DOWN)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS - 100)
+        touch(MotionEvent.ACTION_UP)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
+
+        verify(exactly = 0) { recorder.beginHold(any()) }
+        verify(exactly = 0) { host.setVoiceRecordOverlayVisible(true) }
+    }
+
+    @Test
+    fun `holding past the threshold records over the input field`() {
+        val (host, recorder) = installRecorderHost(beginResult = true)
+
+        touch(MotionEvent.ACTION_DOWN)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
+
+        verify { host.setVoiceRecordOverlayVisible(true) }
+        verify { recorder.beginHold(binding.clInputContent) }
+        assertEquals(0.4f, binding.clLeftActions.alpha)
+
+        touch(MotionEvent.ACTION_MOVE, y = -300f)
+        touch(MotionEvent.ACTION_UP, y = -300f)
+
+        verify { recorder.moveHold(any(), any()) }
+        verify { recorder.endHold() }
+    }
+
+    @Test
+    fun `a rejected hold hides the overlay and leaves the actions undimmed`() {
+        val (host, _) = installRecorderHost(beginResult = false)
+
+        touch(MotionEvent.ACTION_DOWN)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
+
+        verify { host.setVoiceRecordOverlayVisible(false) }
+        assertEquals(1f, binding.clLeftActions.alpha)
+    }
+
+    @Test
+    fun `a non-friend chat never records on hold`() {
+        setField("isGroup", false)
+        setField("isFriend", false)
+        val (_, recorder) = installRecorderHost(beginResult = true)
+
+        touch(MotionEvent.ACTION_DOWN)
+        idle(UnifiedInputTouchHandler.LONG_PRESS_TIMEOUT_MS)
+
+        verify(exactly = 0) { recorder.beginHold(any()) }
+        assertFalse(binding.clInputContent.scaleX < 1f)
+    }
+
+    private fun installRecorderHost(beginResult: Boolean): Pair<VoiceRecordHost, VoiceRecorderView> {
+        val recorder = mockk<VoiceRecorderView>(relaxed = true)
+        every { recorder.beginHold(any()) } returns beginResult
+        val host = mockk<VoiceRecordHost>(relaxed = true)
+        every { host.voiceRecorderView } returns recorder
+        setField("voiceRecordHost", host)
+        every { fragment.isAdded } returns true
+        every { fragment.view } returns binding.root
+        return host to recorder
+    }
+
+    private fun touch(action: Int, y: Float = 10f) {
+        val event = MotionEvent.obtain(0L, 0L, action, 10f, y, 0)
+        binding.edittextInput.dispatchTouchEvent(event)
+        event.recycle()
+    }
+
+    private fun idle(ms: Long) {
+        shadowOf(Looper.getMainLooper()).idleFor(ms, TimeUnit.MILLISECONDS)
+    }
+
+    private fun invokePrivate(name: String) {
+        ChatMessageInputFragment::class.java.getDeclaredMethod(name).apply {
+            isAccessible = true
+        }.invoke(fragment)
     }
 
     private fun setField(name: String, value: Any) {

@@ -2,6 +2,7 @@ package com.difft.android.chat.jobs
 
 import com.difft.android.PushReactionSendJobFactory
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingGate
 import com.difft.android.chat.dependencies.ApplicationDependencies
 import com.difft.android.chat.jobmanager.Data
 import com.difft.android.chat.jobmanager.Job
@@ -26,7 +27,8 @@ open class PushReactionSendJob @AssistedInject constructor(
     private val newSignalServiceMessageSender: NewSignalServiceMessageSender,
     private val dataMessageCreator: DataMessageCreator,
     private val messageStore: MessageStore,
-) : PushSendJob(parameters ?: buildParameters(textMessage)) {
+    messagingGate: MessagingGate,
+) : PushSendJob(parameters ?: buildParameters(textMessage), messagingGate) {
 
     override fun serialize(): Data = Data.Builder()
         .putString(KEY_MESSAGE_OUT, gson.toJson(textMessage))
@@ -54,11 +56,13 @@ open class PushReactionSendJob @AssistedInject constructor(
                     "action=$action"
         }
         val dataMessage = dataMessageCreator.createFrom(textMessage)
+        val admission = admitSend() ?: return
         newSignalServiceMessageSender.sendDataMessage(
             recipient = textMessage.forWhat,
             room = textMessage.forWhat,
             message = dataMessage,
             notification = null,
+            admission = admission,
         )
         L.i {
             "[Reaction] sent target=${textMessage.forWhat.id} ts=${reaction?.originTimestamp} action=$action"

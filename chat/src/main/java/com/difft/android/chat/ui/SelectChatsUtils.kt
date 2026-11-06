@@ -5,7 +5,6 @@ import android.net.Uri
 import android.text.TextUtils
 import android.view.View
 import android.widget.TextView
-import androidx.appcompat.widget.AppCompatEditText
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -19,6 +18,8 @@ import com.difft.android.base.utils.FileUtil
 import com.difft.android.base.utils.ResUtils
 import com.difft.android.base.utils.appScope
 import com.difft.android.base.utils.normalizeNewlines
+import com.difft.android.base.utils.pane.PageWait
+import com.difft.android.base.utils.pane.TaskWait
 import com.difft.android.messageserialization.db.store.getDisplayNameForUI
 import com.difft.android.messageserialization.db.store.getEffectiveAvatarJson
 import com.difft.android.base.utils.globalServices
@@ -64,6 +65,7 @@ import difft.android.messageserialization.model.TextMessage
 import com.difft.android.network.BaseResponse
 import com.difft.android.network.requests.GetConversationSetRequestBody
 import com.difft.android.network.responses.GetConversationSetResponseBody
+import com.difft.android.base.widget.DifftClearableInputView
 import com.difft.android.base.widget.DifftSearchInputView
 import com.difft.android.base.widget.sideBar.SectionDecoration
 import com.difft.android.base.widget.BaseBottomSheetDialogFragment
@@ -77,6 +79,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -98,6 +101,9 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicBoolean
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import javax.inject.Inject
 
 data class ChatsContact(
@@ -130,23 +136,16 @@ class SelectChatsUtils @Inject constructor(
     @Inject
     lateinit var pushForwardNoticeSendJobFactory: PushForwardNoticeSendJobFactory
 
-    private fun showWaitDialog(activity: Activity, message: String = "") {
-        ComposeDialogManager.showWait(activity, message, cancelable = false)
-    }
-
-    private fun dismissWaitDialog() {
-        ComposeDialogManager.dismissWait()
-    }
-
     /**
      * 任务成功完成后的统一处理
      * @param message 成功提示消息的资源ID
+     * @param wait the task's own wait claim, released first
      * @param onDismiss 关闭 dialog 的回调
      */
-    private suspend fun handleTaskSuccess(message: Int, onDismiss: () -> Unit) {
+    private suspend fun handleTaskSuccess(message: Int, wait: TaskWait, onDismiss: () -> Unit) {
         L.i { "[SelectChatsUtils] forward message success" }
         withContext(Dispatchers.Main) {
-            dismissWaitDialog()
+            wait.release()
             ToastUtil.show(message)
             onDismiss()
         }
@@ -155,12 +154,17 @@ class SelectChatsUtils @Inject constructor(
     /**
      * 任务失败后的统一处理
      */
-    private suspend fun handleTaskError(e: Exception) {
+    private suspend fun handleTaskError(e: Exception, wait: TaskWait) {
         L.e(e) { "[SelectChatsUtils] forward message failed:" }
         withContext(Dispatchers.Main) {
-            dismissWaitDialog()
+            wait.release()
             ToastUtil.show(R.string.operation_failed)
         }
+    }
+
+    /** Releases [wait] even when the task's scope was cancelled before the handlers ran. */
+    private suspend fun releaseTaskWait(wait: TaskWait) {
+        withContext(NonCancellable + Dispatchers.Main) { wait.release() }
     }
 
     companion object {
@@ -198,40 +202,70 @@ class SelectChatsUtils @Inject constructor(
         // PRD v2.0 §改动1/§改动2 条件①④: whether the forwarded content includes someone else's real
         // message. Default true keeps share/external callers tracing; forward sites compute it.
         carriesForeignContent: Boolean = true,
+        // Optional ownership transfer: called once after cancellation or when sending no longer
+        // reads the source file. Existing callers retain ownership when this is null.
+        onFileReleased: (() -> Unit)? = null,
     ) {
+        val sending = AtomicBoolean(false)
+        val released = AtomicBoolean(false)
+        fun releaseOwnedFile() {
+            if (onFileReleased != null && released.compareAndSet(false, true)) {
+                try { onFileReleased() }
+                catch (e: Exception) { L.w { "[SelectChats] source_cleanup_failed error=${e.javaClass.simpleName}" } }
+            }
+        }
         val fragment = ChatSelectBottomSheetFragment.newInstance(
             isContactOnly = false,
             excludeNonFriendRooms = file != null
         )
         fragment.onSelected = onSelected@{ data ->
-            if (data == null) return@onSelected
-            if (data.isGroup) {
-                val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.id))
-                if (group != null && !groupUtil.canSpeak(group, globalServices.myId)) {
-                    ToastUtil.show(context.getString(R.string.group_only_moderators_can_speak_tip))
-                    return@onSelected
-                }
+            if (data == null) {
+                if (!sending.get()) releaseOwnedFile()
+                return@onSelected
             }
-            showSendToDialog(
-                context,
-                data,
-                content,
-                title,
-                file,
-                forwardContexts,
-                scene,
-                sourceConversation,
-                sourceAuthorIds,
-                messageCount,
-                combinedForwardMode,
-                carriesForeignContent,
-                scope = fragment.lifecycleScope,
-                onDismiss = { fragment.dismiss() }
-            )
+            try {
+                if (data.isGroup) {
+                    val group = wcdb.group.getFirstObject(DBGroupModel.gid.eq(data.id))
+                    if (group != null && !groupUtil.canSpeak(group, globalServices.myId)) {
+                        ToastUtil.show(context.getString(R.string.group_only_moderators_can_speak_tip))
+                        return@onSelected
+                    }
+                }
+                showSendToDialog(
+                    context,
+                    data,
+                    content,
+                    title,
+                    file,
+                    forwardContexts,
+                    scene,
+                    sourceConversation,
+                    sourceAuthorIds,
+                    messageCount,
+                    combinedForwardMode,
+                    carriesForeignContent,
+                    scope = fragment.lifecycleScope,
+                    onDismiss = { fragment.dismiss() },
+                    onSendStarted = { onFileReleased == null || (!released.get() && sending.compareAndSet(false, true)) },
+                    onFileReleased = if (onFileReleased == null) null else ::releaseOwnedFile,
+                    onConfirmationCanceled = if (onFileReleased == null) null else {
+                        { if (!sending.get()) { releaseOwnedFile(); fragment.dismiss() } }
+                    },
+                )
+            } catch (e: Exception) {
+                if (onFileReleased == null) throw e
+                releaseOwnedFile()
+                fragment.dismissAllowingStateLoss()
+                L.w { "[SelectChats] file_confirmation_failed error=${e.javaClass.simpleName}" }
+            }
         }
+        if (onFileReleased != null) fragment.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY && !sending.get()) releaseOwnedFile()
+        })
         try {
             fragment.show((context as FragmentActivity).supportFragmentManager, "ChatSelectDialog")
         } catch (e: IllegalStateException) {
+            releaseOwnedFile()
             L.e { "[SelectChatsUtils] show ChatSelectDialog error: ${e.message}" }
         }
     }
@@ -340,7 +374,7 @@ class SelectChatsUtils @Inject constructor(
         }
     }
 
-    private var etMessage: AppCompatEditText? = null
+    private var etMessage: DifftClearableInputView? = null
 
     // Long by nature: a single forward/share dialog builder (view binding in onViewCreated +
     // sequential send-task assembly in onConfirm). PRD v2.0 only threaded the notice params
@@ -361,8 +395,12 @@ class SelectChatsUtils @Inject constructor(
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
         carriesForeignContent: Boolean = true,
         scope: CoroutineScope,
-        onDismiss: () -> Unit
+        onDismiss: () -> Unit,
+        onSendStarted: () -> Boolean = { true },
+        onFileReleased: (() -> Unit)? = null,
+        onConfirmationCanceled: (() -> Unit)? = null,
     ) {
+        var confirmed = false
         ComposeDialogManager.showMessageDialog(
             context = context,
             title = context.getString(R.string.chat_send_to),
@@ -393,10 +431,19 @@ class SelectChatsUtils @Inject constructor(
                 textContent.text = contentText.normalizeNewlines()
             },
             onConfirm = {
-                val message = etMessage?.text.toString().trim()
+                if (!onSendStarted()) return@showMessageDialog
+                confirmed = true
+                val message = forwardNoteText(etMessage)
 
-                // 显示全局 WaitDialog，设置为不可取消
-                showWaitDialog(context)
+                // The wait belongs to this send (the select sheet runs it), not to a page.
+                val wait = try { TaskWait.claim(context, wait = null) }
+                catch (e: Exception) {
+                    if (onFileReleased == null) throw e
+                    onFileReleased()
+                    onDismiss()
+                    L.w { "[SelectChats] file_send_start_failed error=${e.javaClass.simpleName}" }
+                    return@showMessageDialog
+                }
 
                 // 收集所有需要发送的任务
                 val sendTasks = mutableListOf<suspend () -> Unit>()
@@ -474,17 +521,29 @@ class SelectChatsUtils @Inject constructor(
                 }
 
                 // 顺序执行所有发送任务
-                scope.launch(Dispatchers.IO) {
+                val sendJob = scope.launch(Dispatchers.IO) {
                     try {
                         sendTasks.forEach { task ->
                             task()
                         }
-                        handleTaskSuccess(R.string.chat_sent, onDismiss)
+                        handleTaskSuccess(R.string.chat_sent, wait, onDismiss)
+                    } catch (e: CancellationException) {
+                        if (onFileReleased != null) throw e
+                        handleTaskError(e, wait)
                     } catch (e: Exception) {
-                        handleTaskError(e)
+                        handleTaskError(e, wait)
+                        if (onFileReleased != null) withContext(Dispatchers.Main) { onDismiss() }
+                    } finally {
+                        releaseTaskWait(wait)
                     }
                 }
-            }
+                // A launch canceled before its body starts still relinquishes the source; when
+                // started, completion happens after synchronous staging/copy has left the file.
+                if (onFileReleased != null) sendJob.invokeOnCompletion { onFileReleased() }
+            },
+            onDismiss = {
+                if (!confirmed) onConfirmationCanceled?.invoke()
+            },
         )
     }
 
@@ -515,9 +574,11 @@ class SelectChatsUtils @Inject constructor(
         combinedForwardMode: CombinedForwardMode = CombinedForwardMode.UNKNOWN,
         // PRD v2.0 §改动1/§改动2 条件①④: whether the saved content includes someone else's real message.
         carriesForeignContent: Boolean = true,
+        // A page in the home screen's detail stack passes its own wait, so the dialog goes with
+        // the page; the save itself still completes.
+        wait: PageWait? = null,
     ) {
-        // 显示全局 WaitDialog，设置为不可取消
-        showWaitDialog(context)
+        val taskWait = TaskWait.claim(context, wait)
 
         if (!forwardContexts.isNullOrEmpty()) {
             appScope.launch(Dispatchers.IO) {
@@ -564,9 +625,11 @@ class SelectChatsUtils @Inject constructor(
                     } else {
                         L.w { "[ForwardNotice] saveToNotes called without sourceConversation, skip notice" }
                     }
-                    handleTaskSuccess(R.string.chat_saved) {}
+                    handleTaskSuccess(R.string.chat_saved, taskWait) {}
                 } catch (e: Exception) {
-                    handleTaskError(e)
+                    handleTaskError(e, taskWait)
+                } finally {
+                    releaseTaskWait(taskWait)
                 }
             }
         } else {
@@ -574,9 +637,11 @@ class SelectChatsUtils @Inject constructor(
             appScope.launch(Dispatchers.IO) {
                 try {
                     sendTextPush(context, content, globalServices.myId, false)
-                    handleTaskSuccess(R.string.chat_sent) {}
+                    handleTaskSuccess(R.string.chat_sent, taskWait) {}
                 } catch (e: Exception) {
-                    handleTaskError(e)
+                    handleTaskError(e, taskWait)
+                } finally {
+                    releaseTaskWait(taskWait)
                 }
             }
         }
@@ -1180,6 +1245,13 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
     override fun isFullScreen(): Boolean = true
 
     override fun onContentViewCreated(view: View, savedInstanceState: Bundle?) {
+        // Fresh instances always get onSelected before show(); a picker restored after recreation
+        // has no callback and would ignore taps (#1440).
+        if (onSelected == null) {
+            L.i { "[SelectChats] restored picker without callback, dismissing" }
+            dismissAllowingStateLoss()
+            return
+        }
         selectChatsUtils.excludeNonFriendRooms = excludeNonFriendRooms
 
         if (isContactOnly) {
@@ -1345,3 +1417,6 @@ class ChatSelectBottomSheetFragment() : BaseBottomSheetDialogFragment() {
         selectChatsUtils.searchKey = ""
     }
 }
+
+/** The optional note typed in the forward dialog, as sent after the forwarded content. */
+internal fun forwardNoteText(input: DifftClearableInputView?): String = input?.query.orEmpty().trim()

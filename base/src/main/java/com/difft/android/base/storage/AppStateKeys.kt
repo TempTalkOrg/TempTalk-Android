@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.difft.android.base.utils.TextSizeUtil
 
 /**
@@ -40,6 +41,7 @@ object AppStateKeys {
     val SYNCED_GROUP_AND_MEMBERS = booleanPreferencesKey("synced_group_and_members")
     val PASSCODE_TIMEOUT = intPreferencesKey("passcode_timeout")
     val PASSCODE_ATTEMPTS = intPreferencesKey("passcode_attempts")
+    val PASSCODE_AUTO_MISSES = intPreferencesKey("passcode_auto_misses")
     val PATTERN_SHOW_PATH = booleanPreferencesKey("pattern_show_path")
     val PATTERN_ATTEMPTS = intPreferencesKey("pattern_attempts")
     val LAST_USE_TIME = longPreferencesKey("last_use_time")              // HOT WRITE — flushed via PendingLastUseTime
@@ -51,7 +53,6 @@ object AppStateKeys {
     val DUAL_PANE_RATIO = floatPreferencesKey("dual_pane_ratio")
     val DUAL_PANE_LIST_COLLAPSED = booleanPreferencesKey("dual_pane_list_collapsed")
     val LEGACY_MIGRATION_GUIDE_SHOWN = booleanPreferencesKey("legacy_migration_guide_shown")
-    val DUAL_PANE_RAIL_COLLAPSED = booleanPreferencesKey("dual_pane_rail_collapsed")
     val CALL_VOICE_CHANGER_PRESET = stringPreferencesKey("call_voice_changer_preset")
     val CALL_MIC_PERMISSION_REQUESTED = booleanPreferencesKey("call_mic_permission_requested")
     val CALL_CAMERA_PERMISSION_REQUESTED = booleanPreferencesKey("call_camera_permission_requested")
@@ -123,6 +124,9 @@ object AppStateKeys {
     /** Up to 7 daily count slots feeding the local push-health verdict, see KeepAliveHealthWindow. */
     val BG_HEALTH_DAILY = stringPreferencesKey("bg_health_daily")
 
+    /** Per-UTC-day counts of late deliveries (`d<day>:n`), see LateDeliveryTracker; counts only, kept for every install. */
+    val BG_LATE_DELIVERY_DAYS = stringPreferencesKey("bg_late_delivery_days")
+
     /** Epoch ms when FCM token fetch/bind first failed in the current failure run; absent when healthy. Duration use only. */
     val BG_FCM_FAIL_SINCE = longPreferencesKey("bg_fcm_fail_since")
 
@@ -191,6 +195,18 @@ object AppStateKeys {
     /** JSON of the one P2P send awaiting the receiver's verdict; see `PendingVerdictStore`. Absent when none. */
     val MIGRATION_PENDING_VERDICT = stringPreferencesKey("migration_pending_verdict")
 
+    /**
+     * JSON of the message pause of a device-replacement export (#1382); see `MigrationMessagePause`.
+     * Absent when messaging is open. Holds only hashes of the account and credential.
+     */
+    val MIGRATION_MESSAGE_PAUSE = stringPreferencesKey("migration_message_pause")
+
+    /**
+     * Set once the send jobs stored without a creator login have been failed (#1382 A04); see
+     * `UntaggedSendJobSweep`. Written only after the sweep completes, so an interrupted sweep reruns.
+     */
+    val UNTAGGED_SEND_JOBS_SWEPT = booleanPreferencesKey("untagged_send_jobs_swept")
+
     // ---------- Section J: Auto-translate model download ----------
     //
     // One JSON blob keyed by ML Kit model code: consecutive failures, last attempt, last failure
@@ -227,6 +243,39 @@ object AppStateKeys {
     val NOTIF_TEST_BANNER = stringPreferencesKey("notif_test_banner")
     val NOTIF_TEST_LOCKSCREEN = stringPreferencesKey("notif_test_lockscreen")
     val NOTIF_TEST_CALL = stringPreferencesKey("notif_test_call")
+    val NOTIF_TEST_CALL_TICKET = stringPreferencesKey("notif_test_call_ticket_v1")
+
+    /** Channel ids whose system settings page the user opened from the notification settings; see NotificationTestStore. */
+    val NOTIF_CATEGORY_SEEN = stringSetPreferencesKey("notif_category_seen")
+
+    // ---------- Section N: Group focus ----------
+
+    /** JSON of the cached group focus state (feature switch + server snapshot); see GroupFocusStore. */
+    val GROUP_FOCUS_STATE = stringPreferencesKey("group_focus_state")
+
+    /**
+     * Legacy: focus group whose pin the user changed during the current focus, before the pin
+     * ownership moved into the room table (`RoomModel.focusPin`). Read once by
+     * `FocusPinCoordinator` to import it, then removed; nothing writes it any more.
+     */
+    val FOCUS_PIN_OPT_OUT_GID = stringPreferencesKey("focus_pin_opt_out_gid")
+
+    /** Invalid-episode key (`<reason>:<gids>`) whose "focus group gone" dialog (D5 / D5b) the user has answered. */
+    val FOCUS_INVALID_DIALOG_HANDLED_EPISODE = stringPreferencesKey("focus_invalid_dialog_handled_episode")
+
+    /** Invalid-episode key whose home status strip the user closed with the x. */
+    val FOCUS_INVALID_STRIP_DISMISSED_EPISODE = stringPreferencesKey("focus_invalid_strip_dismissed_episode")
+
+    /**
+     * Gid and display name of the focus group, cached while it is valid so a dismissed group can still be named.
+     * The gid value is stamped with the owner uid (see FocusOwnedMark); like every focus mark here it only
+     * applies to the account that wrote it.
+     */
+    val FOCUS_GROUP_NAME_GID = stringPreferencesKey("focus_group_name_gid")
+    val FOCUS_GROUP_NAME = stringPreferencesKey("focus_group_name")
+
+    /** Owner-stamped, comma-separated gids of focus groups whose conversation the user deleted during this focus. */
+    val FOCUS_DELETED_ROW_GIDS = stringPreferencesKey("focus_deleted_row_gids")
 
 }
 
@@ -247,6 +296,7 @@ object AppStateDefaults {
     const val SYNCED_GROUP_AND_MEMBERS = false
     const val PASSCODE_TIMEOUT = 300
     const val PASSCODE_ATTEMPTS = 0
+    const val PASSCODE_AUTO_MISSES = 0
     const val PATTERN_SHOW_PATH = true
     const val PATTERN_ATTEMPTS = 0
     const val LAST_USE_TIME = 0L
@@ -259,7 +309,6 @@ object AppStateDefaults {
     const val DUAL_PANE_RATIO = -1f
     const val DUAL_PANE_LIST_COLLAPSED = false
     const val LEGACY_MIGRATION_GUIDE_SHOWN = false
-    const val DUAL_PANE_RAIL_COLLAPSED = false
     const val CALL_VOICE_CHANGER_PRESET = "original"
     const val CALL_MIC_PERMISSION_REQUESTED = false
     const val CALL_CAMERA_PERMISSION_REQUESTED = false
@@ -308,6 +357,7 @@ object AppStateDefaults {
     const val MIGRATION_HANDOFF_ID = ""
     const val MIGRATION_HANDOFF_COMPLETED_ID = ""
     const val MIGRATION_HANDOFF_DONE_AT = 0L
+    const val UNTAGGED_SEND_JOBS_SWEPT = false
 
     // Section J defaults — nullable-string sentinel; "" means "no failure recorded for any model".
     const val TRANSLATE_MODEL_DOWNLOAD_STATE = ""
@@ -319,4 +369,7 @@ object AppStateDefaults {
 
     // Section L defaults — "" = no prompt state written yet.
     const val STARTUP_PROMPT_STATE = ""
+
+    // Section N defaults — "" = no focus state cached yet.
+    const val GROUP_FOCUS_STATE = ""
 }

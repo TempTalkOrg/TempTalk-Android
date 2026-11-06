@@ -10,6 +10,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,33 +41,44 @@ internal class JobRunner(
                 // jobs stay persisted. CancellationException isn't a subtype, so it still propagates.
                 try {
                     val job = jobController.pullNextEligibleJobForExecution(jobPredicate, managementDispatcher)
-                    val result = try {
-                        runJob(job)
+                    try {
+                        val result = try {
+                            runJob(job)
+                        } finally {
+                            withContext(managementDispatcher + NonCancellable) { jobController.onJobFinished(job) }
+                        }
+                        recordResult(job, result)
                     } finally {
-                        withContext(managementDispatcher + NonCancellable) { jobController.onJobFinished(job) }
-                    }
-
-                    when {
-                        result.isSuccess() -> {
-                            withContext(managementDispatcher) { jobController.onSuccess(job) }
-                        }
-                        result.isRetry() -> {
-                            withContext(managementDispatcher) {
-                                jobController.onRetry(job, result.getBackoffInterval())
-                            }
-                            job.onRetry()
-                        }
-                        result.isFailure() -> {
-                            withContext(managementDispatcher) { jobController.onFailure(job) }
-                            job.onFailure()
-                        }
-                        else -> error("Invalid job result!")
+                        // After the result is recorded, so a send ticket also covers onFailure's writes (#1382).
+                        job.closeRunResources()
                     }
                 } catch (e: WCDBKeyUnavailableException) {
                     L.w { "[JobRunner] cipher key unavailable, stopping runner id=$id: ${e.message}" }
                     break
                 }
             }
+        }
+    }
+
+    private suspend fun recordResult(job: Job, result: Job.Result) {
+        when {
+            result.isSuccess() -> {
+                withContext(managementDispatcher) { jobController.onSuccess(job) }
+            }
+            result.isRetry() -> {
+                withContext(managementDispatcher) {
+                    jobController.onRetry(job, result.getBackoffInterval())
+                }
+                job.onRetry()
+            }
+            result.isDeferred() -> {
+                withContext(managementDispatcher) { jobController.onDeferred(job) }
+            }
+            result.isFailure() -> {
+                withContext(managementDispatcher) { jobController.onFailure(job) }
+                job.onFailure()
+            }
+            else -> error("Invalid job result!")
         }
     }
 
@@ -90,7 +103,11 @@ internal class JobRunner(
                 result = Job.Result.failure()
             }
         } catch (e: CancellationException) {
-            throw e // Must rethrow -- coroutine cancellation is not a job failure
+            // Real cancellation of this runner propagates; a stray one thrown by the job would
+            // otherwise end this runner for the rest of the process.
+            currentCoroutineContext().ensureActive()
+            L.w { JobLogger.format(job, id.toString(), "Failing due to a stray cancellation.") + e }
+            return Job.Result.failure()
         } catch (e: Exception) {
             L.w { JobLogger.format(job, id.toString(), "Failing due to an unexpected exception.") + e }
             return Job.Result.failure()

@@ -44,12 +44,35 @@ class RoomModel {
     var pinnedTime: Long? = null
 
     /**
+     * Who owns the current pin with respect to group focus: 0 = focus never touched it (also: the
+     * group was pinned before focus started), 1 = focus pinned it automatically (revoked when focus
+     * ends or moves), 2 = the user changed the pin during focus (permanent; focus leaves it alone).
+     */
+    @WCDBField
+    @WCDBDefault(intValue = 0)
+    var focusPin: Int = 0
+
+    /**
      * MUTED(1),
      * UNMUTED(0);
      */
     @WCDBField
     @WCDBDefault(intValue = 0)
     var muteStatus: Int = 0
+
+    /**
+     * Mute sub-options: what still notifies while [muteStatus] is MUTED (server-owned, synced
+     * through the conversation settings contract). null = never received from the server; read
+     * with the server defaults (@me = true, @all = false, group call = false).
+     */
+    @WCDBField
+    var allowMentionMe: Boolean? = null
+
+    @WCDBField
+    var allowMentionAll: Boolean? = null
+
+    @WCDBField
+    var allowGroupCall: Boolean? = null
 
     /**
      * 屏蔽状态（仅单聊有效）
@@ -175,6 +198,9 @@ class RoomModel {
         if (other !is RoomModel) return false
         return roomType == other.roomType &&
                 muteStatus == other.muteStatus &&
+                allowMentionMe == other.allowMentionMe &&
+                allowMentionAll == other.allowMentionAll &&
+                allowGroupCall == other.allowGroupCall &&
                 blockStatus == other.blockStatus &&
                 readPosition == other.readPosition &&
                 unreadMessageNum == other.unreadMessageNum &&
@@ -209,6 +235,9 @@ class RoomModel {
         messageClearAnchor,
         pinnedTime,
         muteStatus,
+        allowMentionMe,
+        allowMentionAll,
+        allowGroupCall,
         blockStatus,
         readPosition,
         unreadMessageNum,
@@ -238,6 +267,9 @@ class RoomModel {
                 ", messageClearAnchor=" + messageClearAnchor +
                 ", pinnedTime=" + pinnedTime +
                 ", muteStatus=" + muteStatus +
+                ", allowMentionMe=" + allowMentionMe +
+                ", allowMentionAll=" + allowMentionAll +
+                ", allowGroupCall=" + allowGroupCall +
                 ", blockStatus=" + blockStatus +
                 ", readPosition=" + readPosition +
                 ", unreadMessageNum=" + unreadMessageNum +

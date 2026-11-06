@@ -135,6 +135,16 @@ class KeepAliveHealthCounters @Inject constructor(
         flush(force = false)
     }
 
+    /**
+     * One delivery that [LateDeliveryTracker] judged late (see [LateDeliveryRule]); feeds the 7-day
+     * `L` verdict rule on reporting installs. The tracker keeps its own count for every install.
+     */
+    fun onLateDelivery() {
+        if (!collecting) return
+        synchronized(lock) { increment(HealthEventKeys.LATE_5M) }
+        flush(force = false)
+    }
+
     fun onServiceStarted() {
         synchronized(lock) {
             if (fgsAccruedFrom != null) return

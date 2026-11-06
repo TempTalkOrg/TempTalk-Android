@@ -21,8 +21,8 @@ import com.difft.android.base.storage.KeyboardHeightCache
  * Supports smooth keyboard animation via [WindowInsetsAnimationCompat.Callback] when
  * [R.styleable.InsetAwareConstraintLayout_animateKeyboardChanges] is enabled.
  *
- * Use [setUseWindowTypes] to control whether system bars insets are applied (disable for
- * dual-pane mode where the host Activity already handles system bars).
+ * Use [setUseWindowTypes] to control whether system bars insets are applied (disable only
+ * under a host that already pads the system bars; the home screen's panes do not).
  */
 class InsetAwareConstraintLayout @JvmOverloads constructor(
     context: Context,

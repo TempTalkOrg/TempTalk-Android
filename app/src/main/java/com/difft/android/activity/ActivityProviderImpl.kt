@@ -9,6 +9,7 @@ import com.difft.android.base.activity.ActivityProvider
 import com.difft.android.base.activity.ActivityType
 import com.difft.android.call.CriticalAlertActivity
 import com.difft.android.setting.BackgroundConnectionSettingsActivity
+import com.difft.android.setting.NotificationSettingsActivity
 import com.difft.android.setting.ProxySettingsActivity
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +32,7 @@ class ActivityProviderImpl @Inject constructor() : ActivityProvider {
             ActivityType.CRITICAL_ALERT -> CriticalAlertActivity::class.java
             ActivityType.BACKGROUND_CONNECTION_SETTINGS -> BackgroundConnectionSettingsActivity::class.java
             ActivityType.PROXY_SETTINGS -> ProxySettingsActivity::class.java
+            ActivityType.NOTIFICATION_SETTINGS -> NotificationSettingsActivity::class.java
         }
     }
 }

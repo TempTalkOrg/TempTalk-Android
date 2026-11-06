@@ -1,6 +1,12 @@
 package com.difft.android.setting.theme
 
 import android.os.Bundle
+import com.difft.android.base.utils.pane.SettingsIdiomPage
+import com.difft.android.base.utils.pane.ownsWindow
+import com.difft.android.base.utils.pane.detailNavigation
+import com.difft.android.base.utils.pane.detailPageInsets
+import com.difft.android.base.utils.pane.containerPadsBottom
+import com.difft.android.base.utils.DualPaneUtils.showsDetailBackButton
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -27,7 +33,7 @@ import javax.inject.Inject
  * Can be displayed in both Activity (single-pane) and dual-pane mode
  */
 @AndroidEntryPoint
-class ThemeFragment : Fragment() {
+class ThemeFragment : Fragment(), SettingsIdiomPage {
 
     companion object {
         fun newInstance() = ThemeFragment()
@@ -42,7 +48,7 @@ class ThemeFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent { DifftTheme { ThemePage() } }
+        setContent { DifftTheme(applyWindowBackground = ownsWindow()) { ThemePage() } }
     }
 
     // The host applies system-bar insets (BaseActivity does it for the XML root that holds this
@@ -57,12 +63,13 @@ class ThemeFragment : Fragment() {
         Column(
             Modifier
                 .fillMaxSize()
+                .detailPageInsets(containerPadsBottom())
                 .background(DifftTheme.colors.bg),
         ) {
             TitleBar(
                 titleText = getString(com.difft.android.chat.R.string.me_theme),
-                showBackButton = !isInDualPaneMode(),
-                onBackClick = { activity?.finish() },
+                showBackButton = showsDetailBackButton(),
+                onBackClick = { detailNavigation().pop(this@ThemeFragment) },
             )
             ThemeSettingsContent(
                 selectedMode = selectedMode.intValue,
@@ -76,4 +83,5 @@ class ThemeFragment : Fragment() {
             )
         }
     }
+
 }

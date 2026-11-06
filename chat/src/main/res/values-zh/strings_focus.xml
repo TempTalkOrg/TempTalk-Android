@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Focus on This Group: settings rows -->
+    <string name="focus_this_group">专注此群</string>
+    <string name="focus_group_chat">专注群聊</string>
+    <string name="focus_caption_off">开启后，其他群免打扰</string>
+    <string name="focus_caption_on">其他群已免打扰</string>
+    <string name="focus_caption_other">正在专注「%1$s」</string>
+    <string name="focus_caption_other_until">正在专注「%1$s」 · %2$s 结束</string>
+    <string name="focus_caption_invalid">未选择专注的群</string>
+    <string name="focus_me_caption_off">选择一个群专注，其他群免打扰</string>
+    <string name="focus_end_time">结束时间</string>
+    <string name="focus_end_tomorrow">明天 %1$s</string>
+    <string name="focus_others_still_notify">其他群仍通知</string>
+    <string name="focus_still_notify">以下仍通知</string>
+    <string name="focus_fold_others">折叠其他群</string>
+    <string name="focus_select_group">选择专注的群</string>
+    <!-- Me > Notifications: secondary row "Focusing on   {group} >" that opens the picker to switch -->
+    <string name="focus_focusing">正在专注</string>
+    <string name="focus_item_mention_me">\@我</string>
+    <string name="focus_item_mention_all">\@所有人</string>
+    <string name="focus_item_group_call">群通话</string>
+    <string name="focus_item_separator">"、"</string>
+
+    <!-- Paused rows -->
+    <string name="focus_paused">已暂停</string>
+    <string name="focus_paused_returns">结束专注后恢复为“%1$s”</string>
+    <string name="focus_takeover_caption">专注期间由专注设置接管，结束专注后恢复：免打扰“%1$s”，消息通知“%2$s”。</string>
+    <string name="focus_muted_caption">免打扰期间暂停，关闭免打扰后恢复为“%1$s”。</string>
+    <string name="focus_mute_on">开启</string>
+    <string name="focus_mute_off">关闭</string>
+
+    <!-- Duration sheet -->
+    <string name="focus_sheet_title">专注「%1$s」</string>
+    <!-- %1$s: the items of "Other Groups Still Notify" that are on, e.g. "@我、群通话" -->
+    <string name="focus_sheet_desc_fold_notify">此群的所有消息和群通话都会通知。其他群免打扰并折叠显示，%1$s仍会通知。</string>
+    <string name="focus_sheet_desc_notify">此群的所有消息和群通话都会通知。其他群免打扰，%1$s仍会通知。</string>
+    <string name="focus_sheet_desc_fold">此群的所有消息和群通话都会通知。其他群免打扰并折叠显示。</string>
+    <string name="focus_sheet_desc_plain">此群的所有消息和群通话都会通知。其他群免打扰。</string>
+    <string name="focus_duration_1h">1 小时</string>
+    <string name="focus_duration_8h">8 小时</string>
+    <string name="focus_duration_manual">手动结束</string>
+    <string name="focus_cancel">取消</string>
+
+    <!-- Dialogs -->
+    <string name="focus_switch_title">专注此群？</string>
+    <string name="focus_switch_message">将改为专注「%1$s」，「%2$s」将免打扰。</string>
+    <string name="focus_switch_confirm">切换</string>
+    <string name="focus_dialog_mute_paused_title">免打扰已暂停</string>
+    <string name="focus_dialog_notify_paused_title">消息通知已暂停</string>
+    <string name="focus_dialog_group_notify_paused_title">群消息通知已暂停</string>
+    <string name="focus_dialog_takeover_message">专注期间，各群的免打扰和消息通知由专注设置接管，结束专注后恢复。</string>
+    <string name="focus_dialog_muted_message">免打扰期间，消息通知暂停，关闭免打扰后恢复。</string>
+    <string name="focus_dialog_go_settings">前往设置</string>
+    <string name="focus_dialog_end_focus">结束专注</string>
+    <string name="focus_dialog_turn_off_mute">关闭免打扰</string>
+
+    <!-- Group picker -->
+    <string name="focus_picker_cancel">取消</string>
+    <string name="focus_picker_done">完成</string>
+    <string name="focus_picker_footer">仅可选择一个群。</string>
+    <string name="focus_picker_empty">暂无群聊</string>
+    <plurals name="focus_picker_members">
+        <item quantity="other">%1$d 位成员</item>
+    </plurals>
+</resources>

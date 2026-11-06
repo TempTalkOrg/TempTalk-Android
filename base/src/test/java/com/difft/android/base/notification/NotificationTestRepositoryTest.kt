@@ -2,79 +2,77 @@ package com.difft.android.base.notification
 
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
+import java.io.IOException
+import java.util.UUID
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
-/** #1350: the call test's shown signal and the ordering of its OK and timeout FAIL writes. */
+/** Token-aware CALL publication: success is signalled only after a conditional durable write. */
 class NotificationTestRepositoryTest {
-
-    private val written = mutableListOf<NotificationTestResult>()
     private lateinit var store: NotificationTestStore
     private lateinit var repository: NotificationTestRepository
+    private val runId = UUID.randomUUID().toString()
 
     @Before
     fun setUp() {
-        store = mockk {
-            coEvery { write(any(), any()) } answers { synchronized(written) { written += secondArg<NotificationTestResult>() } }
-        }
-        repository = NotificationTestRepository(mockk(), store)
-        repository.notePostedCall("fp")
+        store = mockk()
+        val clock = mockk<NotificationTestClock> { every { nowMs() } returns 2_000L }
+        repository = NotificationTestRepository(mockk(), store, clock)
     }
 
     @Test
-    fun `the call screen raises the shown signal before anything is written`() {
-        repository.markCallShown(nowMs = 2_000)
-        assertEquals(2_000, repository.callShown.value)
-        assertTrue(written.isEmpty())
+    fun `the readiness read folds in the seen categories`() = runBlocking {
+        val provider = mockk<NotificationReadinessProvider>()
+        val untouched = ChannelReading(android.app.NotificationManager.IMPORTANCE_HIGH, hasSound = true, userSetImportance = false)
+        every { provider.readInput() } returns ReadinessInput(
+            sdkInt = 34,
+            postNotificationsGranted = true,
+            appNotificationsEnabled = true,
+            messageGroupBlocked = false,
+            messageChannel = untouched,
+            callChannel = untouched,
+            criticalChannel = untouched,
+            canUseFullScreenIntent = true,
+            oemBrand = OemBrand.XIAOMI,
+        )
+        coEvery { store.read() } returns emptyMap()
+        coEvery { store.readSeenCategories() } returns setOf(NotificationChannelIds.CALL)
+        val readiness = NotificationTestRepository(provider, store, mockk(relaxed = true)).readReadiness()
+        assertEquals(ReadinessIssue.MESSAGE_CATEGORY_NEVER_SET, readiness.item(ReadinessItemId.N2)?.issue)
+        assertEquals(ReadinessStatus.OK, readiness.item(ReadinessItemId.C1)?.status)
     }
 
     @Test
-    fun `a call timeout records nothing once the call screen has opened since the post`() = runBlocking {
-        repository.markCallShown(nowMs = 2_000)
-        assertFalse(repository.recordCallTimeout("fp", postedAt = 1_000))
+    fun `cold screen success uses the durable ticket without reading current settings`() = runBlocking {
+        coEvery { store.updateCall(runId, 2_000L, true) } returns NotificationTestCallUpdate.RECORDED
+        assertEquals(NotificationTestCallUpdate.RECORDED, repository.recordCallShown(runId))
+        assertEquals(runId, repository.callShownRun.value)
         coVerify(exactly = 0) { store.write(any(), any()) }
     }
 
     @Test
-    fun `a call timeout records a failure under the posted fingerprint when no screen opened since the post`() = runBlocking {
-        repository.markCallShown(nowMs = 500)
-        assertTrue(repository.recordCallTimeout("fp", postedAt = 1_000, nowMs = 16_000))
-        assertEquals(listOf(NotificationTestResult(NotificationTestOutcome.FAIL, 16_000, "fp")), written)
+    fun `a rejected old ticket cannot raise the shown signal`() = runBlocking {
+        coEvery { store.updateCall(runId, 2_000L, true) } returns NotificationTestCallUpdate.REJECTED
+        assertEquals(NotificationTestCallUpdate.REJECTED, repository.recordCallShown(runId))
+        assertNull(repository.callShownRun.value)
     }
 
     @Test
-    fun `a call screen opening while the timeout failure is being written still ends on OK`() = runBlocking {
-        val failWriting = CompletableDeferred<Unit>()
-        val releaseFail = CompletableDeferred<Unit>()
-        coEvery { store.write(any(), any()) } coAnswers {
-            val result = secondArg<NotificationTestResult>()
-            if (result.outcome == NotificationTestOutcome.FAIL) {
-                failWriting.complete(Unit)
-                releaseFail.await()
-            }
-            synchronized(written) { written += result }
-        }
-        val fail = async(Dispatchers.IO) { repository.recordCallTimeout("fp", postedAt = 1_000) }
-        failWriting.await()
+    fun `a disk failure cannot masquerade as shown or as a recorded timeout`() = runBlocking {
+        coEvery { store.updateCall(any(), any(), any()) } throws IOException("disk")
+        assertEquals(NotificationTestCallUpdate.PERSISTENCE_FAILED, repository.recordCallShown(runId))
+        assertEquals(NotificationTestCallUpdate.PERSISTENCE_FAILED, repository.recordCallTimeout(runId))
+        assertNull(repository.callShownRun.value)
+    }
 
-        repository.markCallShown(nowMs = 2_000)
-        val ok = launch(Dispatchers.IO) { repository.recordCallShown(nowMs = 2_000) }
-        // Room for an unordered OK write to overtake the held FAIL.
-        delay(100)
-        releaseFail.complete(Unit)
-
-        assertTrue(fail.await())
-        ok.join()
-        assertEquals(listOf(NotificationTestOutcome.FAIL, NotificationTestOutcome.OK), written.map { it.outcome })
+    @Test
+    fun `an already shown ticket wins over a timeout`() = runBlocking {
+        coEvery { store.updateCall(runId, 2_000L, false) } returns NotificationTestCallUpdate.ALREADY_SHOWN
+        assertEquals(NotificationTestCallUpdate.ALREADY_SHOWN, repository.recordCallTimeout(runId))
     }
 }

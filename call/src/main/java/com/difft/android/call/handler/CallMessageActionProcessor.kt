@@ -3,6 +3,7 @@ package com.difft.android.call.handler
 import com.difft.android.base.call.CallActionType
 import com.difft.android.base.call.CallType
 import com.difft.android.base.log.lumberjack.L
+import com.difft.android.base.migration.pause.MessagingTicket
 import com.difft.android.base.utils.appScope
 import com.difft.android.call.LCallManager
 import com.difft.android.websocket.api.messages.SignalServiceDataClass
@@ -20,6 +21,7 @@ import org.whispersystems.signalservice.internal.push.SignalServiceProtos
 internal fun CallMessageHandler.handleJoinedMessage(
     content: SignalServiceProtos.CallMessage,
     roomId: String,
+    admission: MessagingTicket,
 ) {
     L.i { "[Call] handleCallMessage, hasJoined Message:${content.joined.roomId}" }
 
@@ -30,9 +32,15 @@ internal fun CallMessageHandler.handleJoinedMessage(
         callDataManager.updateCallingListData(callingData)
     }
 
-    // Clear the conversation-list critical-alert highlight asynchronously.
+    // Clear the conversation-list critical-alert highlight asynchronously; the room write is held
+    // inside the envelope's receive admission so a migration pause waits for it (#1382).
+    val held = admission.retain("call-joined")
     appScope.launch(Dispatchers.IO) {
-        dismissCriticalAlertForRoom(roomId)
+        try {
+            dismissCriticalAlertForRoom(roomId)
+        } finally {
+            held?.close()
+        }
     }
 }
 

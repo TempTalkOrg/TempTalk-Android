@@ -241,7 +241,8 @@ interface RoomStateReadWrite {
 
     /**
      * Whether the room holds a failed real outgoing message — mirror of `RoomSendStatusQueries`'
-     * scope: `sendType == SEND_TYPE_FAILED` AND `type NOT IN (TYPE_NOTIFY, TYPE_CONFIDENTIAL_PLACEHOLDER)`.
+     * scope: `sendType == SEND_TYPE_FAILED` AND `type NOT IN (TYPE_NOTIFY, TYPE_CONFIDENTIAL_PLACEHOLDER)`
+     * AND no `screenShotJson`.
      */
     fun hasFailedOutgoingMessage(roomId: String): Boolean
 
@@ -392,7 +393,8 @@ internal object RoomStateSupport {
         m.roomId == roomId &&
             m.sendType == MessageModel.SEND_TYPE_FAILED &&
             m.type != MessageModel.TYPE_NOTIFY &&
-            m.type != TYPE_CONFIDENTIAL_PLACEHOLDER
+            m.type != TYPE_CONFIDENTIAL_PLACEHOLDER &&
+            m.screenShotJson.isNullOrEmpty()
     }
 
     /** Whether any of [messageIds] carries a critical alert (`MessageModel.criticalAlertType`). */

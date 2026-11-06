@@ -34,6 +34,7 @@ import org.difft.app.database.models.DBAttachmentModel
 import org.difft.app.database.models.DBForwardContextModel
 import org.difft.app.database.models.DBForwardModel
 import org.difft.app.database.models.DBMentionModel
+import org.difft.app.database.models.ROOM_FOCUS_PIN_AUTO
 import org.difft.app.database.models.DBQuoteModel
 import org.difft.app.database.models.DBReactionModel
 import org.difft.app.database.models.DBSharedContactModel
@@ -235,7 +236,10 @@ internal object NeutralProjections {
         // post-login group full-refresh that would re-set it arrives too late, so a migrated group
         // would render as a 1-on-1 until then.
         roomType = r.roomType,
-        pinnedTime = r.pinnedTime?.takeIf { it > 0 },
+        // A pin that group focus added automatically stays behind: the receiving device re-derives it
+        // from its own focus state, and carrying it would make it permanent there (focusPin is not in
+        // the neutral format). Pins the user made, or changed during focus, travel as before.
+        pinnedTime = r.pinnedTime?.takeIf { it > 0 && r.focusPin != ROOM_FOCUS_PIN_AUTO },
         // The builder folds `RoomModel.readPosition` into the watermark and supplies the readAt
         // Android has no column for, so both halves come from the ladder.
         readPosition = ladder.watermark,

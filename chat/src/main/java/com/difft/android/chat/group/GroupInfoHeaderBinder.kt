@@ -1,11 +1,12 @@
 package com.difft.android.chat.group
 
+import com.difft.android.base.utils.pane.PageWait
 import android.graphics.Rect
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.Fragment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,10 +17,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.difft.android.base.ui.theme.DifftTheme
+import com.difft.android.base.utils.pane.detailBackOwner
+import com.difft.android.base.utils.pane.dismissWithView
 import com.difft.android.base.widget.ComposeDialogManager
 import com.difft.android.base.widget.ToastUtil
 import com.difft.android.chat.R
 import com.difft.android.chat.common.AvatarPickLauncher
+import com.difft.android.chat.common.AvatarPreviewFlight
 import com.difft.android.chat.common.AvatarPreviewLauncher
 import com.difft.android.chat.common.compose.CollapsingTitleBar
 import com.difft.android.chat.common.compose.GroupAvatar
@@ -42,24 +46,28 @@ import kotlinx.coroutines.launch
  * preview, wait dialog, toasts, keyboard). Back (system or title-bar arrow) keeps its meaning while
  * editing — it leaves the page; the pending name is simply dropped (design decision).
  *
- * Construct as an Activity field: the picker registers its permission contract at construction,
+ * Construct as a Fragment field: the picker registers its permission contract at construction,
  * which must happen before STARTED. Binding / ViewModel are deferred providers because both are
- * lazy on the Activity.
+ * lazy on the Fragment. [onLeave] leaves the page (Back or the title arrow); the page decides how
+ * (pop in the home detail stack, finish in the shell).
  */
 internal class GroupInfoHeaderBinder(
-    private val activity: AppCompatActivity,
+    private val fragment: Fragment,
     private val bindingProvider: () -> ChatActivityGroupInfoBinding,
     private val viewModelProvider: () -> GroupInfoHeaderViewModel,
     private val groupIdProvider: () -> String,
+    private val onLeave: () -> Unit,
 ) {
+    // Wait dialog claim scoped to this page (released with its view, dismissed by token only).
+    private val pageWait = PageWait(fragment)
+    private val previewFlight = AvatarPreviewFlight(fragment)
+
     /** Encryption meta row under the name; owned by the Activity's existing encryption-row logic. */
     var encryptionMeta by mutableStateOf<IdentityMeta?>(null)
 
-    private val collapseTracker by lazy { TitleCollapseTracker(binding.composeTitleBar) }
-
-    // Lazy: the binder is an Activity field, so at construction the Activity has no Context yet.
+    // Lazy: the binder is a Fragment field, so at construction the Fragment has no Context yet.
     private val outsideTapDetector by lazy {
-        GestureDetector(activity, object : GestureDetector.SimpleOnGestureListener() {
+        GestureDetector(fragment.requireContext(), object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapUp(e: MotionEvent): Boolean {
                 val state = viewModel.state.value
                 if (!state.isEditing || isTouchOnHeader(e)) return false
@@ -72,7 +80,8 @@ internal class GroupInfoHeaderBinder(
 
     /**
      * Back while editing goes through the ViewModel so an unsaved name can prompt first; without one
-     * back keeps its meaning and leaves the page. Registered only for the duration of an edit.
+     * back keeps its meaning and leaves the page. Registered only for the duration of an edit, with
+     * the page's detail back owner so a covered or hidden page never takes Back.
      */
     private val backWhileEditing = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
@@ -80,7 +89,7 @@ internal class GroupInfoHeaderBinder(
         }
     }
 
-    private val avatarPickLauncher = AvatarPickLauncher.forActivity(activity) { path ->
+    private val avatarPickLauncher = AvatarPickLauncher.forFragment(fragment) { path ->
         viewModelProvider().dispatch(GroupInfoHeaderContract.Intent.AvatarPicked(path))
     }
 
@@ -88,6 +97,8 @@ internal class GroupInfoHeaderBinder(
     private val viewModel get() = viewModelProvider()
 
     fun setup() {
+        // Per view: setup() runs again for a recreated view.
+        val collapseTracker = TitleCollapseTracker(binding.composeTitleBar)
         binding.composeTitleBar.setContent {
             DifftTheme(applyWindowBackground = false) {
                 val state by viewModel.state.collectAsStateWithLifecycle()
@@ -128,13 +139,17 @@ internal class GroupInfoHeaderBinder(
         }
     }
 
+    /** Call from onViewCreated. */
     fun observe() {
-        activity.lifecycleScope.launch {
-            activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
+        val owner = fragment.viewLifecycleOwner
+        owner.lifecycleScope.launch {
+            owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     viewModel.state.map { it.isEditing }.distinctUntilChanged().collect { editing ->
                         backWhileEditing.remove()
-                        if (editing) activity.onBackPressedDispatcher.addCallback(activity, backWhileEditing)
+                        if (editing) {
+                            fragment.requireActivity().onBackPressedDispatcher.addCallback(fragment.detailBackOwner(), backWhileEditing)
+                        }
                     }
                 }
                 launch { viewModel.effect.collect { effect -> handleEffect(effect) } }
@@ -143,11 +158,11 @@ internal class GroupInfoHeaderBinder(
     }
 
     /**
-     * Call from the Activity's `dispatchTouchEvent` before `super`. A single tap (platform slop,
+     * Call from the page root's `dispatchTouchEvent` before `super` (see [TapPeekFrameLayout]). A single tap (platform slop,
      * long-press and multi-touch semantics) outside the title bar / identity header while editing
      * resolves the draft: an unchanged name just leaves edit mode and the touch reaches its target,
      * so the setting row keeps its own click handler; an unsaved change opens the prompt instead and
-     * this returns true, telling the Activity to cancel the touch so that row does not also fire.
+     * this returns true, telling the root to cancel the touch so that row does not also fire.
      * Scrolls, flings, long presses and pinches leave the draft alone.
      */
     fun onDispatchTouchEvent(ev: MotionEvent): Boolean = outsideTapDetector.onTouchEvent(ev)
@@ -157,7 +172,7 @@ internal class GroupInfoHeaderBinder(
 
     /** Pencil for everyone who can edit anything; "Done" while editing; nothing when locked out. */
     private fun titleBarAction(state: GroupInfoHeaderContract.State): TitleBarAction? = when {
-        state.isEditing -> TitleBarAction.Text(activity.getString(R.string.group_edit_name_done)) {
+        state.isEditing -> TitleBarAction.Text(fragment.getString(R.string.group_edit_name_done)) {
             viewModel.dispatch(GroupInfoHeaderContract.Intent.SubmitName)
         }
 
@@ -171,10 +186,10 @@ internal class GroupInfoHeaderBinder(
     private fun handleEffect(effect: GroupInfoHeaderContract.Effect) {
         when (effect) {
             is GroupInfoHeaderContract.Effect.ShowUnsavedDialog -> showUnsavedDialog(effect.source)
-            GroupInfoHeaderContract.Effect.Finish -> activity.finish()
+            GroupInfoHeaderContract.Effect.Finish -> onLeave()
             GroupInfoHeaderContract.Effect.RequestPickAvatar -> avatarPickLauncher.launch()
-            is GroupInfoHeaderContract.Effect.PreviewAvatar -> activity.lifecycleScope.launch {
-                AvatarPreviewLauncher.previewGroup(activity, effect.data)
+            is GroupInfoHeaderContract.Effect.PreviewAvatar -> previewFlight.launch { previewWait ->
+                AvatarPreviewLauncher.previewGroup(fragment.requireActivity(), effect.data, wait = previewWait)
             }
 
             is GroupInfoHeaderContract.Effect.ShowToast -> {
@@ -182,16 +197,17 @@ internal class GroupInfoHeaderBinder(
             }
 
             is GroupInfoHeaderContract.Effect.ShowToastRes -> ToastUtil.show(effect.resId)
-            GroupInfoHeaderContract.Effect.ShowWait -> ComposeDialogManager.showWait(activity, "")
-            GroupInfoHeaderContract.Effect.DismissWait -> ComposeDialogManager.dismissWait()
+            GroupInfoHeaderContract.Effect.ShowWait -> pageWait.show()
+            GroupInfoHeaderContract.Effect.DismissWait -> pageWait.dismiss()
             GroupInfoHeaderContract.Effect.HideKeyboard ->
-                WindowInsetsControllerCompat(activity.window, binding.root).hide(WindowInsetsCompat.Type.ime())
+                WindowInsetsControllerCompat(fragment.requireActivity().window, binding.root).hide(WindowInsetsCompat.Type.ime())
         }
     }
 
     /** Must pick Save or Discard; tapping outside is not an answer, so the dialog is not cancelable. */
     private fun showUnsavedDialog(source: GroupInfoHeaderContract.ExitSource) {
-        ComposeDialogManager.showMessageDialog(
+        val activity = fragment.requireActivity()
+        fragment.dismissWithView(ComposeDialogManager.showMessageDialog(
             context = activity,
             title = "",
             message = activity.getString(R.string.group_edit_unsaved_message),
@@ -200,7 +216,7 @@ internal class GroupInfoHeaderBinder(
             cancelable = false,
             onConfirm = { viewModel.dispatch(GroupInfoHeaderContract.Intent.SaveExit(source)) },
             onCancel = { viewModel.dispatch(GroupInfoHeaderContract.Intent.DiscardExit(source)) },
-        )
+        ))
     }
 
     private fun MotionEvent.isInside(view: View): Boolean {

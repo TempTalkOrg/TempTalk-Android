@@ -33,9 +33,11 @@ import com.difft.android.chat.ui.ChatMessageListFragment
 import com.difft.android.chat.ui.ChatMessageListProvider
 import com.difft.android.chat.ui.ChatMessageViewModel
 import com.difft.android.chat.ui.KeyboardPanelHost
+import com.difft.android.chat.ui.VoiceRecordHost
 import com.difft.android.chat.ui.popup.PopupChatSheetController
 import com.difft.android.chat.ui.popup.PopupSheetViews
 import com.difft.android.chat.widget.RecordingState
+import com.difft.android.chat.widget.VoiceRecorderView
 import com.difft.android.create
 import com.difft.android.network.responses.ConversationSetResponseBody
 import com.hi.dhl.binding.viewbind
@@ -62,7 +64,14 @@ import javax.inject.Inject
  * Used when opening group chat from group member popup.
  */
 @AndroidEntryPoint
-class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost {
+class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, KeyboardPanelHost, VoiceRecordHost {
+
+    override val voiceRecorderView: VoiceRecorderView?
+        get() = mBinding.vVoiceRecorder
+
+    override fun setVoiceRecordOverlayVisible(visible: Boolean) {
+        mBinding.clVoiceRecord.visibility = if (visible) View.VISIBLE else View.GONE
+    }
 
     companion object {
         const val INTENT_EXTRA_GROUP_ID = "INTENT_EXTRA_GROUP_ID"
@@ -205,8 +214,6 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
             return
         }
 
-        SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
-
         getGroupInfo(false)
         getGroupInfo(true)
 
@@ -226,15 +233,9 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
             .catch { L.w { "[GroupChatPopupActivity] observe singleGroupsUpdate error: ${it.stackTraceToString()}" } }
             .launchIn(lifecycleScope)
 
-        chatViewModel.voiceVisibilityChange
-            .onEach {
-                mBinding.clVoiceRecord.visibility = if (it) View.VISIBLE else View.GONE
-            }
-            .catch { L.w { "[GroupChatPopupActivity] observe voiceVisibilityChange error: ${it.stackTraceToString()}" } }
-            .launchIn(lifecycleScope)
-
         mBinding.vVoiceRecorder.onRecordingDismissed = {
             mBinding.vVoiceRecordBg.visibility = View.GONE
+            mBinding.clVoiceRecord.visibility = View.GONE
         }
         mBinding.vVoiceRecorder.recordingCallback = { state ->
             when (state) {
@@ -420,6 +421,7 @@ class GroupChatPopupActivity : BaseActivity(), ChatMessageListProvider, Keyboard
 
     override fun onResume() {
         super.onResume()
+        chatViewModel.onShown()
         messageNotificationUtil.cancelNotificationsByConversation(chatViewModel.forWhat.id)
         SendMessageUtils.addToCurrentChat(chatViewModel.forWhat.id)
         priorConversationReporter.onConversationOpened(chatViewModel.forWhat)

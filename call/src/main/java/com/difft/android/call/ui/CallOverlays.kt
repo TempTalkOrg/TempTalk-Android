@@ -52,7 +52,10 @@ fun CommonCallOverlays(
         onWindowZoomOutClick = onWindowZoomOutClick,
         onInviteUsersClick = onInviteUsersClick,
         onExitClick = onExitClick,
-        onE2eeHintClick = { showE2eeSheet = true },
+        onE2eeHintClick = {
+            viewModel.layout.setControlsHidden(false)
+            showE2eeSheet = true
+        },
     )
     ShowItemsBottomView(
         viewModel,
@@ -138,8 +141,7 @@ private fun RenderTopAndBottomOverlays(
                 val elapsed = System.currentTimeMillis() -
                     viewModel.callUiController.screenShareLastInteractionTime
                 if (elapsed >= 5_000L) {
-                    viewModel.callUiController.setShowTopStatusViewEnabled(false)
-                    viewModel.callUiController.setShowBottomToolBarViewEnabled(false)
+                    viewModel.callUiController.autoHideChrome()
                     break
                 }
             }
@@ -161,7 +163,9 @@ private fun RenderTopAndBottomOverlays(
         MainPageWithBottomControlView(
             viewModel = viewModel,
             isOneVOneCall = isOneVOneCall,
+            isUserSharingScreen = isUserSharingScreen,
             onInviteUsersClick = onInviteUsersClick,
+            onWindowZoomOutClick = onWindowZoomOutClick,
             endCallAction = { callType, callEndType ->
                 val callExitParams = CallExitParams(
                     viewModel.getRoomId(),

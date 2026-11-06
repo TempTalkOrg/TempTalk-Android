@@ -9,6 +9,8 @@ import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.utils.FileUtil
 import com.difft.android.chat.common.SendType
 import com.difft.android.migration.v2.PerConversationTally
+import com.difft.android.migration.model.MigrationException
+import com.difft.android.migration.v2.container.PendingEnvelopeBytes
 import com.difft.android.migration.v2.export.NeutralProjections
 import com.difft.android.migration.v2.model.AttachmentOwner
 import com.difft.android.migration.v2.model.ContentKind
@@ -18,6 +20,7 @@ import com.difft.android.migration.v2.model.NeutralForward
 import com.difft.android.migration.v2.model.NeutralCredential
 import com.difft.android.migration.v2.model.NeutralIdentity
 import com.difft.android.migration.v2.model.NeutralMessage
+import com.difft.android.migration.v2.model.NeutralPendingEnvelope
 import com.difft.android.migration.v2.model.NeutralRecord
 import com.difft.android.migration.v2.model.SendState
 import com.difft.android.migration.v2.readtime.ReadLadder
@@ -30,6 +33,7 @@ import org.difft.app.database.models.ForwardModel
 import org.difft.app.database.models.GroupCryptoKeysModel
 import org.difft.app.database.models.MentionModel
 import org.difft.app.database.models.MessageModel
+import org.difft.app.database.models.PendingMessageModelNew
 import org.difft.app.database.models.QuoteModel
 import org.difft.app.database.models.ReactionModel
 import org.difft.app.database.models.RoomModel
@@ -169,6 +173,7 @@ class NeutralImporter(
     private var skippedUnknownOwner = 0
     private var skippedCascadeAttachments = 0
     private var recordFailures = 0
+    private var pendingEnvelopes = 0
 
     /**
      * Attachment refs whose byte frame never landed, collected until [finish]. The row is inserted
@@ -197,9 +202,14 @@ class NeutralImporter(
      * the stream ends to flush the final partial batch.
      *
      * A single record failing to map or enqueue is counted and skipped; it never aborts the import.
-     * Whole-import failure is reserved for structural errors, which the reader raises, not this.
+     * Whole-import failure is reserved for structural errors, which the reader raises, and for a
+     * pending envelope that cannot be stored (see [importPendingEnvelope]).
      */
     fun onRecord(record: NeutralRecord) {
+        if (record is NeutralRecord.PendingEnvelope) {
+            importPendingEnvelope(record.value)
+            return
+        }
         try {
             when (record) {
                 is NeutralRecord.Message -> {
@@ -238,10 +248,36 @@ class NeutralImporter(
                 // Same memory-only routing as Identity, same reason: credential material never
                 // reaches the staging DB, and is never logged.
                 is NeutralRecord.Credential -> credentialSink?.invoke(record.value)
+                // Handled above, outside this per-record tolerance.
+                is NeutralRecord.PendingEnvelope -> Unit
             }
         } catch (e: Exception) {
             recordFailures++
             L.w { "[MigrationV2][Import] record skipped after mapping failure: ${e.stackTraceToString()}" }
+        }
+    }
+
+    /**
+     * Stores one pending envelope in its own transaction, not the tolerant batch (#1382): the source
+     * consumed it from the server, and this receiver advertised `pending-envelope-v1`, so a row that
+     * cannot be stored fails the import instead of being skipped under a success. The row is
+     * promoted with the staging file, and the receive path applies it once its target message
+     * exists, whether imported here or arriving later.
+     *
+     * @throws MigrationException.RestoreFailed when the bytes are not base64 or the write fails.
+     */
+    private fun importPendingEnvelope(value: NeutralPendingEnvelope) {
+        try {
+            val model = PendingMessageModelNew().apply {
+                messageId = value.messageId
+                originalMessageTimeStamp = value.originalMessageTimeStamp
+                messageEnvelopBytes = PendingEnvelopeBytes.decode(value.messageEnvelopBytes)
+            }
+            target.runInTransaction { target.insertPendingEnvelope(model) }
+            pendingEnvelopes++
+        } catch (e: Exception) {
+            L.e { "[MigrationV2][Import] event=pending_envelope_write_failed ${e.stackTraceToString()}" }
+            throw MigrationException.RestoreFailed("pending envelope write failed", e)
         }
     }
 
@@ -261,7 +297,7 @@ class NeutralImporter(
             "[MigrationV2][Import] done imported=$imported skippedUnknownKind=$skippedUnknownKind " +
                 "skippedUnknownOwner=$skippedUnknownOwner " +
                 "skippedCascadeAttachments=$skippedCascadeAttachments bytesAbsent=$bytesAbsent " +
-                "recordFailures=$recordFailures"
+                "recordFailures=$recordFailures pendingEnvelopes=$pendingEnvelopes"
         }
         // Per-conversation diagnostic from the same inserts above. Diff it against the export line
         // and the displayed conversations to see whether one dropped at export, import or display.

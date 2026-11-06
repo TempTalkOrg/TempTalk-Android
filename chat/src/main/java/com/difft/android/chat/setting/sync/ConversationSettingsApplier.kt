@@ -148,8 +148,11 @@ class ConversationSettingsApplier @Inject constructor(
         val mute = snapshot.muteStatus?.takeIf { writeOthers && it != room.muteStatus }
         val block = snapshot.blockStatus?.takeIf { writeOthers && it != room.blockStatus }
         val anchor = snapshot.messageClearAnchor?.takeIf { writeOthers && it != room.messageClearAnchor }
+        val allowMe = snapshot.allowMentionMe?.takeIf { writeOthers && it != room.allowMentionMe }
+        val allowAll = snapshot.allowMentionAll?.takeIf { writeOthers && it != room.allowMentionAll }
+        val allowCall = snapshot.allowGroupCall?.takeIf { writeOthers && it != room.allowGroupCall }
         val newVersion = v.takeIf { it > prev }
-        if (listOf<Any?>(mute, block, managedWrite, expiry, anchor, newVersion).any { it != null }) {
+        if (listOf<Any?>(mute, block, managedWrite, expiry, anchor, allowMe, allowAll, allowCall, newVersion).any { it != null }) {
             dbRoomStore.updateConversationSettings(
                 roomId = roomId,
                 muteStatus = mute,
@@ -158,6 +161,9 @@ class ConversationSettingsApplier @Inject constructor(
                 messageExpiry = expiry,
                 messageClearAnchor = anchor,
                 conversationConfigVersion = newVersion,
+                allowMentionMe = allowMe,
+                allowMentionAll = allowAll,
+                allowGroupCall = allowCall,
             )
         }
         val update = ConversationSettingUpdate(
@@ -167,7 +173,10 @@ class ConversationSettingsApplier @Inject constructor(
             confidentialMode = managedWrite,
             messageExpiry = expiry,
             messageClearAnchor = anchor,
-        ).takeIf { listOf<Any?>(mute, block, managedWrite, expiry, anchor).any { it != null } }
+            allowMentionMe = allowMe,
+            allowMentionAll = allowAll,
+            allowGroupCall = allowCall,
+        ).takeIf { listOf<Any?>(mute, block, managedWrite, expiry, anchor, allowMe, allowAll, allowCall).any { it != null } }
         L.i {
             "[SettingSync] applier room=$roomId mode=${mode.tag()} v=$v applied=$prev " +
                 "others=$writeOthers managed=$managedWrite outcome=$outcome"

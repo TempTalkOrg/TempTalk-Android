@@ -1,11 +1,13 @@
 package util
 
+import android.app.Activity
 import android.os.Looper
 import androidx.annotation.AnyThread
 import androidx.annotation.MainThread
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.concurrent.Volatile
 
@@ -24,6 +26,9 @@ object AppForegroundObserver {
 
   @Volatile
   private var startedActivityCount: Int = 0
+
+  /** Started activities that have resumed since their own last onStart; main thread only. */
+  private val resumedSinceStart = mutableListOf<WeakReference<Activity>>()
 
   @MainThread
   @JvmStatic
@@ -79,10 +84,31 @@ object AppForegroundObserver {
     startedActivityCount++
   }
 
+  @MainThread
   @JvmStatic
-  fun notifyActivityStopped() {
-    startedActivityCount--
+  fun notifyActivityResumed(activity: Activity) {
+    if (resumedSinceStart.none { it.get() === activity }) {
+      resumedSinceStart.add(WeakReference(activity))
+    }
   }
+
+  @MainThread
+  @JvmStatic
+  fun notifyActivityStopped(activity: Activity) {
+    startedActivityCount--
+    resumedSinceStart.removeAll { it.get().let { ref -> ref == null || ref === activity } }
+  }
+
+  /**
+   * Foreground signal for notification-tap routing only (#1427): true if a started, non-PiP
+   * activity has resumed since its own last onStart. Unlike [isForegrounded], an activity the
+   * system merely restarts below a translucent notification trampoline does not count, because
+   * some ROMs (HyperOS) deliver that start before the trampoline's onCreate.
+   */
+  @MainThread
+  @JvmStatic
+  fun hasUserFacingActivity(): Boolean =
+    resumedSinceStart.any { ref -> ref.get()?.let { !it.isInPictureInPictureMode } == true }
 
   @JvmStatic
   fun getStartedActivityCount(): Int = startedActivityCount

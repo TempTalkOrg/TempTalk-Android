@@ -38,6 +38,8 @@ import com.difft.android.base.ui.theme.DifftTheme
 import com.difft.android.base.ui.compose.DifftModalBottomSheet
 import com.difft.android.call.BuildConfig
 import kotlinx.coroutines.launch
+import com.difft.android.call.ui.screenshare.isCallImmersive
+import com.difft.android.call.ui.tabletop.callSheetScrimColor
 
 /** Vertical rhythm of the sheet: grab bar → emoji row → divider → chips. */
 private val SHEET_ROW_GAP = 16.dp
@@ -95,6 +97,8 @@ fun EmojiReactionSheet(
         sheetState = sheetState,
         contentWindowInsets = { WindowInsets.navigationBars },
         hideNavigationBar = true,
+        hideSystemBars = isCallImmersive(),
+        scrimColor = callSheetScrimColor(),
         onDismissRequest = dismiss,
     ) {
         Column(

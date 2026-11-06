@@ -2,6 +2,27 @@ package com.difft.android.setting
 
 import android.content.Intent
 import android.os.Bundle
+import com.difft.android.base.utils.pane.SettingsIdiomPage
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Box
+import com.difft.android.base.utils.pane.PageWait
+import com.difft.android.base.utils.pane.detailBackOwner
+import com.difft.android.base.utils.pane.dismissWithView
+import com.difft.android.base.utils.pane.dismissWhenLeavingVisibleTop
+import com.difft.android.base.utils.pane.isVisibleTopNow
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import com.difft.android.base.utils.pane.waitWhileVisibleTop
+import com.difft.android.base.utils.pane.ownsWindow
+import com.difft.android.base.utils.pane.detailNavigation
+import com.difft.android.base.utils.pane.detailPageInsets
+import com.difft.android.base.utils.pane.containerPadsBottom
+import com.difft.android.base.utils.DualPaneUtils.showsDetailBackButton
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -10,7 +31,6 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import com.difft.android.BuildConfig
 import com.difft.android.base.ui.theme.DifftTheme
-import com.difft.android.base.utils.DualPaneUtils.isInDualPaneMode
 import com.difft.android.base.utils.PackageUtil
 import com.difft.android.base.utils.globalServices
 import com.difft.android.base.utils.openExternalBrowser
@@ -25,7 +45,16 @@ import javax.inject.Inject
  * Can be displayed in both Activity (single-pane) and dual-pane mode
  */
 @AndroidEntryPoint
-class AboutFragment : Fragment() {
+class AboutFragment : Fragment(), SettingsIdiomPage {
+    private lateinit var prepareWait: PageWait
+    private lateinit var uploadWait: PageWait
+    private lateinit var updateWait: PageWait
+    private var prepareBusy = MutableStateFlow(false)
+    private var uploadBusy = MutableStateFlow(false)
+    private var updateBusy = MutableStateFlow(false)
+    private var updateCheck: Job? = null
+    private var logPreparation: Job? = null
+
 
     companion object {
         fun newInstance() = AboutFragment()
@@ -53,15 +82,16 @@ class AboutFragment : Fragment() {
     ): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                DifftTheme {
+                DifftTheme(applyWindowBackground = ownsWindow()) {
+                    Box(Modifier.detailPageInsets(containerPadsBottom())) {
                     AboutPageView(
-                        onBackClick = { activity?.finish() },
+                        onBackClick = { detailNavigation().pop(this@AboutFragment) },
                         appVersion = PackageUtil.getAppVersionName() ?: "",
                         channelLabel = channelDisplayName(globalServices.environmentHelper.getChannelName()),
                         buildVersion = PackageUtil.getAppVersionCode().toString(),
                         buildTime = TimeUtils.millis2String(BuildConfig.BUILD_TIME.toLong()),
                         onCheckForUpdateClick = {
-                            updateManager.checkUpdate(requireActivity(), true)
+                            if (updateCheck?.isActive != true) updateCheck = updateManager.checkUpdate(this@AboutFragment, updateBusy, updateWait)
                         },
                         joinDesktopClick = {
                             val url = urlManager.installationGuideUrl
@@ -76,11 +106,25 @@ class AboutFragment : Fragment() {
                         // Call-service diagnostics: insider channel, plus any debug build so
                         // devs can reach the node switcher without an insider-flavor install.
                         showCallServerEntry = isDebugOrInsider(),
-                        showBackButton = !isInDualPaneMode()
+                        showBackButton = showsDetailBackButton()
                     )
+                }
                 }
             }
         }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        prepareWait = PageWait(this)
+        uploadWait = PageWait(this)
+        updateWait = PageWait(this)
+        prepareBusy = MutableStateFlow(false)
+        uploadBusy = MutableStateFlow(false)
+        updateBusy = MutableStateFlow(false)
+        waitWhileVisibleTop(prepareBusy, prepareWait)
+        waitWhileVisibleTop(uploadBusy, uploadWait)
+        waitWhileVisibleTop(updateBusy, updateWait)
     }
 
     /** Builds that may see diagnostics affordances: insider installs and any debug build. */

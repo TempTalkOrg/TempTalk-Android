@@ -33,7 +33,11 @@ data class ConversationSetResponseBody(
      * 1: Chinese
      * 2: English
      */
-    val translateSetting: Int = 0
+    val translateSetting: Int = 0,
+    /** Mute sub-options (server-owned). null = not provided; read with defaults true/false/false. */
+    val allowMentionMe: Boolean? = null,
+    val allowMentionAll: Boolean? = null,
+    val allowGroupCall: Boolean? = null
 ) {
     val isMuted: Boolean
         get() = muteStatus == MuteStatus.MUTED.value
@@ -42,7 +46,8 @@ data class ConversationSetResponseBody(
     fun toLogString(): String =
         "conv=$conversation mute=$muteStatus block=$blockStatus confidential=$confidentialMode " +
             "expiry=$messageExpiry clearAnchor=$messageClearAnchor version=$version " +
-            "hasRemark=${!remark.isNullOrEmpty()} saveToPhotos=$saveToPhotos translate=$translateSetting"
+            "hasRemark=${!remark.isNullOrEmpty()} saveToPhotos=$saveToPhotos translate=$translateSetting " +
+            "allowMe=$allowMentionMe allowAll=$allowMentionAll allowCall=$allowGroupCall"
 }
 
 enum class MuteStatus(val value: Int) {

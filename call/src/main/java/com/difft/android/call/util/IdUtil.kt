@@ -25,11 +25,6 @@ object IdUtil {
         return userId.formatBase58Id()
     }
 
-    fun isPersonalMobileDevice(identity: String?): Boolean {
-        if (identity == null) return false
-        return identity.matches(Regex("""^\+[0-9]+\.1${'$'}"""))
-    }
-
     fun getMyIdentity(): String {
         return "${globalServices.myId}.$DEFAULT_DEVICE_ID"
     }

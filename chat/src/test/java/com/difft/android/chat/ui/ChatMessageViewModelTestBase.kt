@@ -1,5 +1,6 @@
 package com.difft.android.chat.ui
 
+import com.difft.android.chat.message.ConversationUnreadMarker
 import android.os.Looper
 import androidx.lifecycle.viewModelScope
 import com.difft.android.ChatPaginationControllerFactory
@@ -155,7 +156,11 @@ abstract class ChatMessageViewModelTestBase {
      * @param initialize false for cases that only read construction-time signals and must not
      *   start the combine pipeline.
      */
-    protected fun viewModel(forWhat: For, initialize: Boolean = true): ChatMessageViewModel {
+    protected fun viewModel(
+        forWhat: For,
+        initialize: Boolean = true,
+        conversationUnreadMarker: ConversationUnreadMarker = mockk(relaxed = true),
+    ): ChatMessageViewModel {
         val controllerMock: ChatPaginationController = mockk(relaxed = true)
         every { controllerMock.chatMessagesStateFlow } returns behaviorFlow.asStateFlow()
         val factory: ChatPaginationControllerFactory = mockk()
@@ -185,7 +190,7 @@ abstract class ChatMessageViewModelTestBase {
             onGoingCallStateManager = mockk(relaxed = true),
             callDataManager = mockk(relaxed = true),
             messageHydrator = MessageHydrator(wrapChildRowLoader(childRowLoader)),
-            conversationUnreadMarker = mockk(relaxed = true),
+            conversationUnreadMarker = conversationUnreadMarker,
         ).also {
             createdViewModels += it
             if (initialize) it.initialize()

@@ -1,12 +1,14 @@
 package com.difft.android.base.utils
 
 import android.app.Activity
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.Display
+import android.view.Surface
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.LifecycleOwner
@@ -72,7 +74,8 @@ object OrientationPolicy {
      * with one exception, a pending [preReleaseForUnfold] on the same panel, where it returns
      * UNSPECIFIED without writing although the display alone would say PORTRAIT.
      * Loop-free by construction: the target depends on the display plus a window floor that can
-     * only release a lock, and nothing this policy requests can change the display. Loop-free
+     * only release a lock (and is dropped only for a window larger than its panel, which a lock
+     * cannot produce), and nothing this policy requests can change the display. Loop-free
      * is the only guarantee here; which reading is trusted when they disagree, and why, is
      * [resolveShortSideDp]'s contract.
      *
@@ -257,7 +260,8 @@ object OrientationPolicy {
 
     /**
      * Pure resolution rule. The panel mode decides; the app-level bounds stand in only when no
-     * mode is reported; the activity's window is a floor under both.
+     * mode is reported; the activity's window is a floor under both while it is plausible for
+     * the panel.
      *
      * Why not the bounds alone: the app-level maxBounds used to stay at the launch posture. A
      * process started folded and then unfolded kept answering the outer panel (Xiaomi 18 Fold:
@@ -267,18 +271,68 @@ object OrientationPolicy {
      * `LanguageUtils.createConfiguredContext` used to apply; HyperOS is likely the same cause but
      * unconfirmed. The mode never passes through `Resources`, so it stays the primary source.
      *
-     * Why the window floor: a window can never be larger than the display it is on, so a window
-     * short side at or above the threshold proves a large display even if every display-level
-     * reading is stale. It can only widen the result, and widening only ever releases a lock,
-     * so it cannot re-create the request-portrait → letterbox → "phone" loop this policy exists
-     * to break. The window can be stale only in the SMALL direction: a letterbox keeps a narrow
-     * window on a bigger display, so no configuration is delivered; when the display shrinks
-     * below the window the window manager has to resize it, so the activity is relaunched or
-     * gets `onConfigurationChanged` (every fold on the Xiaomi 18 Fold relaunched IndexActivity
-     * with the 425dp window), and each of those re-applies the policy.
+     * Why the window floor: a stale display-level reading in the SMALL direction (frozen
+     * maxBounds) must not lock a large display, and a window short side at or above the
+     * threshold shows the display is large. Widening only ever releases a lock, so the floor
+     * cannot re-create the request-portrait → letterbox → "phone" loop this policy exists to break.
+     *
+     * Why the floor is dropped when the window exceeds the mode by [STALE_WINDOW_MARGIN_DP]: a
+     * window cannot be larger than its panel, so such a window is a configuration the OS withheld
+     * after a fold (#1454: HyperOS resized the window to the 424dp outer panel but kept the
+     * activity at its 608dp inner configuration, with no relaunch for 31 s). There the mode
+     * decides, so the policy requests the portrait lock a healthy fold ends up with. This cannot
+     * bring the letterbox loop back: a letterboxed window is narrower than its panel, which keeps
+     * the floor. Without a mode the window cannot be checked against the panel and stays a floor.
      */
-    fun resolveShortSideDp(modeDp: Int, boundsDp: Int, windowDp: Int): Int =
-        maxOf(if (modeDp > 0) modeDp else boundsDp, windowDp)
+    fun resolveShortSideDp(modeDp: Int, boundsDp: Int, windowDp: Int): Int = when {
+        modeDp > 0 && windowDp - modeDp >= STALE_WINDOW_MARGIN_DP -> modeDp
+        else -> maxOf(if (modeDp > 0) modeDp else boundsDp, windowDp)
+    }
+
+    /**
+     * How much larger than the panel's short side the activity's window must read to count as a
+     * withheld configuration rather than rounding (a healthy outer panel reads window 425dp on a
+     * 424dp mode).
+     */
+    const val STALE_WINDOW_MARGIN_DP = 32
+
+    /**
+     * The host display's current panel, read from the fresh sources only: [Display.getMode]
+     * (natural orientation, px), the display's real-metrics density and its current rotation.
+     * Never derived from an activity's `Resources`, which hold the configuration the OS last
+     * delivered (#1454).
+     *
+     * @property key the mode as `WxH`, the same panel identity as [ShortSides.panelKey].
+     */
+    data class HostPanel(val key: String, val widthPx: Int, val heightPx: Int, val density: Float, val rotation: Int) {
+        val shortPx: Int get() = minOf(widthPx, heightPx)
+        val longPx: Int get() = maxOf(widthPx, heightPx)
+        val shortDp: Int get() = dpOf(shortPx, density)
+        val longDp: Int get() = dpOf(longPx, density)
+        val widthDp: Int get() = dpOf(widthPx, density)
+        val heightDp: Int get() = dpOf(heightPx, density)
+    }
+
+    /**
+     * Read [HostPanel] for [displayId] through [context]'s APPLICATION context (see
+     * [ShortSides.boundsDp] for why), with the same mode and density path as [readShortSides].
+     * Never touches [context]'s own `Resources`, so it is safe inside `attachBaseContext`.
+     * Null when the display or its mode is unavailable.
+     */
+    @Suppress("DEPRECATION") // getRealMetrics: only public source of the display's logical density.
+    fun readHostPanel(context: Context, displayId: Int): HostPanel? {
+        val display = context.applicationContext.getSystemService<DisplayManager>()?.getDisplay(displayId) ?: return null
+        val metrics = DisplayMetrics()
+        display.getRealMetrics(metrics)
+        return hostPanelOf(display, metrics.density)
+    }
+
+    private fun hostPanelOf(display: Display, density: Float): HostPanel? {
+        val mode = runCatching { display.mode }.getOrNull() ?: return null
+        if (mode.physicalWidth <= 0 || mode.physicalHeight <= 0) return null
+        val rotation = runCatching { display.rotation }.getOrDefault(Surface.ROTATION_0)
+        return HostPanel("${mode.physicalWidth}x${mode.physicalHeight}", mode.physicalWidth, mode.physicalHeight, density, rotation)
+    }
 
     /**
      * Read the three sources for the display [hostDisplay] identifies. Deliberately NOT
@@ -293,13 +347,12 @@ object OrientationPolicy {
             ?.getDisplay(hostDisplay.displayId) ?: hostDisplay
         val metrics = DisplayMetrics()
         display.getRealMetrics(metrics)
-        val density = metrics.density
-        val mode = runCatching { display.mode }.getOrNull()
+        val panel = hostPanelOf(display, metrics.density)
         return ShortSides(
-            modeDp = mode?.let { dpOf(minOf(it.physicalWidth, it.physicalHeight), density) } ?: 0,
-            boundsDp = dpOf(minOf(metrics.widthPixels, metrics.heightPixels), density),
+            modeDp = panel?.shortDp ?: 0,
+            boundsDp = dpOf(minOf(metrics.widthPixels, metrics.heightPixels), metrics.density),
             windowDp = activity.resources.configuration.smallestScreenWidthDp,
-            panelKey = mode?.let { "${it.physicalWidth}x${it.physicalHeight}" } ?: "",
+            panelKey = panel?.key.orEmpty(),
         )
     }
 

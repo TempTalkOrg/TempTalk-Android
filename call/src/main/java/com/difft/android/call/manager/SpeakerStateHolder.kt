@@ -47,7 +47,7 @@ class SpeakerStateHolder(
 
     /**
      * Called from [RoomEvent.ActiveSpeakersChanged].
-     * Debounces speaker updates to avoid thrashing the participant sort.
+     * Debounces speaker updates before they reach the primary speaker.
      */
     fun onActiveSpeakersChanged(speakers: List<Participant>) {
         scope.launch {
@@ -72,7 +72,6 @@ class SpeakerStateHolder(
                     delay(delayTime)
                     withContext(Dispatchers.IO) {
                         participantManager.onActiveSpeakersChanged(filtered)
-                        participantManager.sortParticipantsBySpeaker(filtered)
                         mutex.withLock { hasSpeaker = false }
                     }
                 }

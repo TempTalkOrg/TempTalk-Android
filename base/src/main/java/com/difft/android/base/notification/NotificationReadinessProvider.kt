@@ -55,5 +55,10 @@ class NotificationReadinessProvider @Inject constructor(
         return nm.getNotificationChannel(id)?.toReading()
     }
 
-    private fun NotificationChannel.toReading() = ChannelReading(importance = importance, hasSound = sound != null, lockscreenVisibility = lockscreenVisibility)
+    private fun NotificationChannel.toReading() = ChannelReading(
+        importance = importance,
+        hasSound = sound != null,
+        lockscreenVisibility = lockscreenVisibility,
+        userSetImportance = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || hasUserSetImportance(),
+    )
 }

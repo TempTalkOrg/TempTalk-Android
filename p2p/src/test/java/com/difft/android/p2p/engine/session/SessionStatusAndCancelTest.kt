@@ -108,8 +108,132 @@ class SessionStatusAndCancelTest {
         sm.stage(TransferStages.RECEIVING)
         sm.recordsImported(3)
         sm.attachmentBytesLanded(1)
-        sm.committing()
+        assertFalse(sm.committing(null))
+        assertFalse(sm.committing("never-existed"))
         assertNull(sm.activeSessionId())
+        assertNull(sm.bodySessionId())
+    }
+
+    @Test
+    fun `a cancel that wins the race against the commit entry refuses the commit`() {
+        val sm = manager()
+        val p = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(p.sessionId, "f1", p.slots.getValue("f1").token, "1.1.1.1")
+        assertEquals(CancelState.ROLLED_BACK, sm.cancel(p.sessionId, p.sessionToken).state)
+        // The import reaches its commit entry after the sender was told rolled_back: it must not commit.
+        assertFalse(sm.committing(p.sessionId))
+        assertEquals(TransferTerminal.CANCELLED, sm.status(p.sessionId, p.sessionToken).terminal)
+        // Idempotent: a repeated cancel is answered by the retained CANCELLED record, never too late.
+        assertEquals(CancelState.STOPPED, sm.cancel(p.sessionId, p.sessionToken).state)
+    }
+
+    @Test
+    fun `a session created after a cancel cannot be committed by the cancelled import`() {
+        val sm = manager()
+        val old = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        assertNull("no body yet", sm.bodySessionId())
+        sm.authorizeUpload(old.sessionId, "f1", old.slots.getValue("f1").token, "1.1.1.1")
+        // The old import binds itself to its session when it starts.
+        val oldImport = sm.bodySessionId()
+        assertEquals(old.sessionId, oldImport)
+        sm.cancel(old.sessionId, old.sessionToken)
+        // A newer session is live and its body started before the old import reaches its commit entry.
+        val fresh = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(fresh.sessionId, "f1", fresh.slots.getValue("f1").token, "1.1.1.1")
+
+        assertFalse(sm.committing(oldImport))
+        // The fresh session can still be cancelled: nothing marked it committing.
+        assertEquals(CancelState.ROLLED_BACK, sm.cancel(fresh.sessionId, fresh.sessionToken).state)
+    }
+
+    @Test
+    fun `the newer session's own import still commits`() {
+        val sm = manager()
+        val old = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(old.sessionId, "f1", old.slots.getValue("f1").token, "1.1.1.1")
+        sm.cancel(old.sessionId, old.sessionToken)
+        val fresh = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(fresh.sessionId, "f1", fresh.slots.getValue("f1").token, "1.1.1.1")
+
+        assertTrue(sm.committing(sm.bodySessionId()))
+        assertEquals(CancelState.TOO_LATE, sm.cancel(fresh.sessionId, fresh.sessionToken).state)
+    }
+
+    @Test
+    fun `once the commit entry passed a cancel is too late`() {
+        val sm = manager()
+        val p = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(p.sessionId, "f1", p.slots.getValue("f1").token, "1.1.1.1")
+        assertTrue(sm.committing(p.sessionId))
+        assertEquals(CancelState.TOO_LATE, sm.cancel(p.sessionId, p.sessionToken).state)
+        assertEquals(p.sessionId, sm.activeSessionId())
+    }
+
+    @Test
+    fun `a listener kept after a failure or cancel answers with the definite terminal`() {
+        assertFalse("no session ever opened: nothing to linger for", manager().retireLiveForLinger())
+
+        val failed = manager()
+        val f = failed.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        failed.authorizeUpload(f.sessionId, "f1", f.slots.getValue("f1").token, "1.1.1.1")
+        failed.markTerminal(f.sessionId, TransferTerminal.FAILED)
+        assertTrue(failed.retireLiveForLinger())
+        assertEquals(TransferTerminal.FAILED, failed.status(f.sessionId, f.sessionToken).terminal)
+
+        // The receiver's own user cancelled while the session was still live.
+        val cancelled = manager()
+        val c = cancelled.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        assertTrue(cancelled.retireLiveForLinger())
+        assertEquals(TransferTerminal.CANCELLED, cancelled.status(c.sessionId, c.sessionToken).terminal)
+    }
+
+    @Test
+    fun `a committing session torn down by the listener is never published as cancelled`() {
+        val sm = manager()
+        val p = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(p.sessionId, "f1", p.slots.getValue("f1").token, "1.1.1.1")
+        assertTrue(sm.committing(p.sessionId))
+        sm.clear()
+        assertNull(sm.status(p.sessionId, p.sessionToken).terminal)
+        assertEquals(CancelState.TOO_LATE, sm.cancel(p.sessionId, p.sessionToken).state)
+    }
+
+    @Test
+    fun `a committing session that fails before promote answers failed whichever side retires it first`() {
+        // Handler first: the upload's failure retires the live session, the linger finds nothing live.
+        val handlerFirst = manager()
+        val h = handlerFirst.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        handlerFirst.authorizeUpload(h.sessionId, "f1", h.slots.getValue("f1").token, "1.1.1.1")
+        assertTrue(handlerFirst.committing(h.sessionId))
+        handlerFirst.markTerminal(h.sessionId, TransferTerminal.FAILED)
+        assertTrue(handlerFirst.retireLiveForLinger())
+        assertEquals(TransferTerminal.FAILED, handlerFirst.status(h.sessionId, h.sessionToken).terminal)
+
+        // Observer first: the linger retires the committing session with no verdict, then the
+        // handler's failure arrives and must still reach /status.
+        val store = MemoryStore()
+        val observerFirst = manager(store)
+        val o = observerFirst.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        observerFirst.authorizeUpload(o.sessionId, "f1", o.slots.getValue("f1").token, "1.1.1.1")
+        assertTrue(observerFirst.committing(o.sessionId))
+        assertTrue(observerFirst.retireLiveForLinger())
+        assertNull(observerFirst.status(o.sessionId, o.sessionToken).terminal)
+        observerFirst.markTerminal(o.sessionId, TransferTerminal.FAILED)
+        val status = observerFirst.status(o.sessionId, o.sessionToken)
+        assertEquals(TransferTerminal.FAILED, status.terminal)
+        assertEquals(TransferStages.FAILED, status.stage)
+        assertEquals(TransferTerminal.FAILED, store.saved.single().terminal)
+    }
+
+    @Test
+    fun `a late failure never rewrites a cancelled session`() {
+        val sm = manager()
+        val p = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
+        sm.authorizeUpload(p.sessionId, "f1", p.slots.getValue("f1").token, "1.1.1.1")
+        assertEquals(CancelState.ROLLED_BACK, sm.cancel(p.sessionId, p.sessionToken).state)
+        assertFalse(sm.committing(p.sessionId))
+        sm.markTerminal(p.sessionId, TransferTerminal.FAILED)
+        assertEquals(TransferTerminal.CANCELLED, sm.status(p.sessionId, p.sessionToken).terminal)
     }
 
     // endregion
@@ -134,7 +258,8 @@ class SessionStatusAndCancelTest {
     fun `cancel past the commit point is too_late and the session stays live`() {
         val sm = manager()
         val p = sm.createSession("1.1.1.1", mapOf("f1" to meta("f1")))
-        sm.committing()
+        sm.authorizeUpload(p.sessionId, "f1", p.slots.getValue("f1").token, "1.1.1.1")
+        assertTrue(sm.committing(p.sessionId))
         assertEquals(CancelOutcome(CancelState.TOO_LATE, tornDown = false), sm.cancel(p.sessionId, p.sessionToken))
         assertEquals(p.sessionId, sm.activeSessionId())
         assertEquals(TransferStages.PROMOTING, sm.status(p.sessionId, p.sessionToken).stage)

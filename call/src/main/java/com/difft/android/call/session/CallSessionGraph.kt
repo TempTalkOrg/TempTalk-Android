@@ -88,7 +88,7 @@ internal class CallSessionGraph(
 
     val audio = components.audioStack(params, mainScope, isDenoiseEnabled = { mediaCtl.deNoiseEnable.value })
     lateinit var rtm: RtmMessageHandler
-    val participantManager = ParticipantManager(mainScope)
+    val participantManager = ParticipantManager()
     val timerManager = TimerManager(mainScope)
 
     val roomCtl = components.roomController(params, audio.handler, audio.processor)
@@ -139,6 +139,7 @@ internal class CallSessionGraph(
             roomIdGetter = { roomId },
             showBarrage = { p, m -> showBarrage(p, m) },
             showToast = ::showToast,
+            messagingGate = deps.messagingGate,
         )
     }
 

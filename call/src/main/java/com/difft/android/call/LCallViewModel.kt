@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.difft.android.base.log.lumberjack.L
 import com.difft.android.base.user.UserManager
 import com.difft.android.base.widget.ToastUtil
+import com.difft.android.call.core.CallLayoutInputs
 import com.difft.android.call.core.CallUiController
 import com.difft.android.call.data.CallEndType
 import com.difft.android.call.data.CallExitParams
@@ -15,6 +16,10 @@ import com.difft.android.call.data.RTM_MESSAGE_TYPE_DEFAULT
 import com.difft.android.call.data.VoicePreset
 import com.difft.android.call.handler.CriticalAlertVisibility
 import com.difft.android.call.handler.RtmMessageHandler
+import com.difft.android.call.layout.CallLayoutController
+import com.difft.android.call.layout.ControllerState
+import com.difft.android.call.core.LayoutControlsOwner
+import com.difft.android.call.core.layoutControls
 import com.difft.android.call.permission.CallMediaPermissionCoordinator
 import com.difft.android.call.session.CallFinishRequest
 import com.difft.android.call.session.CallRoomState
@@ -32,6 +37,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.livekit.android.room.participant.Participant
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -61,6 +67,10 @@ class LCallViewModel @AssistedInject constructor(
 
     val callUiController = CallUiController(session.uiState)
 
+    /** Lays out the call's cards; fed by [layoutInputs] and the page's reporter. */
+    val layout = CallLayoutController()
+    internal val layoutInputs = CallLayoutInputs(layout)
+
     init {
         // UNDISPATCHED: both subscribe inside this constructor (on main). The first page to subscribe
         // receives, in order, the events the session emitted before any page existed.
@@ -70,6 +80,7 @@ class LCallViewModel @AssistedInject constructor(
         viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             session.uiState.groupCriticalAlert.collect(callUiController::setCriticalAlertEnable)
         }
+        startLayout()
         // Once per view model: a configuration change keeps it, so the page stays attached across one.
         session.attachUi()
         onGoingCallStateManager.callPageAttached()
@@ -145,6 +156,8 @@ class LCallViewModel @AssistedInject constructor(
     /** The page went away for good (not a configuration change): it detaches, the call goes on. */
     override fun onCleared() {
         super.onCleared()
+        layoutInputs.stop()
+        layout.stop()
         session.detachUi()
         onGoingCallStateManager.callPageDetached()
         L.i { "[Call][SessionUi] detached session=${session.id} ended=${session.isEnded}" }
@@ -178,8 +191,48 @@ class LCallViewModel @AssistedInject constructor(
         is CallSessionUiEvent.Barrage -> event.renderable.dispatchTo(callUiController)
         is CallSessionUiEvent.Toast -> showToastSafely(event.message)
         CallSessionUiEvent.RevealCallChrome -> {
+            layout.setControlsHidden(false)
             callUiController.setShowTopStatusViewEnabled(true)
             callUiController.setShowBottomToolBarViewEnabled(true)
+        }
+    }
+
+    private fun startLayout() {
+        layout.start(viewModelScope) { L.e { "[Call] layout tick failed: ${it.stackTraceToString()}" } }
+        // The controls' visibility outside a share is the controller's; the bars mirror it.
+        callUiController.setControlsOwner(LayoutControlsOwner(layout))
+        viewModelScope.launch {
+            layout.state.layoutControls().collect { controls ->
+                if (controls.laidOut) callUiController.applyLayoutControls(controls.hidden, controls.docked)
+            }
+        }
+        // Picture in picture takes the shape of what it shows, recomputed from every layout state.
+        viewModelScope.launch { layout.state.collect(layoutInputs::onLayoutState) }
+        viewModelScope.launch { layoutInputs.pipContentAspect.collect(callUiController::setPipContentAspect) }
+        viewModelScope.launch {
+            val room = (roomState.first { it != CallRoomState.Pending } as? CallRoomState.Ready)?.room ?: return@launch
+            layoutInputs.start(
+                scope = viewModelScope,
+                room = room,
+                callType = callType,
+                participants = participants,
+                screenSharingUser = screenSharingUser,
+                schedulerHold = callUiController.participantMenuOpen,
+            )
+        }
+        if (BuildConfig.DEBUG) {
+            viewModelScope.launch { layout.state.collect(::logLayoutState) }
+        }
+    }
+
+    private fun logLayoutState(state: ControllerState) {
+        val plan = state.plan ?: return
+        // The focus as its tile's index, never an identity.
+        val focus = state.focus?.let { id -> plan.tiles.indexOfFirst { it.id == id } }
+        val page = state.pager?.let { "${it.page + 1}/${it.pages}" } ?: "1/1"
+        L.i {
+            "[Call] layout mode=${plan.mode} posture=${plan.posture} tiles=${plan.tiles.size} page=$page " +
+                "hidden=${state.controlsHidden} focus=${focus ?: "none"} animated=${state.animated}"
         }
     }
 

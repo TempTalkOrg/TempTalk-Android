@@ -10,6 +10,7 @@ import com.difft.android.p2p.engine.model.DeviceInfo
 import com.difft.android.p2p.engine.model.P2pJson
 import com.difft.android.p2p.engine.model.PrepareUploadRequest
 import com.difft.android.p2p.engine.model.ProtocolError
+import com.difft.android.p2p.engine.model.ReceiverCaps
 import com.difft.android.p2p.engine.model.TransferStages
 import com.difft.android.p2p.engine.model.TransferTerminal
 import com.difft.android.p2p.engine.session.PairingSessionRegistry
@@ -81,6 +82,8 @@ class ReceiverHttpServer(
     private val pairingRegistry: PairingSessionRegistry? = null,
     /** Receiver-side free-space answer for `prepare-upload`; null where no storage rule applies. */
     storagePrecheck: StoragePrecheck? = null,
+    /** The capability tokens `prepare-upload` advertises; see [ReceiverCaps]. */
+    caps: List<String> = ReceiverCaps.BASE,
 ) {
     /**
      * Our advertised DeviceInfo, served from `/info` + `/register`. Mutable because the bound port is
@@ -123,6 +126,7 @@ class ReceiverHttpServer(
         migrationValidator = migrationValidator,
         pairingRegistry = pairingRegistry,
         storagePrecheck = storagePrecheck,
+        caps = caps,
     )
     private val uploadHandler = UploadHandler(sessionManager, fileSink)
     private val cancelHandler = CancelHandler(sessionManager)
@@ -196,6 +200,9 @@ class ReceiverHttpServer(
     fun closeToNewSessions() {
         acceptingSessions = false
     }
+
+    /** See [SessionManager.retireLiveForLinger]: true when there is a session worth answering for. */
+    fun retireLiveSessionForLinger(): Boolean = sessionManager.retireLiveForLinger()
 
     /**
      * Stops the server, tears down sessions and drops in-flight connections. A body still being read

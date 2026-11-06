@@ -19,6 +19,7 @@ import com.difft.android.p2p.engine.model.DeviceInfo
 import com.difft.android.p2p.engine.model.MigrationHandshake
 import com.difft.android.migration.v2.container.FormatCompat
 import com.difft.android.p2p.engine.model.QrPayload
+import com.difft.android.p2p.engine.model.ReceiverCaps
 import com.difft.android.p2p.engine.session.PairingSessionRegistry
 import com.difft.android.p2p.engine.session.PinPolicy
 import com.difft.android.p2p.engine.session.SessionManager
@@ -90,6 +91,16 @@ class P2pContainerFusion(
         /** Keep answering for the finished session only; a new `prepare-upload` is refused. */
         override fun closeToNewSessions() {
             server.closeToNewSessions()
+        }
+
+        /**
+         * After a failed or cancelled transfer: ends a session still live as not succeeded and drops
+         * the spool, keeping the server up. True when a session ran, so lingering is worth it.
+         */
+        fun retireForLinger(): Boolean {
+            val hadSession = server.retireLiveSessionForLinger()
+            runCatching { receiveSink.abort() }
+            return hadSession
         }
 
         /**
@@ -201,6 +212,7 @@ class P2pContainerFusion(
         migrationValidator = migrationValidator,
         terminalStore = terminalStore,
         storagePrecheck = storagePrecheck,
+        caps = RESTORE_RECEIVER_CAPS,
     ) { transferKey, liveness, pairingRegistry ->
         // The orchestrator's figure comes from the manifest totals and is exact; the byte counter
         // measures against the advertised size, which is only an estimate. A source that announces no
@@ -264,6 +276,7 @@ class P2pContainerFusion(
         migrationValidator: MigrationHandshakeValidator?,
         terminalStore: TerminalRecordStore? = null,
         storagePrecheck: StoragePrecheck? = null,
+        caps: List<String> = ReceiverCaps.BASE,
         // Every address the code advertises, [ip] first; the connecting side races them.
         ips: List<String> = listOf(ip),
         sinkFactory: (
@@ -297,6 +310,7 @@ class P2pContainerFusion(
             migrationValidator = migrationValidator,
             pairingRegistry = pairingRegistry,
             storagePrecheck = storagePrecheck,
+            caps = caps,
         )
         // A same-device handoff advertises loopback alone, so the listener stays off the LAN. It binds
         // the advertised literal itself: `InetAddress.getLoopbackAddress()` is `::1` on Android, which a
@@ -398,6 +412,8 @@ class P2pContainerFusion(
         onBodySent: () -> Unit = {},
         // The 200's headers — the receiver's explicit acknowledgments ([UploadReplyHeaders]).
         onReply: (Map<String, String>) -> Unit = {},
+        // The receiver's typed refusal on a non-200 upload (`SenderHttpClient.typedRejection`).
+        onRejected: (String) -> Unit = {},
         // This device's source environment under its wire name. When non-null a handshake is sent in
         // prepare-upload so the receiver's gate can fail fast; null means no handshake is sent.
         sourceEnvironment: String? = null,
@@ -425,6 +441,10 @@ class P2pContainerFusion(
         verdictWatch: VerdictWatch? = null,
         // The receiver's reported progress stopped moving (true) or resumed (false).
         onVerdictStall: (Boolean) -> Unit = {},
+        // The device-replacement message pause's view of the commit point (#1382); null elsewhere.
+        commitHooks: SendCommitHooks? = null,
+        // Capability tokens the receiver must advertise before any container frame is written.
+        requiredCaps: Set<String> = emptySet(),
     ): Boolean = withContext(Dispatchers.IO) {
         val transferKey = target.transferKey
             ?: error("QR has no transferKey — not a migration receiver")
@@ -456,11 +476,14 @@ class P2pContainerFusion(
             onProgress = onProgress,
             onBodySent = onBodySent,
             onReply = onReply,
+            onRejected = onRejected,
             totals = totals,
             senderAlias = senderAlias,
             onSessionPrepared = onSessionPrepared,
             verdictWatch = verdictWatch,
             onVerdictStall = onVerdictStall,
+            commitHooks = commitHooks,
+            requiredCaps = requiredCaps,
         )
     }
 
@@ -471,5 +494,12 @@ class P2pContainerFusion(
     companion object {
         /** Length of the ephemeral transfer key. */
         const val TRANSFER_KEY_BYTES = 32
+
+        /**
+         * The real import stores pending envelopes and fails rather than skip one, and its listener
+         * lingers after a failure or a cancel as after a success (`lingerAfterUnsuccessfulEnd`) (#1382).
+         */
+        internal val RESTORE_RECEIVER_CAPS: List<String> =
+            ReceiverCaps.BASE + ReceiverCaps.PENDING_ENVELOPE_V1 + ReceiverCaps.VERDICT_RETAIN_V1
     }
 }

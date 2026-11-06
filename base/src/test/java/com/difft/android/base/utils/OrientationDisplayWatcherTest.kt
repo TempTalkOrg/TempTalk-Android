@@ -6,6 +6,7 @@ import android.os.Looper
 import android.view.Display
 import androidx.core.content.ContextCompat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -95,5 +96,50 @@ class OrientationDisplayWatcherTest {
         idle()
 
         assertEquals("after onStop nothing may be delivered", 0, delivered.size)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `a panel change starts the fold diagnostics once, after the consumer`() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val order = mutableListOf<String>()
+        val panels = mutableListOf<Pair<String, String>>()
+        val watcher = OrientationDisplayWatcher(
+            activity,
+            onPanelChanged = { _, _, from, to ->
+                order += "diagnostics"
+                panels += from to to
+            },
+        ) { order += "consumer" }
+
+        watcher.start()
+        idle()
+        assertEquals("the first observation only records the panel", emptyList<Pair<String, String>>(), panels)
+
+        ShadowDisplayManager.changeDisplay(ContextCompat.getDisplayOrDefault(activity).displayId, "w859dp-h608dp")
+        idle()
+
+        assertEquals("one session per panel change (#1454)", 1, panels.size)
+        assertNotEquals(panels.single().first, panels.single().second)
+        assertEquals("the policy consumer runs before the diagnostics", listOf("consumer", "consumer", "diagnostics"), order)
+    }
+
+    @Test
+    @Config(qualifiers = "w400dp-h800dp")
+    fun `a failing diagnostic never stops the consumer`() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val watcher = OrientationDisplayWatcher(
+            activity,
+            onPanelChanged = { _, _, _, _ -> throw IllegalStateException("diagnostics failed") },
+        ) { delivered += it }
+        watcher.start()
+        idle()
+
+        ShadowDisplayManager.changeDisplay(ContextCompat.getDisplayOrDefault(activity).displayId, "w859dp-h608dp")
+        idle()
+        ShadowDisplayManager.changeDisplay(ContextCompat.getDisplayOrDefault(activity).displayId, "w400dp-h800dp")
+        idle()
+
+        assertEquals("every display change still reaches the consumer", 3, delivered.size)
     }
 }

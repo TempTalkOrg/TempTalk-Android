@@ -20,15 +20,17 @@ object NotificationTestContract {
 
         /** Call test: waiting for the test call screen to open. */
         WAIT_CALL,
+
+        FINISHING,
     }
 
     /** One-shot notices that end a test without a result. */
-    enum class Notice { NO_LOCK, POST_FAILED, VOID_UNLOCKED, VOID_NOT_LOCKED, VOID_DND }
+    enum class Notice { NO_LOCK, POST_FAILED, VOID_UNLOCKED, VOID_NOT_LOCKED, VOID_DND, BUSY, PERSISTENCE_FAILED }
 
     sealed interface Dialog {
         data class Intro(val kind: NotificationTestKind) : Dialog
         data class Blocked(val block: PrecheckBlock, val fix: NotificationFix?) : Dialog
-        data class Question(val kind: NotificationTestKind) : Dialog
+        data class Question(val kind: NotificationTestKind, val runId: String) : Dialog
 
         /** A recorded failure; [settingsFix] is the page offered next to the setup guide, if any. */
         data class Failed(val kind: NotificationTestKind, val settingsFix: NotificationFix?) : Dialog
@@ -40,6 +42,7 @@ object NotificationTestContract {
         val results: NotificationTestResults = NotificationTestResults.NONE,
         val running: NotificationTestKind? = null,
         val phase: Phase? = null,
+        val runId: String? = null,
         /** Epoch ms when the running test posted its notification; 0 before that. */
         val postedAt: Long = 0,
         /** Settings fingerprint taken when the notification was posted; results are stored with it (#1350). */
@@ -53,7 +56,7 @@ object NotificationTestContract {
         data class Start(val kind: NotificationTestKind) : Intent
         data object ConfirmStart : Intent
         data object Cancel : Intent
-        data class Answer(val seen: Boolean) : Intent
+        data class Answer(val seen: Boolean, val runId: String) : Intent
         data object DismissDialog : Intent
         data class OpenFix(val fix: NotificationFix) : Intent
         data object OpenGuide : Intent

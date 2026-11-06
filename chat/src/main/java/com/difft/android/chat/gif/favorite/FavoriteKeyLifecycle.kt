@@ -142,32 +142,53 @@ class FavoriteKeyLifecycle @Inject constructor(
      *  2. otherwise unwrap the server wrappedFavKey with [oldPriv]'s KEK.
      * No-op if the server has no wrappedFavKey, or the favKey is unavailable both ways.
      */
-    suspend fun rewrapOnMasterKeyRotation(oldPriv: ByteArray?, newPriv: ByteArray) {
+    suspend fun rewrapOnMasterKeyRotation(oldPriv: ByteArray?, newPriv: ByteArray) =
+        rewrap(oldPriv, newPriv, null, null)
+
+    /** Identity rotation carries its original session across every suspending boundary. */
+    suspend fun rewrapOnMasterKeyRotation(
+        oldPriv: ByteArray?, newPriv: ByteArray, expectedAccount: String, expectedAuthorization: String?,
+    ) = rewrap(oldPriv, newPriv, expectedAccount, expectedAuthorization)
+
+    private suspend fun rewrap(oldPriv: ByteArray?, newPriv: ByteArray, account: String?, authorization: String?) {
+        fun current(): Boolean {
+            if (account == null || keyRepo.matchesSession(account, authorization)) return true
+            L.w { "[FavoriteKey] rewrap_aborted reason=session_changed" }
+            return false
+        }
+        if (!current()) return
         val data = syncRepo.getFavorites()
+        if (!current()) return
         if (data != null) syncRepo.applyServerMeta(data)
         val wrapped = data?.wrappedFavKey
         if (wrapped.isNullOrEmpty()) {
-            L.i { "[FavoriteKey] rewrap skipped: no wrappedFavKey on server" }
+            L.i { "[FavoriteKey] rewrap_skipped reason=no_wrapped_key" }
             return
         }
         val rewrapped = withContext(Dispatchers.IO) {
+            if (!current()) return@withContext null
             val favKey = keyRepo.getFavKey()?.favKey
                 ?: oldPriv?.let { FavoriteCrypto.unwrapFavKey(FavoriteCrypto.deriveKek(it), wrapped) }
             if (favKey == null) {
-                L.w { "[FavoriteKey] rewrap: no cached favKey and old KEK cannot unwrap, abort" }
+                L.w { "[FavoriteKey] rewrap_aborted reason=no_fav_key" }
                 return@withContext null
             }
-            // Cache the favKey locally so subsequent ops don't re-derive it.
-            keyRepo.save(FavoriteCrypto.keyId(favKey), favKey)
+            if (account == null) keyRepo.save(FavoriteCrypto.keyId(favKey), favKey)
+            else if (!keyRepo.saveForSession(account, authorization, FavoriteCrypto.keyId(favKey), favKey)) {
+                L.w { "[FavoriteKey] rewrap_aborted reason=session_changed" }
+                return@withContext null
+            }
             FavoriteCrypto.wrapFavKey(FavoriteCrypto.deriveKek(newPriv), favKey)
         } ?: return
+        if (!current()) return
         try {
-            writeRepo.get().putRewrap(rewrapped)
-            L.i { "[FavoriteKey] rewrap done" }
+            if (account == null) writeRepo.get().putRewrap(rewrapped)
+            else writeRepo.get().putRewrap(rewrapped, account, authorization)
+            L.i { "[FavoriteKey] rewrap_attempted" }
         } catch (e: FavoritePermanentRejectException) {
-            L.w { "[FavoriteKey] rewrap permanently rejected: ${e.message}" }
+            L.w { "[FavoriteKey] rewrap_rejected" }
         } catch (e: CasExhaustedException) {
-            L.w { "[FavoriteKey] rewrap CAS exhausted (unexpected — rewrap has no CAS)" }
+            L.w { "[FavoriteKey] rewrap_conflict" }
         }
     }
 

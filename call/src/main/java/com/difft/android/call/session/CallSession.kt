@@ -295,8 +295,8 @@ class CallSession @AssistedInject internal constructor(
     fun getE2eeKey(): ByteArray? = graph.e2eeKey
     fun getRoomId(): String? = graph.roomId
 
-    /** 1v1 remote peer id. Mirrors SingleParticipantCallPage.kt's exact fallback shape
-     * (remote participant's LiveKit identity once joined, else conversationId before join). */
+    /** 1v1 remote peer id: the remote participant's LiveKit identity once joined, else the
+     * conversationId before join (the ringing screen's callee). */
     fun getOneOnOnePeerId(): String? =
         graph.participantManager.participants.value.filterIsInstance<RemoteParticipant>().firstOrNull()?.identity?.value
             ?: params.callIntent.conversationId

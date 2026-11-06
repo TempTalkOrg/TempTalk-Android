@@ -6,6 +6,8 @@ import android.content.Context
 import android.icu.util.ULocale
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.content.res.Resources
+import android.os.LocaleList
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.edit
 import com.difft.android.base.R
@@ -40,9 +42,28 @@ object LanguageUtils {
     private const val PREF_NAME = "language_prefs"
     private const val KEY_LANGUAGE = "language"
 
-    // In-process locale cache. Populated by [getLanguage] / [getLanguageNonBlocking].
-    private val localeCache = AtomicReference<Locale?>()
+    // The user's explicit choice; null while following the system language. Only meaningful once
+    // [resolved] is true (set after the first SP read / migration, or by [saveLanguage]).
+    private val explicitCache = AtomicReference<Locale?>()
+
+    @Volatile
+    private var resolved = false
     private val cacheLock = Any()
+
+    /**
+     * The tags this APK ships resources for (`localeFilters` in app/build.gradle.kts and the
+     * `values-zh` directories; default `values` is English). Following the system language
+     * resolves to the system list's first match against these, like the platform does (#1395).
+     */
+    private val SUPPORTED_LOCALE_TAGS = arrayOf("en", "zh-CN")
+
+    /**
+     * The system language list, read from the system Resources: unlike an app Context's, they are
+     * never pinned by an override configuration, so they follow a system language change in a
+     * live process. Swappable for unit tests.
+     */
+    @VisibleForTesting
+    internal var systemLocalesProvider: () -> LocaleList = { Resources.getSystem().configuration.locales }
 
     @Volatile
     private var cachedPrefs: SharedPreferences? = null
@@ -72,7 +93,9 @@ object LanguageUtils {
     }
 
     /**
-     * Returns the user-selected locale, or the system locale if no preference is set.
+     * Returns the user-selected locale, or — when following the system — the system language list's
+     * best match for this APK, read on every call so a system language change in a live process is
+     * picked up (#1395).
      *
      * Side effects (first call only):
      *   - Opens the `language_prefs` SP (warms `cachedPrefs`).
@@ -83,32 +106,28 @@ object LanguageUtils {
      * Migration failures (any [Throwable]) fall back to the system locale and are logged
      * at WARN level. Migration is never allowed to crash the application.
      */
-    fun getLanguage(context: Context): Locale {
-        localeCache.get()?.let { return it }
+    fun getLanguage(context: Context): Locale = explicitLanguage(context) ?: systemLocale()
+
+    /** The user's explicit choice, resolving the stored preference on first use; null when following the system. */
+    private fun explicitLanguage(context: Context): Locale? {
+        if (resolved) return explicitCache.get()
         synchronized(cacheLock) {
-            localeCache.get()?.let { return it }
+            if (resolved) return explicitCache.get()
 
             val prefs = cachedPrefs
                 ?: context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                     .also { cachedPrefs = it }
 
-            try {
+            val explicit = try {
                 migrateFromLegacyIfNeeded(context, prefs)
+                prefs.getString(KEY_LANGUAGE, null)?.takeIf { it.isNotEmpty() }?.let(Locale::forLanguageTag)
             } catch (t: Throwable) {
-                L.w { "[LanguageUtils] migration failed; falling back to system locale: ${t.stackTraceToString()}" }
-                val systemLocale = getSystemLocale(context)
-                localeCache.set(systemLocale)
-                return systemLocale
+                L.w { "[LanguageUtils] migration failed; following the system locale: ${t.stackTraceToString()}" }
+                null
             }
-
-            val langTag = prefs.getString(KEY_LANGUAGE, null)
-            val result = if (langTag.isNullOrEmpty()) {
-                getSystemLocale(context)
-            } else {
-                Locale.forLanguageTag(langTag)
-            }
-            localeCache.set(result)
-            return result
+            explicitCache.set(explicit)
+            resolved = true
+            return explicit
         }
     }
 
@@ -128,7 +147,8 @@ object LanguageUtils {
         prefs.edit(commit = true) {
             putString(KEY_LANGUAGE, locale.toLanguageTag())
         }
-        localeCache.set(locale)
+        explicitCache.set(locale)
+        resolved = true
     }
 
     /**
@@ -181,9 +201,10 @@ object LanguageUtils {
     /**
      * Used by `TempTalkApplication.attachBaseContext` and `BaseActivity.attachBaseContext`.
      *
-     * Returns a [Context] whose [Configuration] overrides only the user's locale and pins
-     * font-scale to 1.0 (we don't honor system font scaling — see existing UX contract preserved
-     * from the prior implementation). Night mode is left to
+     * Returns a [Context] whose [Configuration] overrides only the user's explicit locale (none when
+     * following the system, so the Context keeps following a later system language change, #1395)
+     * and pins font-scale to 1.0 (we don't honor system font scaling — see existing UX contract
+     * preserved from the prior implementation). Night mode is left to
      * [androidx.appcompat.app.AppCompatDelegate]; density and screen size follow the system.
      *
      * From `Application.attachBaseContext` (the cold-start case), the locale cache is
@@ -199,7 +220,7 @@ object LanguageUtils {
         // the Application's density and screen size at process start (and an Activity's at
         // attach whenever AppCompat added no overlay of its own).
         val override = Configuration()
-        override.setLocale(getLanguage(context))
+        explicitLanguage(context)?.let { override.setLocale(it) }
         override.fontScale = 1.0f
         return context.createConfigurationContext(override)
     }
@@ -208,23 +229,23 @@ object LanguageUtils {
      * Non-blocking, cache-only locale read for code that must not touch disk
      * (e.g. `attachBaseContext` on a slow device).
      *
-     * Returns the cached locale if [getLanguage] has already run, otherwise falls back
-     * to the system locale. Designed for the "two-step setup" where
+     * Returns the cached explicit choice if [getLanguage] has already run, otherwise the
+     * system language list's best match. Designed for the "two-step setup" where
      * `attachBaseContext` uses this, then `onCreate` runs [getLanguage] + [reapplyLocaleToAppResources]
      * to refresh the Application's resources once the user-selected locale is loaded.
      */
-    fun getLanguageNonBlocking(): Locale = localeCache.get() ?: getSystemLocaleFallback()
+    fun getLanguageNonBlocking(): Locale = explicitCache.get() ?: systemLocale()
 
     /**
-     * Refreshes the [Application]'s [Configuration] with the cached locale. Used as the
+     * Refreshes the [Application]'s [Configuration] with the cached explicit locale. Used as the
      * `onCreate` half of the two-step setup — see [getLanguageNonBlocking].
      *
-     * If the cache is still empty (warm-up did not complete), this is a no-op so we
-     * don't override the system-default that `attachBaseContext` already applied.
+     * A no-op while following the system (or before the preference is resolved): pinning the
+     * system language here would freeze it for the process lifetime (#1395).
      */
     @Suppress("DEPRECATION")
     fun reapplyLocaleToAppResources(app: Application) {
-        val locale = localeCache.get() ?: return
+        val locale = explicitCache.get() ?: return
         val resources = app.resources
         val config = Configuration(resources.configuration)
         config.setLocale(locale)
@@ -272,15 +293,17 @@ object LanguageUtils {
 
     // ----------------------------------------------------------- system fallback
 
-    private fun getSystemLocale(context: Context): Locale {
-        return try {
-            context.resources.configuration.locales[0]
-        } catch (t: Throwable) {
-            getSystemLocaleFallback()
-        }
+    /**
+     * The system language list's first match for this APK (single-entry list: that entry; no
+     * match: the first entry), the same pick the platform makes for the app's resources. Hant
+     * Chinese does not match zh-CN. Falls back to [Locale.getDefault] when the list is unavailable.
+     */
+    private fun systemLocale(): Locale = try {
+        systemLocalesProvider().getFirstMatch(SUPPORTED_LOCALE_TAGS) ?: Locale.getDefault()
+    } catch (t: Throwable) {
+        L.w { "[LanguageUtils] system locale read failed error=${t.javaClass.simpleName}" }
+        Locale.getDefault()
     }
-
-    private fun getSystemLocaleFallback(): Locale = Locale.getDefault()
 
     // ----------------------------------------------------------------- test-only
 
@@ -291,7 +314,8 @@ object LanguageUtils {
     internal fun resetForTest() {
         synchronized(cacheLock) {
             cachedPrefs = null
-            localeCache.set(null)
+            explicitCache.set(null)
+            resolved = false
         }
     }
 }

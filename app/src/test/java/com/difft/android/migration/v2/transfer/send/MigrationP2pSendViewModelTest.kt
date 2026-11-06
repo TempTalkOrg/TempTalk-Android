@@ -561,4 +561,59 @@ class MigrationP2pSendViewModelTest {
                 transferKey = "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo=",
             ),
         )
+
+    // ── #1382: the message pause ──
+
+    /** T19: the live re-check settles through the one settlement path, which owns the receipt. */
+    @Test
+    fun `a re-checked verdict is settled, not just dropped`() = runTest {
+        val session = com.difft.android.migration.v2.transfer.SenderSessionRef("10.0.0.2", 53317, "fp", "s-1", "t", listOf("status-v1"))
+        val settled = mutableListOf<Pair<String, com.difft.android.migration.v2.transfer.Verdict>>()
+        var receiptCleared = false
+        val vm = MigrationP2pSendViewModel(
+            ApplicationProvider.getApplicationContext<Application>(),
+            loadPendingVerdict = { com.difft.android.migration.v2.transfer.PendingVerdict(session, 1L) },
+            clearPendingVerdict = { receiptCleared = true },
+            probeVerdict = { com.difft.android.migration.v2.transfer.Verdict.Ended("failed") },
+            settleVerdict = { s, verdict ->
+                settled += s.sessionId to verdict
+                true
+            },
+        )
+
+        assertIs<MigrationP2pSendState.Failed>(vm.state.value)
+        assertEquals(listOf("s-1" to com.difft.android.migration.v2.transfer.Verdict.Ended("failed")), settled.toList())
+        assertFalse(receiptCleared, "the settlement clears the receipt after the pause")
+    }
+
+    @Test
+    fun `a re-checked verdict the pause did not take stays unconfirmed`() = runTest {
+        val session = com.difft.android.migration.v2.transfer.SenderSessionRef("10.0.0.2", 53317, "fp", "s-1", "t", listOf("status-v1"))
+        val vm = MigrationP2pSendViewModel(
+            ApplicationProvider.getApplicationContext<Application>(),
+            loadPendingVerdict = { com.difft.android.migration.v2.transfer.PendingVerdict(session, 1L) },
+            probeVerdict = { com.difft.android.migration.v2.transfer.Verdict.Succeeded },
+            settleVerdict = { _, _ -> false },
+        )
+
+        assertEquals(
+            MigrationP2pSendState.Unconfirmed(MigrationP2pSendState.Unconfirmed.Phase.UNREACHABLE),
+            vm.state.value,
+        )
+    }
+
+    @Test
+    fun `a phone-to-phone send tells the FGS to pause messaging`() = runTest {
+        mockkObject(MigrationTransferService.Companion)
+        every { MigrationTransferService.startSender(any(), any(), any(), any(), any(), any()) } returns Unit
+        try {
+            val vm = MigrationP2pSendViewModel(ApplicationProvider.getApplicationContext<Application>(), deviceReplacement = true)
+            vm.onIntent(MigrationP2pSendIntent.QrScanned(rawQr()))
+            vm.onIntent(MigrationP2pSendIntent.Send)
+
+            verify(exactly = 1) { MigrationTransferService.startSender(any(), any(), any(), any(), any(), true) }
+        } finally {
+            unmockkObject(MigrationTransferService.Companion)
+        }
+    }
 }

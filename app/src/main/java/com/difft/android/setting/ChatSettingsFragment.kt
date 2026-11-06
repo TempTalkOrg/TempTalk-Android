@@ -1,6 +1,13 @@
 package com.difft.android.setting
 
 import android.os.Bundle
+import com.difft.android.base.utils.pane.SettingsIdiomPage
+import com.difft.android.base.utils.pane.ownsWindow
+import com.difft.android.base.utils.pane.detailNavigation
+import com.difft.android.base.utils.pane.applyDetailPageInsets
+import com.difft.android.base.utils.pane.detailPageInsets
+import com.difft.android.base.utils.pane.containerPadsBottom
+import com.difft.android.base.utils.DualPaneUtils.showsDetailBackButton
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -18,7 +25,7 @@ import javax.inject.Inject
  * Can be displayed in both Activity (single-pane) and dual-pane mode
  */
 @AndroidEntryPoint
-class ChatSettingsFragment : Fragment() {
+class ChatSettingsFragment : Fragment(), SettingsIdiomPage {
 
     companion object {
         fun newInstance() = ChatSettingsFragment()
@@ -41,6 +48,7 @@ class ChatSettingsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        applyDetailPageInsets(view)
         
         setupBackButton(binding.ibBack)
         initView()
@@ -62,13 +70,13 @@ class ChatSettingsFragment : Fragment() {
         // Voice playback speed setting
         updateVoicePlaybackSpeedDisplay()
         binding.clVoicePlaybackSpeed.setOnClickListener {
-            VoicePlaybackSpeedSettingsActivity.startActivity(requireActivity())
+            detailNavigation().push(this, VoicePlaybackSpeedDestination)
         }
 
         // Call voice-changer global preference - local only, no server sync
         updateVoiceChangerDisplay()
         binding.clVoiceChanger.setOnClickListener {
-            VoiceChangerSettingsActivity.startActivity(requireActivity())
+            detailNavigation().push(this, VoiceChangerDestination)
         }
     }
 

@@ -84,6 +84,24 @@
             android:screenOrientation="locked"
             android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
             android:exported="false" />
+
+        <activity
+            android:name=".focus.settings.FocusOthersNotifyActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
+            android:name=".focus.settings.MuteExceptionsActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
+
+        <activity
+            android:name=".focus.settings.FocusGroupPickerActivity"
+            android:screenOrientation="locked"
+            android:configChanges="touchscreen|keyboard|keyboardHidden|orientation|screenLayout|screenSize"
+            android:exported="false" />
         <activity
             android:name=".group.GroupMembersSearchActivity"
             android:screenOrientation="locked"
@@ -254,6 +272,9 @@
              API 30+ package visibility hides them from queryIntentActivities otherwise. -->
         <package android:name="com.miui.securitycenter" />
         <package android:name="com.miui.powerkeeper" />
+        <!-- vivo permission manager; the notification fix resolves its per-app permission page. -->
+        <package android:name="com.vivo.permissionmanager" />
+        <package android:name="com.iqoo.powersaving" />
         <intent>
             <action android:name="android.intent.action.INSERT" />
             <data android:mimeType="vnd.android.cursor.item/event" />
